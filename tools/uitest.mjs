@@ -1070,6 +1070,67 @@ try {
   check('an unsupported file is refused with an explanation',
     (await page.textContent('#drop-error')).includes('PDFs'));
 
+  // ---------- a tab that is not the one being looked at ----------
+  //
+  // A hidden tab gets no animation frames, and pdf.js continues a page render
+  // from one, so opening a document and switching tabs used to park the render
+  // mid-way until you came back.
+  //
+  // Simulated exactly rather than by hoping the browser throttles something:
+  // the page reports itself hidden, and requestAnimationFrame records the call
+  // and never fires the callback — which is what a background tab does.
+  const stubFrames = () => {
+    Object.defineProperty(document, 'hidden', { get: () => window.__pretendHidden });
+    Object.defineProperty(document, 'visibilityState',
+      { get: () => (window.__pretendHidden ? 'hidden' : 'visible') });
+    window.__rafCalls = 0;
+    window.requestAnimationFrame = () => { window.__rafCalls++; return 1; };
+    window.cancelAnimationFrame = () => {};
+  };
+
+  const hidden = await context.newPage();
+  await hidden.addInitScript(() => { window.__pretendHidden = true; });
+  await hidden.addInitScript(stubFrames);
+  await hidden.goto(base);
+  check('the page believes it is hidden',
+    await hidden.evaluate(() => document.visibilityState) === 'hidden');
+
+  let renderedWhileHidden = false;
+  await hidden.setInputFiles('#file', fixturePath);
+  try {
+    await hidden.waitForSelector('#view-review:not([hidden])', { timeout: 25000 });
+    renderedWhileHidden = true;
+  } catch { /* reported below */ }
+
+  check('a document still renders with the tab in the background', renderedWhileHidden);
+  check('and it rendered every page',
+    renderedWhileHidden && await hidden.evaluate(() => window.Blinded.state.pages.length) === 1);
+  check('without ever getting an animation frame',
+    await hidden.evaluate(() => window.__rafCalls) === 0,
+    'asked for ' + await hidden.evaluate(() => window.__rafCalls) + ' frames');
+  await hidden.close();
+
+  // The control. Same dead animation frames, but the page claims to be
+  // visible, so the wrapper hands the request to the real thing — which never
+  // fires. If this one also rendered, the test above would prove nothing.
+  const control = await context.newPage();
+  await control.addInitScript(() => { window.__pretendHidden = false; });
+  await control.addInitScript(stubFrames);
+  await control.goto(base);
+  await control.setInputFiles('#file', fixturePath);
+  let renderedAnyway = false;
+  try {
+    await control.waitForSelector('#view-review:not([hidden])', { timeout: 8000 });
+    renderedAnyway = true;
+  } catch { /* expected */ }
+  check('with frames dead and the page claiming to be visible, rendering does stall',
+    !renderedAnyway,
+    'it rendered anyway, so the simulation does not reproduce the problem');
+  check('and it did ask for the frames it never got',
+    await control.evaluate(() => window.__rafCalls) > 0,
+    String(await control.evaluate(() => window.__rafCalls)));
+  await control.close();
+
   check('nothing threw in the page', consoleErrors.length === 0, consoleErrors.join(' | '));
 } finally {
   await browser.close();

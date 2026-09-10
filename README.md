@@ -368,6 +368,32 @@ when you have finished describing the job.
 - **Drag on the page** to add a box by hand. Click a box you drew to remove it.
   This is the only way to cover anything on a page with no text layer.
 
+## Working in another tab
+
+A browser starves a tab you are not looking at, and two of its economies used
+to stop this program dead.
+
+`requestAnimationFrame` does not fire in a hidden tab at all — there are no
+frames to animate — and pdf.js continues a page render from an rAF callback. So
+opening a document and switching tabs parked the render mid-way until you came
+back. Timers are throttled too, to about one call a second and eventually one a
+minute, which would have made the per-page yield during a search absurd.
+
+Both now schedule through a message channel instead, which is an ordinary task
+rather than a frame or a timer and is not throttled. Rendering and searching
+continue at full speed with the tab in the background. The search itself runs
+in workers, which were never throttled to begin with.
+
+The suite tests this by simulating a hidden tab exactly — the page reports
+itself hidden and `requestAnimationFrame` records the call and never fires —
+and includes the control that matters: with frames equally dead but the page
+claiming to be visible, rendering *does* stall. Without that control the test
+would prove nothing.
+
+What no page can decline is being **frozen** outright, which is a separate
+mechanism a browser may apply to a long-idle background tab. If you leave a
+very long document mid-search for a long time, come back and check it finished.
+
 ## Known limits
 
 - **Scanned documents have no text layer.** If a PDF is a photograph of a page,
@@ -434,6 +460,7 @@ lib/measure.js    real glyph advances, so a bar lands on its text
 lib/match.js      normalised cross-correlation, trimming, on plain arrays
 lib/imagesearch.js  the search: nominate widely, re-score, one pass, many cores
 lib/searchworker.js one core's share of that search
+lib/schedule.js   keeps work moving when the tab is in the background
 lib/pdfread.js    pdf.js wrapper: page images plus positioned text
 lib/pdfwrite.js   builds the image-only output PDF
 lib/render.js     burns boxes into pixels and encodes them

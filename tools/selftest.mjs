@@ -21,7 +21,7 @@ const check = (label, ok, detail) => {
   else failures.push(label + (detail === undefined ? '' : ' — ' + detail));
 };
 
-for (const file of ['detect.js', 'boxes.js', 'pdfwrite.js', 'match.js', 'imagesearch.js', 'labels.js']) {
+for (const file of ['schedule.js', 'detect.js', 'boxes.js', 'pdfwrite.js', 'match.js', 'imagesearch.js', 'labels.js']) {
   runInThisContext(readFileSync(join(root, 'lib', file), 'utf8'), { filename: file });
 }
 const Detect = globalThis.BlindedDetect;
@@ -30,6 +30,7 @@ const PdfWrite = globalThis.BlindedPdfWrite;
 const Match = globalThis.BlindedMatch;
 const ImageSearch = globalThis.BlindedImageSearch;
 const Labels = globalThis.BlindedLabels;
+const Schedule = globalThis.BlindedSchedule;
 
 // ---------- checksums ----------
 
@@ -719,6 +720,67 @@ check('a whole sentence is not assumed to be a name',
   check('an unlabelled span in replacement mode removes rather than inventing',
     Detect.applyToText('a b', [{ start: 0, end: 1 }], 'replacement') === ' b');
 }
+
+// ---------- keeping going in a background tab ----------
+//
+// A hidden tab gets no animation frames at all, and pdf.js continues a page
+// render from one. The wrapper substitutes a task the browser will still run.
+// Tested against the functions it wraps rather than by waiting for a real
+// browser to decide to throttle something.
+
+{
+  let hidden = false;
+  let realCalls = 0;
+  let cancelled = [];
+  const wrapper = Schedule.wrapAnimationFrame(
+    callback => { realCalls++; callback(0); return 42; },
+    id => cancelled.push(id),
+    () => hidden,
+    () => 123);
+
+  // Visible: the real thing, untouched.
+  let ran = 0;
+  const visibleId = wrapper.request(() => { ran++; });
+  check('a visible page uses real animation frames', realCalls === 1 && ran === 1);
+  check('and hands back the real identifier', visibleId === 42);
+  wrapper.cancel(visibleId);
+  check('cancelling a real frame goes to the real canceller',
+    cancelled.length === 1 && cancelled[0] === 42);
+
+  // Hidden: never touches rAF, still runs the callback.
+  hidden = true;
+  realCalls = 0;
+  let hiddenRan = 0;
+  let stamp = null;
+  const hiddenId = wrapper.request(when => { hiddenRan++; stamp = when; });
+  check('a hidden page does not ask for an animation frame', realCalls === 0);
+  check('and the callback has not run synchronously', hiddenRan === 0);
+  check('its identifier cannot be mistaken for a real one', hiddenId < 0);
+  check('and it is outstanding until it runs', wrapper.pendingCount() === 1);
+
+  await Schedule.nextTask();
+  await Schedule.nextTask();
+  check('the callback runs anyway, without a frame', hiddenRan === 1, String(hiddenRan));
+  check('and is handed a timestamp, as a frame callback expects', stamp === 123);
+  check('nothing is left outstanding', wrapper.pendingCount() === 0);
+
+  // Cancelling before it runs.
+  cancelled = [];
+  let neverRan = 0;
+  const doomed = wrapper.request(() => { neverRan++; });
+  wrapper.cancel(doomed);
+  check('cancelling a hidden request drops it', wrapper.pendingCount() === 0);
+  check('and does not reach the real canceller, which knows nothing of it',
+    cancelled.length === 0);
+  await Schedule.nextTask();
+  await Schedule.nextTask();
+  check('a cancelled callback never runs', neverRan === 0, String(neverRan));
+}
+
+check('yielding resolves rather than hanging', await (async () => {
+  await Schedule.nextTask();
+  return true;
+})());
 
 // ---------- pdf writer ----------
 
