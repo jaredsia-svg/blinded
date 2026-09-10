@@ -158,3 +158,43 @@ button { font: inherit; cursor: pointer; border-radius: 8px; }
 
 .foot { padding: 26px 20px 40px; color: var(--ink-soft); font-size: 13px; }
 .foot p { margin: 0; max-width: 720px; }
+
+/* ---------- terms feedback and image matching ---------- */
+
+.termcounts, .templates { list-style: none; margin: 8px 0 0; padding: 0; }
+.termcounts li, .templates li {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 12.5px; padding: 3px 0; color: var(--ink-soft);
+}
+.termcounts .t, .templates .t { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); }
+.termcounts .n, .templates .n {
+  font-variant-numeric: tabular-nums; background: #eef1f6;
+  border-radius: 20px; padding: 1px 8px; flex: none;
+}
+/* A term that matched nothing is the one thing in this panel a reviewer must
+   not skim past: it looks identical to a term that worked. */
+.termcounts li.none .n { background: var(--warn-bg); color: var(--warn); }
+.termcounts li.none .t { color: var(--warn); }
+
+.templates li { padding: 5px 0; border-bottom: 1px solid var(--line); }
+.templates li:last-child { border-bottom: 0; }
+.templates canvas {
+  width: 42px; height: 28px; object-fit: contain; flex: none;
+  border: 1px solid var(--line); border-radius: 4px; background: #fff;
+}
+.templates button {
+  border: 0; background: transparent; color: var(--ink-soft);
+  font-size: 15px; line-height: 1; padding: 2px 5px; flex: none;
+}
+.templates button:hover { color: var(--danger); }
+
+button.wide { width: 100%; padding: 8px; }
+button.wide.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+.sens { display: flex; align-items: center; gap: 8px; font-size: 12.5px; margin-top: 12px; color: var(--ink-soft); }
+.sens input { flex: 1; min-width: 0; }
+.sens span { font-variant-numeric: tabular-nums; flex: none; }
+
+/* While picking, the page invites a different kind of drag. */
+.page.picking canvas { cursor: cell; }
+.page.picking { outline: 2px solid var(--accent); outline-offset: -1px; }

@@ -13,6 +13,8 @@
   const PdfWrite = window.BlackbarPdfWrite;
   const Render = window.BlackbarRender;
   const measure = window.BlackbarMeasure.create();
+  const Match = window.BlackbarMatch;
+  const ImageSearch = window.BlackbarImageSearch;
 
   const el = id => document.getElementById(id);
   const views = { drop: el('view-drop'), review: el('view-review') };
@@ -27,7 +29,15 @@
     enabled: new Set(Detect.KINDS.map(k => k.kind).concat('term')),
     includeMedium: false,
     terms: [],
+    // Logos the reviewer has picked. Each holds the greyscale patch it was cut
+    // from, so its matches can be recomputed when the sensitivity moves
+    // without making them draw the box again.
+    templates: [],
+    // 'box' draws a redaction; 'pick' cuts a logo to search for. One drag
+    // gesture, two meanings, so the mode is always visible on the page itself.
+    mode: 'box',
   };
+  let nextTemplateId = 1;
 
   // ---------- chrome ----------
 
@@ -113,6 +123,7 @@
       canvas: null,              // the on-screen copy, created below
       findings: [],
       hits: [],
+      imageHits: [],
       manual: [],
       dismissed: new Set(),
     }));
@@ -158,6 +169,7 @@
       }
     }
     renderKinds();
+    renderTermCounts();
     renderCounts();
   }
 
@@ -225,16 +237,19 @@
       ? state.findings.filter(f => !dismissedText.has(f.id)).length
       : state.pages.reduce((sum, p) => sum + p.hits.filter(h => !p.dismissed.has(h.finding.id)).length, 0);
     const manual = state.pages.reduce((sum, p) => sum + p.manual.length, 0);
+    const images = state.pages.reduce(
+      (sum, p) => sum + p.imageHits.filter(m => !p.dismissed.has(m.id)).length, 0);
     const skipped = state.kind === 'text'
       ? dismissedText.size
       : state.pages.reduce((sum, p) => sum + p.dismissed.size, 0);
 
-    const parts = ['<strong>' + covered + '</strong> match' + (covered === 1 ? '' : 'es') + ' will be covered'];
+    const parts = ['<strong>' + covered + '</strong> text match' + (covered === 1 ? '' : 'es') + ' will be covered'];
+    if (images) parts.push('<strong>' + images + '</strong> image match' + (images === 1 ? '' : 'es'));
     if (manual) parts.push('<strong>' + manual + '</strong> box' + (manual === 1 ? '' : 'es') + ' you drew');
     if (skipped) parts.push('<strong>' + skipped + '</strong> you turned off');
     el('counts').innerHTML = parts.join('<br>');
 
-    const total = covered + manual;
+    const total = covered + manual + images;
     el('export').disabled = total === 0 && state.kind !== 'text';
     el('exportnote').textContent = total === 0 ? 'Nothing is selected yet.' : '';
   }
@@ -266,7 +281,10 @@
 
   function activeBoxes(page) {
     const spans = page.hits.filter(h => !page.dismissed.has(h.finding.id)).map(h => h.finding);
-    return Boxes.boxesForSpans(page.items, spans, { advance: measure }).concat(page.manual);
+    const images = page.imageHits.filter(m => !page.dismissed.has(m.id)).map(m => m.rect);
+    return Boxes.boxesForSpans(page.items, spans, { advance: measure })
+      .concat(images)
+      .concat(page.manual);
   }
 
   function drawPage(page, preview) {
@@ -283,12 +301,14 @@
     // Dismissed detections: dashed, so a mistaken dismissal is obvious and
     // can be clicked back on.
     const off = page.hits.filter(h => page.dismissed.has(h.finding.id));
-    if (off.length) {
+    const offImages = page.imageHits.filter(m => page.dismissed.has(m.id));
+    if (off.length || offImages.length) {
       ctx.save();
       ctx.strokeStyle = '#d98b1f';
       ctx.lineWidth = Math.max(1.5, page.canvas.width / 700);
       ctx.setLineDash([6, 5]);
       for (const hit of off) for (const r of hit.rects) ctx.strokeRect(r.x, r.y, r.w, r.h);
+      for (const m of offImages) ctx.strokeRect(m.rect.x, m.rect.y, m.rect.w, m.rect.h);
       ctx.restore();
     }
 
@@ -339,6 +359,13 @@
       // A drag too small to be a box was a click, and a click means "change
       // your mind about whatever is under it".
       const minimum = canvas.width * 0.008;
+      if (state.mode === 'pick') {
+        // Too small to hold a logo. Leave pick mode armed rather than
+        // silently treating the stray click as a redaction.
+        if (rect.w < 8 || rect.h < 8) { drawPage(page); return; }
+        addTemplate(page, rect);
+        return;
+      }
       if (rect.w < minimum && rect.h < minimum) toggleAt(page, end.x, end.y);
       else page.manual.push(rect);
 
@@ -355,13 +382,181 @@
     const manualHit = Boxes.rectAt(page.manual, x, y);
     if (manualHit !== -1) { page.manual.splice(manualHit, 1); return; }
 
+    // Live things first, in the order they are stacked on the page, then
+    // dismissed ones so a change of mind is always reversible by clicking the
+    // same spot again.
     for (const hit of page.hits) {
       if (page.dismissed.has(hit.finding.id)) continue;
       if (Boxes.rectAt(hit.rects, x, y) !== -1) { page.dismissed.add(hit.finding.id); return; }
     }
+    for (const m of page.imageHits) {
+      if (page.dismissed.has(m.id)) continue;
+      if (Boxes.rectAt([m.rect], x, y) !== -1) { page.dismissed.add(m.id); return; }
+    }
     for (const hit of page.hits) {
       if (!page.dismissed.has(hit.finding.id)) continue;
       if (Boxes.rectAt(hit.rects, x, y) !== -1) { page.dismissed.delete(hit.finding.id); return; }
+    }
+    for (const m of page.imageHits) {
+      if (!page.dismissed.has(m.id)) continue;
+      if (Boxes.rectAt([m.rect], x, y) !== -1) { page.dismissed.delete(m.id); return; }
+    }
+  }
+
+  // ---------- picking a logo, and finding it again ----------
+
+  function sensitivity() {
+    return Number(el('sens').value) / 100;
+  }
+
+  function setMode(mode) {
+    state.mode = mode;
+    const button = el('pick');
+    button.classList.toggle('on', mode === 'pick');
+    button.textContent = mode === 'pick' ? 'Cancel — drag a box around a logo' : 'Pick a logo to match';
+    for (const page of state.pages) {
+      if (page.canvas) page.canvas.parentElement.classList.toggle('picking', mode === 'pick');
+    }
+    el('tip').textContent = mode === 'pick'
+      ? 'Drag a box around the logo you want found everywhere else.'
+      : 'Drag on the page to add a box by hand. Click a box you added to remove it.';
+  }
+
+  // Cuts the picked region out of the page and searches every page for it.
+  async function addTemplate(page, rect) {
+    const cut = ImageSearch.templateFrom(page.source, rect);
+    setMode('box');
+    if (!cut) {
+      alert('That pick was too small to match on. Draw a box around the whole logo.');
+      drawPage(page);
+      return;
+    }
+
+    const template = {
+      id: 'tpl' + (nextTemplateId++),
+      cut,
+      rect,
+      thumbnail: thumbnailOf(page.source, rect),
+      matches: 0,
+    };
+    state.templates.push(template);
+    await runSearch(template);
+  }
+
+  // Re-runs one template across the document and replaces its matches. Called
+  // on pick and again whenever the sensitivity changes, so what is on screen
+  // always reflects the current threshold rather than the one in force when
+  // the logo happened to be picked.
+  async function runSearch(template) {
+    busy(true, 'Looking for that image…');
+    try {
+      const hits = await ImageSearch.search(
+        state.pages, template.cut, { threshold: sensitivity() },
+        (done, total) => busy(true, 'Searching page ' + done + ' of ' + total + '…'));
+
+      for (const page of state.pages) {
+        page.imageHits = page.imageHits.filter(m => m.templateId !== template.id);
+      }
+      hits.forEach((hit, n) => {
+        const page = state.pages[hit.pageIndex];
+        if (!page) return;
+        page.imageHits.push({
+          // Stable across a re-search at a new threshold, so a match the
+          // reviewer already dismissed stays dismissed.
+          id: template.id + ':' + hit.pageIndex + ':' + Math.round(hit.x) + ':' + Math.round(hit.y),
+          templateId: template.id,
+          rect: { x: hit.x, y: hit.y, w: hit.w, h: hit.h },
+          score: hit.score,
+        });
+      });
+      template.matches = hits.length;
+
+      for (const page of state.pages) drawPage(page);
+      renderTemplates();
+      renderCounts();
+    } catch (error) {
+      alert('That image search could not finish: ' + (error && error.message ? error.message : error));
+    } finally {
+      busy(false);
+    }
+  }
+
+  function removeTemplate(id) {
+    state.templates = state.templates.filter(t => t.id !== id);
+    for (const page of state.pages) {
+      page.imageHits = page.imageHits.filter(m => m.templateId !== id);
+    }
+    for (const page of state.pages) drawPage(page);
+    renderTemplates();
+    renderCounts();
+  }
+
+  // A small picture of what was picked, so a list of three logos is
+  // distinguishable at a glance.
+  function thumbnailOf(source, rect) {
+    const canvas = document.createElement('canvas');
+    const scale = Math.min(1, 84 / Math.max(rect.w, rect.h));
+    canvas.width = Math.max(1, Math.round(rect.w * scale));
+    canvas.height = Math.max(1, Math.round(rect.h * scale));
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(source, rect.x, rect.y, rect.w, rect.h, 0, 0, canvas.width, canvas.height);
+    return canvas;
+  }
+
+  function renderTemplates() {
+    const host = el('templates');
+    host.textContent = '';
+    for (const template of state.templates) {
+      const row = document.createElement('li');
+      const name = document.createElement('span');
+      name.className = 't';
+      name.textContent = template.matches === 1 ? 'found once' : 'found ' + template.matches + ' times';
+
+      const count = document.createElement('span');
+      count.className = 'n';
+      count.textContent = String(template.matches);
+
+      const remove = document.createElement('button');
+      remove.type = 'button';
+      remove.textContent = '×';
+      remove.title = 'Stop matching this image';
+      remove.addEventListener('click', () => removeTemplate(template.id));
+
+      row.append(template.thumbnail, name, count, remove);
+      host.append(row);
+    }
+  }
+
+  // ---------- what each typed term actually matched ----------
+  //
+  // A term that matched nothing looks exactly like one that matched: the box
+  // just sits there. Saying so is the difference between a reviewer noticing
+  // they typed a name wrong and shipping a document with it still in.
+  function renderTermCounts() {
+    const host = el('termcounts');
+    host.textContent = '';
+    if (!state.terms.length) return;
+
+    const texts = state.kind === 'text' ? [state.text] : state.pages.map(p => p.text);
+    for (const term of state.terms) {
+      let n = 0;
+      for (const text of texts) n += Detect.findTerms(text, [term]).length;
+
+      const row = document.createElement('li');
+      if (n === 0) row.className = 'none';
+
+      const label = document.createElement('span');
+      label.className = 't';
+      label.textContent = term;
+
+      const count = document.createElement('span');
+      count.className = 'n';
+      count.textContent = n === 0 ? 'not found' : String(n);
+
+      row.append(label, count);
+      host.append(row);
     }
   }
 
@@ -477,6 +672,20 @@
   });
 
   el('medium').addEventListener('change', e => { state.includeMedium = e.target.checked; rescan(); });
+
+  el('pick').addEventListener('click', () => setMode(state.mode === 'pick' ? 'box' : 'pick'));
+
+  // The slider moves continuously; re-running the whole document on every
+  // pixel of travel would make it unusable, so the search waits for it to
+  // settle. The read-out updates immediately either way.
+  let sensTimer = null;
+  el('sens').addEventListener('input', () => {
+    el('sensvalue').textContent = sensitivity().toFixed(2);
+    clearTimeout(sensTimer);
+    sensTimer = setTimeout(async () => {
+      for (const template of state.templates) await runSearch(template);
+    }, 350);
+  });
   el('export').addEventListener('click', exportFile);
   el('restart').addEventListener('click', () => {
     state.pages = [];
@@ -485,8 +694,12 @@
     dismissedText.clear();
     el('terms').value = '';
     state.terms = [];
+    state.templates = [];
+    setMode('box');
+    renderTemplates();
+    renderTermCounts();
     show('drop');
   });
 
-  window.Blackbar = { state, rescan, loadFile, exportFile };
+  window.Blackbar = { state, rescan, loadFile, exportFile, setMode, runSearch, addTemplate };
 })();

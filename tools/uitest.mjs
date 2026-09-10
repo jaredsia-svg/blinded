@@ -11,7 +11,7 @@ import { dirname, extname, join, normalize, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { chromium } from 'playwright';
-import { buildTextPdf } from './fixture.mjs';
+import { buildTextPdf, buildLogoPdf, LOGO_PLACEMENTS } from './fixture.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = resolve(join(here, '..'));
@@ -45,6 +45,8 @@ const base = 'http://127.0.0.1:' + port + '/';
 
 const fixturePath = join(tmpdir(), 'blackbar-fixture.pdf');
 writeFileSync(fixturePath, buildTextPdf());
+const logoPath = join(tmpdir(), 'blackbar-logo.pdf');
+writeFileSync(logoPath, buildLogoPdf());
 const textPath = join(tmpdir(), 'blackbar-fixture.txt');
 writeFileSync(textPath, 'Jane Doe — jane.doe@example.com — (415) 555-0132\nnothing sensitive here\n');
 
@@ -248,6 +250,104 @@ try {
   }
   const meta = await doc.getMetadata();
   check('the export declares Blackbar as its producer', meta.info.Producer === 'Blackbar');
+
+  // ---------- picking a logo and finding it everywhere ----------
+  //
+  // The fixture draws the same asymmetric mark four times across two pages, at
+  // two different sizes, using path operators rather than a shared image
+  // object — so this exercises the pixel matcher, not a shortcut through the
+  // PDF's structure. A fifth, different mark sits on page 2 as a decoy.
+  await page.click('#restart');
+  await page.waitForSelector('#view-drop:not([hidden])');
+  await page.setInputFiles('#file', logoPath);
+  await page.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
+  check('the two-page logo document opened',
+    await page.evaluate(() => window.Blackbar.state.pages.length) === 2);
+
+  // Entering pick mode changes what a drag means, and says so.
+  await page.click('#pick');
+  check('pick mode is announced on the button',
+    (await page.textContent('#pick')).includes('drag a box'));
+  check('pick mode changes the instruction under the panel',
+    (await page.textContent('#tip')).includes('found everywhere else'));
+
+  // Drag around the first logo. Its PDF coordinates are known, so convert:
+  // pdf y is measured up from the bottom, the canvas is 2x, and a little
+  // margin makes this a realistic hand-drawn pick rather than a perfect one.
+  const first = LOGO_PLACEMENTS[0];
+  await page.evaluate(({ x, y, size }) => {
+    const p = window.Blackbar.state.pages[0];
+    const S = 2, PAD = 3;
+    const cx = x * S - PAD;
+    const cy = (792 - y - size) * S - PAD;
+    const cw = size * S + PAD * 2;
+    const ch = size * S + PAD * 2;
+    const rect = p.canvas.getBoundingClientRect();
+    const sx = rect.width / p.canvas.width;
+    const sy = rect.height / p.canvas.height;
+    const send = (type, px, py) => p.canvas.dispatchEvent(new PointerEvent(type, {
+      clientX: rect.left + px * sx, clientY: rect.top + py * sy, bubbles: true, pointerId: 9,
+    }));
+    send('pointerdown', cx, cy);
+    send('pointermove', cx + cw, cy + ch);
+    send('pointerup', cx + cw, cy + ch);
+  }, first);
+
+  await page.waitForFunction(() => window.Blackbar.state.templates.length === 1, { timeout: 60000 });
+  // Wait for the sweep to finish. `waitForSelector` is wrong here — it waits
+  // for visibility, and a hidden overlay is never visible.
+  await page.waitForFunction(() => document.getElementById('busy').hidden, { timeout: 180000 });
+
+  const matched = await page.evaluate(() => ({
+    templates: window.Blackbar.state.templates.length,
+    perPage: window.Blackbar.state.pages.map(p => p.imageHits.length),
+    total: window.Blackbar.state.pages.reduce((n, p) => n + p.imageHits.length, 0),
+    scales: window.Blackbar.state.pages.flatMap(p => p.imageHits.map(m => Math.round(m.rect.w))),
+  }));
+  check('picking a logo leaves pick mode', await page.evaluate(() => window.Blackbar.state.mode) === 'box');
+  check('every copy of the logo is found across both pages',
+    matched.total === 4, matched.total + ' found, per page ' + JSON.stringify(matched.perPage));
+  check('including the two on the second page',
+    matched.perPage[1] === 1, JSON.stringify(matched.perPage));
+  check('and the smaller copy, at a different size',
+    new Set(matched.scales).size >= 2, 'widths ' + JSON.stringify(matched.scales));
+  check('the decoy mark is not matched', matched.total === 4);
+  check('the panel reports the image matches',
+    (await page.textContent('#counts')).includes('image match'));
+  check('the picked logo is listed with its count',
+    (await page.textContent('#templates')).includes('found 4 times'),
+    await page.textContent('#templates'));
+
+  // The listing is not the deliverable — the pixels are. Preview and export
+  // share activeBoxes(), so a black centre here is a black centre in the file.
+  const logoPainted = await page.evaluate(() => {
+    const p = window.Blackbar.state.pages[1];
+    const m = p.imageHits[0];
+    const d = p.canvas.getContext('2d').getImageData(
+      Math.round(m.rect.x + m.rect.w / 2), Math.round(m.rect.y + m.rect.h / 2), 1, 1).data;
+    return [d[0], d[1], d[2]];
+  });
+  check('a matched logo is painted solid black on the page',
+    logoPainted.every(v => v === 0), JSON.stringify(logoPainted));
+
+  // A matched logo is a proposal like any other: clickable off and on.
+  const afterClick = await page.evaluate(() => {
+    const p = window.Blackbar.state.pages[0];
+    const m = p.imageHits[0];
+    const rect = p.canvas.getBoundingClientRect();
+    const x = rect.left + (m.rect.x + m.rect.w / 2) * (rect.width / p.canvas.width);
+    const y = rect.top + (m.rect.y + m.rect.h / 2) * (rect.height / p.canvas.height);
+    for (const t of ['pointerdown', 'pointerup']) {
+      p.canvas.dispatchEvent(new PointerEvent(t, { clientX: x, clientY: y, bubbles: true, pointerId: 3 }));
+    }
+    return p.dismissed.size;
+  });
+  check('an image match can be dismissed by clicking it', afterClick === 1, String(afterClick));
+
+  // Removing the template withdraws its matches entirely.
+  await page.click('#templates button');
+  check('removing the picked logo removes its matches',
+    await page.evaluate(() => window.Blackbar.state.pages.reduce((n, p) => n + p.imageHits.length, 0)) === 0);
 
   // ---------- a plain text document ----------
   await page.click('#restart');

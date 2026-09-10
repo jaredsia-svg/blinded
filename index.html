@@ -61,9 +61,23 @@
         </div>
 
         <div class="field">
-          <label for="terms">Names and other terms to cover</label>
+          <label for="terms">Text to redact</label>
           <textarea id="terms" rows="3" placeholder="One per line — Jane Doe, an account number, a project codename"></textarea>
-          <p class="hint">No rule can find a name reliably. List them here and every occurrence is matched, ignoring case.</p>
+          <p class="hint">No rule can find a name reliably. Type them here and every occurrence is covered, ignoring case.</p>
+          <ul id="termcounts" class="termcounts"></ul>
+        </div>
+
+        <div class="field">
+          <label>Images and logos</label>
+          <button type="button" id="pick" class="ghost wide">Pick a logo to match</button>
+          <p class="hint" id="pickhint">Draw a box around a logo, stamp, signature or face. Every place it appears again is found and proposed.</p>
+          <ul id="templates" class="templates"></ul>
+          <label class="sens" for="sens">
+            Match sensitivity
+            <input type="range" id="sens" min="70" max="95" value="82" step="1">
+            <span id="sensvalue">0.82</span>
+          </label>
+          <p class="hint">Lower finds more, including things that only resemble the logo. Every match is proposed, never applied on its own.</p>
         </div>
 
         <div id="kinds" class="kinds"></div>
@@ -73,7 +87,7 @@
           <p class="hint" id="medium-hint">Shape-only matches, like a five-digit number that may be a postcode.</p>
         </div>
 
-        <p class="tip">Drag on the page to add a box by hand. Click a box you added to remove it.</p>
+        <p class="tip" id="tip">Drag on the page to add a box by hand. Click a box you added to remove it.</p>
 
         <div class="counts" id="counts"></div>
       </aside>
@@ -106,6 +120,8 @@
 <script src="lib/detect.js"></script>
 <script src="lib/boxes.js"></script>
 <script src="lib/measure.js"></script>
+<script src="lib/match.js"></script>
+<script src="lib/imagesearch.js"></script>
 <script src="lib/pdfwrite.js"></script>
 <script src="lib/pdfread.js"></script>
 <script src="lib/render.js"></script>

@@ -21,12 +21,13 @@ const check = (label, ok, detail) => {
   else failures.push(label + (detail === undefined ? '' : ' — ' + detail));
 };
 
-for (const file of ['detect.js', 'boxes.js', 'pdfwrite.js']) {
+for (const file of ['detect.js', 'boxes.js', 'pdfwrite.js', 'match.js']) {
   runInThisContext(readFileSync(join(root, 'lib', file), 'utf8'), { filename: file });
 }
 const Detect = globalThis.BlackbarDetect;
 const Boxes = globalThis.BlackbarBoxes;
 const PdfWrite = globalThis.BlackbarPdfWrite;
+const Match = globalThis.BlackbarMatch;
 
 // ---------- checksums ----------
 
@@ -171,6 +172,171 @@ check('a drag normalises to positive extents', (() => {
   const r = Boxes.rectFromDrag(30, 40, 10, 10);
   return r.x === 10 && r.y === 10 && r.w === 20 && r.h === 30;
 })());
+
+// ---------- matching an image ----------
+//
+// A synthetic page with a known mark stamped into it at known places, so the
+// matcher can be held to finding exactly those and nothing else.
+
+function blankPage(w, h, level) {
+  const page = new Float32Array(w * h).fill(level === undefined ? 210 : level);
+  return page;
+}
+
+// An asymmetric glyph: a bar across the top, a diagonal, and a stroke down the
+// right edge. `gain` fades it towards mid grey, standing in for a lighter
+// print or a washed-out scan.
+//
+// Deliberately not a checkerboard, which was the first thing tried here. A
+// periodic pattern correlates with a shifted copy of itself — shift a
+// checkerboard by two and it *is* its own inverse — so the inversion test
+// below passed against a neighbouring offset and proved nothing about the
+// matcher. A logo worth redacting has no such symmetry, and neither does this.
+function markPixel(x, y, size) {
+  const bar = y < size / 4 && x < size * 0.7;
+  const diagonal = Math.abs(x - y) < 2;
+  const edge = x > size - 3 && y > size / 3;
+  return bar || diagonal || edge;
+}
+
+function stamp(page, pw, x0, y0, size, gain) {
+  const g = gain === undefined ? 1 : gain;
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const v = markPixel(x, y, size) ? 30 : 235;
+      page[(y0 + y) * pw + x0 + x] = v * g + (1 - g) * 128;
+    }
+  }
+}
+
+function markTemplate(size) {
+  const t = new Float32Array(size * size);
+  stamp(t, size, 0, 0, size, 1);
+  return Match.prepareTemplate(t, size, size);
+}
+
+{
+  const W = 160, H = 120, S = 16;
+  const page = blankPage(W, H);
+  stamp(page, W, 10, 10, S, 1);
+  stamp(page, W, 100, 20, S, 1);
+  stamp(page, W, 60, 90, S, 0.45);   // same mark, much fainter
+  const tpl = markTemplate(S);
+
+  const raw = Match.correlate(page, W, H, tpl);
+  const hits = Match.suppress(raw);
+  check('a mark stamped three times is found three times', hits.length === 3,
+    hits.length + ' found');
+  check('and at the default threshold each is a single clean hit',
+    raw.length === 3, raw.length + ' raw positions');
+
+  // Suppression earns its place at looser thresholds and across the scale
+  // sweep, where each mark does come back as a cluster of near-misses around
+  // the true position. Forced here rather than assumed.
+  const loose = Match.correlate(page, W, H, tpl, { threshold: 0.45 });
+  const collapsed = Match.suppress(loose);
+  check('a looser threshold does produce a cluster around each mark',
+    loose.length > 3, loose.length + ' raw positions at 0.45');
+  check('and suppression collapses those clusters',
+    collapsed.length < loose.length, loose.length + ' -> ' + collapsed.length);
+  check('every real mark survives suppression',
+    [[10, 10], [100, 20], [60, 90]].every(([x, y]) =>
+      collapsed.some(h => Math.abs(h.x - x) <= 1 && Math.abs(h.y - y) <= 1)),
+    JSON.stringify(collapsed.map(h => [h.x, h.y])));
+  // Suppression merges boxes that overlap; it cannot know that a box which
+  // overlaps nothing is wrong. A threshold loose enough to admit a false
+  // positive somewhere else on the page keeps it, which is the whole reason
+  // the sensitivity control warns about lowering it and why every match is
+  // proposed to the reviewer rather than applied.
+  check('a loose threshold still lets an unrelated position through',
+    collapsed.length > 3, collapsed.length + ' at 0.45 vs 3 real marks');
+
+  const at = (x, y) => hits.some(h => Math.abs(h.x - x) <= 1 && Math.abs(h.y - y) <= 1);
+  check('the first copy is located', at(10, 10));
+  check('the second copy is located', at(100, 20));
+  check('the faded copy is located too', at(60, 90));
+  check('a faded copy still scores as a match',
+    hits.every(h => h.score > 0.9), JSON.stringify(hits.map(h => +h.score.toFixed(3))));
+}
+
+{
+  // Contrast invariance is the whole reason for normalising. The same mark on
+  // a darker page, at half the contrast, has entirely different pixel values.
+  const W = 80, H = 60, S = 16;
+  const dark = blankPage(W, H, 90);
+  stamp(dark, W, 20, 20, S, 0.5);
+  const hits = Match.suppress(Match.correlate(dark, W, H, markTemplate(S)));
+  check('the same mark is found on a darker page at lower contrast',
+    hits.length === 1 && Math.abs(hits[0].x - 20) <= 1, JSON.stringify(hits));
+}
+
+{
+  // The other half of the bargain: it must not match things that are merely
+  // busy. An inverted mark is structurally identical but opposite, and a
+  // correlation that reported it would be matching texture, not shape.
+  const W = 80, H = 60, S = 16;
+  const page = blankPage(W, H);
+  for (let y = 0; y < S; y++) {
+    for (let x = 0; x < S; x++) {
+      page[(20 + y) * W + 20 + x] = markPixel(x, y, S) ? 235 : 30;   // inverted
+    }
+  }
+  const hits = Match.suppress(Match.correlate(page, W, H, markTemplate(S)));
+  check('an inverted mark is not reported as the same mark', hits.length === 0,
+    JSON.stringify(hits.map(h => +h.score.toFixed(2))));
+}
+
+{
+  const W = 80, H = 60, S = 16;
+  const noise = blankPage(W, H);
+  let seed = 7;
+  for (let i = 0; i < noise.length; i++) {
+    seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+    noise[i] = (seed % 256);
+  }
+  const hits = Match.suppress(Match.correlate(noise, W, H, markTemplate(S)));
+  check('random noise produces no matches', hits.length === 0, hits.length + ' false positives');
+}
+
+check('a featureless pick is refused rather than matching everything',
+  Match.prepareTemplate(new Float32Array(64).fill(120), 8, 8) === null);
+check('an empty pick is refused', Match.prepareTemplate(new Float32Array(0), 0, 0) === null);
+check('a template larger than the page finds nothing',
+  Match.correlate(new Float32Array(16), 4, 4, markTemplate(8)).length === 0);
+
+// Resampling has to preserve structure, since every search runs on a resized
+// copy of both the template and the page.
+{
+  const S = 32;
+  const big = new Float32Array(S * S);
+  stamp(big, S, 0, 0, S, 1);
+  const small = Match.resize(big, S, S, 16, 16);
+  check('resampling keeps the mark recognisable',
+    Match.prepareTemplate(small, 16, 16) !== null);
+  check('resampling preserves the overall brightness', (() => {
+    const mean = a => a.reduce((n, v) => n + v, 0) / a.length;
+    return Math.abs(mean(big) - mean(small)) < 12;
+  })(), 'means drifted');
+  check('resizing to nothing returns an empty image',
+    Match.resize(big, S, S, 0, 0).length === 0);
+}
+
+// Overlap arithmetic, which decides what counts as the same find.
+check('identical boxes overlap completely',
+  Match.iou({x:0,y:0,w:10,h:10}, {x:0,y:0,w:10,h:10}) === 1);
+check('disjoint boxes do not overlap',
+  Match.iou({x:0,y:0,w:10,h:10}, {x:50,y:50,w:10,h:10}) === 0);
+check('suppression keeps the better-scoring of two overlapping finds', (() => {
+  const kept = Match.suppress([
+    { x: 0, y: 0, w: 10, h: 10, score: 0.85 },
+    { x: 1, y: 1, w: 10, h: 10, score: 0.95 },
+  ]);
+  return kept.length === 1 && kept[0].score === 0.95;
+})());
+check('suppression keeps finds that do not overlap', Match.suppress([
+  { x: 0, y: 0, w: 10, h: 10, score: 0.9 },
+  { x: 40, y: 0, w: 10, h: 10, score: 0.9 },
+]).length === 2);
 
 // ---------- pdf writer ----------
 

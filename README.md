@@ -70,13 +70,60 @@ hundreds of false positives trains you to approve everything, which loses both.
 | Dates of birth | requires a birth-date keyword |
 
 **Names are not on that list, and cannot be.** No rule finds a name reliably.
-Type the names you care about into the terms box and every occurrence is
-matched, ignoring case, longest first.
+
+## Typing what to redact
+
+The **Text to redact** box takes anything you want covered, one per line —
+names, an account number, a project codename. Every occurrence is matched,
+ignoring case, longest first, so "Jane Doe" wins over "Jane".
+
+Each term is listed underneath with how many times it was found, and a term
+that matched **nothing** is called out in amber. That feedback is the point: a
+mistyped name and a name that genuinely does not appear look identical
+otherwise, and the failure is silent until the document is already out.
+
+## Matching a logo everywhere it appears
+
+Click **Pick a logo to match** and drag a box around a logo, a stamp, a
+signature, a face — anything visual. Blackbar searches every page for it and
+proposes a box over each place it finds. Removing the picked logo from the
+list withdraws all of its matches at once.
+
+The method is normalised cross-correlation on greyscale. Both the template and
+the patch under test have their mean subtracted and are divided by their
+standard deviation before being correlated, which is what lets it find the same
+mark printed lighter, scanned at a different exposure, or photocopied onto a
+darker page — cases where the absolute pixel values share nothing and the
+structure is identical. The same template is correlated at seven sizes, so a
+letterhead repeated at half scale in a footer is still found.
+
+**Match sensitivity** sets the correlation threshold. The default, 0.82, sits
+comfortably below a re-encoded copy of the same mark and above most unrelated
+page furniture. Lowering it finds more and also finds things that merely
+resemble the logo — the suite has a test asserting exactly that, because it is
+a real property of the method rather than a caveat worth burying.
+
+What it does not do, stated plainly rather than left to be discovered:
+
+- **It does not rotate.** A logo turned even slightly will not be found.
+- **It ignores colour.** Two marks identical in shape and different in hue
+  match. For redaction that errs the safe way — one logo too many covered,
+  rather than one missed.
+- **It does not know what a logo is.** It matches structure. A repeated table
+  rule or a column of identical bullets can score highly, which is why every
+  match is proposed and clickable rather than applied.
+- **A blank or near-blank pick is refused** rather than matched against every
+  empty patch on the page.
+
+A search over a two-page document takes about 0.4 seconds; cost scales with
+page area and page count, and the progress message names the page it is on.
 
 ## Reviewing
 
-- Detected values are covered with a solid black bar — exactly what the export
-  will contain, so the preview is never more reassuring than the result.
+- Detected values and matched images are covered with a solid black bar —
+  exactly what the export will contain, since the preview and the export are
+  built from the same list of boxes. The preview is never more reassuring than
+  the result.
 - **Click a bar** to turn that one off. It becomes a dashed amber outline, so a
   mistaken dismissal is visible, and clicking it again turns it back on.
 - **Drag on the page** to add a box by hand. Click a box you drew to remove it.
@@ -85,8 +132,10 @@ matched, ignoring case, longest first.
 ## Known limits
 
 - **Scanned documents have no text layer.** If a PDF is a photograph of a page,
-  there is nothing to search and Blackbar will find nothing. Everything must be
-  covered by hand. There is no OCR.
+  there is nothing to search for *text* and the detectors and terms box will
+  find nothing. There is no OCR. Image matching does work on a scan, though —
+  it reads pixels — so a repeated letterhead or signature on a scanned document
+  can still be found and covered in one go.
 - **Form fields and annotations are drawn but not searched.** pdf.js reports
   page text, not annotation contents, so a value typed into a form field is
   visible on the page and will not be detected. Cover those by hand.
@@ -119,7 +168,11 @@ pipeline, and re-opens the result to prove the text is gone. `npm run test:ui`
 drives the actual interface with Playwright: it loads that PDF, checks the
 detections, clicks a bar off and back on, drags a box, exports, and then
 verifies the downloaded file contains no text objects and none of the secrets
-as raw bytes. It also renders a deliberately adversarial line — narrow glyphs
+as raw bytes. It also opens a second fixture whose logo is drawn four times
+across two pages, at two sizes, with path operators rather than a shared image
+object — so the pixel matcher is genuinely under test rather than a shortcut
+through the PDF's structure — picks one copy, and asserts the other three are
+found, a fifth decoy mark is not, and the matches are painted black. It also renders a deliberately adversarial line — narrow glyphs
 before a card number, where estimating character positions by even division is
 badly wrong — and asserts the bar covers the value's ink from first pixel to
 last.
@@ -133,6 +186,8 @@ app.css           all of the styling
 lib/detect.js     rules that propose spans, and the checksums behind them
 lib/boxes.js      character spans to rectangles on a page
 lib/measure.js    real glyph advances, so a bar lands on its text
+lib/match.js      normalised cross-correlation, on plain arrays
+lib/imagesearch.js  runs the matcher over pages, at several sizes
 lib/pdfread.js    pdf.js wrapper: page images plus positioned text
 lib/pdfwrite.js   builds the image-only output PDF
 lib/render.js     burns boxes into pixels and encodes them
