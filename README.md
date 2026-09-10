@@ -118,6 +118,12 @@ It costs four templates per word — one per typeface — searched in the same
 single pass as everything else. It is off by default and runs only when you
 press Redact.
 
+A word that is real text *and* recognisable by its shape is found twice, once
+by each route. Only one mark is kept: the one from the text layer, since it
+comes from glyph positions rather than from correlating a rendering. The
+duplicate is set aside rather than deleted, so removing the term brings it
+back rather than leaving a hole.
+
 ## Matching a logo everywhere it appears
 
 Click **Pick a logo to match** and drag a box around a logo, a stamp, a

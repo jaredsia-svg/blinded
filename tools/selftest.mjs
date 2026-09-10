@@ -369,6 +369,28 @@ check('a template larger than the page finds nothing',
     Match.resize(big, S, S, 0, 0).length === 0);
 }
 
+// Whether two marks are the same find, which is a different question from how
+// well two boxes agree.
+//
+// The same word can be found twice by different means — once from the text
+// layer and once by recognising its shape — and the two boxes then differ in
+// size and sit slightly apart. The pair that prompted this had the picture box
+// entirely inside the text box: an overlap of 1.0 measured against the smaller
+// area, but only 0.60 by IoU, which is not obviously "the same thing" at all.
+check('a box entirely inside another overlaps it completely',
+  Match.overlapFraction({ x: 133, y: 136, w: 132, h: 63 },
+    { x: 142, y: 143, w: 115, h: 43 }) === 1);
+check('and IoU would have understated it',
+  Match.iou({ x: 133, y: 136, w: 132, h: 63 }, { x: 142, y: 143, w: 115, h: 43 }) < 0.7);
+check('boxes that miss each other overlap not at all',
+  Match.overlapFraction({ x: 0, y: 0, w: 50, h: 50 }, { x: 200, y: 0, w: 50, h: 50 }) === 0);
+check('boxes that merely touch do not overlap',
+  Match.overlapFraction({ x: 0, y: 0, w: 50, h: 50 }, { x: 50, y: 0, w: 50, h: 50 }) === 0);
+check('half of the smaller box inside the larger reads as a half',
+  Match.overlapFraction({ x: 0, y: 0, w: 50, h: 50 }, { x: 25, y: 0, w: 50, h: 50 }) === 0.5);
+check('a zero-area box cannot overlap anything',
+  Match.overlapFraction({ x: 0, y: 0, w: 0, h: 0 }, { x: 0, y: 0, w: 50, h: 50 }) === 0);
+
 // Overlap arithmetic, which decides what counts as the same find.
 check('identical boxes overlap completely',
   Match.iou({x:0,y:0,w:10,h:10}, {x:0,y:0,w:10,h:10}) === 1);

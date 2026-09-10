@@ -239,6 +239,7 @@
         drawPage(page);
       }
     }
+    markDuplicates();
     renderKinds();
     renderTermCounts();
     applyLabels();
@@ -296,7 +297,7 @@
     }
     return state.pages.reduce((sum, page) =>
       sum + page.hits.filter(h => !page.dismissed.has(h.finding.id)).length
-        + page.imageHits.filter(m => !page.dismissed.has(m.id)).length
+        + liveImageHits(page).filter(m => !page.dismissed.has(m.id)).length
         + page.manual.length, 0);
   }
 
@@ -367,7 +368,8 @@
     try {
       results = await ImageSearch.searchAllParallel(state.pages, entries,
         { threshold: sensitivity() },
-        (done, total) => busy(true, 'Searching for ' + what + ' — page ' + done + ' of ' + total + '…'));
+        (done, total) => busy(true,
+          'Searching for ' + what + ' — page ' + done + ' of ' + total + '…'));
     } finally {
       busy(false);
     }
@@ -383,6 +385,7 @@
         inverted: Boolean(hit.inverted),
       }));
       entry.logo.matches = found.matches.length;
+      entry.logo.rawMatches = found.matches.length;
       entry.logo.best = found.best;
       entry.logo.searched = true;
       reportSearch(found);
@@ -426,6 +429,7 @@
       reportSearch({ matches: pooled, best });
     }
 
+    markDuplicates();
     renderTemplates();
     renderTermCounts();
     renderCounts();
@@ -456,6 +460,49 @@
     hint.classList.add('warnhint');
   }
 
+  // ---------- one occurrence, one mark ----------
+
+  // How much two marks must overlap to be treated as the same find. The pair
+  // that prompted this had one box entirely inside the other, so anything
+  // above a half is comfortably clear of a genuine near-miss.
+  const SAME_MARK = 0.5;
+
+  // A word that is real text *and* recognisable by its shape gets found twice:
+  // once from the text layer, once by the picture search. Two boxes appear,
+  // slightly different sizes and slightly offset, over one word — which looks
+  // like a bug because it is one. It also double-counts in the panel and, with
+  // labelling on, tries to write two placeholders into the same space.
+  //
+  // The text-layer box wins. It comes from glyph positions rather than from
+  // correlating a rendering, so it is the more precise of the two.
+  //
+  // Marked rather than deleted, and recomputed whenever the findings change,
+  // so that removing the term brings the picture match back rather than
+  // leaving a hole where a mark used to be.
+  function markDuplicates() {
+    for (const page of state.pages) {
+      const textRects = [];
+      // Dismissed findings count here too. A reviewer who clicked a mark off
+      // decided that occurrence should stay; a duplicate quietly covering it
+      // anyway would overrule them.
+      for (const hit of page.hits) for (const rect of hit.rects) textRects.push(rect);
+
+      const kept = [];
+      for (const match of page.imageHits) {
+        const overText = textRects.some(rect => Match.overlapFraction(match.rect, rect) > SAME_MARK);
+        const overImage = kept.some(other => Match.overlapFraction(match.rect, other.rect) > SAME_MARK);
+        match.superseded = overText || overImage;
+        if (!match.superseded) kept.push(match);
+      }
+    }
+  }
+
+  // The image matches that actually count: everything not already covered by
+  // something else.
+  function liveImageHits(page) {
+    return page.imageHits.filter(m => !m.superseded);
+  }
+
   // ---------- placeholder labels ----------
 
   // Everything that will be covered, in the order a reader meets it. Order is
@@ -480,7 +527,7 @@
           term: hit.finding.term,
         });
       }
-      for (const match of page.imageHits) {
+      for (const match of liveImageHits(page)) {
         if (page.dismissed.has(match.id)) continue;
         // A picture of a typed word is that word, so it is labelled as one and
         // shares a placeholder with every written occurrence of it. Anything
@@ -617,7 +664,7 @@
       : state.pages.reduce((sum, p) => sum + p.hits.filter(h => !p.dismissed.has(h.finding.id)).length, 0);
     const manual = state.pages.reduce((sum, p) => sum + p.manual.length, 0);
     const images = state.pages.reduce(
-      (sum, p) => sum + p.imageHits.filter(m => !p.dismissed.has(m.id)).length, 0);
+      (sum, p) => sum + liveImageHits(p).filter(m => !p.dismissed.has(m.id)).length, 0);
     const skipped = state.kind === 'text'
       ? dismissedText.size
       : state.pages.reduce((sum, p) => sum + p.dismissed.size, 0);
@@ -659,7 +706,7 @@
 
   function activeBoxes(page) {
     const live = page.hits.filter(h => !page.dismissed.has(h.finding.id));
-    const images = page.imageHits.filter(m => !page.dismissed.has(m.id));
+    const images = liveImageHits(page).filter(m => !page.dismissed.has(m.id));
 
     if (!state.labelling) {
       // Merged across findings, which closes the gaps between adjacent bars.
@@ -728,7 +775,7 @@
     // Dismissed detections: dashed, so a mistaken dismissal is obvious and
     // can be clicked back on.
     const off = page.hits.filter(h => page.dismissed.has(h.finding.id));
-    const offImages = page.imageHits.filter(m => page.dismissed.has(m.id));
+    const offImages = liveImageHits(page).filter(m => page.dismissed.has(m.id));
     if (off.length || offImages.length) {
       ctx.save();
       ctx.strokeStyle = '#d98b1f';
@@ -836,7 +883,7 @@
         return;
       }
     }
-    for (const m of page.imageHits) {
+    for (const m of liveImageHits(page)) {
       if (page.dismissed.has(m.id)) continue;
       if (Boxes.rectAt([m.rect], x, y) !== -1) {
         page.dismissed.add(m.id);
@@ -852,7 +899,7 @@
         return;
       }
     }
-    for (const m of page.imageHits) {
+    for (const m of liveImageHits(page)) {
       if (!page.dismissed.has(m.id)) continue;
       if (Boxes.rectAt([m.rect], x, y) !== -1) {
         page.dismissed.delete(m.id);
@@ -956,16 +1003,21 @@
       const row = document.createElement('li');
       const name = document.createElement('span');
       name.className = 't';
+      // Counted from what survives, not from what the search returned: a
+      // match already covered by a text mark is not a second thing found.
+      const live = state.pages.reduce((sum, page) =>
+        sum + liveImageHits(page).filter(m => m.templateId === template.id).length, 0);
+
       if (!template.searched) {
         name.textContent = 'not searched yet';
         name.classList.add('waiting');
       } else {
-        name.textContent = template.matches === 1 ? 'found once' : 'found ' + template.matches + ' times';
+        name.textContent = live === 1 ? 'found once' : 'found ' + live + ' times';
       }
 
       const count = document.createElement('span');
       count.className = 'n';
-      count.textContent = template.searched ? String(template.matches) : '—';
+      count.textContent = template.searched ? String(live) : '—';
 
       const remove = document.createElement('button');
       remove.type = 'button';
@@ -1001,7 +1053,7 @@
       label.textContent = term;
 
       const pictures = state.pages.reduce((sum, page) =>
-        sum + page.imageHits.filter(m => m.term === term).length, 0);
+        sum + liveImageHits(page).filter(m => m.term === term).length, 0);
 
       const count = document.createElement('span');
       count.className = 'n';

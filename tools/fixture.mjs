@@ -225,3 +225,38 @@ export function buildSmallLogoPdf() {
   push('trailer\n<< /Size 7 /Root 1 0 R >>\nstartxref\n' + xrefAt + '\n%%EOF\n');
   return Buffer.concat(chunks);
 }
+
+
+// A word set large enough as real text that the picture search recognises it
+// too — which is the whole point of the fixture.
+//
+// At the small sizes of the other text fixture the picture search finds
+// nothing, so a duplicate never arises and a test of duplicate suppression
+// passes without testing anything. Set at 28pt, both routes find it and the
+// duplicate is real.
+export const DOUBLE_TERM = 'KAG';
+
+export function buildDoubleFoundPdf() {
+  const body = 'BT /F1 28 Tf 70 700 Td (KAG is a company) Tj ET\n'
+    + 'BT /F1 28 Tf 70 640 Td (and KAG again here) Tj ET\n';
+
+  const chunks = [];
+  let length = 0;
+  const offsets = [0];
+  const push = t => { const b = Buffer.from(t, 'latin1'); chunks.push(b); length += b.length; };
+  const begin = id => { offsets[id] = length; push(id + ' 0 obj\n'); };
+
+  push('%PDF-1.4\n');
+  begin(1); push('<< /Type /Catalog /Pages 2 0 R >>\n'); push('endobj\n');
+  begin(2); push('<< /Type /Pages /Count 1 /Kids [3 0 R] >>\n'); push('endobj\n');
+  begin(3); push('<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792]'
+    + ' /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>\n'); push('endobj\n');
+  begin(4); push('<< /Length ' + Buffer.byteLength(body, 'latin1') + ' >>\nstream\n' + body + 'endstream\n'); push('endobj\n');
+  begin(5); push('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\n'); push('endobj\n');
+
+  const xrefAt = length;
+  push('xref\n0 6\n0000000000 65535 f \n');
+  for (let id = 1; id <= 5; id++) push(String(offsets[id]).padStart(10, '0') + ' 00000 n \n');
+  push('trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n' + xrefAt + '\n%%EOF\n');
+  return Buffer.concat(chunks);
+}

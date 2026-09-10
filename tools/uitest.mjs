@@ -13,7 +13,8 @@ import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
 import { buildTextPdf, buildLogoPdf, LOGO_PLACEMENTS,
   buildWordmarkPdf, WORDMARK_PLACEMENTS, WORDMARK_ASPECT,
-  buildSmallLogoPdf, SMALL_LOGO_PLACEMENTS, WORDMARK_BOX } from './fixture.mjs';
+  buildSmallLogoPdf, SMALL_LOGO_PLACEMENTS, WORDMARK_BOX,
+  buildDoubleFoundPdf, DOUBLE_TERM } from './fixture.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = resolve(join(here, '..'));
@@ -49,6 +50,8 @@ const fixturePath = join(tmpdir(), 'blackbar-fixture.pdf');
 writeFileSync(fixturePath, buildTextPdf());
 const logoPath = join(tmpdir(), 'blackbar-logo.pdf');
 writeFileSync(logoPath, buildLogoPdf());
+const doublePath = join(tmpdir(), 'blackbar-double.pdf');
+writeFileSync(doublePath, buildDoubleFoundPdf());
 const smallLogoPath = join(tmpdir(), 'blackbar-smalllogo.pdf');
 writeFileSync(smallLogoPath, buildSmallLogoPdf());
 const wordmarkPath = join(tmpdir(), 'blackbar-wordmark.pdf');
@@ -556,6 +559,54 @@ try {
 
   await page.uncheck('#labelling');
   check('turning labelling off hides the legend again', await page.isHidden('#legendbox'));
+
+  // ---------- one occurrence, one mark ----------
+  //
+  // A word that is real text *and* recognisable by its shape gets found twice:
+  // once from the text layer, once by the picture search. Two boxes over one
+  // word, slightly different sizes and slightly offset — which looks like a
+  // bug because it is one, and it double-counts in the panel besides.
+  await page.click('#restart');
+  await page.waitForSelector('#view-drop:not([hidden])');
+  await page.setInputFiles('#file', doublePath);
+  await page.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
+  await page.fill('#terms', DOUBLE_TERM);
+  await page.waitForTimeout(400);
+  await page.check('#termimages');
+  await redact(page);
+
+  const doubled = await page.evaluate(() => {
+    const p = window.Blackbar.state.pages[0];
+    const textHits = p.hits.filter(h => h.finding.kind === 'term');
+    const pictures = p.imageHits.filter(m => m.term);
+    return {
+      text: textHits.length,
+      pictures: pictures.length,
+      superseded: pictures.filter(m => m.superseded).length,
+      live: pictures.filter(m => !m.superseded).length,
+      counts: document.getElementById('counts').textContent,
+    };
+  });
+
+  check('the word is found in the text layer', doubled.text > 0, String(doubled.text));
+  // Without this the test would pass vacuously on a document where the picture
+  // search simply found nothing.
+  check('and the picture search finds it too, so there really is a duplicate',
+    doubled.pictures > 0, String(doubled.pictures));
+  check('every duplicate is suppressed',
+    doubled.live === 0, doubled.live + ' still live of ' + doubled.pictures);
+  check('and the suppression is what did it, not an empty search',
+    doubled.superseded === doubled.pictures,
+    doubled.superseded + ' of ' + doubled.pictures);
+  check('so the panel counts the word once, not twice',
+    !doubled.counts.includes('image match'), doubled.counts.replace(/\s+/g, ' '));
+
+  // Taking the word away brings the picture matches back rather than leaving a
+  // hole: they were marked, not deleted.
+  await page.fill('#terms', '');
+  await page.waitForTimeout(500);
+  check('removing the term withdraws its matches entirely',
+    await page.evaluate(() => window.Blackbar.state.pages[0].imageHits.filter(m => m.term).length) === 0);
 
   // ---------- a typed word, found as a picture ----------
   //
