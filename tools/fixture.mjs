@@ -260,3 +260,59 @@ export function buildDoubleFoundPdf() {
   push('trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n' + xrefAt + '\n%%EOF\n');
   return Buffer.concat(chunks);
 }
+
+
+// A one-page PDF where the same word appears three times: twice set plainly,
+// and once with the letters tracked apart the way a designed slide sets a
+// styled header. The tracking is done with a TJ array carrying a large
+// negative offset between glyphs, which is what a layout tool emits — and
+// which makes pdf.js hand back "K", " ", "A", " ", "G" as separate text
+// items with spaces standing in for the gaps. A redactor that matched the
+// term literally covered the first two and left the third in plain sight.
+export function buildTrackedPdf(word = 'KAG') {
+  const chunks = [];
+  let length = 0;
+  const offsets = [0];
+  const push = s => {
+    const b = Buffer.from(s, 'latin1');
+    chunks.push(b);
+    length += b.length;
+  };
+  const begin = id => { offsets[id] = length; push(id + ' 0 obj\n'); };
+  const escape = s => s.replace(/[\\()]/g, m => '\\' + m);
+
+  // -420 thousandths of an em between glyphs: wide enough that pdf.js reads
+  // the gaps as spaces, which is exactly the case that used to be missed.
+  const tracked = word
+    .split('')
+    .map(ch => '(' + escape(ch) + ') -420')
+    .join(' ');
+
+  const body =
+    'BT\n/F1 18 Tf\n40 TL\n60 700 Td\n' +
+    '(' + escape(word + ' engages each account') + ') Tj T*\n' +
+    '(' + escape(word + '’s value') + ') Tj T*\n' +
+    '[' + tracked + ' (’s value)] TJ\n' +
+    'ET\n';
+
+  push('%PDF-1.4\n');
+  begin(1); push('<< /Type /Catalog /Pages 2 0 R >>\n'); push('endobj\n');
+  begin(2); push('<< /Type /Pages /Count 1 /Kids [3 0 R] >>\n'); push('endobj\n');
+  begin(3);
+  push('<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792]' +
+    ' /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>\n');
+  push('endobj\n');
+  begin(4);
+  push('<< /Length ' + Buffer.byteLength(body, 'latin1') + ' >>\nstream\n' + body + 'endstream\n');
+  push('endobj\n');
+  begin(5);
+  push('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>\n');
+  push('endobj\n');
+
+  const xrefAt = length;
+  push('xref\n0 6\n0000000000 65535 f \n');
+  for (let id = 1; id <= 5; id++) push(String(offsets[id]).padStart(10, '0') + ' 00000 n \n');
+  push('trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n' + xrefAt + '\n%%EOF\n');
+
+  return Buffer.concat(chunks);
+}

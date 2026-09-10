@@ -9,7 +9,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { runInThisContext } from 'node:vm';
 
-import { buildTextPdf, FIXTURE_LINES } from './fixture.mjs';
+import { buildTextPdf, buildTrackedPdf, FIXTURE_LINES } from './fixture.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..');
@@ -94,6 +94,37 @@ check('the longer of two overlapping terms wins',
   textsOf('Jane Doe called', 'term', { terms: ['Jane', 'Jane Doe'] })[0] === 'Jane Doe');
 check('a term with punctuation still matches',
   textsOf('ref #A-1/22 here', 'term', { terms: ['#A-1/22'] }).length === 1);
+
+// A PDF is free to draw a word as separately positioned glyphs, and a heading
+// set with letter-spacing arrives from pdf.js as the items "K", " ", "A",
+// " ", "G" — those spaces are pdf.js's rendering of the gaps, not characters
+// in the document. Matching the term literally found the word everywhere it
+// was set plainly and missed it wherever a designer had styled it: the least
+// helpful possible failure, and a silent one.
+check('a term still matches when the document tracked its letters apart',
+  textsOf('K A G ’s value', 'term', { terms: ['KAG'] })[0] === 'K A G');
+check('and the match spans the gaps, so the box covers the whole word',
+  (textsOf('K A G ’s value', 'term', { terms: ['KAG'] })[0] || '').length === 5);
+check('wider tracking is matched too',
+  textsOf('K   A   G here', 'term', { terms: ['KAG'] }).length === 1);
+check('a tracked term is matched across a line break',
+  textsOf('K\nA\nG here', 'term', { terms: ['KAG'] }).length === 1);
+check('a term containing a space still requires one',
+  Detect.findAll('JaneDoe signed', { terms: ['Jane Doe'] }).length === 0);
+check('but tolerates a document that spaced that name out as well',
+  textsOf('J a n e  D o e signed', 'term', { terms: ['Jane Doe'] }).length === 1);
+// Only whitespace may separate the letters, and the ends still have to be
+// word boundaries — otherwise "KAG" would swallow half the dictionary.
+check('tolerating whitespace does not weaken the leading boundary',
+  Detect.findAll('MyKAG value', { terms: ['KAG'] }).length === 0);
+check('nor match a longer word that merely starts the same way',
+  Detect.findAll('KAGS differs', { terms: ['KAG'] }).length === 0);
+check('letters separated by other words are not a match',
+  Detect.findAll('a K then A then G', { terms: ['KAG'] }).length === 0);
+check('the pattern demands a space where the term has one',
+  Detect.termPattern('Jane Doe').includes('\\s+'));
+check('and permits an optional one between letters',
+  Detect.termPattern('KAG') === 'K\\s*A\\s*G', Detect.termPattern('KAG'));
 
 // ---------- overlap ----------
 
@@ -867,6 +898,61 @@ check('page size survives the rebuild', firstViewport.width === 612 && firstView
 const secondViewport = (await after.getPage(2)).getViewport({ scale: 1 });
 check('a second, differently sized page survives too',
   secondViewport.width === 200.5 && secondViewport.height === 100);
+
+// ---------- a word the document tracked apart ----------
+//
+// The unit tests above prove the pattern tolerates whitespace. This proves the
+// case that actually reached a user: a heading whose letters are tracked apart
+// with a TJ array comes back from pdf.js with spaces standing in for the gaps,
+// and the term has to survive that and still produce a box wide enough to
+// cover the whole word.
+
+const trackedDoc = await pdfjs.getDocument({ data: new Uint8Array(buildTrackedPdf('KAG')) }).promise;
+const trackedPdfPage = await trackedDoc.getPage(1);
+const trackedViewport = trackedPdfPage.getViewport({ scale: 1 });
+// The same normalisation lib/pdfread.js does in the browser: place each item
+// in viewport space so the boxes come out in the coordinates the app draws in.
+const trackedItems = (await trackedPdfPage.getTextContent()).items
+  .filter(item => typeof item.str === 'string' && item.transform)
+  .map(item => {
+    const tx = pdfjs.Util.transform(trackedViewport.transform, item.transform);
+    return {
+      str: item.str,
+      x: tx[4],
+      y: tx[5],
+      w: item.width * trackedViewport.scale,
+      h: Math.hypot(tx[2], tx[3]) || item.height * trackedViewport.scale,
+      hasEOL: Boolean(item.hasEOL),
+    };
+  });
+
+const trackedPage = Boxes.buildPageText(trackedItems);
+
+// The precondition. If pdf.js ever stops reporting the tracked gaps as
+// whitespace, this fixture no longer exercises the bug and everything below
+// would pass for the wrong reason — so fail loudly here rather than quietly
+// there.
+check('the tracked heading reaches us with its letters spaced apart',
+  /K\s+A\s+G/.test(trackedPage.text), JSON.stringify(trackedPage.text));
+check('while the plain occurrences arrive unspaced',
+  (trackedPage.text.match(/KAG/g) || []).length === 2, JSON.stringify(trackedPage.text));
+
+const trackedSpans = Detect.findAll(trackedPage.text, { terms: ['KAG'] });
+check('all three occurrences are found, the tracked one included',
+  trackedSpans.length === 3, trackedSpans.length + ' found in ' + JSON.stringify(trackedPage.text));
+check('and the tracked match covers the gaps, not just the first letter',
+  trackedSpans.some(s => s.text === 'K A G'),
+  JSON.stringify(trackedSpans.map(s => s.text)));
+
+const trackedBoxes = Boxes.boxesForSpans(trackedPage.items, trackedSpans);
+check('each occurrence gets a box', trackedBoxes.length === 3, trackedBoxes.length + ' box(es)');
+
+// The tracked heading is physically wider than the plain word, so its box has
+// to be wider too. A box sized to the plain word would sit over "K A" and
+// leave the G showing, which is the visible half of the original bug.
+const trackedWidths = trackedBoxes.map(b => b.w).sort((a, b) => a - b);
+check('the tracked occurrence gets the widest box, covering the whole word',
+  trackedWidths[2] > trackedWidths[1] * 1.3, JSON.stringify(trackedWidths));
 
 const meta = await after.getMetadata();
 check('the rebuilt file names Blinded as producer', meta.info.Producer === 'Blinded');

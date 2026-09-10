@@ -105,6 +105,14 @@ that matched **nothing** is called out in amber. That feedback is the point: a
 mistyped name and a name that genuinely does not appear look identical
 otherwise, and the failure is silent until the document is already out.
 
+Matching tolerates the spacing a document puts inside a word. A heading set
+with letter-spacing — the styled box header on a designed slide — is drawn as
+separate glyphs, and the text underneath a document arrives as `K A G` rather
+than `KAG`. Typing `KAG` covers all of them, and the box drawn over the tracked
+one is wide enough to include the gaps. Only whitespace may come between the
+letters, and the ends still have to be word boundaries, so `KAG` does not match
+`MyKAG`, `KAGS`, or "a K then A then G".
+
 ### Words that are not text
 
 Tick **Also look for these words as pictures** and each typed word is drawn in
