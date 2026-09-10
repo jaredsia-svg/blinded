@@ -378,6 +378,11 @@
           term,
           rect: { x: hit.x, y: hit.y, w: hit.w, h: hit.h },
           score: hit.score,
+          // Whether the shape was found light-on-dark rather than dark-on-
+          // light. Not used to decide anything — it is the same word either
+          // way — but carried through so the behaviour is observable rather
+          // than something the pipeline does silently.
+          inverted: Boolean(hit.inverted),
         });
       }
     }
@@ -863,6 +868,7 @@
           templateId: template.id,
           rect: { x: hit.x, y: hit.y, w: hit.w, h: hit.h },
           score: hit.score,
+          inverted: Boolean(hit.inverted),
         });
       });
       template.matches = hits.length;

@@ -276,9 +276,15 @@ function markTemplate(size) {
 }
 
 {
-  // The other half of the bargain: it must not match things that are merely
-  // busy. An inverted mark is structurally identical but opposite, and a
-  // correlation that reported it would be matching texture, not shape.
+  // Polarity. An inverted mark — light where the template is dark — is the
+  // same shape with the colours swapped: white lettering knocked out of a
+  // dark banner, against a template cut from dark lettering on white.
+  //
+  // The primitive keeps the sign, because the sign is real information and a
+  // correlation function should not throw it away. The search pipeline asks it
+  // to ignore the sign, because "is this the same shape?" is the question a
+  // redaction tool wants answered — a word is no less exposed for being
+  // knocked out of a coloured box.
   const W = 80, H = 60, S = 16;
   const page = blankPage(W, H);
   for (let y = 0; y < S; y++) {
@@ -286,9 +292,46 @@ function markTemplate(size) {
       page[(20 + y) * W + 20 + x] = markPixel(x, y, S) ? 235 : 30;   // inverted
     }
   }
-  const hits = Match.suppress(Match.correlate(page, W, H, markTemplate(S)));
-  check('an inverted mark is not reported as the same mark', hits.length === 0,
-    JSON.stringify(hits.map(h => +h.score.toFixed(2))));
+  const signed = Match.correlate(page, W, H, markTemplate(S), { threshold: -2 });
+  const atMark = signed.filter(h => Math.abs(h.x - 20) <= 1 && Math.abs(h.y - 20) <= 1);
+  check('an inverted mark correlates strongly negative',
+    atMark.some(h => h.score < -0.95), JSON.stringify(atMark.map(h => +h.score.toFixed(3))));
+  check('so a signed search does not report it',
+    Match.suppress(Match.correlate(page, W, H, markTemplate(S))).length === 0);
+
+  const blind = Match.suppress(
+    Match.correlate(page, W, H, markTemplate(S), { anyPolarity: true }));
+  check('but a polarity-blind search finds it', blind.length === 1,
+    JSON.stringify(blind.map(h => +h.score.toFixed(3))));
+  check('and scores it as the match it is',
+    blind.length === 1 && blind[0].score > 0.95, JSON.stringify(blind.map(h => h.score)));
+  check('and says it was inverted, rather than hiding the fact',
+    blind.length === 1 && blind[0].inverted === true);
+}
+
+// Brightness and contrast were never the problem — normalising the mean and
+// deviation out of both sides already handled those. Pinned here so a future
+// change to the correlation cannot quietly lose them.
+{
+  const W = 80, H = 60, S = 16;
+  const variants = {
+    'the same colours': (on) => (on ? 30 : 235),
+    'darker ink on a grey ground': (on) => (on ? 10 : 120),
+    'a coloured ink on white': (on) => (on ? 90 : 245),
+    'barely any contrast at all': (on) => (on ? 118 : 138),
+    'inverted and barely any contrast': (on) => (on ? 138 : 118),
+  };
+  for (const [name, paint] of Object.entries(variants)) {
+    const page = blankPage(W, H);
+    for (let y = 0; y < S; y++) {
+      for (let x = 0; x < S; x++) page[(20 + y) * W + 20 + x] = paint(markPixel(x, y, S));
+    }
+    const hits = Match.suppress(
+      Match.correlate(page, W, H, markTemplate(S), { anyPolarity: true, threshold: 0.75 }));
+    const at = hits.find(h => Math.abs(h.x - 20) <= 1 && Math.abs(h.y - 20) <= 1);
+    check('a mark printed with ' + name + ' is still found',
+      Boolean(at) && at.score > 0.95, at ? at.score.toFixed(3) : 'missed');
+  }
 }
 
 {

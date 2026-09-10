@@ -95,6 +95,18 @@ it — set in sans, set in bold, set in serif — and leaves the rest of the pag
 alone. A picture of a word shares the word's placeholder, so `[T1]` covers the
 written mentions and the pictured ones alike.
 
+**Colour does not matter — only shape does.** The correlation removes the mean
+and the deviation from both sides before comparing, so brightness and contrast
+were never a factor, and it ignores the sign of the result, so a polarity flip
+is not one either. The word is found in black on white, white on black, white
+on navy, a brand colour on white, yellow on black, red on green, grey on grey,
+and a pair of colours of nearly the same brightness — eight combinations, all
+scoring above 0.95, each one a test.
+
+The one case that cannot work is two colours of genuinely identical
+brightness, since the shape then has no edge to correlate at all. In practice
+that does not arise: text nobody can read is text nobody typeset.
+
 **It is not OCR, and the difference matters.** It finds the word set in
 something close to one of those four faces. It will miss a stylised logotype,
 an unusual face, letter-spaced capitals, and anything curved or rotated. Every
@@ -174,8 +186,9 @@ refinement already rated plausible.
 What it does not do, stated plainly rather than left to be discovered:
 
 - **It does not rotate.** A logo turned even slightly will not be found.
-- **It ignores colour.** Two marks identical in shape and different in hue
-  match. For redaction that errs the safe way — one logo too many covered,
+- **It ignores colour entirely**, including which of the two colours is the
+  ink. A mark and the same mark knocked out of a dark banner are the same
+  mark. For redaction that errs the safe way — one logo too many covered,
   rather than one missed.
 - **It does not know what a logo is.** It matches structure. A repeated table
   rule or a column of identical bullets can score highly, which is why every

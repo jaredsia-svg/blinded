@@ -642,6 +642,73 @@ try {
   check('and returns the document to review',
     await page.evaluate(() => window.Blackbar.state.applied) === false);
 
+  // ---------- the same word, any colours ----------
+  //
+  // Shape is the question, not colour. Normalising the mean and deviation out
+  // of both sides already handled brightness and contrast; what failed was a
+  // polarity flip — white lettering knocked out of a dark banner correlates at
+  // -1 against a template cut from dark lettering on white, which is a perfect
+  // match reported as a perfect mismatch. Eight real combinations here,
+  // rendered and read back through the whole pipeline.
+  const COMBOS = [
+    ['black on white', '#111111', '#ffffff'],
+    ['white on black', '#ffffff', '#111111'],
+    ['white on navy', '#ffffff', '#0b2a5b'],
+    ['brand blue on white', '#1f6feb', '#ffffff'],
+    ['yellow on black', '#ffd400', '#111111'],
+    ['red on green', '#cc0000', '#009000'],
+    ['grey on grey', '#8a8a8a', '#b4b4b4'],
+    ['nearly the same brightness', '#7a86ff', '#8f8340'],
+  ];
+  const colourBytes = await page.evaluate(async (combos) => {
+    const c = document.createElement('canvas');
+    c.width = 1224; c.height = 1584;
+    const x = c.getContext('2d', { alpha: false });
+    x.fillStyle = '#ffffff'; x.fillRect(0, 0, c.width, c.height);
+    combos.forEach(([, fg, bg], i) => {
+      const y = 120 + i * 170;
+      x.fillStyle = bg; x.fillRect(70, y - 70, 420, 120);
+      x.fillStyle = fg; x.font = '700 72px Helvetica, Arial, sans-serif';
+      x.textBaseline = 'middle'; x.fillText('KAG', 110, y - 10);
+    });
+    const img = await window.BlackbarRender.encodeForPdf(c, false);
+    return Array.from(window.BlackbarPdfWrite.build([{ widthPt: 612, heightPt: 792, image: img }]));
+  }, COMBOS);
+  const colourPath = join(tmpdir(), 'blackbar-colours.pdf');
+  writeFileSync(colourPath, Buffer.from(colourBytes));
+
+  await page.click('#restart');
+  await page.waitForSelector('#view-drop:not([hidden])');
+  await page.setInputFiles('#file', colourPath);
+  await page.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
+  await page.fill('#terms', 'KAG');
+  await page.waitForTimeout(400);
+  await page.check('#termimages');
+  await redact(page);
+
+  const coloured = await page.evaluate((combos) => {
+    const p = window.Blackbar.state.pages[0];
+    const mine = p.imageHits.filter(m => m.term === 'KAG');
+    // The embedded image is exactly the size the page renders at, so canvas
+    // coordinates map one to one — no scaling between them.
+    return combos.map(([name], i) => {
+      const want = 120 + i * 170 - 10;
+      const hit = mine.find(m => Math.abs(m.rect.y + m.rect.h / 2 - want) < 60);
+      return { name, found: Boolean(hit), score: hit ? hit.score : 0, inverted: hit ? Boolean(hit.inverted) : false };
+    });
+  }, COMBOS);
+
+  for (const row of coloured) {
+    check('the word is found in ' + row.name,
+      row.found && row.score > 0.95,
+      row.found ? row.score.toFixed(3) : 'missed');
+  }
+  check('the light-on-dark ones are recognised as inverted',
+    coloured.filter(r => r.inverted).length >= 2,
+    JSON.stringify(coloured.map(r => [r.name, r.inverted])));
+  check('and the dark-on-light ones are not',
+    coloured.find(r => r.name === 'black on white').inverted === false);
+
   // ---------- a small logo, repeated at the same size ----------
   //
   // The simplest case there is, and the one that was broken: three identical
