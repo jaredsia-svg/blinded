@@ -179,3 +179,49 @@ export function buildWordmarkPdf() {
   push('trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n' + xrefAt + '\n%%EOF\n');
   return Buffer.concat(chunks);
 }
+
+
+// A small serif wordmark in a ruled box — the shape of a real company logo on
+// a letterhead, and the one that exposed three separate faults at once: a
+// scale ladder that never tested 1.0, a sampling stride that stepped over the
+// correlation peak of a small template, and a final score taken on a shrunken
+// copy where identical marks scored anywhere from 0.74 to 0.98.
+//
+// All three copies are the same size, so all three sit at scale 1.0 relative
+// to whichever one is picked. Anything less than three found means the search
+// cannot find a logo identical to the one it was handed.
+export const WORDMARK_BOX = { w: 54, h: 30 };
+export const SMALL_LOGO_PLACEMENTS = [
+  { x: 70, y: 700 },
+  { x: 300, y: 700 },
+  { x: 70, y: 500 },
+];
+
+export function buildSmallLogoPdf() {
+  let body = 'BT /F1 11 Tf 70 760 Td (Letterhead with a small wordmark) Tj ET\n';
+  for (const p of SMALL_LOGO_PLACEMENTS) {
+    body += `0.15 0.2 0.45 rg\nBT /F2 20 Tf ${p.x} ${p.y} Td (BDA) Tj ET\n`
+      + `0.15 0.2 0.45 RG 1 w\n${p.x - 5} ${p.y - 6} ${WORDMARK_BOX.w} ${WORDMARK_BOX.h} re S\n`;
+  }
+
+  const chunks = [];
+  let length = 0;
+  const offsets = [0];
+  const push = t => { const b = Buffer.from(t, 'latin1'); chunks.push(b); length += b.length; };
+  const begin = id => { offsets[id] = length; push(id + ' 0 obj\n'); };
+
+  push('%PDF-1.4\n');
+  begin(1); push('<< /Type /Catalog /Pages 2 0 R >>\n'); push('endobj\n');
+  begin(2); push('<< /Type /Pages /Count 1 /Kids [3 0 R] >>\n'); push('endobj\n');
+  begin(3); push('<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792]'
+    + ' /Resources << /Font << /F1 5 0 R /F2 6 0 R >> >> /Contents 4 0 R >>\n'); push('endobj\n');
+  begin(4); push('<< /Length ' + Buffer.byteLength(body, 'latin1') + ' >>\nstream\n' + body + 'endstream\n'); push('endobj\n');
+  begin(5); push('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\n'); push('endobj\n');
+  begin(6); push('<< /Type /Font /Subtype /Type1 /BaseFont /Times-Bold >>\n'); push('endobj\n');
+
+  const xrefAt = length;
+  push('xref\n0 7\n0000000000 65535 f \n');
+  for (let id = 1; id <= 6; id++) push(String(offsets[id]).padStart(10, '0') + ' 00000 n \n');
+  push('trailer\n<< /Size 7 /Root 1 0 R >>\nstartxref\n' + xrefAt + '\n%%EOF\n');
+  return Buffer.concat(chunks);
+}

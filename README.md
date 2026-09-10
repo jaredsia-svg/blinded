@@ -96,8 +96,8 @@ mark printed lighter, scanned at a different exposure, or photocopied onto a
 darker page — cases where the absolute pixel values share nothing and the
 structure is identical.
 
-Three things make it work on real documents rather than only on tidy ones, and
-each of them exists because the first version did not have it:
+Six things make it work on real documents rather than only on tidy ones, and
+every one exists because a version without it failed on a real file:
 
 - **Your pick is trimmed to the ink inside it.** Nobody drags a tight box. The
   margin of blank page you include is noise in the correlation, and worse, it
@@ -111,11 +111,28 @@ each of them exists because the first version did not have it:
   scaled so its long side is 14 pixels becomes a template *one pixel tall*,
   with no structure left to match. Wide marks are now kept several pixels tall
   and allowed to be longer instead.
+- **The size ladder contains exactly 1.0.** It used to be 0.25 × 1.25ⁿ, whose
+  rungs straddle 1.0 at 0.954 and 1.192 — so the one size guaranteed to matter
+  was never tried. A picked logo is at scale 1.0 by definition, and so is every
+  copy printed at the same size, which on a letterhead is most of them.
+- **Correlation tests every position.** There was a stride here, on the
+  reasoning that the sweep only needs to get close. Sampling an image at a
+  coarser interval than the feature you are looking for does not approximate
+  the answer, it misses it: on a small logo the coarse template is around
+  20 × 11, and stepping two pixels dropped the score at the true position from
+  0.765 to 0.374 — under the threshold, so the page reported nothing found.
+- **The final score is taken at the template's own resolution.** Scoring on a
+  shrunken copy is not merely imprecise, it is unstable: three identical logos
+  on one page scored 0.977, 0.845 and 0.738, and what differed between them was
+  where the downsampling landed relative to their strokes, not their content.
 
-The search runs in two passes: a cheap sweep over all those sizes nominates
-candidates, and each candidate is then re-scored against the full-resolution
-page. One pass cannot do both — coarse enough to sweep quickly is too coarse to
-score honestly, and a true match scores 0.6 and gets thrown away.
+The search runs in three passes, because locating something and deciding
+whether it is really the same thing are different jobs with different
+requirements. A cheap sweep over every size nominates candidates; refinement
+finds where each one actually sits; and verification re-scores the plausible
+ones at full resolution, choosing the size itself rather than inheriting
+refinement's guess. At the picked size nothing is resampled at all, so a copy
+identical to the pick correlates against it exactly and scores 1.0.
 
 **Match sensitivity** sets the correlation threshold, defaulting to 0.75.
 Lowering it finds more and also finds things that merely resemble the logo —
@@ -124,8 +141,10 @@ the method rather than a caveat worth burying. If a search comes back empty it
 tells you the best score it actually saw, so you can tell a threshold that is
 too strict from a mark that genuinely is not there.
 
-A search takes roughly half a second per page for a compact logo and up to two
-for a wide one, and the progress message names the page it is on.
+A search takes roughly half a second per page for a small logo and up to about
+two for a large or wide one, and the progress message names the page it is on.
+Verification is the expensive part, so it is spent only on candidates
+refinement already rated plausible.
 
 What it does not do, stated plainly rather than left to be discovered:
 

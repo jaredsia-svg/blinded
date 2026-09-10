@@ -12,7 +12,8 @@ import { fileURLToPath } from 'node:url';
 
 import { chromium } from 'playwright';
 import { buildTextPdf, buildLogoPdf, LOGO_PLACEMENTS,
-  buildWordmarkPdf, WORDMARK_PLACEMENTS, WORDMARK_ASPECT } from './fixture.mjs';
+  buildWordmarkPdf, WORDMARK_PLACEMENTS, WORDMARK_ASPECT,
+  buildSmallLogoPdf, SMALL_LOGO_PLACEMENTS, WORDMARK_BOX } from './fixture.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = resolve(join(here, '..'));
@@ -48,6 +49,8 @@ const fixturePath = join(tmpdir(), 'blackbar-fixture.pdf');
 writeFileSync(fixturePath, buildTextPdf());
 const logoPath = join(tmpdir(), 'blackbar-logo.pdf');
 writeFileSync(logoPath, buildLogoPdf());
+const smallLogoPath = join(tmpdir(), 'blackbar-smalllogo.pdf');
+writeFileSync(smallLogoPath, buildSmallLogoPdf());
 const wordmarkPath = join(tmpdir(), 'blackbar-wordmark.pdf');
 writeFileSync(wordmarkPath, buildWordmarkPdf());
 const textPath = join(tmpdir(), 'blackbar-fixture.txt');
@@ -505,6 +508,58 @@ try {
 
   await page.uncheck('#labelling');
   check('turning labelling off hides the legend again', await page.isHidden('#legendbox'));
+
+  // ---------- a small logo, repeated at the same size ----------
+  //
+  // The simplest case there is, and the one that was broken: three identical
+  // copies of a small wordmark, so all three sit at scale 1.0 relative to
+  // whichever is picked. A search that cannot find a logo identical to the one
+  // it was handed cannot find anything, and this reported "found 0 times".
+  await page.click('#restart');
+  await page.waitForSelector('#view-drop:not([hidden])');
+  await page.setInputFiles('#file', smallLogoPath);
+  await page.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
+  await page.click('#pick');
+
+  await page.evaluate(({ place, box }) => {
+    const p = window.Blackbar.state.pages[0];
+    const S = 2, PAD = 4;
+    const { x, y } = place[0];
+    // The ruled box starts 5pt left and 6pt below the text origin.
+    const cx = (x - 5) * S - PAD;
+    const cy = (792 - y - 24) * S - PAD;
+    const rect = p.canvas.getBoundingClientRect();
+    const sx = rect.width / p.canvas.width;
+    const sy = rect.height / p.canvas.height;
+    const send = (type, px, py) => p.canvas.dispatchEvent(new PointerEvent(type, {
+      clientX: rect.left + px * sx, clientY: rect.top + py * sy, bubbles: true, pointerId: 51,
+    }));
+    send('pointerdown', cx, cy);
+    send('pointermove', cx + box.w * S + PAD * 2, cy + box.h * S + PAD * 2);
+    send('pointerup', cx + box.w * S + PAD * 2, cy + box.h * S + PAD * 2);
+  }, { place: SMALL_LOGO_PLACEMENTS, box: WORDMARK_BOX });
+
+  await page.waitForFunction(() => window.Blackbar.state.templates.length === 1, { timeout: 60000 });
+  await page.waitForFunction(() => document.getElementById('busy').hidden, { timeout: 180000 });
+
+  const small = await page.evaluate(() => {
+    const hits = window.Blackbar.state.pages[0].imageHits;
+    return {
+      found: hits.length,
+      worst: hits.length ? Math.min(...hits.map(m => m.score)) : 0,
+      positions: hits.map(m => [Math.round(m.x), Math.round(m.y)]).sort((a, b) => a[1] - b[1] || a[0] - b[0]),
+    };
+  });
+  check('a small logo is found everywhere it appears at the same size',
+    small.found === 3, small.found + ' found at ' + JSON.stringify(small.positions));
+  // A copy identical to the pick, at the same size, correlates with it
+  // exactly. Anything materially under 1.0 means the score is measuring
+  // resampling rather than similarity.
+  check('and an identical copy scores essentially perfectly',
+    small.worst > 0.97, 'worst ' + small.worst.toFixed(3));
+  check('the panel reports the count it found',
+    (await page.textContent('#templates')).includes('found 3 times'),
+    await page.textContent('#templates'));
 
   // ---------- a wide wordmark ----------
   //

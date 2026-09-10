@@ -346,6 +346,17 @@ check('suppression keeps finds that do not overlap', Match.suppress([
 // The scale ladder is the whole reason the first version of this "found
 // nothing" on real documents: it spanned 0.6x to 1.75x, so a logo at half size
 // or double size was never tried at any threshold.
+// The rung that matters most, and the one that was missing. A picked logo is
+// at scale 1.0 by definition, and so is every copy printed at the same size,
+// which on a letterhead is most of them. The ladder used to be 0.25 x 1.25^k,
+// which straddles 1.0 at 0.954 and 1.192 and never lands on it: refining the
+// source position scored 0.977 while the search topped out at 0.805 and
+// reported nothing found.
+check('the scale ladder contains exactly 1.0', Match.SCALES.includes(1),
+  Match.SCALES.join(','));
+check('and 1.0 is not merely close to a rung',
+  Match.SCALES.filter(s => s === 1).length === 1);
+
 check('the scale ladder reaches well below half size', Match.SCALES[0] <= 0.3,
   String(Match.SCALES[0]));
 check('and well above double size',
@@ -360,6 +371,13 @@ check('the coarse pass is more permissive than the reported threshold',
   Match.COARSE_THRESHOLD < Match.THRESHOLD);
 check('the fine pass scores at a higher resolution than the coarse pass',
   Match.FINE_SIZE.target > Match.COARSE_SIZE.target);
+// Localising and scoring are different jobs with different requirements.
+// Scoring on a shrunken copy made identical logos score 0.98, 0.85 and 0.74
+// depending on where the downsample landed relative to their strokes.
+check('the final score is taken at a higher resolution than either search pass',
+  Match.NATIVE_SIZE.target > Match.FINE_SIZE.target);
+check('verification reaches far enough to correct refinement, not just re-score it',
+  Match.VERIFY_RADIUS >= 8, String(Match.VERIFY_RADIUS));
 
 // Sizing a template by its long side alone is what made a wide wordmark
 // collapse to a one-pixel-tall strip with no structure left to match — the
@@ -440,32 +458,32 @@ check('cropping lifts out exactly the requested rectangle', (() => {
   return c[0] === 6 && c[1] === 7 && c[2] === 11 && c[3] === 12;
 })());
 
-// A window confines the search; a stride samples it.
+// A small logo makes a small coarse template, and a small template is exactly
+// where sampling shortcuts break. This pins the failure that shipped: at the
+// true position the correlation peaked at 0.765, but stepping two pixels at a
+// time saw only 0.374 — below the nomination threshold, so the document came
+// back with nothing found at all.
 {
-  const W = 160, H = 120, S = 16;
+  const W = 240, H = 180, S = 11;
   const page = blankPage(W, H);
-  stamp(page, W, 10, 10, S, 1);
-  stamp(page, W, 100, 20, S, 1);
-  const tpl = markTemplate(S);
+  stamp(page, W, 40, 30, S, 1);
+  stamp(page, W, 150, 100, S, 1);
+  const tiny = markTemplate(S);
 
-  const windowed = Match.correlate(page, W, H, tpl, { window: { x: 90, y: 10, w: 30, h: 30 } });
-  check('a windowed search reports nothing outside its window',
-    windowed.every(h => h.x >= 90 && h.x <= 120 && h.y >= 10 && h.y <= 40),
-    JSON.stringify(windowed.map(h => [h.x, h.y])));
-  check('and still finds the mark that is inside it',
-    Match.suppress(windowed).length === 1 &&
-    Math.abs(Match.suppress(windowed)[0].x - 100) <= 1, JSON.stringify(windowed));
-  check('the mark outside the window is not reported',
-    !windowed.some(h => Math.abs(h.x - 10) <= 2));
-  check('a full search still reports both',
-    Match.suppress(Match.correlate(page, W, H, tpl)).length === 2);
-  check('a stride still lands on a mark it steps over', (() => {
-    const hits = Match.suppress(Match.correlate(page, W, H, tpl, { stride: 2, threshold: 0.6 }));
-    return hits.length === 2;
-  })());
-  check('striding costs fewer positions than testing every one',
-    Match.correlate(page, W, H, tpl, { stride: 2, threshold: 0.1 }).length <
-    Match.correlate(page, W, H, tpl, { stride: 1, threshold: 0.1 }).length);
+  const hits = Match.suppress(Match.correlate(page, W, H, tiny));
+  check('a small mark is still found when the template is small',
+    hits.length === 2, hits.length + ' found with an ' + S + 'px template');
+  check('and scores well at the position it really is',
+    hits.every(h => h.score > 0.9), JSON.stringify(hits.map(h => +h.score.toFixed(3))));
+  check('correlation steps one pixel at a time, with no sampling shortcut', (() => {
+    // Counting positions does not work as a check: featureless patches are
+    // skipped, so most of a mostly-blank page never appears. What does
+    // distinguish a stride is whether neighbouring positions are both tested —
+    // stepping by two can never return two x-coordinates differing by one.
+    const all = Match.correlate(page, W, H, tiny, { threshold: -2 });
+    const xs = new Set(all.map(h => h.x));
+    return [...xs].some(x => xs.has(x + 1));
+  })(), 'no adjacent positions were tested');
 }
 
 // The sensitivity slider's default and the matcher's threshold are the same
