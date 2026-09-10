@@ -642,6 +642,78 @@ try {
   check('and returns the document to review',
     await page.evaluate(() => window.Blackbar.state.applied) === false);
 
+  // ---------- one pass, spread across cores ----------
+  //
+  // The search is split across workers, so the thing worth proving is that
+  // splitting it changes nothing but the clock. Same document, same templates,
+  // three routes: a sweep per template, one pass over the pages, and that same
+  // pass spread across cores.
+  // A four-page document, so the split across workers is real rather than
+  // falling back to the single-threaded path.
+  const deckBytes = await page.evaluate(async () => {
+    const built = [];
+    for (let i = 0; i < 4; i++) {
+      const c = document.createElement('canvas');
+      c.width = 1224; c.height = 1584;
+      const x = c.getContext('2d', { alpha: false });
+      x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height);
+      x.fillStyle = '#111';
+      x.font = '700 64px Helvetica, Arial, sans-serif';
+      x.fillText('KAG', 90, 180);
+      x.font = '400 40px Helvetica, Arial, sans-serif';
+      for (let k = 0; k < 8; k++) x.fillText('Body line ' + k + ' of page ' + (i + 1), 90, 320 + k * 70);
+      x.fillStyle = '#0b2a5b'; x.fillRect(820, 110, 300, 100);
+      x.fillStyle = '#fff'; x.font = '700 48px Helvetica, Arial, sans-serif';
+      x.fillText('ACME', 850, 175);
+      built.push({ widthPt: 612, heightPt: 792, image: await window.BlackbarRender.encodeForPdf(c, false) });
+    }
+    return Array.from(window.BlackbarPdfWrite.build(built));
+  });
+  const deckPath = join(tmpdir(), 'blackbar-deck.pdf');
+  writeFileSync(deckPath, Buffer.from(deckBytes));
+
+  await page.click('#restart');
+  await page.waitForSelector('#view-drop:not([hidden])');
+  await page.setInputFiles('#file', deckPath);
+  await page.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
+
+  const parallel = await page.evaluate(async () => {
+    const IS = window.BlackbarImageSearch;
+    const TI = window.BlackbarTextImage;
+    const pages = window.Blackbar.state.pages;
+    const logo = IS.templateFrom(pages[0].source, { x: 820, y: 110, w: 300, h: 100 });
+    const entries = [{ key: 'logo', template: logo }]
+      .concat(TI.templatesFor('KAG').map((t, i) => ({ key: 'face' + i, template: t })));
+
+    const shape = map => [...map.entries()]
+      .map(([key, v]) => key + ':' + v.matches
+        .map(m => [m.pageIndex, Math.round(m.x), Math.round(m.y), m.score.toFixed(3)].join(','))
+        .sort().join('|'))
+      .sort().join(' ');
+
+    const one = await IS.searchAll(pages, entries, {});
+    const many = await IS.searchAllParallel(pages, entries, {});
+    return {
+      cores: navigator.hardwareConcurrency || 0,
+      pages: pages.length,
+      sameShape: shape(one) === shape(many),
+      oneCount: [...one.values()].reduce((n, v) => n + v.matches.length, 0),
+      manyCount: [...many.values()].reduce((n, v) => n + v.matches.length, 0),
+      oneShape: shape(one).slice(0, 200),
+      manyShape: shape(many).slice(0, 200),
+    };
+  });
+  check('splitting the search across cores finds the same number of things',
+    parallel.oneCount === parallel.manyCount,
+    parallel.oneCount + ' vs ' + parallel.manyCount);
+  check('and exactly the same things, in the same places, at the same scores',
+    parallel.sameShape,
+    'one: ' + parallel.oneShape + '  many: ' + parallel.manyShape);
+  check('the document had enough pages for the split to be real',
+    parallel.pages === 4, String(parallel.pages));
+  check('and it actually found things to compare',
+    parallel.oneCount > 0, String(parallel.oneCount));
+
   // ---------- the same word, any colours ----------
   //
   // Shape is the question, not colour. Normalising the mean and deviation out

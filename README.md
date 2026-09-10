@@ -114,8 +114,9 @@ hit is proposed for review like any other, and a search that finds nothing says
 so — but do not read a clean result as proof the word is absent. Treat it as a
 second pair of eyes, never as a guarantee.
 
-It costs one sweep of the document per word, so it is off by default and runs
-only when you press Redact.
+It costs four templates per word — one per typeface — searched in the same
+single pass as everything else. It is off by default and runs only when you
+press Redact.
 
 ## Matching a logo everywhere it appears
 
@@ -178,10 +179,33 @@ the method rather than a caveat worth burying. If a search comes back empty it
 tells you the best score it actually saw, so you can tell a threshold that is
 too strict from a mark that genuinely is not there.
 
-A search takes roughly half a second per page for a small logo and up to about
-two for a large or wide one, and the progress message names the page it is on.
-Verification is the expensive part, so it is spent only on candidates
-refinement already rated plausible.
+### How long it takes
+
+Everything you have marked is searched for in **one pass over the document**,
+not one pass per image. That matters more than it sounds on a long file: the
+first version swept all hundred pages for the first logo, then all hundred
+again for the second, and four times more for each typed word, decoding every
+page from its canvas again each time.
+
+That pass is also split across cores, since no page's result depends on any
+other's. Measured on a twelve-page fixture with five templates — one picked
+logo and one word in four typefaces:
+
+| | |
+| --- | ---: |
+| a sweep per template, as it was | 17.6s |
+| one pass, every template together | 15.2s |
+| that pass, spread across cores | **5.7s** |
+
+Identical results in all three — the same thirty-six matches in the same
+places — so the only thing that changed is the clock. The end-to-end suite
+asserts that equivalence rather than assuming it.
+
+Roughly, then: half a second per page per image on a few cores. Fewer terms
+and fewer logos in one go is proportionally faster, and the progress message
+names the page it is on so a long document is at least legible while it works.
+Verification, the expensive stage, is spent only on candidates refinement has
+already rated plausible.
 
 What it does not do, stated plainly rather than left to be discovered:
 
@@ -379,7 +403,8 @@ lib/textimage.js  draws a typed word so the matcher can hunt for it
 lib/boxes.js      character spans to rectangles on a page
 lib/measure.js    real glyph advances, so a bar lands on its text
 lib/match.js      normalised cross-correlation, trimming, on plain arrays
-lib/imagesearch.js  the two-pass search: nominate widely, then re-score
+lib/imagesearch.js  the search: nominate widely, re-score, one pass, many cores
+lib/searchworker.js one core's share of that search
 lib/pdfread.js    pdf.js wrapper: page images plus positioned text
 lib/pdfwrite.js   builds the image-only output PDF
 lib/render.js     burns boxes into pixels and encodes them

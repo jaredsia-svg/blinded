@@ -303,16 +303,9 @@
   // Runs every search that has not run yet, then switches the view to what the
   // exported file will contain.
   async function applyRedaction() {
-    const pending = state.templates.filter(t => !t.searched);
-    const words = termsNeedingPictures();
+    const entries = pendingTemplates();
     try {
-      for (let i = 0; i < pending.length; i++) {
-        await runSearch(pending[i], pending.length > 1 ? (i + 1) + ' of ' + pending.length : null);
-      }
-      for (let i = 0; i < words.length; i++) {
-        await searchTermPictures(words[i], words.length > 1 ? (i + 1) + ' of ' + words.length : null);
-      }
-      if (words.length) { busy(false); renderTermCounts(); }
+      if (entries.length) await runSearches(entries);
     } catch (error) {
       alert('The image search could not finish: ' + (error && error.message ? error.message : error));
       return;
@@ -323,7 +316,7 @@
     refreshApply();
   }
 
-  // ---------- finding a typed word as a picture ----------
+  // ---------- searching for every image at once ----------
 
   // Which terms still need a visual sweep. Recorded by the exact text searched
   // so that editing the list only costs a search for what actually changed.
@@ -339,54 +332,128 @@
     }
   }
 
-  // Renders one word in each face and sweeps the document for every one.
+  // Everything that needs looking for, as one list.
   //
-  // The results all carry the term, not the face that found them: which
-  // typeface happened to correlate is an implementation detail, and a reviewer
-  // asked to reason about "the serif-bold match" would rightly wonder what
-  // they were being told.
-  async function searchTermPictures(term, ordinal) {
-    const templates = TextImage.templatesFor(term);
-    if (!templates.length) return;
+  // A typed word contributes one entry per typeface it is drawn in, and a
+  // picked logo contributes one. They are all just templates by this point,
+  // which is what lets a single pass over the document cover the lot.
+  function pendingTemplates() {
+    const entries = [];
 
-    const found = [];
-    for (let i = 0; i < templates.length; i++) {
-      const template = templates[i];
-      busy(true, 'Looking for "' + term + '" as a picture' + (ordinal ? ' (' + ordinal + ')' : '')
-        + ' — style ' + (i + 1) + ' of ' + templates.length + '…');
-      const { matches } = await ImageSearch.search(state.pages, template,
-        { threshold: sensitivity() });
-      for (const hit of matches) found.push(hit);
+    for (const template of state.templates) {
+      if (template.searched) continue;
+      entries.push({ key: 'logo:' + template.id, template: template.cut, logo: template });
     }
 
-    // One word found by two faces at the same place is one find.
-    const perPage = new Map();
-    for (const hit of found) {
-      if (!perPage.has(hit.pageIndex)) perPage.set(hit.pageIndex, []);
-      perPage.get(hit.pageIndex).push(hit);
+    for (const term of termsNeedingPictures()) {
+      TextImage.templatesFor(term).forEach((template, i) => {
+        entries.push({ key: 'term:' + term + ':' + i, template, term });
+      });
+    }
+    return entries;
+  }
+
+  // Runs every outstanding search in one sweep of the document.
+  async function runSearches(entries) {
+    const logos = entries.filter(e => e.logo).length;
+    const words = new Set(entries.filter(e => e.term).map(e => e.term)).size;
+    const what = [
+      logos ? logos + (logos === 1 ? ' image' : ' images') : null,
+      words ? words + (words === 1 ? ' word' : ' words') : null,
+    ].filter(Boolean).join(' and ');
+
+    busy(true, 'Searching for ' + what + '…');
+    let results;
+    try {
+      results = await ImageSearch.searchAllParallel(state.pages, entries,
+        { threshold: sensitivity() },
+        (done, total) => busy(true, 'Searching for ' + what + ' — page ' + done + ' of ' + total + '…'));
+    } finally {
+      busy(false);
     }
 
-    for (const [pageIndex, hits] of perPage) {
-      const page = state.pages[pageIndex];
-      if (!page) continue;
-      for (const hit of Match.suppress(hits, 0.3)) {
-        page.imageHits.push({
-          id: 'term:' + term + ':' + pageIndex + ':' + Math.round(hit.x) + ':' + Math.round(hit.y),
-          // No templateId: this belongs to the typed word, and labelling keys
-          // it to the word so a picture of a name shares the placeholder its
-          // written occurrences get.
-          term,
-          rect: { x: hit.x, y: hit.y, w: hit.w, h: hit.h },
-          score: hit.score,
-          // Whether the shape was found light-on-dark rather than dark-on-
-          // light. Not used to decide anything — it is the same word either
-          // way — but carried through so the behaviour is observable rather
-          // than something the pipeline does silently.
-          inverted: Boolean(hit.inverted),
-        });
+    // Logos: one entry each, so the results land directly.
+    for (const entry of entries.filter(e => e.logo)) {
+      const found = results.get(entry.key);
+      distribute(found.matches, hit => ({
+        id: entry.logo.id + ':' + hit.pageIndex + ':' + Math.round(hit.x) + ':' + Math.round(hit.y),
+        templateId: entry.logo.id,
+        rect: { x: hit.x, y: hit.y, w: hit.w, h: hit.h },
+        score: hit.score,
+        inverted: Boolean(hit.inverted),
+      }));
+      entry.logo.matches = found.matches.length;
+      entry.logo.best = found.best;
+      entry.logo.searched = true;
+      reportSearch(found);
+    }
+
+    // Words: several typefaces per word, pooled and then de-duplicated. One
+    // word found by two faces in the same place is one find, and which face
+    // happened to correlate is an implementation detail a reviewer should
+    // never be asked to reason about.
+    for (const term of new Set(entries.filter(e => e.term).map(e => e.term))) {
+      const pooled = [];
+      let best = 0;
+      for (const entry of entries.filter(e => e.term === term)) {
+        const found = results.get(entry.key);
+        if (found.best > best) best = found.best;
+        for (const hit of found.matches) pooled.push(hit);
       }
+
+      const perPage = new Map();
+      for (const hit of pooled) {
+        if (!perPage.has(hit.pageIndex)) perPage.set(hit.pageIndex, []);
+        perPage.get(hit.pageIndex).push(hit);
+      }
+      for (const [pageIndex, hits] of perPage) {
+        const page = state.pages[pageIndex];
+        if (!page) continue;
+        for (const hit of Match.suppress(hits, 0.3)) {
+          page.imageHits.push({
+            id: 'term:' + term + ':' + pageIndex + ':' + Math.round(hit.x) + ':' + Math.round(hit.y),
+            // No templateId: this belongs to the typed word, and labelling
+            // keys it to the word so a picture of a name shares the
+            // placeholder its written occurrences get.
+            term,
+            rect: { x: hit.x, y: hit.y, w: hit.w, h: hit.h },
+            score: hit.score,
+            inverted: Boolean(hit.inverted),
+          });
+        }
+      }
+      state.searchedTerms.push(term);
+      reportSearch({ matches: pooled, best });
     }
-    state.searchedTerms.push(term);
+
+    renderTemplates();
+    renderTermCounts();
+    renderCounts();
+  }
+
+  function distribute(matches, make) {
+    for (const hit of matches) {
+      const page = state.pages[hit.pageIndex];
+      if (page) page.imageHits.push(make(hit));
+    }
+  }
+
+  // "0 found" on its own reads as a broken feature. Saying what the best score
+  // actually was turns it into a decision the reviewer can act on.
+  function reportSearch(found) {
+    const hint = el('pickhint');
+    if (found.matches.length) {
+      hint.textContent = 'Draw a box around a logo, stamp, signature or face. '
+        + 'Every place it appears again is found and proposed.';
+      hint.classList.remove('warnhint');
+      return;
+    }
+    const near = found.best > 0 ? found.best.toFixed(2) : null;
+    hint.textContent = near
+      ? 'No match at ' + sensitivity().toFixed(2) + '. The closest thing scored '
+        + near + ' — lower the sensitivity below that to include it.'
+      : 'Nothing resembling that was found anywhere in the document.';
+    hint.classList.add('warnhint');
   }
 
   // ---------- placeholder labels ----------
@@ -841,60 +908,6 @@
     drawPage(page);
   }
 
-  // Re-runs one template across the document and replaces its matches. Called
-  // on pick and again whenever the sensitivity changes, so what is on screen
-  // always reflects the current threshold rather than the one in force when
-  // the logo happened to be picked.
-  async function runSearch(template, ordinal) {
-    const which = ordinal ? 'Image ' + ordinal + ': ' : '';
-    busy(true, which + 'looking for that image…');
-    try {
-      const { matches: hits, best } = await ImageSearch.search(
-        state.pages, template.cut, { threshold: sensitivity() },
-        (done, total) => busy(true, which + 'searching page ' + done + ' of ' + total + '…'));
-      template.best = best;
-      template.searched = true;
-
-      for (const page of state.pages) {
-        page.imageHits = page.imageHits.filter(m => m.templateId !== template.id);
-      }
-      hits.forEach((hit, n) => {
-        const page = state.pages[hit.pageIndex];
-        if (!page) return;
-        page.imageHits.push({
-          // Stable across a re-search at a new threshold, so a match the
-          // reviewer already dismissed stays dismissed.
-          id: template.id + ':' + hit.pageIndex + ':' + Math.round(hit.x) + ':' + Math.round(hit.y),
-          templateId: template.id,
-          rect: { x: hit.x, y: hit.y, w: hit.w, h: hit.h },
-          score: hit.score,
-          inverted: Boolean(hit.inverted),
-        });
-      });
-      template.matches = hits.length;
-
-      // "0 found" on its own reads as a broken feature. Saying what the best
-      // score actually was turns it into a decision the reviewer can act on.
-      if (hits.length === 0) {
-        const near = best > 0 ? best.toFixed(2) : null;
-        el('pickhint').textContent = near
-          ? 'No match at ' + sensitivity().toFixed(2) + '. The closest thing on the page scored '
-            + near + ' — lower the sensitivity below that to include it.'
-          : 'Nothing resembling that was found anywhere in the document.';
-        el('pickhint').classList.add('warnhint');
-      } else {
-        el('pickhint').textContent = 'Draw a box around a logo, stamp, signature or face. '
-          + 'Every place it appears again is found and proposed.';
-        el('pickhint').classList.remove('warnhint');
-      }
-
-      renderTemplates();
-      renderCounts();
-    } finally {
-      busy(false);
-    }
-  }
-
   // Removal without recording an undo, so undoing an *add* does not leave a
   // "redo the removal" entry behind it.
   function dropTemplate(id) {
@@ -1301,7 +1314,7 @@
     show('drop');
   });
 
-  window.Blackbar = { state, rescan, loadFile, exportFile, setMode, runSearch, addTemplate,
+  window.Blackbar = { state, rescan, loadFile, exportFile, setMode, addTemplate,
     undoLast, undoStack, applyLabels, labelItems, legendText, downloadKey,
-    applyRedaction, markPending, plannedCount, searchTermPictures, termsNeedingPictures };
+    applyRedaction, markPending, plannedCount, pendingTemplates, termsNeedingPictures };
 })();
