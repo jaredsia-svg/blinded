@@ -82,6 +82,29 @@ that matched **nothing** is called out in amber. That feedback is the point: a
 mistyped name and a name that genuinely does not appear look identical
 otherwise, and the failure is silent until the document is already out.
 
+### Words that are not text
+
+Tick **Also look for these words as pictures** and each typed word is drawn in
+four common typefaces — a grotesque and a serif, each regular and bold — and
+hunted for visually as well as read out of the text layer.
+
+This is for the case the text layer cannot reach at all: a word inside a logo,
+a scanned page, a screenshot, a chart label baked into a bitmap. On a page that
+is purely ink, with an empty text layer, typing `KAG` finds every occurrence of
+it — set in sans, set in bold, set in serif — and leaves the rest of the page
+alone. A picture of a word shares the word's placeholder, so `[T1]` covers the
+written mentions and the pictured ones alike.
+
+**It is not OCR, and the difference matters.** It finds the word set in
+something close to one of those four faces. It will miss a stylised logotype,
+an unusual face, letter-spaced capitals, and anything curved or rotated. Every
+hit is proposed for review like any other, and a search that finds nothing says
+so — but do not read a clean result as proof the word is absent. Treat it as a
+second pair of eyes, never as a guarantee.
+
+It costs one sweep of the document per word, so it is off by default and runs
+only when you press Redact.
+
 ## Matching a logo everywhere it appears
 
 Click **Pick a logo to match** and drag a box around a logo, a stamp, a
@@ -282,10 +305,10 @@ when you have finished describing the job.
 ## Known limits
 
 - **Scanned documents have no text layer.** If a PDF is a photograph of a page,
-  there is nothing to search for *text* and the detectors and terms box will
-  find nothing. There is no OCR. Image matching does work on a scan, though —
-  it reads pixels — so a repeated letterhead or signature on a scanned document
-  can still be found and covered in one go.
+  the detectors find nothing, because there is nothing to read. There is no
+  OCR. Two things still work on a scan, because both read pixels: picking a
+  logo, and looking for a typed word as a picture — so a repeated letterhead, a
+  signature, or a name set in an ordinary face can still be found and covered.
 - **Form fields and annotations are drawn but not searched.** pdf.js reports
   page text, not annotation contents, so a value typed into a form field is
   visible on the page and will not be detected. Cover those by hand.
@@ -339,6 +362,7 @@ app.js            the controller: load, review, export
 app.css           all of the styling
 lib/detect.js     rules that propose spans, and the checksums behind them
 lib/labels.js     placeholder naming, and the legend/key boundary
+lib/textimage.js  draws a typed word so the matcher can hunt for it
 lib/boxes.js      character spans to rectangles on a page
 lib/measure.js    real glyph advances, so a bar lands on its text
 lib/match.js      normalised cross-correlation, trimming, on plain arrays

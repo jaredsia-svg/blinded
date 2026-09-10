@@ -557,6 +557,91 @@ try {
   await page.uncheck('#labelling');
   check('turning labelling off hides the legend again', await page.isHidden('#legendbox'));
 
+  // ---------- a typed word, found as a picture ----------
+  //
+  // The case the text layer cannot reach at all: a page that is purely ink,
+  // like a scan or a screenshot, where the word exists only as pixels. Built
+  // here with the app's own renderer and PDF writer so the fixture is a real
+  // image-only document rather than an approximation of one.
+  const scanBytes = await page.evaluate(async () => {
+    const c = document.createElement('canvas');
+    c.width = 1224; c.height = 1584;
+    const x = c.getContext('2d', { alpha: false });
+    x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height);
+    x.fillStyle = '#111';
+    x.font = '400 46px Helvetica, Arial, sans-serif';
+    x.fillText('Report prepared for KAG Holdings', 90, 180);
+    x.font = '700 64px Helvetica, Arial, sans-serif';
+    x.fillText('KAG', 90, 400);
+    x.font = '400 40px "Times New Roman", Times, serif';
+    x.fillText('countersigned by KAG on the third', 90, 600);
+    x.font = '400 46px Helvetica, Arial, sans-serif';
+    x.fillText('Nothing sensitive on this line', 90, 800);
+    const img = await window.BlackbarRender.encodeForPdf(c, false);
+    return Array.from(window.BlackbarPdfWrite.build([{ widthPt: 612, heightPt: 792, image: img }]));
+  });
+  const scanPath = join(tmpdir(), 'blackbar-scan.pdf');
+  writeFileSync(scanPath, Buffer.from(scanBytes));
+
+  await page.click('#restart');
+  await page.waitForSelector('#view-drop:not([hidden])');
+  await page.setInputFiles('#file', scanPath);
+  await page.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
+
+  check('the fixture really has no text layer at all',
+    (await page.evaluate(() => window.Blackbar.state.pages[0].text.trim())) === '',
+    await page.evaluate(() => window.Blackbar.state.pages[0].text.slice(0, 60)));
+
+  await page.fill('#terms', 'KAG');
+  await page.waitForTimeout(400);
+  check('and so a typed word finds nothing in it by text',
+    await page.evaluate(() => window.Blackbar.state.pages[0].hits.length) === 0);
+  check('which the term list reports rather than leaving blank',
+    (await page.textContent('#termcounts')).includes('not found'),
+    await page.textContent('#termcounts'));
+
+  await page.check('#termimages');
+  await redact(page);
+
+  const pictured = await page.evaluate(() => {
+    const p = window.Blackbar.state.pages[0];
+    const mine = p.imageHits.filter(m => m.term === 'KAG');
+    return {
+      found: mine.length,
+      worst: mine.length ? Math.min(...mine.map(m => m.score)) : 0,
+      labels: [...new Set(mine.map(m => window.Blackbar.state.labels.byId[m.id]))],
+      ys: mine.map(m => Math.round(m.rect.y)).sort((a, b) => a - b),
+    };
+  });
+  check('every occurrence of the word is found as a picture',
+    pictured.found === 3, pictured.found + ' found at y ' + JSON.stringify(pictured.ys));
+  check('and none of them is a marginal score',
+    pictured.worst > 0.8, 'worst ' + pictured.worst.toFixed(3));
+  check('including the one set in a serif face, not just the sans ones',
+    pictured.ys.some(y => y > 500), JSON.stringify(pictured.ys));
+  check('the line with nothing sensitive on it is left alone',
+    !pictured.ys.some(y => y > 730 && y < 800), JSON.stringify(pictured.ys));
+
+  // A picture of a word is that word, so it shares the word's placeholder
+  // rather than being labelled as an unrelated image.
+  check('a pictured word shares one placeholder with the word itself',
+    pictured.labels.length === 1, JSON.stringify(pictured.labels));
+  check('and is not labelled as a logo',
+    !pictured.labels[0].startsWith('L'), pictured.labels[0]);
+  check('an acronym is not labelled as a person',
+    pictured.labels[0].startsWith('T'), pictured.labels[0]);
+
+  check('the term list reports the pictured matches separately',
+    (await page.textContent('#termcounts')).includes('as picture'),
+    await page.textContent('#termcounts'));
+
+  // Turning the option off withdraws them.
+  await page.uncheck('#termimages');
+  check('turning the option off removes the pictured matches',
+    await page.evaluate(() => window.Blackbar.state.pages[0].imageHits.length) === 0);
+  check('and returns the document to review',
+    await page.evaluate(() => window.Blackbar.state.applied) === false);
+
   // ---------- a small logo, repeated at the same size ----------
   //
   // The simplest case there is, and the one that was broken: three identical

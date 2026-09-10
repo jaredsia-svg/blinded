@@ -68,6 +68,12 @@
           <textarea id="terms" rows="3" placeholder="One per line — Jane Doe, an account number, a project codename"></textarea>
           <p class="hint">No rule can find a name reliably. Type them here and every occurrence is covered, ignoring case.</p>
           <ul id="termcounts" class="termcounts"></ul>
+          <label class="check"><input type="checkbox" id="termimages"> Also look for these words as pictures</label>
+          <p class="hint">Some words are not text: a logo, a scan, a screenshot, a chart label
+            baked into a bitmap. This draws each word above in four common typefaces and hunts
+            for it visually as well. It is <strong>not</strong> OCR — it finds the word set in
+            something close to those faces, and will miss a stylised logotype or an unusual
+            one. It also adds a sweep of the document per word, so Redact takes longer.</p>
         </div>
 
         <div class="field">
@@ -158,6 +164,7 @@
 <script src="lib/measure.js"></script>
 <script src="lib/match.js"></script>
 <script src="lib/imagesearch.js"></script>
+<script src="lib/textimage.js"></script>
 <script src="lib/pdfwrite.js"></script>
 <script src="lib/pdfread.js"></script>
 <script src="lib/render.js"></script>

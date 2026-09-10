@@ -624,6 +624,14 @@ check('a very long label is cut to something printable',
 check('a placeholder is rendered in brackets', Labels.render('PERSON_1') === '[PERSON_1]');
 
 check('a name is recognised as one', Labels.looksLikeName('Jane Doe'));
+check('a hyphenated or apostrophised name still is', Labels.looksLikeName("O'Brien"));
+// An acronym is not a person, and saying it is puts a false claim into the
+// legend — the part of the document a later reader actually trusts. Found by
+// typing a real company's initials into the terms box and being told they were
+// somebody's name.
+check('an acronym is not assumed to be a person', !Labels.looksLikeName('KAG'));
+check('nor is a longer one', !Labels.looksLikeName('NHS'));
+check('nor is a name shouted in capitals', !Labels.looksLikeName('JANE DOE'));
 check('a lower-case word is not assumed to be a name', !Labels.looksLikeName('invoice'));
 check('anything with digits is not assumed to be a name', !Labels.looksLikeName('Account 4471'));
 check('a whole sentence is not assumed to be a name',

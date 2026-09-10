@@ -13,6 +13,7 @@
   const PdfWrite = window.BlackbarPdfWrite;
   const Render = window.BlackbarRender;
   const Labels = window.BlackbarLabels;
+  const TextImage = window.BlackbarTextImage;
   const measure = window.BlackbarMeasure.create();
   const Match = window.BlackbarMatch;
   const ImageSearch = window.BlackbarImageSearch;
@@ -58,6 +59,13 @@
     // a black bar that no longer reflects the current settings is exactly the
     // kind of stale reassurance this program must never give.
     applied: false,
+    // Whether typed words are also hunted for as pictures. Off by default: it
+    // costs a sweep of the document per word, and the text layer already
+    // covers the ordinary case.
+    termImages: false,
+    // Terms whose picture search has already run, so pressing Redact twice
+    // does not repeat it.
+    searchedTerms: [],
   };
   let nextTemplateId = 1;
   let nextManualId = 1;
@@ -257,7 +265,8 @@
   function refreshApply() {
     const button = el('apply');
     const marks = plannedCount();
-    const unsearched = state.templates.filter(t => !t.searched).length;
+    const unsearched = state.templates.filter(t => !t.searched).length
+      + termsNeedingPictures().length;
 
     button.disabled = marks === 0 && unsearched === 0;
     button.textContent = state.applied ? 'Redacted' : 'Redact';
@@ -270,8 +279,8 @@
       note.textContent = marks === 0 ? 'Nothing is covered.' : '';
     } else if (unsearched) {
       note.textContent = unsearched === 1
-        ? '1 image still to search for.'
-        : unsearched + ' images still to search for.';
+        ? '1 search still to run.'
+        : unsearched + ' searches still to run.';
     } else if (marks === 0) {
       note.textContent = 'Nothing marked yet.';
     } else {
@@ -295,10 +304,15 @@
   // exported file will contain.
   async function applyRedaction() {
     const pending = state.templates.filter(t => !t.searched);
+    const words = termsNeedingPictures();
     try {
       for (let i = 0; i < pending.length; i++) {
         await runSearch(pending[i], pending.length > 1 ? (i + 1) + ' of ' + pending.length : null);
       }
+      for (let i = 0; i < words.length; i++) {
+        await searchTermPictures(words[i], words.length > 1 ? (i + 1) + ' of ' + words.length : null);
+      }
+      if (words.length) { busy(false); renderTermCounts(); }
     } catch (error) {
       alert('The image search could not finish: ' + (error && error.message ? error.message : error));
       return;
@@ -307,6 +321,67 @@
     applyLabels();
     redrawAll();
     refreshApply();
+  }
+
+  // ---------- finding a typed word as a picture ----------
+
+  // Which terms still need a visual sweep. Recorded by the exact text searched
+  // so that editing the list only costs a search for what actually changed.
+  function termsNeedingPictures() {
+    if (!state.termImages || state.kind === 'text') return [];
+    return state.terms.filter(term => !state.searchedTerms.includes(term));
+  }
+
+  function clearTermImages() {
+    state.searchedTerms = [];
+    for (const page of state.pages) {
+      page.imageHits = page.imageHits.filter(m => !m.term);
+    }
+  }
+
+  // Renders one word in each face and sweeps the document for every one.
+  //
+  // The results all carry the term, not the face that found them: which
+  // typeface happened to correlate is an implementation detail, and a reviewer
+  // asked to reason about "the serif-bold match" would rightly wonder what
+  // they were being told.
+  async function searchTermPictures(term, ordinal) {
+    const templates = TextImage.templatesFor(term);
+    if (!templates.length) return;
+
+    const found = [];
+    for (let i = 0; i < templates.length; i++) {
+      const template = templates[i];
+      busy(true, 'Looking for "' + term + '" as a picture' + (ordinal ? ' (' + ordinal + ')' : '')
+        + ' — style ' + (i + 1) + ' of ' + templates.length + '…');
+      const { matches } = await ImageSearch.search(state.pages, template,
+        { threshold: sensitivity() });
+      for (const hit of matches) found.push(hit);
+    }
+
+    // One word found by two faces at the same place is one find.
+    const perPage = new Map();
+    for (const hit of found) {
+      if (!perPage.has(hit.pageIndex)) perPage.set(hit.pageIndex, []);
+      perPage.get(hit.pageIndex).push(hit);
+    }
+
+    for (const [pageIndex, hits] of perPage) {
+      const page = state.pages[pageIndex];
+      if (!page) continue;
+      for (const hit of Match.suppress(hits, 0.3)) {
+        page.imageHits.push({
+          id: 'term:' + term + ':' + pageIndex + ':' + Math.round(hit.x) + ':' + Math.round(hit.y),
+          // No templateId: this belongs to the typed word, and labelling keys
+          // it to the word so a picture of a name shares the placeholder its
+          // written occurrences get.
+          term,
+          rect: { x: hit.x, y: hit.y, w: hit.w, h: hit.h },
+          score: hit.score,
+        });
+      }
+    }
+    state.searchedTerms.push(term);
   }
 
   // ---------- placeholder labels ----------
@@ -335,7 +410,11 @@
       }
       for (const match of page.imageHits) {
         if (page.dismissed.has(match.id)) continue;
-        items.push({ id: match.id, kind: 'image', templateId: match.templateId });
+        // A picture of a typed word is that word, so it is labelled as one and
+        // shares a placeholder with every written occurrence of it. Anything
+        // else is a picked logo.
+        if (match.term) items.push({ id: match.id, kind: 'term', term: match.term, text: match.term });
+        else items.push({ id: match.id, kind: 'image', templateId: match.templateId });
       }
       for (const box of page.manual) {
         items.push({ id: box.id, kind: 'manual' });
@@ -902,9 +981,15 @@
       label.className = 't';
       label.textContent = term;
 
+      const pictures = state.pages.reduce((sum, page) =>
+        sum + page.imageHits.filter(m => m.term === term).length, 0);
+
       const count = document.createElement('span');
       count.className = 'n';
-      count.textContent = n === 0 ? 'not found' : String(n);
+      if (n === 0 && pictures === 0) count.textContent = 'not found';
+      else if (pictures) count.textContent = n + ' + ' + pictures + ' as picture';
+      else count.textContent = String(n);
+      if (n === 0 && pictures > 0) row.className = '';
 
       row.append(label, count);
       host.append(row);
@@ -1123,12 +1208,29 @@
   el('terms').addEventListener('input', () => {
     clearTimeout(termsTimer);
     termsTimer = setTimeout(() => {
-      state.terms = el('terms').value.split('\n').map(s => s.trim()).filter(Boolean);
+      const next = el('terms').value.split('\n').map(s => s.trim()).filter(Boolean);
+      // A word that is no longer listed should not keep its picture matches.
+      const gone = state.searchedTerms.filter(term => !next.includes(term));
+      if (gone.length) {
+        state.searchedTerms = state.searchedTerms.filter(term => next.includes(term));
+        for (const page of state.pages) {
+          page.imageHits = page.imageHits.filter(m => !m.term || next.includes(m.term));
+        }
+      }
+      state.terms = next;
       rescan();
     }, 200);
   });
 
   el('medium').addEventListener('change', e => { state.includeMedium = e.target.checked; rescan(); });
+
+  el('termimages').addEventListener('change', e => {
+    state.termImages = e.target.checked;
+    clearTermImages();
+    renderTermCounts();
+    markPending();
+    redrawAll();
+  });
 
   el('pick').addEventListener('click', () => setMode(state.mode === 'pick' ? 'box' : 'pick'));
 
@@ -1166,7 +1268,9 @@
       if (template.searched) { template.searched = false; template.matches = 0; }
     }
     for (const page of state.pages) page.imageHits = [];
+    state.searchedTerms = [];
     renderTemplates();
+    renderTermCounts();
     markPending();
     redrawAll();
   });
@@ -1182,6 +1286,7 @@
     state.labelOverrides = {};
     state.labels = { byId: {}, entries: [] };
     state.applied = false;
+    state.searchedTerms = [];
     undoStack.length = 0;
     refreshUndo();
     setMode('box');
@@ -1192,5 +1297,5 @@
 
   window.Blackbar = { state, rescan, loadFile, exportFile, setMode, runSearch, addTemplate,
     undoLast, undoStack, applyLabels, labelItems, legendText, downloadKey,
-    applyRedaction, markPending, plannedCount };
+    applyRedaction, markPending, plannedCount, searchTermPictures, termsNeedingPictures };
 })();
