@@ -74,16 +74,9 @@ body {
 .drop-icon { width: 34px; height: 34px; color: var(--ink-soft); margin-bottom: 10px; }
 .drop:hover .drop-icon, .drop.over .drop-icon { color: var(--accent); }
 
-.warnstrip {
-  max-width: 720px; margin: 22px auto 0; font-size: 14px; line-height: 1.5;
-  background: var(--warn-bg); border-left: 3px solid #d98b1f; color: var(--warn);
-  padding: 12px 15px; border-radius: 0 var(--radius) var(--radius) 0;
-}
-.warnstrip strong { display: block; margin-bottom: 2px; color: #7a4100; }
-
 .features {
-  list-style: none; padding: 0; margin: 30px auto 0; max-width: 1000px;
-  display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(270px, 1fr));
+  list-style: none; padding: 0; margin: 30px auto 0; max-width: 760px;
+  display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
 }
 .features li {
   background: var(--card); border: 1px solid var(--line);

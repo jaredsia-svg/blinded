@@ -1131,6 +1131,42 @@ try {
     String(await control.evaluate(() => window.__rafCalls)));
   await control.close();
 
+  // ---------- the front page on a laptop ----------
+  //
+  // The landing page is the whole first impression, and its failure mode is
+  // not an exception — it is a page that quietly grows until the feature cards
+  // fall off the bottom of a 1366x768 laptop, the commonest screen there is.
+  // Nothing else in this suite would notice, so it is measured here.
+  for (const [w, h] of [[1366, 768], [1440, 900], [390, 844]]) {
+    const shot = await context.newPage();
+    await shot.setViewportSize({ width: w, height: h });
+    await shot.goto(base);
+    const front = await shot.evaluate(() => ({
+      inner: window.innerWidth,
+      scrollW: document.documentElement.scrollWidth,
+      cards: document.querySelectorAll('.features li').length,
+      lastBottom: Math.round(
+        [...document.querySelectorAll('.features li')].pop().getBoundingClientRect().bottom),
+      icons: [...document.querySelectorAll('.features .ico')]
+        .map(i => Math.round(i.getBoundingClientRect().width)),
+    }));
+    // Guard the measurement itself: setViewportSize silently doing nothing
+    // would make every assertion below a measurement of the default window.
+    check('the front page is measured at ' + w + 'px', front.inner === w, String(front.inner));
+    check('the front page has four feature cards at ' + w + 'px',
+      front.cards === 4, String(front.cards));
+    check('the front page never scrolls sideways at ' + w + 'px',
+      front.scrollW <= w, front.scrollW + ' > ' + w);
+    check('the feature icons stay small at ' + w + 'px',
+      front.icons.every(px => px > 0 && px <= 34), JSON.stringify(front.icons));
+    // Only asked of a laptop: a phone is expected to stack and scroll.
+    if (w >= 1366) {
+      check('every feature card is above the fold at ' + w + 'x' + h,
+        front.lastBottom <= h, 'last card ends at ' + front.lastBottom + ', viewport is ' + h);
+    }
+    await shot.close();
+  }
+
   check('nothing threw in the page', consoleErrors.length === 0, consoleErrors.join(' | '));
 } finally {
   await browser.close();
