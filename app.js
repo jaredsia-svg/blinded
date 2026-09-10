@@ -349,7 +349,9 @@
 
     for (const term of termsNeedingPictures()) {
       TextImage.templatesFor(term).forEach((template, i) => {
-        entries.push({ key: 'term:' + term + ':' + i, template, term });
+        entries.push({
+          key: 'term:' + term + ':' + i, template, term, threshold: wordSensitivity(),
+        });
       });
     }
     return entries;
@@ -427,7 +429,7 @@
         }
       }
       state.searchedTerms.push(term);
-      reportSearch({ matches: pooled, best });
+      reportSearch({ matches: pooled, best }, wordSensitivity());
     }
 
     markDuplicates();
@@ -446,7 +448,7 @@
 
   // "0 found" on its own reads as a broken feature. Saying what the best score
   // actually was turns it into a decision the reviewer can act on.
-  function reportSearch(found) {
+  function reportSearch(found, threshold) {
     const hint = el('pickhint');
     if (found.matches.length) {
       hint.textContent = 'Draw a box around a logo, stamp, signature or face. '
@@ -455,8 +457,9 @@
       return;
     }
     const near = found.best > 0 ? found.best.toFixed(2) : null;
+    const bar = threshold === undefined ? sensitivity() : threshold;
     hint.textContent = near
-      ? 'No match at ' + sensitivity().toFixed(2) + '. The closest thing scored '
+      ? 'No match at ' + bar.toFixed(2) + '. The closest thing scored '
         + near + ' — lower the sensitivity below that to include it.'
       : 'Nothing resembling that was found anywhere in the document.';
     hint.classList.add('warnhint');
@@ -945,6 +948,24 @@
     return Number(el('sens').value) / 100;
   }
 
+  // The bar a word drawn as a picture has to clear.
+  //
+  // Measured, not guessed. On a real deck whose box heading "KAG's value" was
+  // outlined vector art rather than text, the true occurrences scored 0.735
+  // and 0.598 while the best thing that was not a KAG — the letters of a "BDA"
+  // logo — scored 0.465. The word bar has to sit in that gap. A cut-out logo
+  // is matched against a copy of itself and scores far higher, so it keeps the
+  // slider's own value.
+  //
+  // Expressed as an offset rather than a constant so the slider still means
+  // something for words: drag it up and both bars tighten together.
+  const WORD_OFFSET = 0.20;
+  const WORD_FLOOR = 0.35;
+
+  function wordSensitivity() {
+    return Math.max(WORD_FLOOR, Math.round((sensitivity() - WORD_OFFSET) * 100) / 100);
+  }
+
   function setMode(mode) {
     state.mode = mode;
     const button = el('pick');
@@ -1401,5 +1422,6 @@
 
   window.Blinded = { state, rescan, loadFile, exportFile, setMode, addTemplate,
     undoLast, undoStack, applyLabels, labelItems, legendText, downloadKey,
+    sensitivity, wordSensitivity,
     applyRedaction, markPending, plannedCount, pendingTemplates, termsNeedingPictures };
 })();

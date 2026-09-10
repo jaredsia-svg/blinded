@@ -500,6 +500,81 @@ check('a square mark is sized by its target', (() => {
 check('an elongated mark is allowed to be longer than the target',
   Math.round(600 * Match.workingScale(600, 30, Match.COARSE_SIZE)) > Match.COARSE_SIZE.target);
 
+// How far a mark can be shrunk for nomination depends on where it keeps its
+// identity. A monogram is a shape and survives; a wordmark is letters, and
+// the letters live in its height. A real logo cut out of a real deck was not
+// found at the pixels it had been cut from, because nomination squashed
+// 451x44 of lettering to 72x7 and could no longer tell where to look: it
+// proposed the true position with an overlap of zero, so verification was
+// never given the chance to score it. Forced to score that position by hand,
+// the very same template refined to 0.90.
+check('a wordmark-shaped template gets the wide coarse profile',
+  Match.coarseSizeFor(451, 44) === Match.COARSE_SIZE_WIDE);
+check('and so does one just over the line',
+  Match.coarseSizeFor(300, 100) === Match.COARSE_SIZE_WIDE);
+check('a tall mark is treated the same way as a wide one',
+  Match.coarseSizeFor(44, 451) === Match.COARSE_SIZE_WIDE);
+check('an ordinary mark keeps the cheap profile',
+  Match.coarseSizeFor(200, 200) === Match.COARSE_SIZE);
+check('and so does a mildly oblong one',
+  Match.coarseSizeFor(200, 90) === Match.COARSE_SIZE);
+check('a degenerate size does not throw',
+  Match.coarseSizeFor(0, 0) === Match.COARSE_SIZE);
+
+// The point of the profile is the short side, so measure that and not the
+// constant. Seven rows is what the cheap profile gave the logo that went
+// missing; the wide profile has to do materially better than that.
+(() => {
+  const wide = Match.coarseSizeFor(451, 44);
+  const rows = Math.round(44 * Match.workingScale(451, 44, wide));
+  check('a wordmark keeps enough rows to nominate from', rows >= 12, rows + ' rows');
+  const wasRows = Math.round(44 * Match.workingScale(451, 44, Match.COARSE_SIZE));
+  check('which is more than the profile that lost it', rows > wasRows, rows + ' vs ' + wasRows);
+  // The cost of those rows is bounded, or every wide mark becomes a full
+  // resolution sweep and the search stops finishing.
+  const cols = Math.round(451 * Match.workingScale(451, 44, wide));
+  check('without letting the coarse pass grow without limit',
+    cols <= Match.COARSE_SIZE_WIDE.maxLong, cols + ' columns');
+})();
+
+// A template may carry its own threshold, because not every template
+// deserves the same bar. A logo cut from the document is matched against a
+// copy of itself; a word drawn here in Helvetica is a guess at whatever
+// typeface the document was really set in, and never scores as well. On a
+// real deck the two true occurrences of a word scored 0.735 and 0.598 while
+// the best thing that was not the word scored 0.465 — reachable only if the
+// word can be given a lower bar than the logos in the same sweep.
+(() => {
+  const page = new Float32Array(40 * 40);
+  for (let i = 0; i < page.length; i++) page[i] = (i * 37 % 251) / 251;
+  const cut = ImageSearch.templateFromGray
+    ? null
+    : { gray: Match.crop(page, 40, 40, { x: 8, y: 8, w: 12, h: 12 }), width: 12, height: 12 };
+  const ready = ImageSearch.prepareTemplate(cut, {});
+  if (!ready) { check('per-template threshold fixture builds', false); return; }
+  const strict = ImageSearch.searchPage(page, 40, 40, { ...ready, threshold: 0.99 },
+    { threshold: 0.1 });
+  const loose = ImageSearch.searchPage(page, 40, 40, { ...ready, threshold: 0.1 },
+    { threshold: 0.99 });
+  // Without this the assertion below is vacuous: an empty match list passes
+  // .every() trivially, so a threshold that let nothing through at all would
+  // look like a threshold that worked.
+  check('the per-threshold fixture actually matches something',
+    loose.matches.length > 0, JSON.stringify(loose.matches.length));
+  check('a template threshold overrides the sweep it runs in, upwards',
+    strict.matches.every(m => m.score >= 0.99),
+    JSON.stringify(strict.matches.map(m => +m.score.toFixed(2))));
+  check('and downwards, so one sweep can hold two different bars',
+    loose.matches.length >= strict.matches.length,
+    loose.matches.length + ' vs ' + strict.matches.length);
+})();
+
+// A square mark must be untouched by all of this: it was never broken, and
+// the wide profile costs about three times the nominating work.
+check('an ordinary mark is sized exactly as before',
+  Match.workingScale(200, 200, Match.coarseSizeFor(200, 200))
+    === Match.workingScale(200, 200, Match.COARSE_SIZE));
+
 // Candidates are chosen round-robin across scales, never by pooling coarse
 // scores. Coarse scores come from differently resampled pages and are not
 // comparable, and ranking them against each other dropped real matches that

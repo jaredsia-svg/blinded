@@ -155,6 +155,17 @@ comes from glyph positions rather than from correlating a rendering. The
 duplicate is set aside rather than deleted, so removing the term brings it
 back rather than leaving a hole.
 
+Two different bars are in play, and they are not the same number for a reason.
+A logo you cut out of the document is matched against a copy of itself and
+should correlate almost perfectly. A word drawn here in Helvetica is only ever
+an approximation of whatever typeface the document was really set in, and never
+reaches those scores. On a real deck whose box heading was outlined vector art
+rather than text, the two true occurrences of a word scored 0.74 and 0.60 while
+the best thing that was *not* the word — the letters of an unrelated logo —
+scored 0.47. One number for both means either the logos let rubbish through or
+the words are never found. So the word bar sits below the slider's value, and
+the slider still moves both together.
+
 ## Matching a logo everywhere it appears
 
 Click **Pick a logo to match** and drag a box around a logo, a stamp, a
@@ -184,6 +195,19 @@ every one exists because a version without it failed on a real file:
   scaled so its long side is 14 pixels becomes a template *one pixel tall*,
   with no structure left to match. Wide marks are now kept several pixels tall
   and allowed to be longer instead.
+- **A wordmark is nominated at a taller size than a monogram.** Several pixels
+  turned out not to be enough. How far a mark can be shrunk before nomination
+  loses it depends on where it keeps its identity: a roundel is a shape and is
+  still itself at 19x20, while a wordmark is letters, and the letters live in
+  its height. Squashing 451x44 of lettering to 72x7 made every letter the same
+  grey smear, and a logo cut out of a real deck was then not found at the very
+  pixels it had been cut from — nomination proposed its true position with an
+  overlap of zero, so verification never got to score it. Forced to score that
+  position by hand, the same template refined to 0.90. Four reasonable
+  hand-drawn crops of one logo scored 0.38, 0.45, 0.50 and 0.51; three of them
+  now match. Keeping the extra rows costs about three times the nominating
+  work, so it is spent only on marks at least three times longer than they are
+  tall, and an ordinary mark is sized exactly as before.
 - **The size ladder contains exactly 1.0.** It used to be 0.25 × 1.25ⁿ, whose
   rungs straddle 1.0 at 0.954 and 1.192 — so the one size guaranteed to matter
   was never tried. A picked logo is at scale 1.0 by definition, and so is every

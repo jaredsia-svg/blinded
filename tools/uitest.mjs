@@ -1131,6 +1131,33 @@ try {
     String(await control.evaluate(() => window.__rafCalls)));
   await control.close();
 
+  // ---------- two bars in one sweep ----------
+  //
+  // A word drawn here as a picture is a guess at the document's typeface and
+  // never scores as well as a logo cut from the page itself, so it gets a
+  // lower bar. The slider still governs both: drag it and they move together.
+  const bars = await page.evaluate(() => {
+    const B = window.Blinded;
+    const set = v => { const s = document.getElementById('sens'); s.value = String(v);
+      s.dispatchEvent(new Event('input', { bubbles: true })); };
+    const read = () => ({ image: B.sensitivity(), word: B.wordSensitivity() });
+    const at75 = (set(75), read());
+    const at90 = (set(90), read());
+    const at45 = (set(45), read());
+    set(75);
+    return { at75, at90, at45, min: Number(document.getElementById('sens').min) };
+  });
+  check('a typed word is searched at a lower bar than a cut-out logo',
+    bars.at75.word < bars.at75.image, JSON.stringify(bars.at75));
+  check('and that bar is low enough for the case that failed',
+    bars.at75.word <= 0.6 && bars.at75.word > 0.465, JSON.stringify(bars.at75));
+  check('raising the slider tightens the word bar too',
+    bars.at90.word > bars.at75.word, JSON.stringify(bars.at90));
+  check('the word bar never falls through the floor',
+    bars.at45.word >= 0.35, JSON.stringify(bars.at45));
+  check('the slider reaches below the score the missed heading got',
+    bars.min / 100 < 0.598, String(bars.min));
+
   // ---------- the front page on a laptop ----------
   //
   // The landing page is the whole first impression, and its failure mode is
