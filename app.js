@@ -45,6 +45,19 @@
     // edit survives a rescan.
     labelOverrides: {},
     labels: { byId: {}, entries: [] },
+    // Marking up and redacting are two steps, not one.
+    //
+    // Everything used to happen the moment it was typed or drawn, which meant
+    // picking a logo froze the tab for a full sweep of the document before the
+    // reviewer had finished saying what else to cover — and then again for the
+    // next logo. Now marks accumulate as red outlines and nothing is searched,
+    // covered or committed until Redact is pressed.
+    //
+    // `applied` is the view: false shows what *would* be covered, true shows
+    // what will be. Any change to what is covered returns it to false, because
+    // a black bar that no longer reflects the current settings is exactly the
+    // kind of stale reassurance this program must never give.
+    applied: false,
   };
   let nextTemplateId = 1;
   let nextManualId = 1;
@@ -96,6 +109,7 @@
     const action = undoStack.pop();
     if (!action) return;
     action.undo();
+    markPending();
     for (const page of state.pages) if (page.canvas) drawPage(page);
     if (state.kind === 'text') drawTextView();
     renderTemplates();
@@ -181,9 +195,11 @@
     el('pages').hidden = kind === 'text';
     el('lossless').closest('.exportopts').hidden = kind === 'text';
 
+    state.applied = false;
     if (kind !== 'text') buildPageElements();
     show('review');
     rescan();
+    refreshApply();
   }
 
   // ---------- detection ----------
@@ -219,6 +235,78 @@
     renderTermCounts();
     applyLabels();
     renderCounts();
+    // A rescan only ever happens because the reviewer changed what should be
+    // covered — a term, a detector, the confidence setting — so the document
+    // goes back into review along with it.
+    markPending();
+  }
+
+  // ---------- marking up, then redacting ----------
+
+  // Anything that changes what would be covered puts the document back into
+  // review. Appearance-only settings — how a placeholder is spelled, whether a
+  // legend page is appended — deliberately do not, since they cannot make the
+  // bars on screen wrong.
+  function markPending() {
+    if (!state.applied) { refreshApply(); return; }
+    state.applied = false;
+    redrawAll();
+    refreshApply();
+  }
+
+  function refreshApply() {
+    const button = el('apply');
+    const marks = plannedCount();
+    const unsearched = state.templates.filter(t => !t.searched).length;
+
+    button.disabled = marks === 0 && unsearched === 0;
+    button.textContent = state.applied ? 'Redacted' : 'Redact';
+    button.classList.toggle('done', state.applied);
+
+    el('export').disabled = !state.applied || marks === 0;
+
+    const note = el('exportnote');
+    if (state.applied) {
+      note.textContent = marks === 0 ? 'Nothing is covered.' : '';
+    } else if (unsearched) {
+      note.textContent = unsearched === 1
+        ? '1 image still to search for.'
+        : unsearched + ' images still to search for.';
+    } else if (marks === 0) {
+      note.textContent = 'Nothing marked yet.';
+    } else {
+      note.textContent = 'Outlined in red — press Redact to cover them.';
+    }
+  }
+
+  // How many things are currently marked, whether or not they have been
+  // applied. Image matches only exist once their search has run.
+  function plannedCount() {
+    if (state.kind === 'text') {
+      return state.findings.filter(f => !dismissedText.has(f.id)).length;
+    }
+    return state.pages.reduce((sum, page) =>
+      sum + page.hits.filter(h => !page.dismissed.has(h.finding.id)).length
+        + page.imageHits.filter(m => !page.dismissed.has(m.id)).length
+        + page.manual.length, 0);
+  }
+
+  // Runs every search that has not run yet, then switches the view to what the
+  // exported file will contain.
+  async function applyRedaction() {
+    const pending = state.templates.filter(t => !t.searched);
+    try {
+      for (let i = 0; i < pending.length; i++) {
+        await runSearch(pending[i], pending.length > 1 ? (i + 1) + ' of ' + pending.length : null);
+      }
+    } catch (error) {
+      alert('The image search could not finish: ' + (error && error.message ? error.message : error));
+      return;
+    }
+    state.applied = true;
+    applyLabels();
+    redrawAll();
+    refreshApply();
   }
 
   // ---------- placeholder labels ----------
@@ -389,9 +477,8 @@
     if (skipped) parts.push('<strong>' + skipped + '</strong> you turned off');
     el('counts').innerHTML = parts.join('<br>');
 
-    const total = covered + manual + images;
-    el('export').disabled = total === 0 && state.kind !== 'text';
-    el('exportnote').textContent = total === 0 ? 'Nothing is selected yet.' : '';
+    // Whether Export is available is decided by refreshApply, since it depends
+    // on the phase rather than only on the count.
   }
 
   // ---------- page rendering ----------
@@ -457,18 +544,34 @@
     ctx.fillRect(0, 0, page.canvas.width, page.canvas.height);
     ctx.drawImage(page.source, 0, 0);
 
-    // Solid black, exactly as it will be burned in — the preview must not be
-    // more reassuring than the output.
     const boxes = activeBoxes(page);
-    ctx.fillStyle = '#000';
-    for (const box of boxes) ctx.fillRect(box.x, box.y, box.w, box.h);
 
-    // Placeholders on top, through the same function the export uses, so what
-    // is on screen is what ends up in the file — including a label that turns
-    // out not to fit, which the reviewer needs to see here rather than
-    // discover in the finished document.
-    for (const box of boxes) {
-      if (box.label) Render.drawLabel(ctx, box, box.label);
+    if (state.applied) {
+      // Solid black, exactly as it will be burned in — the preview must not be
+      // more reassuring than the output.
+      ctx.fillStyle = '#000';
+      for (const box of boxes) ctx.fillRect(box.x, box.y, box.w, box.h);
+
+      // Placeholders on top, through the same function the export uses, so
+      // what is on screen is what ends up in the file — including a label that
+      // turns out not to fit, which the reviewer needs to see here rather than
+      // discover in the finished document.
+      for (const box of boxes) {
+        if (box.label) Render.drawLabel(ctx, box, box.label);
+      }
+    } else {
+      // Not yet applied: outline what would be covered, and leave it readable.
+      // Being able to read what is about to disappear is the whole point of
+      // reviewing, and a filled bar removes that before the decision is made.
+      ctx.save();
+      ctx.strokeStyle = '#d92d20';
+      ctx.fillStyle = 'rgba(217, 45, 32, 0.13)';
+      ctx.lineWidth = Math.max(2, page.canvas.width / 600);
+      for (const box of boxes) {
+        ctx.fillRect(box.x, box.y, box.w, box.h);
+        ctx.strokeRect(box.x, box.y, box.w, box.h);
+      }
+      ctx.restore();
     }
 
     // Dismissed detections: dashed, so a mistaken dismissal is obvious and
@@ -487,8 +590,11 @@
 
     if (preview) {
       ctx.save();
-      ctx.fillStyle = 'rgba(0,0,0,.45)';
+      ctx.strokeStyle = '#d92d20';
+      ctx.fillStyle = 'rgba(217, 45, 32, 0.2)';
+      ctx.lineWidth = Math.max(2, page.canvas.width / 600);
       ctx.fillRect(preview.x, preview.y, preview.w, preview.h);
+      ctx.strokeRect(preview.x, preview.y, preview.w, preview.h);
       ctx.restore();
     }
   }
@@ -541,12 +647,14 @@
       }
       if (rect.w < minimum && rect.h < minimum) {
         toggleAt(page, end.x, end.y);
+        markPending();
       } else {
         const at = page.manual.length;
         // An id, so a hand-drawn box can carry a label and keep it across a
         // rescan.
         page.manual.push({ ...rect, id: 'man' + (nextManualId++) });
         pushUndo('the box you drew', () => page.manual.splice(at, 1));
+        markPending();
       }
 
       drawPage(page);
@@ -638,23 +746,30 @@
       rect,
       thumbnail: thumbnailOf(page.source, rect),
       matches: 0,
+      // Not searched yet, and deliberately so: sweeping the document here is
+      // what made picking a second logo mean waiting through the first.
+      searched: false,
     };
     state.templates.push(template);
     pushUndo('picking that logo', () => dropTemplate(template.id));
-    await runSearch(template);
+    renderTemplates();
+    markPending();
+    drawPage(page);
   }
 
   // Re-runs one template across the document and replaces its matches. Called
   // on pick and again whenever the sensitivity changes, so what is on screen
   // always reflects the current threshold rather than the one in force when
   // the logo happened to be picked.
-  async function runSearch(template) {
-    busy(true, 'Looking for that image…');
+  async function runSearch(template, ordinal) {
+    const which = ordinal ? 'Image ' + ordinal + ': ' : '';
+    busy(true, which + 'looking for that image…');
     try {
       const { matches: hits, best } = await ImageSearch.search(
         state.pages, template.cut, { threshold: sensitivity() },
-        (done, total) => busy(true, 'Searching page ' + done + ' of ' + total + '…'));
+        (done, total) => busy(true, which + 'searching page ' + done + ' of ' + total + '…'));
       template.best = best;
+      template.searched = true;
 
       for (const page of state.pages) {
         page.imageHits = page.imageHits.filter(m => m.templateId !== template.id);
@@ -688,11 +803,8 @@
         el('pickhint').classList.remove('warnhint');
       }
 
-      for (const page of state.pages) drawPage(page);
       renderTemplates();
       renderCounts();
-    } catch (error) {
-      alert('That image search could not finish: ' + (error && error.message ? error.message : error));
     } finally {
       busy(false);
     }
@@ -720,9 +832,9 @@
       state.pages.forEach((p, i) => { p.imageHits = p.imageHits.concat(saved[i]); });
     });
 
-    for (const page of state.pages) drawPage(page);
     renderTemplates();
-    renderCounts();
+    markPending();
+    redrawAll();
   }
 
   // A small picture of what was picked, so a list of three logos is
@@ -746,11 +858,16 @@
       const row = document.createElement('li');
       const name = document.createElement('span');
       name.className = 't';
-      name.textContent = template.matches === 1 ? 'found once' : 'found ' + template.matches + ' times';
+      if (!template.searched) {
+        name.textContent = 'not searched yet';
+        name.classList.add('waiting');
+      } else {
+        name.textContent = template.matches === 1 ? 'found once' : 'found ' + template.matches + ' times';
+      }
 
       const count = document.createElement('span');
       count.className = 'n';
-      count.textContent = String(template.matches);
+      count.textContent = template.searched ? String(template.matches) : '—';
 
       const remove = document.createElement('button');
       remove.type = 'button';
@@ -809,12 +926,16 @@
       const mark = document.createElement('mark');
       mark.textContent = state.text.slice(f.start, f.end);
       mark.title = f.label + ' — click to keep it';
+      // Outlined until applied, so the reviewer can still read what is about
+      // to go, exactly as on a page.
+      if (!state.applied) mark.classList.add('pending');
       if (dismissedText.has(f.id)) { mark.className = 'off'; mark.title = f.label + ' — click to cover it'; }
       mark.addEventListener('click', () => {
         const wasOff = dismissedText.has(f.id);
         if (wasOff) dismissedText.delete(f.id); else dismissedText.add(f.id);
         pushUndo(wasOff ? 'covering that again' : 'keeping that match',
           () => { if (wasOff) dismissedText.add(f.id); else dismissedText.delete(f.id); });
+        markPending();
         drawTextView();
         renderCounts();
       });
@@ -1023,6 +1144,7 @@
   });
   el('downloadkey').addEventListener('click', downloadKey);
   el('undo').addEventListener('click', undoLast);
+  el('apply').addEventListener('click', applyRedaction);
   window.addEventListener('keydown', event => {
     if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'z' && !event.shiftKey) {
       // Not while typing into the terms box — there, undo means the textarea's.
@@ -1035,13 +1157,18 @@
   // The slider moves continuously; re-running the whole document on every
   // pixel of travel would make it unusable, so the search waits for it to
   // settle. The read-out updates immediately either way.
-  let sensTimer = null;
+  // Moving the slider invalidates every search rather than re-running them.
+  // Re-running on each pixel of travel was unusable, and re-running once it
+  // settled still meant a multi-second sweep nobody asked for.
   el('sens').addEventListener('input', () => {
     el('sensvalue').textContent = sensitivity().toFixed(2);
-    clearTimeout(sensTimer);
-    sensTimer = setTimeout(async () => {
-      for (const template of state.templates) await runSearch(template);
-    }, 350);
+    for (const template of state.templates) {
+      if (template.searched) { template.searched = false; template.matches = 0; }
+    }
+    for (const page of state.pages) page.imageHits = [];
+    renderTemplates();
+    markPending();
+    redrawAll();
   });
   el('export').addEventListener('click', exportFile);
   el('restart').addEventListener('click', () => {
@@ -1054,6 +1181,7 @@
     state.templates = [];
     state.labelOverrides = {};
     state.labels = { byId: {}, entries: [] };
+    state.applied = false;
     undoStack.length = 0;
     refreshUndo();
     setMode('box');
@@ -1063,5 +1191,6 @@
   });
 
   window.Blackbar = { state, rescan, loadFile, exportFile, setMode, runSearch, addTemplate,
-    undoLast, undoStack, applyLabels, labelItems, legendText, downloadKey };
+    undoLast, undoStack, applyLabels, labelItems, legendText, downloadKey,
+    applyRedaction, markPending, plannedCount };
 })();

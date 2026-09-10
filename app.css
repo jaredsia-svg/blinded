@@ -258,3 +258,27 @@ code {
 }
 #downloadkey { margin-top: 10px; border-color: #e6c9c6; color: var(--danger); }
 #downloadkey:hover { border-color: var(--danger); }
+
+/* ---------- marking up, then redacting ---------- */
+
+/* Redact is the action; Export only becomes the action once it has been run. */
+.primary.ghostly {
+  background: transparent; color: var(--accent); border-color: #bcd3f5;
+}
+.primary.ghostly:hover:not(:disabled) { background: #f2f7ff; border-color: var(--accent); }
+.primary.ghostly:disabled { background: transparent; color: #9db8e6; border-color: #dbe6f8; }
+
+/* Once applied the button stops inviting a press without disappearing, so the
+   state of the document stays legible at a glance. */
+.primary.done, .primary.done:hover {
+  background: #e8f3ec; color: #1a6b3c; border-color: #bfe0cb;
+}
+
+.templates .waiting { color: var(--warn); font-style: italic; }
+
+/* A pending mark in a text document mirrors a pending box on a page: outlined
+   in red and still readable. */
+.textview mark.pending {
+  background: rgba(217, 45, 32, .13); color: var(--ink);
+  box-shadow: inset 0 0 0 1.5px #d92d20; border-radius: 2px;
+}

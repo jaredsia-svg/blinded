@@ -60,6 +60,16 @@ const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromi
 const context = await browser.newContext({ acceptDownloads: true });
 const page = await context.newPage();
 
+// Marking up and redacting are two steps now, so every test that wants to see
+// or export a finished redaction has to press the button in between. Waiting
+// on state.applied rather than on a timeout keeps this honest about the
+// searches actually having run.
+async function redact(page) {
+  await page.click('#apply');
+  await page.waitForFunction(() => window.Blackbar.state.applied === true, { timeout: 240000 });
+  await page.waitForFunction(() => document.getElementById('busy').hidden, { timeout: 240000 });
+}
+
 const consoleErrors = [];
 page.on('pageerror', e => consoleErrors.push(String(e)));
 page.on('console', m => { if (m.type() === 'error') consoleErrors.push(m.text()); });
@@ -97,17 +107,49 @@ try {
   check('every detection produced at least one box', boxCount === kinds.length,
     boxCount + ' of ' + kinds.length);
 
-  // ---------- the preview really is black ----------
-  const painted = await page.evaluate(() => {
+  // ---------- marked in red, then covered in black ----------
+  //
+  // Nothing is covered until Redact is pressed. Before it, a mark is outlined
+  // so the reviewer can still read what is about to disappear — which is the
+  // whole point of reviewing, and impossible once it is filled in.
+  const sample = () => page.evaluate(() => {
     const p = window.Blackbar.state.pages[0];
     const hit = p.hits.find(h => h.finding.kind === 'email');
     const r = hit.rects[0];
     const ctx = p.canvas.getContext('2d');
-    const px = ctx.getImageData(Math.round(r.x + r.w / 2), Math.round(r.y + r.h / 2), 1, 1).data;
-    return { r: px[0], g: px[1], b: px[2] };
+    const mid = ctx.getImageData(Math.round(r.x + r.w / 2), Math.round(r.y + r.h / 2), 1, 1).data;
+    const edge = ctx.getImageData(Math.round(r.x), Math.round(r.y + r.h / 2), 1, 1).data;
+    return { mid: [mid[0], mid[1], mid[2]], edge: [edge[0], edge[1], edge[2]], applied: window.Blackbar.state.applied };
   });
-  check('the middle of a detection box is painted black in the preview',
-    painted.r === 0 && painted.g === 0 && painted.b === 0, JSON.stringify(painted));
+
+  const unapplied = await sample();
+  check('a document opens in review, with nothing applied', unapplied.applied === false);
+  check('a marked box is not blacked out before Redact',
+    !(unapplied.mid[0] === 0 && unapplied.mid[1] === 0 && unapplied.mid[2] === 0), JSON.stringify(unapplied.mid));
+  check('it is tinted red instead',
+    unapplied.mid[0] > unapplied.mid[2] + 15, JSON.stringify(unapplied.mid));
+  check('and outlined in red',
+    unapplied.edge[0] > 150 && unapplied.edge[0] > unapplied.edge[1] + 40, JSON.stringify(unapplied.edge));
+  check('the export is unavailable until it has been applied',
+    await page.isDisabled('#export'));
+
+  await redact(page);
+  const covered = await sample();
+  check('pressing Redact covers the box in solid black',
+    covered.mid[0] === 0 && covered.mid[1] === 0 && covered.mid[2] === 0, JSON.stringify(covered.mid));
+  check('and the export becomes available', !(await page.isDisabled('#export')));
+  check('and the button reports the document as redacted',
+    (await page.textContent('#apply')).trim() === 'Redacted');
+
+  // Changing anything puts it back into review, because a black bar that no
+  // longer matches the settings is worse than no bar at all.
+  await page.fill('#terms', 'Mulan');
+  await page.waitForTimeout(400);
+  check('changing a term returns the document to review',
+    await page.evaluate(() => window.Blackbar.state.applied) === false);
+  check('and disables the export again', await page.isDisabled('#export'));
+  await page.fill('#terms', '');
+  await page.waitForTimeout(400);
 
   // ---------- the bar lands on the text, not beside it ----------
   //
@@ -226,6 +268,7 @@ try {
   check('dragging on the page adds a box', manual === 1, String(manual));
 
   // ---------- export ----------
+  await redact(page);
   const [download] = await Promise.all([
     page.waitForEvent('download', { timeout: 60000 }),
     page.click('#export'),
@@ -300,9 +343,12 @@ try {
   }, first);
 
   await page.waitForFunction(() => window.Blackbar.state.templates.length === 1, { timeout: 60000 });
-  // Wait for the sweep to finish. `waitForSelector` is wrong here — it waits
-  // for visibility, and a hidden overlay is never visible.
-  await page.waitForFunction(() => document.getElementById('busy').hidden, { timeout: 180000 });
+  check('picking a logo does not search on its own',
+    await page.evaluate(() => window.Blackbar.state.templates[0].searched) === false);
+  check('and the panel says so',
+    (await page.textContent('#templates')).includes('not searched yet'),
+    await page.textContent('#templates'));
+  await redact(page);
 
   const matched = await page.evaluate(() => ({
     templates: window.Blackbar.state.templates.length,
@@ -378,6 +424,7 @@ try {
     send('pointermove', 400, 1500);
     send('pointerup', 400, 1500);
   });
+  await redact(page);
   await page.waitForFunction(
     () => document.getElementById('pickhint').classList.contains('warnhint'),
     { timeout: 120000 });
@@ -454,6 +501,7 @@ try {
   check('an edited placeholder is normalised to a machine-readable form',
     renamed === 'CLAIMANT', renamed);
 
+  await redact(page);
   const [labelled] = await Promise.all([
     page.waitForEvent('download', { timeout: 90000 }),
     page.click('#export'),
@@ -540,7 +588,7 @@ try {
   }, { place: SMALL_LOGO_PLACEMENTS, box: WORDMARK_BOX });
 
   await page.waitForFunction(() => window.Blackbar.state.templates.length === 1, { timeout: 60000 });
-  await page.waitForFunction(() => document.getElementById('busy').hidden, { timeout: 180000 });
+  await redact(page);
 
   const small = await page.evaluate(() => {
     const hits = window.Blackbar.state.pages[0].imageHits;
@@ -593,7 +641,7 @@ try {
   }, { place: WORDMARK_PLACEMENTS, aspect: WORDMARK_ASPECT });
 
   await page.waitForFunction(() => window.Blackbar.state.templates.length === 1, { timeout: 60000 });
-  await page.waitForFunction(() => document.getElementById('busy').hidden, { timeout: 240000 });
+  await redact(page);
 
   const wordmarks = await page.evaluate(() => ({
     found: window.Blackbar.state.pages[0].imageHits.length,
@@ -711,6 +759,7 @@ try {
   check('clicking it again covers it once more',
     (await page.locator('#textview mark.off').count()) === 0);
 
+  await redact(page);
   const [textDownload] = await Promise.all([
     page.waitForEvent('download', { timeout: 30000 }),
     page.click('#export'),

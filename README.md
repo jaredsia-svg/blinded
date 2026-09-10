@@ -135,6 +135,8 @@ refinement's guess. At the picked size nothing is resampled at all, so a copy
 identical to the pick correlates against it exactly and scores 1.0.
 
 **Match sensitivity** sets the correlation threshold, defaulting to 0.75.
+Moving it discards any results already found and marks the picked images as
+needing another search, rather than re-sweeping the document as you drag.
 Lowering it finds more and also finds things that merely resemble the logo —
 the suite has a test asserting exactly that, because it is a real property of
 the method rather than a caveat worth burying. If a search comes back empty it
@@ -238,12 +240,40 @@ The test suite asserts both halves: that a labelled export contains the
 placeholders as extractable text, and that none of the values they replaced
 appear anywhere in the finished bytes.
 
+## Marking up, then redacting
+
+Blackbar works in two steps, and nothing happens to the document until you ask
+for it.
+
+**Mark up.** Type the text you want covered, pick the logos you want found,
+drag boxes over anything else. Every mark appears as a **red outline** with the
+content still readable underneath — which is the point of reviewing, and
+impossible once a bar is filled in. Picking a logo does not search for it yet;
+it joins the list marked *not searched yet*.
+
+**Press Redact.** Every outstanding image search runs, then everything you
+marked turns solid black — exactly what the exported file will contain. Export
+becomes available only at this point, so you cannot export a document you have
+not seen the result of.
+
+Change anything afterwards — a term, a detector, the sensitivity, a box — and
+the document goes back to outlines and Export switches off again. A black bar
+that no longer reflects the current settings is precisely the kind of stale
+reassurance this program exists to avoid.
+
+This replaced an earlier design where everything happened live. It was wrong in
+a way that only shows up on a real document: picking a logo swept every page
+before you had finished saying what else to cover, and picking a second one
+made you wait through it again. Searching is now something you trigger, once,
+when you have finished describing the job.
+
 ## Reviewing
 
-- Detected values and matched images are covered with a solid black bar —
-  exactly what the export will contain, since the preview and the export are
-  built from the same list of boxes. The preview is never more reassuring than
-  the result.
+- Before Redact, everything marked is outlined in red and still readable.
+  After it, detected values and matched images are covered with a solid black
+  bar — exactly what the export will contain, since the preview and the export
+  are built from the same list of boxes. The preview is never more reassuring
+  than the result.
 - **Click a bar** to turn that one off. It becomes a dashed amber outline, so a
   mistaken dismissal is visible, and clicking it again turns it back on.
 - **Drag on the page** to add a box by hand. Click a box you drew to remove it.
