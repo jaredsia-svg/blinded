@@ -518,20 +518,30 @@ check('cropping lifts out exactly the requested rectangle', (() => {
 
   check('a name typed once is one placeholder however it is cased',
     byId.a === byId.c && byId.c === byId.d, JSON.stringify([byId.a, byId.c, byId.d]));
-  check('and that placeholder says it is a person', byId.a === 'PERSON_1', byId.a);
+  check('and that placeholder says it is a person', byId.a === 'P1', byId.a);
   check('an email is one placeholder regardless of case',
-    byId.b === byId.e && byId.b === 'EMAIL_1', byId.b + ' vs ' + byId.e);
+    byId.b === byId.e && byId.b === 'E1', byId.b + ' vs ' + byId.e);
   check('a typed term full of digits is not guessed to be a person',
-    byId.f === 'TERM_1', byId.f);
+    byId.f === 'T1', byId.f);
   check('every match of one picked logo shares a placeholder',
-    byId.g === byId.h && byId.g === 'LOGO_1', byId.g + ' vs ' + byId.h);
-  check('a different logo gets a different one', byId.i === 'LOGO_2', byId.i);
+    byId.g === byId.h && byId.g === 'L1', byId.g + ' vs ' + byId.h);
+  check('a different logo gets a different one', byId.i === 'L2', byId.i);
   check('hand-drawn boxes are numbered separately',
-    byId.j === 'REDACTED_1' && byId.k === 'REDACTED_2', byId.j + ' ' + byId.k);
-  check('a detector kind gets its own prefix', byId.l === 'PHONE_1', byId.l);
+    byId.j === 'R1' && byId.k === 'R2', byId.j + ' ' + byId.k);
+  check('a detector kind gets its own prefix', byId.l === 'PH1', byId.l);
   check('numbering follows first appearance in the document',
-    entries.map(e => e.label).join(',') ===
-    'PERSON_1,EMAIL_1,TERM_1,LOGO_1,LOGO_2,REDACTED_1,REDACTED_2,PHONE_1',
+    entries.map(e => e.label).join(',') === 'P1,E1,T1,L1,L2,R1,R2,PH1',
+    entries.map(e => e.label).join(','));
+
+  // A placeholder has to fit inside the bar it labels, and bars are only as
+  // wide as what they cover. render.js shrinks a label until it fits, so the
+  // cost of a long one is a smaller, harder-to-read label rather than a
+  // missing one — until it hits the floor, below which nothing is drawn.
+  check('every suggested placeholder is short enough for a narrow bar',
+    entries.every(e => e.label.length <= 4),
+    entries.map(e => e.label).join(','));
+  check('a suggested placeholder is at most twice the width of a bare number',
+    entries.every(e => e.label.replace(/\d+$/, '').length <= 2),
     entries.map(e => e.label).join(','));
   check('an entry counts every occurrence',
     entries[0].count === 3 && entries[1].count === 2,
@@ -551,7 +561,12 @@ check('cropping lifts out exactly the requested rectangle', (() => {
     legend.every(row => Object.keys(row).sort().join(',') === 'count,description,label'),
     JSON.stringify(Object.keys(legend[0])));
   check('the legend still says what each placeholder stands for',
-    legend[0].description === "a person's name" && legend[0].label === 'PERSON_1');
+    legend[0].description === "a person's name" && legend[0].label === 'P1');
+  // Terse codes only work because the legend spells them out, so this is
+  // load-bearing rather than decorative.
+  check('every short code is explained by the legend',
+    legend.every(row => row.description && row.description.length > 5),
+    JSON.stringify(legend.slice(0, 2)));
 
   const key = Labels.key(entries);
   check('the key does map back to the originals, which is its whole purpose',
@@ -566,10 +581,18 @@ check('cropping lifts out exactly the requested rectangle', (() => {
   const edited = Labels.assign(items, overrides);
   check('an edited placeholder replaces every occurrence',
     edited.byId.a === 'CLAIMANT' && edited.byId.c === 'CLAIMANT' && edited.byId.d === 'CLAIMANT');
-  check('and leaves the others alone', edited.byId.b === 'EMAIL_1');
+  check('and leaves the others alone', edited.byId.b === 'E1');
   check('an edited entry is marked as edited', edited.entries[0].edited === true);
   check('an unedited entry is not', edited.entries[1].edited === false);
 }
+
+check('no two categories share a prefix', (() => {
+  const prefixes = Object.values(Labels.CATEGORIES).map(c => c.prefix);
+  return new Set(prefixes).size === prefixes.length;
+})(), Object.values(Labels.CATEGORIES).map(c => c.prefix).join(','));
+check('every prefix is letters only, so a code splits cleanly from its number',
+  Object.values(Labels.CATEGORIES).every(c => /^[A-Z]{1,2}$/.test(c.prefix)),
+  Object.values(Labels.CATEGORIES).map(c => c.prefix).join(','));
 
 check('a label is normalised into something a machine can read', (() => {
   return Labels.normalise("Jane's employer") === 'JANE_S_EMPLOYER'
@@ -601,7 +624,7 @@ check('a whole sentence is not assumed to be a name',
   check('placeholders replace the values in a text export',
     !out.includes('Jane') && !out.includes('555-0132') && !out.includes('jane@example.com'), out);
   check('and the sentence still reads as a sentence',
-    /^Call \[PERSON_1\] on \[PHONE_1\] about \[EMAIL_1\]\.$/.test(out), out);
+    /^Call \[P1\] on \[PH1\] about \[E1\]\.$/.test(out), out);
   check('an unlabelled span in replacement mode removes rather than inventing',
     Detect.applyToText('a b', [{ start: 0, end: 1 }], 'replacement') === ' b');
 }

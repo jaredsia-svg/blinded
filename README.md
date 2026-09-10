@@ -162,7 +162,7 @@ which is what anyone typing would expect.
 
 A black bar says something was removed. It does not say *what*, and that costs
 more than it sounds: "____ transferred the account to ____" is nearly
-unreadable, while "[PERSON_1] transferred the account to [PERSON_2]" carries
+unreadable, while "[P1] transferred the account to [P2]" carries
 the whole sentence. Tick **Label each redaction** and every bar gets a
 placeholder written into it.
 
@@ -173,11 +173,23 @@ is the person in paragraph nine. Casing does not break it: `Jane Doe`, `JANE
 DOE` and `jane doe` are one person and one placeholder. Every match of one
 picked logo shares a placeholder too, for the same reason.
 
-Placeholders are suggested by kind — `PERSON_1`, `EMAIL_2`, `CARD_1`, `LOGO_1`,
-`REDACTED_3` — and **every one is editable**. Rename `PERSON_1` to `CLAIMANT`
-and all of its occurrences change together. A typed term is only guessed to be
-a person when it is shaped like a name; `Account 4471` becomes `TERM_1`, not a
-person.
+Placeholders are suggested by kind and kept deliberately short — `P1` a person,
+`E2` an email, `PH1` a phone number, `C1` a card, `L1` a logo, `R3` a
+hand-drawn box. Terse because a placeholder has to fit inside the bar it
+labels, and a bar is only as wide as whatever it covers.
+
+A long label is not usually dropped — it is shrunk to fit, which is worse for
+being less obvious. Measured on the test document: over a bar covering a
+five-digit postcode, `[PC1]` draws at the bar's full height of 22.8px while
+`[POSTCODE_1]` is squeezed to 9.8px. Over a name, `[P1]` holds 22.8px against
+`[PERSON_1]`'s 17.8px. Below 7px nothing is drawn at all. The legend carries
+the meaning instead, so the short form loses nothing.
+
+**Every placeholder is editable.** Rename `P1` to `CLAIMANT` and all of its
+occurrences change together — and a name you choose usually says more than any
+code will. A longer name is only drawn where the bar is wide enough for it. A
+typed term is only guessed to be a person when it is shaped like a name;
+`Account 4471` becomes `T1`, not a person.
 
 Two options come with it:
 
@@ -193,8 +205,8 @@ Two options come with it:
 This is the part worth reading twice.
 
 The **legend** — the one in the document — carries placeholders and categories
-only: `[PERSON_1] — a person's name — appears 3 times`. It never records what
-anything was. A legend inside a redacted document that mapped `[PERSON_1]` back
+only: `[P1] — a person's name — appears 3 times`. It never records what
+anything was. A legend inside a redacted document that mapped `[P1]` back
 to a name would undo the entire redaction, which is the failure this whole
 program exists to prevent.
 
@@ -247,7 +259,7 @@ redaction failed.
 
 With Blackbar nothing should. Without labelling there is no text to select at
 all. With labelling on there is exactly one kind of text — the placeholders —
-and if you can select `[PERSON_1]` but not the name it replaced, it worked.
+and if you can select `[P1]` but not the name it replaced, it worked.
 
 ## Tests
 

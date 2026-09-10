@@ -418,10 +418,12 @@ try {
   check('the legend suggests a placeholder for every distinct thing',
     legendRows.length >= 5, JSON.stringify(legendRows));
   check('the typed name is suggested as a person',
-    legendRows.some(([label]) => label === 'PERSON_1'), JSON.stringify(legendRows));
+    legendRows.some(([label]) => label === 'P1'), JSON.stringify(legendRows));
   check('the detectors get their own kinds',
-    ['EMAIL_1', 'PHONE_1', 'CARD_1', 'SSN_1'].every(want =>
+    ['E1', 'PH1', 'C1', 'S1'].every(want =>
       legendRows.some(([label]) => label === want)), JSON.stringify(legendRows));
+  check('every suggested placeholder is short enough for a narrow bar',
+    legendRows.every(([label]) => label.length <= 4), JSON.stringify(legendRows));
 
   // A label is painted into the bar, in white on the black.
   const labelPainted = await page.evaluate(() => {
@@ -468,7 +470,7 @@ try {
     extracted += (await p2.getTextContent()).items.map(i => i.str).join(' ') + ' ';
   }
   check('the placeholders are extractable as real text',
-    extracted.includes('[CLAIMANT]') && extracted.includes('[EMAIL_1]'), extracted.slice(0, 200));
+    extracted.includes('[CLAIMANT]') && extracted.includes('[E1]'), extracted.slice(0, 200));
   check('the legend page names each placeholder',
     extracted.includes('Redaction legend') && extracted.includes("a person's name"),
     extracted.slice(-300));
