@@ -11,7 +11,8 @@ import { dirname, extname, join, normalize, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { chromium } from 'playwright';
-import { buildTextPdf, buildLogoPdf, LOGO_PLACEMENTS } from './fixture.mjs';
+import { buildTextPdf, buildLogoPdf, LOGO_PLACEMENTS,
+  buildWordmarkPdf, WORDMARK_PLACEMENTS, WORDMARK_ASPECT } from './fixture.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = resolve(join(here, '..'));
@@ -47,6 +48,8 @@ const fixturePath = join(tmpdir(), 'blackbar-fixture.pdf');
 writeFileSync(fixturePath, buildTextPdf());
 const logoPath = join(tmpdir(), 'blackbar-logo.pdf');
 writeFileSync(logoPath, buildLogoPdf());
+const wordmarkPath = join(tmpdir(), 'blackbar-wordmark.pdf');
+writeFileSync(wordmarkPath, buildWordmarkPdf());
 const textPath = join(tmpdir(), 'blackbar-fixture.txt');
 writeFileSync(textPath, 'Jane Doe — jane.doe@example.com — (415) 555-0132\nnothing sensitive here\n');
 
@@ -309,8 +312,13 @@ try {
     matched.total === 4, matched.total + ' found, per page ' + JSON.stringify(matched.perPage));
   check('including the two on the second page',
     matched.perPage[1] === 1, JSON.stringify(matched.perPage));
-  check('and the smaller copy, at a different size',
-    new Set(matched.scales).size >= 2, 'widths ' + JSON.stringify(matched.scales));
+  check('at four clearly different sizes',
+    new Set(matched.scales).size === 4, 'widths ' + JSON.stringify(matched.scales));
+  // The sizes the old ladder could not reach at all.
+  check('including one below half the picked size',
+    matched.scales.some(w => w < 60 * 2 * 0.5), JSON.stringify(matched.scales));
+  check('and one above double it',
+    matched.scales.some(w => w > 60 * 2 * 1.8), JSON.stringify(matched.scales));
   check('the decoy mark is not matched', matched.total === 4);
   check('the panel reports the image matches',
     (await page.textContent('#counts')).includes('image match'));
@@ -344,10 +352,176 @@ try {
   });
   check('an image match can be dismissed by clicking it', afterClick === 1, String(afterClick));
 
+  // A search that finds nothing must say what it nearly found. "0 found" on
+  // its own is indistinguishable from a broken feature, which is how this
+  // behaved before.
+  //
+  // Note what this cannot be tested with: raising the threshold. A picked logo
+  // always matches *itself* at very nearly 1.0, so no sensitivity setting the
+  // slider can reach will empty the results. The honest way to find nothing is
+  // to pick something with no structure in it, which is also the mistake a
+  // real reviewer makes — dragging across blank page.
+  await page.click('#pick');
+  await page.evaluate(() => {
+    const p = window.Blackbar.state.pages[0];
+    const rect = p.canvas.getBoundingClientRect();
+    const sx = rect.width / p.canvas.width;
+    const sy = rect.height / p.canvas.height;
+    const send = (type, px, py) => p.canvas.dispatchEvent(new PointerEvent(type, {
+      clientX: rect.left + px * sx, clientY: rect.top + py * sy, bubbles: true, pointerId: 41,
+    }));
+    // Empty margin near the foot of the page.
+    send('pointerdown', 200, 1400);
+    send('pointermove', 400, 1500);
+    send('pointerup', 400, 1500);
+  });
+  await page.waitForFunction(
+    () => document.getElementById('pickhint').classList.contains('warnhint'),
+    { timeout: 120000 });
+  const hint = await page.textContent('#pickhint');
+  check('picking blank page reports that nothing was found',
+    hint.includes('Nothing resembling that'), hint);
+  check('and the empty pick adds no matches',
+    await page.evaluate(() => window.Blackbar.state.pages
+      .reduce((n, p) => n + p.imageHits.filter(m => m.templateId === 'tpl2').length, 0)) === 0);
+
+  // Clear that one away so the counts below describe the real logo only.
+  await page.evaluate(() => {
+    const rows = document.querySelectorAll('#templates li button');
+    rows[rows.length - 1].click();
+  });
+
   // Removing the template withdraws its matches entirely.
   await page.click('#templates button');
   check('removing the picked logo removes its matches',
     await page.evaluate(() => window.Blackbar.state.pages.reduce((n, p) => n + p.imageHits.length, 0)) === 0);
+
+  // ---------- a wide wordmark ----------
+  //
+  // The shape that used to break the matcher outright: sized by its long side
+  // alone it became a one-pixel-tall strip, and a page covered in copies of it
+  // returned nothing found. Picked sloppily here, as anyone would.
+  await page.click('#restart');
+  await page.waitForSelector('#view-drop:not([hidden])');
+  await page.setInputFiles('#file', wordmarkPath);
+  await page.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
+  await page.click('#pick');
+
+  await page.evaluate(({ place, aspect }) => {
+    const p = window.Blackbar.state.pages[0];
+    const S = 2, PAD = 10;
+    const { x, y, size } = place[0];
+    const height = size / aspect;
+    const cx = x * S - PAD;
+    const cy = (792 - y - height) * S - PAD;
+    const cw = size * S + PAD * 2;
+    const ch = height * S + PAD * 2;
+    const rect = p.canvas.getBoundingClientRect();
+    const sx = rect.width / p.canvas.width;
+    const sy = rect.height / p.canvas.height;
+    const send = (type, px, py) => p.canvas.dispatchEvent(new PointerEvent(type, {
+      clientX: rect.left + px * sx, clientY: rect.top + py * sy, bubbles: true, pointerId: 31,
+    }));
+    send('pointerdown', cx, cy);
+    send('pointermove', cx + cw, cy + ch);
+    send('pointerup', cx + cw, cy + ch);
+  }, { place: WORDMARK_PLACEMENTS, aspect: WORDMARK_ASPECT });
+
+  await page.waitForFunction(() => window.Blackbar.state.templates.length === 1, { timeout: 60000 });
+  await page.waitForFunction(() => document.getElementById('busy').hidden, { timeout: 240000 });
+
+  const wordmarks = await page.evaluate(() => ({
+    found: window.Blackbar.state.pages[0].imageHits.length,
+    widths: window.Blackbar.state.pages[0].imageHits.map(m => Math.round(m.rect.w)).sort((a, b) => a - b),
+    worst: Math.min(...window.Blackbar.state.pages[0].imageHits.map(m => m.score)),
+  }));
+  // Three of the four, and which one is missed is understood rather than
+  // mysterious. The fixture's smallest copy is 0.46x of a 13:1 mark, so it
+  // renders about thirteen pixels tall and the vertical detail that
+  // distinguishes it — blocks at three different heights — has been resampled
+  // below a pixel before the matcher ever sees it. No amount of candidate
+  // depth recovers structure that is not in the image; this was measured, not
+  // assumed. Compact marks do not have this problem: the square-logo document
+  // above finds all four copies at 0.99.
+  check('a wide wordmark is found at several sizes',
+    wordmarks.found >= 3, wordmarks.found + ' found, widths ' + JSON.stringify(wordmarks.widths));
+  check('including a copy smaller than the one picked',
+    wordmarks.widths[0] < 200 * 2 * 0.9, JSON.stringify(wordmarks.widths));
+  check('and a copy well over one and a half times it',
+    Math.max(...wordmarks.widths) > 200 * 2 * 1.5, JSON.stringify(wordmarks.widths));
+  check('and none of what it does find is a marginal score',
+    wordmarks.worst > 0.8, 'worst ' + wordmarks.worst.toFixed(3));
+
+  // ---------- undo ----------
+  await page.click('#restart');
+  await page.waitForSelector('#view-drop:not([hidden])');
+  await page.setInputFiles('#file', fixturePath);
+  await page.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
+
+  check('undo starts disabled with nothing to undo',
+    await page.isDisabled('#undo'));
+
+  const drawBox = (id, x0, y0, x1, y1) => page.evaluate(({ id, x0, y0, x1, y1 }) => {
+    const p = window.Blackbar.state.pages[0];
+    const rect = p.canvas.getBoundingClientRect();
+    const sx = rect.width / p.canvas.width;
+    const sy = rect.height / p.canvas.height;
+    const send = (type, cx, cy) => p.canvas.dispatchEvent(new PointerEvent(type, {
+      clientX: rect.left + cx * sx, clientY: rect.top + cy * sy, bubbles: true, pointerId: id,
+    }));
+    send('pointerdown', x0, y0);
+    send('pointermove', x1, y1);
+    send('pointerup', x1, y1);
+    return p.manual.length;
+  }, { id, x0, y0, x1, y1 });
+
+  check('drawing a box records it', await drawBox(21, 100, 900, 400, 980) === 1);
+  check('undo becomes available once there is something to undo',
+    !(await page.isDisabled('#undo')));
+  check('the button names what it will undo',
+    (await page.getAttribute('#undo', 'title')).includes('box you drew'),
+    await page.getAttribute('#undo', 'title'));
+
+  check('a second box stacks', await drawBox(22, 100, 1000, 400, 1080) === 2);
+  await page.click('#undo');
+  check('undo removes the most recent box only',
+    await page.evaluate(() => window.Blackbar.state.pages[0].manual.length) === 1);
+  await page.click('#undo');
+  check('undo again removes the first box',
+    await page.evaluate(() => window.Blackbar.state.pages[0].manual.length) === 0);
+  check('undo disables itself when the history runs out',
+    await page.isDisabled('#undo'));
+
+  // Dismissing a detection is a reviewer decision too, so it must be undoable.
+  await page.evaluate(() => {
+    const p = window.Blackbar.state.pages[0];
+    const hit = p.hits.find(h => h.finding.kind === 'email');
+    const r = hit.rects[0];
+    const rect = p.canvas.getBoundingClientRect();
+    const x = rect.left + (r.x + r.w / 2) * (rect.width / p.canvas.width);
+    const y = rect.top + (r.y + r.h / 2) * (rect.height / p.canvas.height);
+    for (const t of ['pointerdown', 'pointerup']) {
+      p.canvas.dispatchEvent(new PointerEvent(t, { clientX: x, clientY: y, bubbles: true, pointerId: 23 }));
+    }
+  });
+  check('dismissing a detection is recorded',
+    await page.evaluate(() => window.Blackbar.state.pages[0].dismissed.size) === 1);
+  await page.click('#undo');
+  check('and undoing it covers the detection again',
+    await page.evaluate(() => window.Blackbar.state.pages[0].dismissed.size) === 0);
+
+  // Keyboard undo, which is how anyone doing this work for real will reach it.
+  await drawBox(24, 120, 900, 420, 980);
+  await page.keyboard.press('Control+z');
+  check('ctrl+z undoes as well as the button',
+    await page.evaluate(() => window.Blackbar.state.pages[0].manual.length) === 0);
+
+  // ...but not while typing, where undo belongs to the text box.
+  await drawBox(25, 130, 900, 430, 980);
+  await page.focus('#terms');
+  await page.keyboard.press('Control+z');
+  check('ctrl+z in the terms box does not undo a redaction',
+    await page.evaluate(() => window.Blackbar.state.pages[0].manual.length) === 1);
 
   // ---------- a plain text document ----------
   await page.click('#restart');

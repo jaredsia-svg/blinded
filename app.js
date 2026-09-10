@@ -56,6 +56,43 @@
     box.hidden = false;
   }
 
+  // ---------- undo ----------
+  //
+  // Every change a reviewer makes by hand is recorded with the operation that
+  // puts it back. Redaction is fiddly work — a box drawn slightly wrong, a
+  // detection dismissed by a misjudged click, a logo picked from the wrong
+  // mark — and without this the only way back was to start the document over
+  // and redo every decision.
+  //
+  // Undo covers what the reviewer did, not what the detectors found: rescans
+  // are derived state and rebuild themselves from the settings.
+  const undoStack = [];
+  const UNDO_LIMIT = 100;
+
+  function pushUndo(label, undo) {
+    undoStack.push({ label, undo });
+    if (undoStack.length > UNDO_LIMIT) undoStack.shift();
+    refreshUndo();
+  }
+
+  function refreshUndo() {
+    const button = el('undo');
+    const last = undoStack[undoStack.length - 1];
+    button.disabled = !last;
+    button.title = last ? 'Undo ' + last.label : 'Nothing to undo';
+  }
+
+  function undoLast() {
+    const action = undoStack.pop();
+    if (!action) return;
+    action.undo();
+    for (const page of state.pages) if (page.canvas) drawPage(page);
+    if (state.kind === 'text') drawTextView();
+    renderTemplates();
+    renderCounts();
+    refreshUndo();
+  }
+
   // ---------- loading ----------
 
   const TEXT_EXT = /\.(txt|md|markdown|csv|log|json|xml|yml|yaml)$/i;
@@ -366,8 +403,13 @@
         addTemplate(page, rect);
         return;
       }
-      if (rect.w < minimum && rect.h < minimum) toggleAt(page, end.x, end.y);
-      else page.manual.push(rect);
+      if (rect.w < minimum && rect.h < minimum) {
+        toggleAt(page, end.x, end.y);
+      } else {
+        const at = page.manual.length;
+        page.manual.push(rect);
+        pushUndo('the box you drew', () => page.manual.splice(at, 1));
+      }
 
       drawPage(page);
       renderCounts();
@@ -380,26 +422,46 @@
   // then a live detection is dismissed; then a dismissed one is restored.
   function toggleAt(page, x, y) {
     const manualHit = Boxes.rectAt(page.manual, x, y);
-    if (manualHit !== -1) { page.manual.splice(manualHit, 1); return; }
+    if (manualHit !== -1) {
+      const [removed] = page.manual.splice(manualHit, 1);
+      pushUndo('removing that box', () => page.manual.splice(manualHit, 0, removed));
+      return;
+    }
 
     // Live things first, in the order they are stacked on the page, then
     // dismissed ones so a change of mind is always reversible by clicking the
     // same spot again.
     for (const hit of page.hits) {
       if (page.dismissed.has(hit.finding.id)) continue;
-      if (Boxes.rectAt(hit.rects, x, y) !== -1) { page.dismissed.add(hit.finding.id); return; }
+      if (Boxes.rectAt(hit.rects, x, y) !== -1) {
+        page.dismissed.add(hit.finding.id);
+        pushUndo('keeping that match', () => page.dismissed.delete(hit.finding.id));
+        return;
+      }
     }
     for (const m of page.imageHits) {
       if (page.dismissed.has(m.id)) continue;
-      if (Boxes.rectAt([m.rect], x, y) !== -1) { page.dismissed.add(m.id); return; }
+      if (Boxes.rectAt([m.rect], x, y) !== -1) {
+        page.dismissed.add(m.id);
+        pushUndo('keeping that image', () => page.dismissed.delete(m.id));
+        return;
+      }
     }
     for (const hit of page.hits) {
       if (!page.dismissed.has(hit.finding.id)) continue;
-      if (Boxes.rectAt(hit.rects, x, y) !== -1) { page.dismissed.delete(hit.finding.id); return; }
+      if (Boxes.rectAt(hit.rects, x, y) !== -1) {
+        page.dismissed.delete(hit.finding.id);
+        pushUndo('covering that match again', () => page.dismissed.add(hit.finding.id));
+        return;
+      }
     }
     for (const m of page.imageHits) {
       if (!page.dismissed.has(m.id)) continue;
-      if (Boxes.rectAt([m.rect], x, y) !== -1) { page.dismissed.delete(m.id); return; }
+      if (Boxes.rectAt([m.rect], x, y) !== -1) {
+        page.dismissed.delete(m.id);
+        pushUndo('covering that image again', () => page.dismissed.add(m.id));
+        return;
+      }
     }
   }
 
@@ -440,6 +502,7 @@
       matches: 0,
     };
     state.templates.push(template);
+    pushUndo('picking that logo', () => dropTemplate(template.id));
     await runSearch(template);
   }
 
@@ -450,9 +513,10 @@
   async function runSearch(template) {
     busy(true, 'Looking for that image…');
     try {
-      const hits = await ImageSearch.search(
+      const { matches: hits, best } = await ImageSearch.search(
         state.pages, template.cut, { threshold: sensitivity() },
         (done, total) => busy(true, 'Searching page ' + done + ' of ' + total + '…'));
+      template.best = best;
 
       for (const page of state.pages) {
         page.imageHits = page.imageHits.filter(m => m.templateId !== template.id);
@@ -471,6 +535,21 @@
       });
       template.matches = hits.length;
 
+      // "0 found" on its own reads as a broken feature. Saying what the best
+      // score actually was turns it into a decision the reviewer can act on.
+      if (hits.length === 0) {
+        const near = best > 0 ? best.toFixed(2) : null;
+        el('pickhint').textContent = near
+          ? 'No match at ' + sensitivity().toFixed(2) + '. The closest thing on the page scored '
+            + near + ' — lower the sensitivity below that to include it.'
+          : 'Nothing resembling that was found anywhere in the document.';
+        el('pickhint').classList.add('warnhint');
+      } else {
+        el('pickhint').textContent = 'Draw a box around a logo, stamp, signature or face. '
+          + 'Every place it appears again is found and proposed.';
+        el('pickhint').classList.remove('warnhint');
+      }
+
       for (const page of state.pages) drawPage(page);
       renderTemplates();
       renderCounts();
@@ -481,11 +560,28 @@
     }
   }
 
-  function removeTemplate(id) {
+  // Removal without recording an undo, so undoing an *add* does not leave a
+  // "redo the removal" entry behind it.
+  function dropTemplate(id) {
     state.templates = state.templates.filter(t => t.id !== id);
     for (const page of state.pages) {
       page.imageHits = page.imageHits.filter(m => m.templateId !== id);
     }
+  }
+
+  function removeTemplate(id) {
+    const template = state.templates.find(t => t.id === id);
+    const at = state.templates.indexOf(template);
+    // Keep the matches as they stand, dismissals included, so putting the
+    // logo back restores the review rather than re-running the search.
+    const saved = state.pages.map(p => p.imageHits.filter(m => m.templateId === id));
+
+    dropTemplate(id);
+    pushUndo('removing that logo', () => {
+      if (template) state.templates.splice(at, 0, template);
+      state.pages.forEach((p, i) => { p.imageHits = p.imageHits.concat(saved[i]); });
+    });
+
     for (const page of state.pages) drawPage(page);
     renderTemplates();
     renderCounts();
@@ -577,7 +673,10 @@
       mark.title = f.label + ' — click to keep it';
       if (dismissedText.has(f.id)) { mark.className = 'off'; mark.title = f.label + ' — click to cover it'; }
       mark.addEventListener('click', () => {
-        if (dismissedText.has(f.id)) dismissedText.delete(f.id); else dismissedText.add(f.id);
+        const wasOff = dismissedText.has(f.id);
+        if (wasOff) dismissedText.delete(f.id); else dismissedText.add(f.id);
+        pushUndo(wasOff ? 'covering that again' : 'keeping that match',
+          () => { if (wasOff) dismissedText.add(f.id); else dismissedText.delete(f.id); });
         drawTextView();
         renderCounts();
       });
@@ -674,6 +773,15 @@
   el('medium').addEventListener('change', e => { state.includeMedium = e.target.checked; rescan(); });
 
   el('pick').addEventListener('click', () => setMode(state.mode === 'pick' ? 'box' : 'pick'));
+  el('undo').addEventListener('click', undoLast);
+  window.addEventListener('keydown', event => {
+    if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'z' && !event.shiftKey) {
+      // Not while typing into the terms box — there, undo means the textarea's.
+      if (document.activeElement && document.activeElement.tagName === 'TEXTAREA') return;
+      event.preventDefault();
+      undoLast();
+    }
+  });
 
   // The slider moves continuously; re-running the whole document on every
   // pixel of travel would make it unusable, so the search waits for it to
@@ -695,11 +803,13 @@
     el('terms').value = '';
     state.terms = [];
     state.templates = [];
+    undoStack.length = 0;
+    refreshUndo();
     setMode('box');
     renderTemplates();
     renderTermCounts();
     show('drop');
   });
 
-  window.Blackbar = { state, rescan, loadFile, exportFile, setMode, runSearch, addTemplate };
+  window.Blackbar = { state, rescan, loadFile, exportFile, setMode, runSearch, addTemplate, undoLast, undoStack };
 })();

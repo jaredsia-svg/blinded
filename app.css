@@ -198,3 +198,19 @@ button.wide.on { background: var(--accent); color: #fff; border-color: var(--acc
 /* While picking, the page invites a different kind of drag. */
 .page.picking canvas { cursor: cell; }
 .page.picking { outline: 2px solid var(--accent); outline-offset: -1px; }
+
+/* A hint that has turned into a warning — a search that found nothing. */
+.warnhint {
+  background: var(--warn-bg); color: var(--warn);
+  border-left: 3px solid #d98b1f; padding: 8px 10px;
+  border-radius: 0 6px 6px 0; margin-top: 8px;
+}
+
+#undo:disabled { opacity: .45; cursor: not-allowed; }
+
+
+/* Undo lives in the panel head, which is sticky, because an undo button you
+   have to scroll to find is one you reach for after you have already scrolled
+   past the mistake. */
+.head-actions { display: flex; gap: 6px; flex: none; }
+.head-actions button { white-space: nowrap; }

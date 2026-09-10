@@ -21,13 +21,14 @@ const check = (label, ok, detail) => {
   else failures.push(label + (detail === undefined ? '' : ' — ' + detail));
 };
 
-for (const file of ['detect.js', 'boxes.js', 'pdfwrite.js', 'match.js']) {
+for (const file of ['detect.js', 'boxes.js', 'pdfwrite.js', 'match.js', 'imagesearch.js']) {
   runInThisContext(readFileSync(join(root, 'lib', file), 'utf8'), { filename: file });
 }
 const Detect = globalThis.BlackbarDetect;
 const Boxes = globalThis.BlackbarBoxes;
 const PdfWrite = globalThis.BlackbarPdfWrite;
 const Match = globalThis.BlackbarMatch;
+const ImageSearch = globalThis.BlackbarImageSearch;
 
 // ---------- checksums ----------
 
@@ -227,8 +228,11 @@ function markTemplate(size) {
   const hits = Match.suppress(raw);
   check('a mark stamped three times is found three times', hits.length === 3,
     hits.length + ' found');
-  check('and at the default threshold each is a single clean hit',
-    raw.length === 3, raw.length + ' raw positions');
+  // At the default threshold a mark also scores above the bar one pixel off
+  // centre, so the raw count exceeds the number of marks. That is what
+  // suppression is for, and the check above already pins the result at three.
+  check('near-miss positions around each mark also clear the threshold',
+    raw.length > 3 && raw.length <= 3 * 6, raw.length + ' raw positions');
 
   // Suppression earns its place at looser thresholds and across the scale
   // sweep, where each mark does come back as a cluster of near-misses around
@@ -337,6 +341,156 @@ check('suppression keeps finds that do not overlap', Match.suppress([
   { x: 0, y: 0, w: 10, h: 10, score: 0.9 },
   { x: 40, y: 0, w: 10, h: 10, score: 0.9 },
 ]).length === 2);
+
+// The scale ladder is the whole reason the first version of this "found
+// nothing" on real documents: it spanned 0.6x to 1.75x, so a logo at half size
+// or double size was never tried at any threshold.
+check('the scale ladder reaches well below half size', Match.SCALES[0] <= 0.3,
+  String(Match.SCALES[0]));
+check('and well above double size',
+  Match.SCALES[Match.SCALES.length - 1] >= 3, String(Match.SCALES[Match.SCALES.length - 1]));
+check('the ladder is geometric, so its steps stay proportional', (() => {
+  const ratios = Match.SCALES.slice(1).map((s, i) => s / Match.SCALES[i]);
+  return ratios.every(r => Math.abs(r - ratios[0]) < 0.02);
+})(), JSON.stringify(Match.SCALES));
+check('no step is coarse enough for refinement to miss',
+  Match.SCALES[1] / Match.SCALES[0] < 1.3);
+check('the coarse pass is more permissive than the reported threshold',
+  Match.COARSE_THRESHOLD < Match.THRESHOLD);
+check('the fine pass scores at a higher resolution than the coarse pass',
+  Match.FINE_SIZE.target > Match.COARSE_SIZE.target);
+
+// Sizing a template by its long side alone is what made a wide wordmark
+// collapse to a one-pixel-tall strip with no structure left to match — the
+// most likely reason a real document came back with nothing found. Every
+// shape must survive both stages with something to correlate against.
+for (const [w, h] of [[400, 40], [600, 30], [900, 20], [1200, 15], [122, 122], [40, 300], [30, 900]]) {
+  for (const [name, size] of [['coarse', Match.COARSE_SIZE], ['fine', Match.FINE_SIZE]]) {
+    const base = Match.workingScale(w, h, size);
+    const tw = Math.round(w * base);
+    const th = Math.round(h * base);
+    check('a ' + w + 'x' + h + ' mark keeps structure at the ' + name + ' stage',
+      Math.min(tw, th) >= 3, tw + 'x' + th);
+  }
+}
+check('sizing never upsamples a template', (() => {
+  const base = Match.workingScale(6, 6, Match.FINE_SIZE);
+  return base <= 1;
+})(), String(Match.workingScale(6, 6, Match.FINE_SIZE)));
+check('a square mark is sized by its target', (() => {
+  const base = Match.workingScale(200, 200, Match.COARSE_SIZE);
+  return Math.round(200 * base) === Match.COARSE_SIZE.target;
+})());
+check('an elongated mark is allowed to be longer than the target',
+  Math.round(600 * Match.workingScale(600, 30, Match.COARSE_SIZE)) > Match.COARSE_SIZE.target);
+
+// Candidates are chosen round-robin across scales, never by pooling coarse
+// scores. Coarse scores come from differently resampled pages and are not
+// comparable, and ranking them against each other dropped real matches that
+// scored 0.83 to 0.95 once refinement looked at them properly.
+check('interleaving takes the best of every scale before the second of any', (() => {
+  const byScale = [
+    [{ id: 'a1', score: 0.9 }, { id: 'a2', score: 0.8 }],
+    [{ id: 'b1', score: 0.5 }, { id: 'b2', score: 0.4 }],
+    [{ id: 'c1', score: 0.7 }],
+  ];
+  const picked = ImageSearch.interleave(byScale, 4).map(x => x.id);
+  return picked.join(',') === 'a1,b1,c1,a2';
+})());
+check('interleaving honours its limit',
+  ImageSearch.interleave([[{ id: 1 }, { id: 2 }], [{ id: 3 }]], 2).length === 2);
+check('interleaving an empty nomination set yields nothing',
+  ImageSearch.interleave([], 10).length === 0);
+check('interleaving copes with scales that found nothing',
+  ImageSearch.interleave([[], [{ id: 1 }], []], 5).length === 1);
+
+// Trimming a sloppy pick down to its ink.
+{
+  const W = 60, H = 50;
+  const pick = new Float32Array(W * H).fill(238);
+  stamp(pick, W, 20, 16, 16, 1);
+  const box = Match.trimToContent(pick, W, H);
+  check('a hand-drawn pick is trimmed to the mark inside it',
+    box.x >= 18 && box.x <= 20 && box.y >= 14 && box.y <= 16, JSON.stringify(box));
+  check('and the trim keeps the whole mark',
+    box.x + box.w >= 36 && box.y + box.h >= 32, JSON.stringify(box));
+  check('trimming never grows the pick',
+    box.w <= W && box.h <= H && box.x >= 0 && box.y >= 0);
+}
+check('a pick with nothing in it is left alone rather than trimmed to nothing', (() => {
+  const flat = new Float32Array(40 * 40).fill(200);
+  const box = Match.trimToContent(flat, 40, 40);
+  return box.w === 40 && box.h === 40;
+})());
+check('trimming works against a dark background too', (() => {
+  const W = 50, H = 40;
+  const dark = new Float32Array(W * H).fill(20);
+  for (let y = 12; y < 28; y++) for (let x = 15; x < 33; x++) dark[y * W + x] = 230;
+  const box = Match.trimToContent(dark, W, H);
+  return box.x >= 13 && box.x <= 15 && box.w <= 22;
+})(), JSON.stringify(Match.trimToContent(
+  (() => { const W = 50, H = 40; const d = new Float32Array(W * H).fill(20);
+    for (let y = 12; y < 28; y++) for (let x = 15; x < 33; x++) d[y * W + x] = 230; return d; })(), 50, 40)));
+
+check('cropping lifts out exactly the requested rectangle', (() => {
+  const g = new Float32Array(25);
+  for (let i = 0; i < 25; i++) g[i] = i;
+  const c = Match.crop(g, 5, 5, { x: 1, y: 1, w: 2, h: 2 });
+  return c[0] === 6 && c[1] === 7 && c[2] === 11 && c[3] === 12;
+})());
+
+// A window confines the search; a stride samples it.
+{
+  const W = 160, H = 120, S = 16;
+  const page = blankPage(W, H);
+  stamp(page, W, 10, 10, S, 1);
+  stamp(page, W, 100, 20, S, 1);
+  const tpl = markTemplate(S);
+
+  const windowed = Match.correlate(page, W, H, tpl, { window: { x: 90, y: 10, w: 30, h: 30 } });
+  check('a windowed search reports nothing outside its window',
+    windowed.every(h => h.x >= 90 && h.x <= 120 && h.y >= 10 && h.y <= 40),
+    JSON.stringify(windowed.map(h => [h.x, h.y])));
+  check('and still finds the mark that is inside it',
+    Match.suppress(windowed).length === 1 &&
+    Math.abs(Match.suppress(windowed)[0].x - 100) <= 1, JSON.stringify(windowed));
+  check('the mark outside the window is not reported',
+    !windowed.some(h => Math.abs(h.x - 10) <= 2));
+  check('a full search still reports both',
+    Match.suppress(Match.correlate(page, W, H, tpl)).length === 2);
+  check('a stride still lands on a mark it steps over', (() => {
+    const hits = Match.suppress(Match.correlate(page, W, H, tpl, { stride: 2, threshold: 0.6 }));
+    return hits.length === 2;
+  })());
+  check('striding costs fewer positions than testing every one',
+    Match.correlate(page, W, H, tpl, { stride: 2, threshold: 0.1 }).length <
+    Match.correlate(page, W, H, tpl, { stride: 1, threshold: 0.1 }).length);
+}
+
+// The sensitivity slider's default and the matcher's threshold are the same
+// number written in two files, and they had drifted: the slider shipped at
+// 0.82 while the matcher was tuned to 0.75, so the app searched stricter than
+// anything tested and quietly dropped real matches scoring in between. Held
+// together here, since nothing else can notice.
+{
+  const html = readFileSync(join(root, 'index.html'), 'utf8');
+  const slider = html.match(/id="sens"[^>]*value="(\d+)"/);
+  check('the sensitivity slider declares a default', Boolean(slider), 'not found in index.html');
+  if (slider) {
+    check('and it matches the matcher\'s own threshold',
+      Number(slider[1]) / 100 === Match.THRESHOLD,
+      'slider ' + (Number(slider[1]) / 100) + ' vs threshold ' + Match.THRESHOLD);
+  }
+  const shown = html.match(/id="sensvalue">([\d.]+)</);
+  check('the read-out beside it starts at the same value',
+    shown && Number(shown[1]) === Match.THRESHOLD,
+    shown ? shown[1] : 'not found');
+  const bounds = html.match(/id="sens"[^>]*min="(\d+)"[^>]*max="(\d+)"/);
+  check('the slider can reach below the default, to find more',
+    bounds && Number(bounds[1]) / 100 < Match.THRESHOLD, bounds ? bounds[1] : 'no min');
+  check('and above it, to find only near-certain matches',
+    bounds && Number(bounds[2]) / 100 > Match.THRESHOLD, bounds ? bounds[2] : 'no max');
+}
 
 // ---------- pdf writer ----------
 

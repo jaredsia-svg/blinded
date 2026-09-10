@@ -94,14 +94,38 @@ the patch under test have their mean subtracted and are divided by their
 standard deviation before being correlated, which is what lets it find the same
 mark printed lighter, scanned at a different exposure, or photocopied onto a
 darker page — cases where the absolute pixel values share nothing and the
-structure is identical. The same template is correlated at seven sizes, so a
-letterhead repeated at half scale in a footer is still found.
+structure is identical.
 
-**Match sensitivity** sets the correlation threshold. The default, 0.82, sits
-comfortably below a re-encoded copy of the same mark and above most unrelated
-page furniture. Lowering it finds more and also finds things that merely
-resemble the logo — the suite has a test asserting exactly that, because it is
-a real property of the method rather than a caveat worth burying.
+Three things make it work on real documents rather than only on tidy ones, and
+each of them exists because the first version did not have it:
+
+- **Your pick is trimmed to the ink inside it.** Nobody drags a tight box. The
+  margin of blank page you include is noise in the correlation, and worse, it
+  makes the template's size depend on how you dragged rather than on the logo,
+  so every size in the sweep is measured against the wrong reference.
+- **Sizes from a quarter to nearly four times the picked one are searched.**
+  The original swept 0.6x to 1.75x, which meant a mark at half size or double
+  size could not be found at any threshold at all. That single limit was the
+  main reason it reported nothing on real files.
+- **A template is never sized by its long side alone.** A 600x30 wordmark
+  scaled so its long side is 14 pixels becomes a template *one pixel tall*,
+  with no structure left to match. Wide marks are now kept several pixels tall
+  and allowed to be longer instead.
+
+The search runs in two passes: a cheap sweep over all those sizes nominates
+candidates, and each candidate is then re-scored against the full-resolution
+page. One pass cannot do both — coarse enough to sweep quickly is too coarse to
+score honestly, and a true match scores 0.6 and gets thrown away.
+
+**Match sensitivity** sets the correlation threshold, defaulting to 0.75.
+Lowering it finds more and also finds things that merely resemble the logo —
+the suite has a test asserting exactly that, because it is a real property of
+the method rather than a caveat worth burying. If a search comes back empty it
+tells you the best score it actually saw, so you can tell a threshold that is
+too strict from a mark that genuinely is not there.
+
+A search takes roughly half a second per page for a compact logo and up to two
+for a wide one, and the progress message names the page it is on.
 
 What it does not do, stated plainly rather than left to be discovered:
 
@@ -114,9 +138,25 @@ What it does not do, stated plainly rather than left to be discovered:
   match is proposed and clickable rather than applied.
 - **A blank or near-blank pick is refused** rather than matched against every
   empty patch on the page.
+- **A very wide mark repeated very small may be missed.** This one is a limit
+  of the method rather than a bug: at 0.46x, a 13:1 wordmark renders about
+  thirteen pixels tall, and the vertical detail that identifies it has been
+  resampled below a pixel before the matcher sees it. Structure that is not in
+  the image cannot be recovered by searching harder — this was measured, not
+  assumed. Compact marks do not have the problem; the square-logo test finds
+  every copy at 0.99. If you hit it, cover the small copies by hand.
 
-A search over a two-page document takes about 0.4 seconds; cost scales with
-page area and page count, and the progress message names the page it is on.
+## Undoing
+
+Every change you make by hand can be undone, with the **Undo** button beside
+the document name or with Ctrl+Z (Cmd+Z on a Mac): a box you drew, a box you
+removed, a detection you dismissed or restored, a logo you picked or removed.
+The button names what it will undo, so you can see what is about to happen
+before it does. Undo does not cover the detectors' own findings, which rebuild
+themselves from the settings whenever those change.
+
+Ctrl+Z inside the text box is left alone — there, it means the text box's undo,
+which is what anyone typing would expect.
 
 ## Reviewing
 
@@ -186,8 +226,8 @@ app.css           all of the styling
 lib/detect.js     rules that propose spans, and the checksums behind them
 lib/boxes.js      character spans to rectangles on a page
 lib/measure.js    real glyph advances, so a bar lands on its text
-lib/match.js      normalised cross-correlation, on plain arrays
-lib/imagesearch.js  runs the matcher over pages, at several sizes
+lib/match.js      normalised cross-correlation, trimming, on plain arrays
+lib/imagesearch.js  the two-pass search: nominate widely, then re-score
 lib/pdfread.js    pdf.js wrapper: page images plus positioned text
 lib/pdfwrite.js   builds the image-only output PDF
 lib/render.js     burns boxes into pixels and encodes them

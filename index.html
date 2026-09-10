@@ -57,7 +57,10 @@
       <aside class="panel">
         <div class="panel-head">
           <h2 id="doc-name">document</h2>
-          <button type="button" id="restart" class="ghost">Start over</button>
+          <div class="head-actions">
+            <button type="button" id="undo" class="ghost" disabled>Undo</button>
+            <button type="button" id="restart" class="ghost">Start over</button>
+          </div>
         </div>
 
         <div class="field">
@@ -74,8 +77,8 @@
           <ul id="templates" class="templates"></ul>
           <label class="sens" for="sens">
             Match sensitivity
-            <input type="range" id="sens" min="70" max="95" value="82" step="1">
-            <span id="sensvalue">0.82</span>
+            <input type="range" id="sens" min="60" max="95" value="75" step="1">
+            <span id="sensvalue">0.75</span>
           </label>
           <p class="hint">Lower finds more, including things that only resemble the logo. Every match is proposed, never applied on its own.</p>
         </div>
