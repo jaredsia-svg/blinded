@@ -1,7 +1,7 @@
 // Builds a small PDF that actually contains text, so the tests can prove that
 // the exported file no longer does.
 //
-// Deliberately not built with Blackbar's own writer: that one only makes
+// Deliberately not built with Blinded's own writer: that one only makes
 // image-only PDFs, and a test whose input came from the code under test would
 // prove nothing about real documents.
 const LINES = [

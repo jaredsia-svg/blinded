@@ -1,6 +1,6 @@
 // End-to-end pass in a real browser.
 //
-// This is the suite that matters, because Blackbar's promise is about the file
+// This is the suite that matters, because Blinded's promise is about the file
 // that comes out the other side. It loads a PDF that genuinely contains text,
 // drives the review UI the way a person would, exports, and then re-opens the
 // export to confirm the text is gone and the pixels are black.
@@ -46,17 +46,17 @@ function serve() {
 const { server, port } = await serve();
 const base = 'http://127.0.0.1:' + port + '/';
 
-const fixturePath = join(tmpdir(), 'blackbar-fixture.pdf');
+const fixturePath = join(tmpdir(), 'blinded-fixture.pdf');
 writeFileSync(fixturePath, buildTextPdf());
-const logoPath = join(tmpdir(), 'blackbar-logo.pdf');
+const logoPath = join(tmpdir(), 'blinded-logo.pdf');
 writeFileSync(logoPath, buildLogoPdf());
-const doublePath = join(tmpdir(), 'blackbar-double.pdf');
+const doublePath = join(tmpdir(), 'blinded-double.pdf');
 writeFileSync(doublePath, buildDoubleFoundPdf());
-const smallLogoPath = join(tmpdir(), 'blackbar-smalllogo.pdf');
+const smallLogoPath = join(tmpdir(), 'blinded-smalllogo.pdf');
 writeFileSync(smallLogoPath, buildSmallLogoPdf());
-const wordmarkPath = join(tmpdir(), 'blackbar-wordmark.pdf');
+const wordmarkPath = join(tmpdir(), 'blinded-wordmark.pdf');
 writeFileSync(wordmarkPath, buildWordmarkPdf());
-const textPath = join(tmpdir(), 'blackbar-fixture.txt');
+const textPath = join(tmpdir(), 'blinded-fixture.txt');
 writeFileSync(textPath, 'Jane Doe — jane.doe@example.com — (415) 555-0132\nnothing sensitive here\n');
 
 const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
@@ -67,9 +67,19 @@ const page = await context.newPage();
 // or export a finished redaction has to press the button in between. Waiting
 // on state.applied rather than on a timeout keeps this honest about the
 // searches actually having run.
+// Two panel sections start collapsed, so a test has to open one before it can
+// touch what is inside — exactly as a person would.
+async function reveal(page, id) {
+  await page.evaluate(target => {
+    const node = document.getElementById(target);
+    const section = node && node.closest('details');
+    if (section) section.open = true;
+  }, id);
+}
+
 async function redact(page) {
   await page.click('#apply');
-  await page.waitForFunction(() => window.Blackbar.state.applied === true, { timeout: 240000 });
+  await page.waitForFunction(() => window.Blinded.state.applied === true, { timeout: 240000 });
   await page.waitForFunction(() => document.getElementById('busy').hidden, { timeout: 240000 });
 }
 
@@ -90,7 +100,7 @@ try {
   check('the document name is shown', (await page.textContent('#doc-name')).endsWith('.pdf'));
 
   const rendered = await page.evaluate(() => {
-    const p = window.Blackbar.state.pages;
+    const p = window.Blinded.state.pages;
     return { pages: p.length, w: p[0].source.width, h: p[0].source.height, items: p[0].items.length };
   });
   check('the PDF rendered to one page', rendered.pages === 1);
@@ -100,13 +110,13 @@ try {
 
   // ---------- detection ----------
   const kinds = await page.evaluate(() =>
-    window.Blackbar.state.pages[0].findings.map(f => f.kind));
+    window.Blinded.state.pages[0].findings.map(f => f.kind));
   for (const kind of ['email', 'phone', 'card', 'ssn']) {
     check('the page view detected a ' + kind, kinds.includes(kind), kinds.join(','));
   }
 
   const boxCount = await page.evaluate(() =>
-    window.Blackbar.state.pages[0].hits.filter(h => h.rects.length).length);
+    window.Blinded.state.pages[0].hits.filter(h => h.rects.length).length);
   check('every detection produced at least one box', boxCount === kinds.length,
     boxCount + ' of ' + kinds.length);
 
@@ -116,13 +126,13 @@ try {
   // so the reviewer can still read what is about to disappear — which is the
   // whole point of reviewing, and impossible once it is filled in.
   const sample = () => page.evaluate(() => {
-    const p = window.Blackbar.state.pages[0];
+    const p = window.Blinded.state.pages[0];
     const hit = p.hits.find(h => h.finding.kind === 'email');
     const r = hit.rects[0];
     const ctx = p.canvas.getContext('2d');
     const mid = ctx.getImageData(Math.round(r.x + r.w / 2), Math.round(r.y + r.h / 2), 1, 1).data;
     const edge = ctx.getImageData(Math.round(r.x), Math.round(r.y + r.h / 2), 1, 1).data;
-    return { mid: [mid[0], mid[1], mid[2]], edge: [edge[0], edge[1], edge[2]], applied: window.Blackbar.state.applied };
+    return { mid: [mid[0], mid[1], mid[2]], edge: [edge[0], edge[1], edge[2]], applied: window.Blinded.state.applied };
   });
 
   const unapplied = await sample();
@@ -149,7 +159,7 @@ try {
   await page.fill('#terms', 'Mulan');
   await page.waitForTimeout(400);
   check('changing a term returns the document to review',
-    await page.evaluate(() => window.Blackbar.state.applied) === false);
+    await page.evaluate(() => window.Blinded.state.applied) === false);
   check('and disables the export again', await page.isDisabled('#export'));
   await page.fill('#terms', '');
   await page.waitForTimeout(400);
@@ -164,7 +174,7 @@ try {
   // the adversarial fixture line, and the value — the last group on that line
   // — must be covered end to end.
   const guard = await page.evaluate(() => {
-    const p = window.Blackbar.state.pages[0];
+    const p = window.Blinded.state.pages[0];
     const hit = p.hits.find(h => h.finding.text === '4242424242424242');
     if (!hit) return { found: false };
     const r = hit.rects[0];
@@ -216,15 +226,15 @@ try {
   await page.fill('#terms', 'Jane Doe');
   await page.waitForTimeout(400);
   const termHits = await page.evaluate(() =>
-    window.Blackbar.state.pages[0].findings.filter(f => f.kind === 'term').length);
+    window.Blinded.state.pages[0].findings.filter(f => f.kind === 'term').length);
   check('a listed name is found in the page text', termHits >= 1, String(termHits));
 
   // ---------- clicking a box turns it off, and back on ----------
-  const before = await page.evaluate(() => window.Blackbar.state.pages[0].dismissed.size);
+  const before = await page.evaluate(() => window.Blinded.state.pages[0].dismissed.size);
   const clicked = await page.evaluate(() => {
     // Click the middle of a detection through the same coordinate path a real
     // pointer would take, so the scaling maths is under test too.
-    const p = window.Blackbar.state.pages[0];
+    const p = window.Blinded.state.pages[0];
     const hit = p.hits.find(h => h.finding.kind === 'card');
     const r = hit.rects[0];
     const rect = p.canvas.getBoundingClientRect();
@@ -241,7 +251,7 @@ try {
     (await page.textContent('#counts')).includes('turned off'));
 
   const restored = await page.evaluate(() => {
-    const p = window.Blackbar.state.pages[0];
+    const p = window.Blinded.state.pages[0];
     const hit = p.hits.find(h => p.dismissed.has(h.finding.id));
     const r = hit.rects[0];
     const rect = p.canvas.getBoundingClientRect();
@@ -257,7 +267,7 @@ try {
 
   // ---------- dragging adds a box by hand ----------
   const manual = await page.evaluate(() => {
-    const p = window.Blackbar.state.pages[0];
+    const p = window.Blinded.state.pages[0];
     const rect = p.canvas.getBoundingClientRect();
     const sx = rect.width / p.canvas.width;
     const sy = rect.height / p.canvas.height;
@@ -279,7 +289,7 @@ try {
   check('the export is named after the original',
     download.suggestedFilename().endsWith('-redacted.pdf'), download.suggestedFilename());
 
-  const out = join(tmpdir(), 'blackbar-out.pdf');
+  const out = join(tmpdir(), 'blinded-out.pdf');
   await download.saveAs(out);
   const bytes = new Uint8Array(readFileSync(out));
 
@@ -301,7 +311,7 @@ try {
     check('the raw bytes of the export do not contain "' + secret + '"', !asString.includes(secret));
   }
   const meta = await doc.getMetadata();
-  check('the export declares Blackbar as its producer', meta.info.Producer === 'Blackbar');
+  check('the export declares Blinded as its producer', meta.info.Producer === 'Blinded');
 
   // ---------- picking a logo and finding it everywhere ----------
   //
@@ -314,7 +324,7 @@ try {
   await page.setInputFiles('#file', logoPath);
   await page.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
   check('the two-page logo document opened',
-    await page.evaluate(() => window.Blackbar.state.pages.length) === 2);
+    await page.evaluate(() => window.Blinded.state.pages.length) === 2);
 
   // Entering pick mode changes what a drag means, and says so.
   await page.click('#pick');
@@ -328,7 +338,7 @@ try {
   // margin makes this a realistic hand-drawn pick rather than a perfect one.
   const first = LOGO_PLACEMENTS[0];
   await page.evaluate(({ x, y, size }) => {
-    const p = window.Blackbar.state.pages[0];
+    const p = window.Blinded.state.pages[0];
     const S = 2, PAD = 3;
     const cx = x * S - PAD;
     const cy = (792 - y - size) * S - PAD;
@@ -345,21 +355,21 @@ try {
     send('pointerup', cx + cw, cy + ch);
   }, first);
 
-  await page.waitForFunction(() => window.Blackbar.state.templates.length === 1, { timeout: 60000 });
+  await page.waitForFunction(() => window.Blinded.state.templates.length === 1, { timeout: 60000 });
   check('picking a logo does not search on its own',
-    await page.evaluate(() => window.Blackbar.state.templates[0].searched) === false);
+    await page.evaluate(() => window.Blinded.state.templates[0].searched) === false);
   check('and the panel says so',
     (await page.textContent('#templates')).includes('not searched yet'),
     await page.textContent('#templates'));
   await redact(page);
 
   const matched = await page.evaluate(() => ({
-    templates: window.Blackbar.state.templates.length,
-    perPage: window.Blackbar.state.pages.map(p => p.imageHits.length),
-    total: window.Blackbar.state.pages.reduce((n, p) => n + p.imageHits.length, 0),
-    scales: window.Blackbar.state.pages.flatMap(p => p.imageHits.map(m => Math.round(m.rect.w))),
+    templates: window.Blinded.state.templates.length,
+    perPage: window.Blinded.state.pages.map(p => p.imageHits.length),
+    total: window.Blinded.state.pages.reduce((n, p) => n + p.imageHits.length, 0),
+    scales: window.Blinded.state.pages.flatMap(p => p.imageHits.map(m => Math.round(m.rect.w))),
   }));
-  check('picking a logo leaves pick mode', await page.evaluate(() => window.Blackbar.state.mode) === 'box');
+  check('picking a logo leaves pick mode', await page.evaluate(() => window.Blinded.state.mode) === 'box');
   check('every copy of the logo is found across both pages',
     matched.total === 4, matched.total + ' found, per page ' + JSON.stringify(matched.perPage));
   check('including the two on the second page',
@@ -381,7 +391,7 @@ try {
   // The listing is not the deliverable — the pixels are. Preview and export
   // share activeBoxes(), so a black centre here is a black centre in the file.
   const logoPainted = await page.evaluate(() => {
-    const p = window.Blackbar.state.pages[1];
+    const p = window.Blinded.state.pages[1];
     const m = p.imageHits[0];
     const d = p.canvas.getContext('2d').getImageData(
       Math.round(m.rect.x + m.rect.w / 2), Math.round(m.rect.y + m.rect.h / 2), 1, 1).data;
@@ -392,7 +402,7 @@ try {
 
   // A matched logo is a proposal like any other: clickable off and on.
   const afterClick = await page.evaluate(() => {
-    const p = window.Blackbar.state.pages[0];
+    const p = window.Blinded.state.pages[0];
     const m = p.imageHits[0];
     const rect = p.canvas.getBoundingClientRect();
     const x = rect.left + (m.rect.x + m.rect.w / 2) * (rect.width / p.canvas.width);
@@ -415,7 +425,7 @@ try {
   // real reviewer makes — dragging across blank page.
   await page.click('#pick');
   await page.evaluate(() => {
-    const p = window.Blackbar.state.pages[0];
+    const p = window.Blinded.state.pages[0];
     const rect = p.canvas.getBoundingClientRect();
     const sx = rect.width / p.canvas.width;
     const sy = rect.height / p.canvas.height;
@@ -435,7 +445,7 @@ try {
   check('picking blank page reports that nothing was found',
     hint.includes('Nothing resembling that'), hint);
   check('and the empty pick adds no matches',
-    await page.evaluate(() => window.Blackbar.state.pages
+    await page.evaluate(() => window.Blinded.state.pages
       .reduce((n, p) => n + p.imageHits.filter(m => m.templateId === 'tpl2').length, 0)) === 0);
 
   // Clear that one away so the counts below describe the real logo only.
@@ -447,7 +457,7 @@ try {
   // Removing the template withdraws its matches entirely.
   await page.click('#templates button');
   check('removing the picked logo removes its matches',
-    await page.evaluate(() => window.Blackbar.state.pages.reduce((n, p) => n + p.imageHits.length, 0)) === 0);
+    await page.evaluate(() => window.Blinded.state.pages.reduce((n, p) => n + p.imageHits.length, 0)) === 0);
 
   // ---------- placeholder labels ----------
   //
@@ -462,12 +472,13 @@ try {
   await page.waitForTimeout(400);
 
   check('the legend is hidden until labelling is on', await page.isHidden('#legendbox'));
+  await reveal(page, 'labelling');
   await page.check('#labelling');
   check('turning labelling on reveals the legend', await page.isVisible('#legendbox'));
   check('and its options', await page.isVisible('#labelopts'));
 
   const legendRows = await page.evaluate(() =>
-    window.Blackbar.state.labels.entries.map(e => [e.label, e.count]));
+    window.Blinded.state.labels.entries.map(e => [e.label, e.count]));
   check('the legend suggests a placeholder for every distinct thing',
     legendRows.length >= 5, JSON.stringify(legendRows));
   check('the typed name is suggested as a person',
@@ -480,7 +491,7 @@ try {
 
   // A label is painted into the bar, in white on the black.
   const labelPainted = await page.evaluate(() => {
-    const p = window.Blackbar.state.pages[0];
+    const p = window.Blinded.state.pages[0];
     const hit = p.hits.find(h => h.finding.kind === 'email');
     const r = hit.rects[0];
     const ctx = p.canvas.getContext('2d');
@@ -500,7 +511,7 @@ try {
     input.dispatchEvent(new Event('change', { bubbles: true }));
   });
   const renamed = await page.evaluate(() =>
-    window.Blackbar.state.labels.entries[0].label);
+    window.Blinded.state.labels.entries[0].label);
   check('an edited placeholder is normalised to a machine-readable form',
     renamed === 'CLAIMANT', renamed);
 
@@ -509,7 +520,7 @@ try {
     page.waitForEvent('download', { timeout: 90000 }),
     page.click('#export'),
   ]);
-  const labelledOut = join(tmpdir(), 'blackbar-labelled.pdf');
+  const labelledOut = join(tmpdir(), 'blinded-labelled.pdf');
   await labelled.saveAs(labelledOut);
   const labelledBytes = new Uint8Array(readFileSync(labelledOut));
 
@@ -547,7 +558,7 @@ try {
   ]);
   check('the key file is named so it cannot be mistaken for the document',
     /KEY-KEEP-PRIVATE\.json$/.test(keyFile.suggestedFilename()), keyFile.suggestedFilename());
-  const keyOut = join(tmpdir(), 'blackbar-key.json');
+  const keyOut = join(tmpdir(), 'blinded-key.json');
   await keyFile.saveAs(keyOut);
   const key = JSON.parse(readFileSync(keyOut, 'utf8'));
   check('the key warns what it is', /reconstructs everything/.test(key.warning), key.warning);
@@ -557,6 +568,7 @@ try {
   check('the key covers the detected values too',
     key.entries.some(e => e.original === 'jane.doe@example.com'));
 
+  await reveal(page, 'labelling');
   await page.uncheck('#labelling');
   check('turning labelling off hides the legend again', await page.isHidden('#legendbox'));
 
@@ -576,7 +588,7 @@ try {
   await redact(page);
 
   const doubled = await page.evaluate(() => {
-    const p = window.Blackbar.state.pages[0];
+    const p = window.Blinded.state.pages[0];
     const textHits = p.hits.filter(h => h.finding.kind === 'term');
     const pictures = p.imageHits.filter(m => m.term);
     return {
@@ -606,7 +618,7 @@ try {
   await page.fill('#terms', '');
   await page.waitForTimeout(500);
   check('removing the term withdraws its matches entirely',
-    await page.evaluate(() => window.Blackbar.state.pages[0].imageHits.filter(m => m.term).length) === 0);
+    await page.evaluate(() => window.Blinded.state.pages[0].imageHits.filter(m => m.term).length) === 0);
 
   // ---------- a typed word, found as a picture ----------
   //
@@ -628,10 +640,10 @@ try {
     x.fillText('countersigned by KAG on the third', 90, 600);
     x.font = '400 46px Helvetica, Arial, sans-serif';
     x.fillText('Nothing sensitive on this line', 90, 800);
-    const img = await window.BlackbarRender.encodeForPdf(c, false);
-    return Array.from(window.BlackbarPdfWrite.build([{ widthPt: 612, heightPt: 792, image: img }]));
+    const img = await window.BlindedRender.encodeForPdf(c, false);
+    return Array.from(window.BlindedPdfWrite.build([{ widthPt: 612, heightPt: 792, image: img }]));
   });
-  const scanPath = join(tmpdir(), 'blackbar-scan.pdf');
+  const scanPath = join(tmpdir(), 'blinded-scan.pdf');
   writeFileSync(scanPath, Buffer.from(scanBytes));
 
   await page.click('#restart');
@@ -640,13 +652,13 @@ try {
   await page.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
 
   check('the fixture really has no text layer at all',
-    (await page.evaluate(() => window.Blackbar.state.pages[0].text.trim())) === '',
-    await page.evaluate(() => window.Blackbar.state.pages[0].text.slice(0, 60)));
+    (await page.evaluate(() => window.Blinded.state.pages[0].text.trim())) === '',
+    await page.evaluate(() => window.Blinded.state.pages[0].text.slice(0, 60)));
 
   await page.fill('#terms', 'KAG');
   await page.waitForTimeout(400);
   check('and so a typed word finds nothing in it by text',
-    await page.evaluate(() => window.Blackbar.state.pages[0].hits.length) === 0);
+    await page.evaluate(() => window.Blinded.state.pages[0].hits.length) === 0);
   check('which the term list reports rather than leaving blank',
     (await page.textContent('#termcounts')).includes('not found'),
     await page.textContent('#termcounts'));
@@ -655,12 +667,12 @@ try {
   await redact(page);
 
   const pictured = await page.evaluate(() => {
-    const p = window.Blackbar.state.pages[0];
+    const p = window.Blinded.state.pages[0];
     const mine = p.imageHits.filter(m => m.term === 'KAG');
     return {
       found: mine.length,
       worst: mine.length ? Math.min(...mine.map(m => m.score)) : 0,
-      labels: [...new Set(mine.map(m => window.Blackbar.state.labels.byId[m.id]))],
+      labels: [...new Set(mine.map(m => window.Blinded.state.labels.byId[m.id]))],
       ys: mine.map(m => Math.round(m.rect.y)).sort((a, b) => a - b),
     };
   });
@@ -689,9 +701,9 @@ try {
   // Turning the option off withdraws them.
   await page.uncheck('#termimages');
   check('turning the option off removes the pictured matches',
-    await page.evaluate(() => window.Blackbar.state.pages[0].imageHits.length) === 0);
+    await page.evaluate(() => window.Blinded.state.pages[0].imageHits.length) === 0);
   check('and returns the document to review',
-    await page.evaluate(() => window.Blackbar.state.applied) === false);
+    await page.evaluate(() => window.Blinded.state.applied) === false);
 
   // ---------- one pass, spread across cores ----------
   //
@@ -716,11 +728,11 @@ try {
       x.fillStyle = '#0b2a5b'; x.fillRect(820, 110, 300, 100);
       x.fillStyle = '#fff'; x.font = '700 48px Helvetica, Arial, sans-serif';
       x.fillText('ACME', 850, 175);
-      built.push({ widthPt: 612, heightPt: 792, image: await window.BlackbarRender.encodeForPdf(c, false) });
+      built.push({ widthPt: 612, heightPt: 792, image: await window.BlindedRender.encodeForPdf(c, false) });
     }
-    return Array.from(window.BlackbarPdfWrite.build(built));
+    return Array.from(window.BlindedPdfWrite.build(built));
   });
-  const deckPath = join(tmpdir(), 'blackbar-deck.pdf');
+  const deckPath = join(tmpdir(), 'blinded-deck.pdf');
   writeFileSync(deckPath, Buffer.from(deckBytes));
 
   await page.click('#restart');
@@ -729,9 +741,9 @@ try {
   await page.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
 
   const parallel = await page.evaluate(async () => {
-    const IS = window.BlackbarImageSearch;
-    const TI = window.BlackbarTextImage;
-    const pages = window.Blackbar.state.pages;
+    const IS = window.BlindedImageSearch;
+    const TI = window.BlindedTextImage;
+    const pages = window.Blinded.state.pages;
     const logo = IS.templateFrom(pages[0].source, { x: 820, y: 110, w: 300, h: 100 });
     const entries = [{ key: 'logo', template: logo }]
       .concat(TI.templatesFor('KAG').map((t, i) => ({ key: 'face' + i, template: t })));
@@ -794,10 +806,10 @@ try {
       x.fillStyle = fg; x.font = '700 72px Helvetica, Arial, sans-serif';
       x.textBaseline = 'middle'; x.fillText('KAG', 110, y - 10);
     });
-    const img = await window.BlackbarRender.encodeForPdf(c, false);
-    return Array.from(window.BlackbarPdfWrite.build([{ widthPt: 612, heightPt: 792, image: img }]));
+    const img = await window.BlindedRender.encodeForPdf(c, false);
+    return Array.from(window.BlindedPdfWrite.build([{ widthPt: 612, heightPt: 792, image: img }]));
   }, COMBOS);
-  const colourPath = join(tmpdir(), 'blackbar-colours.pdf');
+  const colourPath = join(tmpdir(), 'blinded-colours.pdf');
   writeFileSync(colourPath, Buffer.from(colourBytes));
 
   await page.click('#restart');
@@ -810,7 +822,7 @@ try {
   await redact(page);
 
   const coloured = await page.evaluate((combos) => {
-    const p = window.Blackbar.state.pages[0];
+    const p = window.Blinded.state.pages[0];
     const mine = p.imageHits.filter(m => m.term === 'KAG');
     // The embedded image is exactly the size the page renders at, so canvas
     // coordinates map one to one — no scaling between them.
@@ -845,7 +857,7 @@ try {
   await page.click('#pick');
 
   await page.evaluate(({ place, box }) => {
-    const p = window.Blackbar.state.pages[0];
+    const p = window.Blinded.state.pages[0];
     const S = 2, PAD = 4;
     const { x, y } = place[0];
     // The ruled box starts 5pt left and 6pt below the text origin.
@@ -862,11 +874,11 @@ try {
     send('pointerup', cx + box.w * S + PAD * 2, cy + box.h * S + PAD * 2);
   }, { place: SMALL_LOGO_PLACEMENTS, box: WORDMARK_BOX });
 
-  await page.waitForFunction(() => window.Blackbar.state.templates.length === 1, { timeout: 60000 });
+  await page.waitForFunction(() => window.Blinded.state.templates.length === 1, { timeout: 60000 });
   await redact(page);
 
   const small = await page.evaluate(() => {
-    const hits = window.Blackbar.state.pages[0].imageHits;
+    const hits = window.Blinded.state.pages[0].imageHits;
     return {
       found: hits.length,
       worst: hits.length ? Math.min(...hits.map(m => m.score)) : 0,
@@ -896,7 +908,7 @@ try {
   await page.click('#pick');
 
   await page.evaluate(({ place, aspect }) => {
-    const p = window.Blackbar.state.pages[0];
+    const p = window.Blinded.state.pages[0];
     const S = 2, PAD = 10;
     const { x, y, size } = place[0];
     const height = size / aspect;
@@ -915,13 +927,13 @@ try {
     send('pointerup', cx + cw, cy + ch);
   }, { place: WORDMARK_PLACEMENTS, aspect: WORDMARK_ASPECT });
 
-  await page.waitForFunction(() => window.Blackbar.state.templates.length === 1, { timeout: 60000 });
+  await page.waitForFunction(() => window.Blinded.state.templates.length === 1, { timeout: 60000 });
   await redact(page);
 
   const wordmarks = await page.evaluate(() => ({
-    found: window.Blackbar.state.pages[0].imageHits.length,
-    widths: window.Blackbar.state.pages[0].imageHits.map(m => Math.round(m.rect.w)).sort((a, b) => a - b),
-    worst: Math.min(...window.Blackbar.state.pages[0].imageHits.map(m => m.score)),
+    found: window.Blinded.state.pages[0].imageHits.length,
+    widths: window.Blinded.state.pages[0].imageHits.map(m => Math.round(m.rect.w)).sort((a, b) => a - b),
+    worst: Math.min(...window.Blinded.state.pages[0].imageHits.map(m => m.score)),
   }));
   // Three of the four, and which one is missed is understood rather than
   // mysterious. The fixture's smallest copy is 0.46x of a 13:1 mark, so it
@@ -950,7 +962,7 @@ try {
     await page.isDisabled('#undo'));
 
   const drawBox = (id, x0, y0, x1, y1) => page.evaluate(({ id, x0, y0, x1, y1 }) => {
-    const p = window.Blackbar.state.pages[0];
+    const p = window.Blinded.state.pages[0];
     const rect = p.canvas.getBoundingClientRect();
     const sx = rect.width / p.canvas.width;
     const sy = rect.height / p.canvas.height;
@@ -973,16 +985,16 @@ try {
   check('a second box stacks', await drawBox(22, 100, 1000, 400, 1080) === 2);
   await page.click('#undo');
   check('undo removes the most recent box only',
-    await page.evaluate(() => window.Blackbar.state.pages[0].manual.length) === 1);
+    await page.evaluate(() => window.Blinded.state.pages[0].manual.length) === 1);
   await page.click('#undo');
   check('undo again removes the first box',
-    await page.evaluate(() => window.Blackbar.state.pages[0].manual.length) === 0);
+    await page.evaluate(() => window.Blinded.state.pages[0].manual.length) === 0);
   check('undo disables itself when the history runs out',
     await page.isDisabled('#undo'));
 
   // Dismissing a detection is a reviewer decision too, so it must be undoable.
   await page.evaluate(() => {
-    const p = window.Blackbar.state.pages[0];
+    const p = window.Blinded.state.pages[0];
     const hit = p.hits.find(h => h.finding.kind === 'email');
     const r = hit.rects[0];
     const rect = p.canvas.getBoundingClientRect();
@@ -993,23 +1005,23 @@ try {
     }
   });
   check('dismissing a detection is recorded',
-    await page.evaluate(() => window.Blackbar.state.pages[0].dismissed.size) === 1);
+    await page.evaluate(() => window.Blinded.state.pages[0].dismissed.size) === 1);
   await page.click('#undo');
   check('and undoing it covers the detection again',
-    await page.evaluate(() => window.Blackbar.state.pages[0].dismissed.size) === 0);
+    await page.evaluate(() => window.Blinded.state.pages[0].dismissed.size) === 0);
 
   // Keyboard undo, which is how anyone doing this work for real will reach it.
   await drawBox(24, 120, 900, 420, 980);
   await page.keyboard.press('Control+z');
   check('ctrl+z undoes as well as the button',
-    await page.evaluate(() => window.Blackbar.state.pages[0].manual.length) === 0);
+    await page.evaluate(() => window.Blinded.state.pages[0].manual.length) === 0);
 
   // ...but not while typing, where undo belongs to the text box.
   await drawBox(25, 130, 900, 430, 980);
   await page.focus('#terms');
   await page.keyboard.press('Control+z');
   check('ctrl+z in the terms box does not undo a redaction',
-    await page.evaluate(() => window.Blackbar.state.pages[0].manual.length) === 1);
+    await page.evaluate(() => window.Blinded.state.pages[0].manual.length) === 1);
 
   // ---------- a plain text document ----------
   await page.click('#restart');
@@ -1039,7 +1051,7 @@ try {
     page.waitForEvent('download', { timeout: 30000 }),
     page.click('#export'),
   ]);
-  const outText2 = join(tmpdir(), 'blackbar-out.txt');
+  const outText2 = join(tmpdir(), 'blinded-out.txt');
   await textDownload.saveAs(outText2);
   const redacted = readFileSync(outText2, 'utf8');
   check('the redacted text file is named correctly',
@@ -1051,7 +1063,7 @@ try {
 
   // ---------- an unsupported file is refused ----------
   await page.click('#restart');
-  const junk = join(tmpdir(), 'blackbar.bin');
+  const junk = join(tmpdir(), 'blinded.bin');
   writeFileSync(junk, Buffer.from([0, 1, 2, 3]));
   await page.setInputFiles('#file', junk);
   await page.waitForSelector('#drop-error:not([hidden])', { timeout: 10000 });
@@ -1064,7 +1076,7 @@ try {
   server.close();
 }
 
-console.log('\nBlackbar UI test');
+console.log('\nBlinded UI test');
 if (failures.length) {
   console.error('  ' + failures.length + ' FAILED:');
   for (const f of failures) console.error('    - ' + f);

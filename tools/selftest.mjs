@@ -24,12 +24,12 @@ const check = (label, ok, detail) => {
 for (const file of ['detect.js', 'boxes.js', 'pdfwrite.js', 'match.js', 'imagesearch.js', 'labels.js']) {
   runInThisContext(readFileSync(join(root, 'lib', file), 'utf8'), { filename: file });
 }
-const Detect = globalThis.BlackbarDetect;
-const Boxes = globalThis.BlackbarBoxes;
-const PdfWrite = globalThis.BlackbarPdfWrite;
-const Match = globalThis.BlackbarMatch;
-const ImageSearch = globalThis.BlackbarImageSearch;
-const Labels = globalThis.BlackbarLabels;
+const Detect = globalThis.BlindedDetect;
+const Boxes = globalThis.BlindedBoxes;
+const PdfWrite = globalThis.BlindedPdfWrite;
+const Match = globalThis.BlindedMatch;
+const ImageSearch = globalThis.BlindedImageSearch;
+const Labels = globalThis.BlindedLabels;
 
 // ---------- checksums ----------
 
@@ -807,14 +807,14 @@ check('a second, differently sized page survives too',
   secondViewport.width === 200.5 && secondViewport.height === 100);
 
 const meta = await after.getMetadata();
-check('the rebuilt file names Blackbar as producer', meta.info.Producer === 'Blackbar');
+check('the rebuilt file names Blinded as producer', meta.info.Producer === 'Blinded');
 check('no author is carried into the output', !meta.info.Author);
 check('no title is carried into the output', !meta.info.Title);
 check('no creation date is carried into the output', !meta.info.CreationDate);
 
 // ---------- report ----------
 
-console.log('\nBlackbar self-test');
+console.log('\nBlinded self-test');
 console.log('  fixture lines    : ' + FIXTURE_LINES.length);
 console.log('  written PDF      : ' + writtenBytes + ' bytes, ' + after.numPages + ' pages\n');
 

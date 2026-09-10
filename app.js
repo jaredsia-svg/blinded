@@ -1,4 +1,4 @@
-// Blackbar's controller: file in, review, redacted file out.
+// Blinded's controller: file in, review, redacted file out.
 //
 // The review step is the product. Detection is a suggestion engine and it is
 // wrong in both directions, so every proposal is visible on the document
@@ -7,16 +7,16 @@
 (function () {
   'use strict';
 
-  const Detect = window.BlackbarDetect;
-  const Boxes = window.BlackbarBoxes;
-  const PdfRead = window.BlackbarPdfRead;
-  const PdfWrite = window.BlackbarPdfWrite;
-  const Render = window.BlackbarRender;
-  const Labels = window.BlackbarLabels;
-  const TextImage = window.BlackbarTextImage;
-  const measure = window.BlackbarMeasure.create();
-  const Match = window.BlackbarMatch;
-  const ImageSearch = window.BlackbarImageSearch;
+  const Detect = window.BlindedDetect;
+  const Boxes = window.BlindedBoxes;
+  const PdfRead = window.BlindedPdfRead;
+  const PdfWrite = window.BlindedPdfWrite;
+  const Render = window.BlindedRender;
+  const Labels = window.BlindedLabels;
+  const TextImage = window.BlindedTextImage;
+  const measure = window.BlindedMeasure.create();
+  const Match = window.BlindedMatch;
+  const ImageSearch = window.BlindedImageSearch;
 
   const el = id => document.getElementById(id);
   const views = { drop: el('view-drop'), review: el('view-review') };
@@ -148,7 +148,7 @@
         state.text = await file.text();
         startReview('text', file.name, []);
       } else {
-        fail('Blackbar can open PDFs, PNG and JPEG images, and plain text files. That looked like none of those.');
+        fail('Blinded can open PDFs, PNG and JPEG images, and plain text files. That looked like none of those.');
       }
     } catch (error) {
       // A failure here means the document was not fully understood, and a
@@ -242,6 +242,7 @@
     markDuplicates();
     renderKinds();
     renderTermCounts();
+    renderSectionNotes();
     applyLabels();
     renderCounts();
     // A rescan only ever happens because the reviewer changed what should be
@@ -432,6 +433,7 @@
     markDuplicates();
     renderTemplates();
     renderTermCounts();
+    renderSectionNotes();
     renderCounts();
   }
 
@@ -458,6 +460,33 @@
         + near + ' — lower the sensitivity below that to include it.'
       : 'Nothing resembling that was found anywhere in the document.';
     hint.classList.add('warnhint');
+  }
+
+  // ---------- what a collapsed section is holding ----------
+  //
+  // Sections can be shut, so each one has to say enough on its own line to be
+  // worth not opening. Without this, collapsing the panel just hides the state
+  // rather than tidying it.
+  function renderSectionNotes() {
+    const set = (id, text, active) => {
+      const note = el(id);
+      note.textContent = text || '';
+      note.classList.toggle('on', Boolean(active));
+    };
+
+    const terms = state.terms.length;
+    set('term-note', terms ? terms + (terms === 1 ? ' word' : ' words') : '', terms > 0);
+
+    const logos = state.templates.length;
+    set('image-note', logos ? logos + (logos === 1 ? ' image' : ' images') : '', logos > 0);
+
+    const kinds = Detect.KINDS.filter(k => state.enabled.has(k.kind)).length;
+    set('kind-note', kinds + ' of ' + Detect.KINDS.length
+      + (state.includeMedium ? ' · low-confidence' : ''), false);
+
+    set('label-note', state.labelling
+      ? (state.labels.entries.length || 0) + ' labels'
+      : 'off', state.labelling);
   }
 
   // ---------- one occurrence, one mark ----------
@@ -545,6 +574,7 @@
   function applyLabels() {
     state.labels = Labels.assign(labelItems(), state.labelOverrides);
     renderLegend();
+    renderSectionNotes();
   }
 
   function renderLegend() {
@@ -925,7 +955,7 @@
     }
     el('tip').textContent = mode === 'pick'
       ? 'Drag a box around the logo you want found everywhere else.'
-      : 'Drag on the page to add a box by hand. Click a box you added to remove it.';
+      : 'Drag on a page to add a box. Click a mark to drop it. Marks stay red until you press Redact.';
   }
 
   // Cuts the picked region out of the page and searches every page for it.
@@ -951,6 +981,7 @@
     state.templates.push(template);
     pushUndo('picking that logo', () => dropTemplate(template.id));
     renderTemplates();
+    renderSectionNotes();
     markPending();
     drawPage(page);
   }
@@ -978,6 +1009,7 @@
     });
 
     renderTemplates();
+    renderSectionNotes();
     markPending();
     redrawAll();
   }
@@ -1309,6 +1341,7 @@
     state.labelling = e.target.checked;
     el('labelopts').hidden = !state.labelling;
     el('legendbox').hidden = !state.labelling;
+    renderSectionNotes();
     redrawAll();
     // The legend is the point of turning this on and it sits below the fold of
     // a long panel, so bring it to the reviewer rather than making them look
@@ -1366,7 +1399,7 @@
     show('drop');
   });
 
-  window.Blackbar = { state, rescan, loadFile, exportFile, setMode, addTemplate,
+  window.Blinded = { state, rescan, loadFile, exportFile, setMode, addTemplate,
     undoLast, undoStack, applyLabels, labelItems, legendText, downloadKey,
     applyRedaction, markPending, plannedCount, pendingTemplates, termsNeedingPictures };
 })();

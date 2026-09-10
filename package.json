@@ -1,5 +1,5 @@
 {
-  "name": "blackbar",
+  "name": "blinded",
   "version": "0.1.0",
   "description": "A document redactor that runs entirely in your browser. Nothing is uploaded.",
   "private": true,

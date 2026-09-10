@@ -1,4 +1,4 @@
-// A static file server for local use. Blackbar is plain files, but ES modules
+// A static file server for local use. Blinded is plain files, but ES modules
 // and pdf.js's worker will not load over file://, so opening index.html
 // directly does not work — this is the smallest thing that does.
 import { createReadStream, statSync } from 'node:fs';
@@ -42,5 +42,5 @@ createServer((req, res) => {
   });
   createReadStream(path).pipe(res);
 }).listen(port, () => {
-  console.log('Blackbar is at http://localhost:' + port);
+  console.log('Blinded is at http://localhost:' + port);
 });

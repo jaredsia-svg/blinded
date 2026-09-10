@@ -1,10 +1,15 @@
-# Blackbar
+# Blinded
 
-A document redactor that runs entirely in your browser. Nothing is uploaded.
+Redact a document properly, in your browser. Nothing is uploaded.
 
-Open a PDF, an image or a text file, review what Blackbar thinks is sensitive,
-and export a copy with the approved parts removed. There is no server, no
-build step and no network request once the page has loaded.
+Cover names, numbers, logos and faces — and have them *actually gone* from the
+file, not hidden under a black rectangle that anyone can select the text out
+of. Open a PDF, an image or a text file, review every mark before it is
+applied, and export a copy with the approved parts removed. There is no server,
+no build step and no network request once the page has loaded.
+
+> The repository is still called `blackbar`, which is what this was called
+> before. Only the name of the application changed; the clone URL did not.
 
 ```
 npm install     # only needed to run the tests
@@ -16,6 +21,24 @@ static folder. It cannot be opened straight off the disk with `file://`,
 because ES modules and pdf.js's worker are blocked there; any static server
 will do, and `npm start` is one.
 
+## What it does
+
+- **Gone, not covered.** Each page is rebuilt from pixels, so there is nothing
+  underneath the bars — no text, no fonts, no annotations, and none of the
+  original author, title or history.
+- **It finds them for you.** Emails, cards, IBANs and Social Security numbers,
+  validated against real checksums rather than guessed at. Type any name or
+  word and every occurrence is caught.
+- **Logos and pictures too.** Pick a logo, signature or stamp and every other
+  copy is found across the document, at any size and in any colours. Typed
+  words can be hunted for as pictures as well, for scans and screenshots.
+- **You approve every mark.** Everything is outlined in red and still readable
+  until you press Redact. Click a mark to drop it, drag to add your own, undo
+  anything.
+- **Placeholders, not blanks.** Optionally label each redaction `[P1]`, `[E2]`,
+  so a later reader — or a model — can still follow the sentence.
+- **Nothing is uploaded.** No server, no account, no analytics.
+
 ## Why not just draw a black rectangle
 
 Because that does not remove anything. A rectangle drawn over text in a PDF
@@ -24,7 +47,7 @@ still selectable, and still recoverable with `pdftotext` or a copy and paste.
 Redacted court filings, intelligence reports and corporate disclosures have all
 been un-redacted this way by readers who simply selected the text.
 
-Blackbar never edits the input document. It rasterises each page, paints the
+Blinded never edits the input document. It rasterises each page, paints the
 approved boxes onto those pixels, and builds a **new** PDF out of the resulting
 images. The output contains no text objects, no fonts, no annotations, no
 embedded files, no JavaScript, and none of the original's metadata — no author,
@@ -43,7 +66,7 @@ exported file with a real PDF parser and fails if a single text object survives.
 
 ## How it decides what to propose
 
-Everything Blackbar finds is a *proposal*. Nothing is covered that you have not
+Everything Blinded finds is a *proposal*. Nothing is covered that you have not
 seen, and every proposal can be switched off by clicking it on the page.
 
 Detection is rule-based and runs locally. Where a value can check itself it
@@ -127,7 +150,7 @@ back rather than leaving a hole.
 ## Matching a logo everywhere it appears
 
 Click **Pick a logo to match** and drag a box around a logo, a stamp, a
-signature, a face — anything visual. Blackbar searches every page for it and
+signature, a face — anything visual. Blinded searches every page for it and
 proposes a box over each place it finds. Removing the picked logo from the
 list withdraws all of its matches at once.
 
@@ -308,7 +331,7 @@ appear anywhere in the finished bytes.
 
 ## Marking up, then redacting
 
-Blackbar works in two steps, and nothing happens to the document until you ask
+Blinded works in two steps, and nothing happens to the document until you ask
 for it.
 
 **Mark up.** Type the text you want covered, pick the logos you want found,
@@ -358,7 +381,7 @@ when you have finished describing the job.
 - **Rotated text is approximated.** Boxes are axis-aligned, so text on an angle
   gets its bounding box rather than a tight one.
 - **Character positions inside a run are reconstructed, not reported.** PDF
-  gives the width of a whole run, not of each glyph, so Blackbar measures the
+  gives the width of a whole run, not of each glyph, so Blinded measures the
   run with the page's own font and normalises against the known total. Boxes
   are padded outward and never inward, so the worst case is covering a
   neighbouring character rather than leaving one showing.
@@ -372,7 +395,7 @@ The habit worth keeping, whatever tool you use: open the exported file, select
 all, copy, and paste it somewhere. If anything you redacted comes back, the
 redaction failed.
 
-With Blackbar nothing should. Without labelling there is no text to select at
+With Blinded nothing should. Without labelling there is no text to select at
 all. With labelling on there is exactly one kind of text — the placeholders —
 and if you can select `[P1]` but not the name it replaced, it worked.
 

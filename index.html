@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Blackbar — redact a document, locally</title>
+<title>Blinded — redact a document, locally</title>
 <meta name="description" content="Redact PDFs, images and text in your browser. The file never leaves your machine.">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="app.css">
@@ -12,7 +12,7 @@
 
 <header class="top">
   <div class="wrap top-inner">
-    <div class="mark"><span class="bar"></span> Blackbar</div>
+    <div class="mark"><span class="bar"></span> Blinded</div>
     <p class="claim" id="claim">Runs entirely in this tab. Your file is never uploaded.</p>
   </div>
 </header>
@@ -21,33 +21,71 @@
 
   <!-- ---------- 1. pick a file ---------- -->
   <section id="view-drop" class="view">
+
+    <div class="hero">
+      <h1>Redact a document properly.</h1>
+      <p class="lede">Cover names, numbers, logos and faces — and have them
+        <em>actually gone</em> from the file, not just hidden under a black
+        rectangle. Nothing leaves your computer.</p>
+    </div>
+
     <div id="drop" class="drop" tabindex="0" role="button" aria-label="Choose a document to redact">
+      <svg class="drop-icon" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5" fill="none" stroke="currentColor"
+          stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3" fill="none" stroke="currentColor"
+          stroke-width="1.6" stroke-linecap="round"/>
+      </svg>
       <p class="drop-lead">Drop a document here</p>
-      <p class="drop-sub">PDF, PNG, JPEG, or plain text — or <span class="link">browse</span></p>
+      <p class="drop-sub">PDF, PNG, JPEG or plain text — or <span class="link">browse</span></p>
       <input type="file" id="file" accept=".pdf,.png,.jpg,.jpeg,.txt,.md,.markdown,.csv,.log,application/pdf,image/png,image/jpeg,text/plain" hidden>
     </div>
     <p id="drop-error" class="error" hidden></p>
 
-    <div class="explainer">
-      <h2>What this does</h2>
-      <p>
-        Blackbar finds things that look sensitive, shows you every one of them,
-        and covers only the ones you approve. Then it rebuilds the document from
-        scratch so the covered content is <strong>gone</strong>, not hidden.
-      </p>
-      <p class="warn">
-        Drawing a black rectangle over text in a PDF editor does not remove the
-        text. It stays in the file and can be copied straight back out. That is
-        how redacted court filings and government documents have been un-redacted
-        by readers. Blackbar rasterises each page and builds a new PDF from the
-        pixels, so there is nothing left underneath.
-      </p>
-      <p class="cost">
-        The trade: the exported PDF is an image, so it is no longer searchable or
-        selectable, and the file is larger. Original metadata — author, title,
-        timestamps, revision history — is dropped rather than copied across.
-      </p>
+    <div class="warnstrip">
+      <strong>A black rectangle is not a redaction.</strong>
+      Drawing one over text in a PDF editor leaves the text in the file, where it
+      can be selected and copied straight back out. That is how published court
+      filings have been un-redacted by their readers.
     </div>
+
+    <ul class="features">
+      <li>
+        <h3><svg class="ico" viewBox="0 0 20 20" aria-hidden="true"><rect x="3" y="7" width="14" height="6" rx="1" fill="currentColor"/></svg> Gone, not covered</h3>
+        <p>Each page is rebuilt from pixels, so there is nothing underneath the
+          bars. No text, no fonts, no annotations — and none of the original
+          author, title or history either.</p>
+      </li>
+      <li>
+        <h3><svg class="ico" viewBox="0 0 20 20" aria-hidden="true"><circle cx="9" cy="9" r="5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12.8 12.8 16.5 16.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg> It finds them for you</h3>
+        <p>Emails, cards, IBANs and Social Security numbers, checked against
+          real checksums rather than guessed at. Type any name or word and every
+          occurrence is caught.</p>
+      </li>
+      <li>
+        <h3><svg class="ico" viewBox="0 0 20 20" aria-hidden="true"><rect x="3" y="4" width="14" height="12" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="7.5" cy="8" r="1.4" fill="currentColor"/><path d="M4 14l4-4 3.5 3.5L14 11l2.5 3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg> Logos and pictures too</h3>
+        <p>Pick a logo, signature or stamp and every other copy is found across
+          the document — at any size, in any colours. Typed words can be hunted
+          for as pictures as well, for scans and screenshots.</p>
+      </li>
+      <li>
+        <h3><svg class="ico" viewBox="0 0 20 20" aria-hidden="true"><path d="M4 10.5 8 14.5 16 5.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> You approve every mark</h3>
+        <p>Everything is outlined in red and still readable until you press
+          Redact. Click any mark to drop it, drag to add your own, undo
+          anything.</p>
+      </li>
+      <li>
+        <h3><svg class="ico" viewBox="0 0 20 20" aria-hidden="true"><path d="M7.5 4H5v12h2.5M12.5 4H15v12h-2.5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg> Placeholders, not blanks</h3>
+        <p>Optionally label each redaction <code>[P1]</code>, <code>[E2]</code>,
+          so a later reader — or a model — can still follow the sentence. The
+          same thing always gets the same label.</p>
+      </li>
+      <li>
+        <h3><svg class="ico" viewBox="0 0 20 20" aria-hidden="true"><path d="M10 3l6 2.5v4.2c0 3.4-2.4 6.3-6 7.3-3.6-1-6-3.9-6-7.3V5.5L10 3z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg> Nothing is uploaded</h3>
+        <p>No server, no account, no analytics. The document is opened, read and
+          rewritten inside this tab. Close it and nothing remains.</p>
+      </li>
+    </ul>
   </section>
 
   <!-- ---------- 2. review ---------- -->
@@ -58,76 +96,72 @@
         <div class="panel-head">
           <h2 id="doc-name">document</h2>
           <div class="head-actions">
-            <button type="button" id="undo" class="ghost" disabled>Undo</button>
-            <button type="button" id="restart" class="ghost">Start over</button>
+            <button type="button" id="undo" class="ghost" disabled title="Nothing to undo">Undo</button>
+            <button type="button" id="restart" class="ghost">New file</button>
           </div>
         </div>
 
-        <div class="field">
-          <label for="terms">Text to redact</label>
-          <textarea id="terms" rows="3" placeholder="One per line — Jane Doe, an account number, a project codename"></textarea>
-          <p class="hint">No rule can find a name reliably. Type them here and every occurrence is covered, ignoring case.</p>
-          <ul id="termcounts" class="termcounts"></ul>
-          <label class="check"><input type="checkbox" id="termimages"> Also look for these words as pictures</label>
-          <p class="hint">Some words are not text: a logo, a scan, a screenshot, a chart label
-            baked into a bitmap. This draws each word above in four common typefaces and hunts
-            for it visually as well. It is <strong>not</strong> OCR — it finds the word set in
-            something close to those faces, and will miss a stylised logotype or an unusual
-            one. It also adds a sweep of the document per word, so Redact takes longer.</p>
-        </div>
-
-        <div class="field">
-          <label>Images and logos</label>
-          <button type="button" id="pick" class="ghost wide">Pick a logo to match</button>
-          <p class="hint" id="pickhint">Draw a box around a logo, stamp, signature or face. Every place it appears again is found and proposed.</p>
-          <ul id="templates" class="templates"></ul>
-          <label class="sens" for="sens">
-            Match sensitivity
-            <input type="range" id="sens" min="60" max="95" value="75" step="1">
-            <span id="sensvalue">0.75</span>
-          </label>
-          <p class="hint">Lower finds more, including things that only resemble the logo. Every match is proposed, never applied on its own.</p>
-        </div>
-
-        <div id="kinds" class="kinds"></div>
-
-        <div class="field">
-          <label class="check"><input type="checkbox" id="medium"> Include lower-confidence matches</label>
-          <p class="hint" id="medium-hint">Shape-only matches, like a five-digit number that may be a postcode.</p>
-        </div>
-
-        <div class="field">
-          <label class="check"><input type="checkbox" id="labelling"> Label each redaction</label>
-          <p class="hint">Writes a placeholder into every bar — <code>[P1]</code>,
-            <code>[E2]</code> — so a later reader, or a model, can follow what the
-            sentence refers to instead of meeting a blank. The same thing always gets the
-            same placeholder. Codes are short so they fit inside narrow bars; the legend
-            page spells out what each one means.</p>
-          <div id="labelopts" hidden>
-            <label class="check"><input type="checkbox" id="textlayer" checked> Make placeholders machine-readable</label>
-            <p class="hint">Adds an invisible text layer containing the placeholders and
-              nothing else, so tools that extract text — rather than look at the page — read
-              them too.</p>
-            <label class="check"><input type="checkbox" id="legendpage" checked> Append a legend page</label>
-            <p class="hint">Lists each placeholder and what kind of thing it stands for. It
-              never records what any of them were.</p>
+        <details class="sect" open>
+          <summary><span class="s-title">Text</span><span class="s-note" id="term-note"></span></summary>
+          <div class="s-body">
+            <textarea id="terms" rows="3" placeholder="One per line&#10;Jane Doe&#10;Account 4471"></textarea>
+            <ul id="termcounts" class="termcounts"></ul>
+            <label class="check"><input type="checkbox" id="termimages">
+              Also find these words as pictures
+              <span class="why" title="Draws each word in four typefaces and looks for it visually, for logos, scans and screenshots. Not OCR — it can miss unusual lettering. Adds time.">?</span>
+            </label>
           </div>
-        </div>
+        </details>
 
-        <div class="field" id="legendbox" hidden>
-          <label>Legend</label>
-          <p class="hint" id="legend-empty">Nothing is being covered yet.</p>
-          <ul id="legend" class="legend"></ul>
-          <p class="hint">Edit any placeholder to something meaningful — <code>CLAIMANT</code>,
-            <code>SUPPLIER_BANK</code>. Changing one changes every occurrence. A longer name
-            is only drawn where the bar is wide enough for it.</p>
-          <button type="button" id="downloadkey" class="ghost wide">Download the key…</button>
-          <p class="hint danger">The key maps each placeholder back to the text it replaced,
-            so it undoes the redaction completely. It is never part of the exported document.
-            Keep it separate, and never send the two together.</p>
-        </div>
+        <details class="sect" open>
+          <summary><span class="s-title">Images</span><span class="s-note" id="image-note"></span></summary>
+          <div class="s-body">
+            <button type="button" id="pick" class="ghost wide">Pick a logo to match</button>
+            <p class="hint" id="pickhint">Drag a box around a logo, stamp, signature or face.</p>
+            <ul id="templates" class="templates"></ul>
+            <label class="sens" for="sens">
+              <span>Sensitivity</span>
+              <input type="range" id="sens" min="60" max="95" value="75" step="1">
+              <span id="sensvalue">0.75</span>
+              <span class="why" title="Lower finds more, including things that only resemble it. Every match is proposed, never applied on its own.">?</span>
+            </label>
+          </div>
+        </details>
 
-        <p class="tip" id="tip">Drag on the page to add a box by hand. Click a box you added to remove it. Marks stay outlined in red until you press <strong>Redact</strong>.</p>
+        <details class="sect">
+          <summary><span class="s-title">Detectors</span><span class="s-note" id="kind-note"></span></summary>
+          <div class="s-body">
+            <div id="kinds" class="kinds"></div>
+            <label class="check"><input type="checkbox" id="medium">
+              Include lower-confidence matches
+              <span class="why" title="Shape-only matches, like a five-digit number that may be a postcode.">?</span>
+            </label>
+          </div>
+        </details>
+
+        <details class="sect">
+          <summary><span class="s-title">Placeholders</span><span class="s-note" id="label-note">off</span></summary>
+          <div class="s-body">
+            <label class="check"><input type="checkbox" id="labelling">
+              Label each redaction
+              <span class="why" title="Writes [P1], [E2] into each bar so a later reader, or a model, can follow the sentence. The same thing always gets the same label.">?</span>
+            </label>
+            <div id="labelopts" hidden>
+              <label class="check"><input type="checkbox" id="textlayer" checked> Machine-readable</label>
+              <label class="check"><input type="checkbox" id="legendpage" checked> Append a legend page</label>
+            </div>
+            <div id="legendbox" hidden>
+              <p class="hint" id="legend-empty">Nothing is being covered yet.</p>
+              <ul id="legend" class="legend"></ul>
+              <button type="button" id="downloadkey" class="ghost wide">Download the key…</button>
+              <p class="hint danger">The key undoes the redaction. It is never part of the
+                exported file — keep it separate.</p>
+            </div>
+          </div>
+        </details>
+
+        <p class="tip" id="tip">Drag on a page to add a box. Click a mark to drop it.
+          Marks stay red until you press <strong>Redact</strong>.</p>
 
         <div class="counts" id="counts"></div>
       </aside>
@@ -155,7 +189,7 @@
 </main>
 
 <footer class="wrap foot">
-  <p>Blackbar keeps your document in this tab. There is no server, no upload, and no analytics. Close the tab and nothing remains.</p>
+  <p>Blinded keeps your document in this tab. There is no server, no upload, and no analytics. Close the tab and nothing remains.</p>
 </footer>
 
 <script src="lib/detect.js"></script>
@@ -178,7 +212,7 @@
   import * as pdfjsLib from './vendor/pdf.min.mjs';
   pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('./vendor/pdf.worker.min.mjs', import.meta.url).href;
   window.pdfjsLib = pdfjsLib;
-  window.dispatchEvent(new Event('blackbar:ready'));
+  window.dispatchEvent(new Event('blinded:ready'));
 </script>
 </body>
 </html>
