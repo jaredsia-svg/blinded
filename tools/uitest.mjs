@@ -396,6 +396,114 @@ try {
   check('removing the picked logo removes its matches',
     await page.evaluate(() => window.Blackbar.state.pages.reduce((n, p) => n + p.imageHits.length, 0)) === 0);
 
+  // ---------- placeholder labels ----------
+  //
+  // The point of labelling is that a later reader meets [PERSON_1] instead of
+  // a blank and can still follow the sentence. The point of testing it is the
+  // opposite: proving that nothing the labels stand for travels with them.
+  await page.click('#restart');
+  await page.waitForSelector('#view-drop:not([hidden])');
+  await page.setInputFiles('#file', fixturePath);
+  await page.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
+  await page.fill('#terms', 'Jane Doe');
+  await page.waitForTimeout(400);
+
+  check('the legend is hidden until labelling is on', await page.isHidden('#legendbox'));
+  await page.check('#labelling');
+  check('turning labelling on reveals the legend', await page.isVisible('#legendbox'));
+  check('and its options', await page.isVisible('#labelopts'));
+
+  const legendRows = await page.evaluate(() =>
+    window.Blackbar.state.labels.entries.map(e => [e.label, e.count]));
+  check('the legend suggests a placeholder for every distinct thing',
+    legendRows.length >= 5, JSON.stringify(legendRows));
+  check('the typed name is suggested as a person',
+    legendRows.some(([label]) => label === 'PERSON_1'), JSON.stringify(legendRows));
+  check('the detectors get their own kinds',
+    ['EMAIL_1', 'PHONE_1', 'CARD_1', 'SSN_1'].every(want =>
+      legendRows.some(([label]) => label === want)), JSON.stringify(legendRows));
+
+  // A label is painted into the bar, in white on the black.
+  const labelPainted = await page.evaluate(() => {
+    const p = window.Blackbar.state.pages[0];
+    const hit = p.hits.find(h => h.finding.kind === 'email');
+    const r = hit.rects[0];
+    const ctx = p.canvas.getContext('2d');
+    const strip = ctx.getImageData(Math.round(r.x), Math.round(r.y + r.h / 2),
+      Math.round(r.w), 1).data;
+    let light = 0;
+    for (let i = 0; i < strip.length; i += 4) if (strip[i] > 200) light++;
+    return light;
+  });
+  check('a placeholder is drawn inside the bar', labelPainted > 0,
+    labelPainted + ' light pixels across the middle of the bar');
+
+  // Editing one placeholder renames every occurrence of that thing.
+  await page.evaluate(() => {
+    const input = document.querySelector('#legend .labelinput');
+    input.value = 'claimant';
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  const renamed = await page.evaluate(() =>
+    window.Blackbar.state.labels.entries[0].label);
+  check('an edited placeholder is normalised to a machine-readable form',
+    renamed === 'CLAIMANT', renamed);
+
+  const [labelled] = await Promise.all([
+    page.waitForEvent('download', { timeout: 90000 }),
+    page.click('#export'),
+  ]);
+  const labelledOut = join(tmpdir(), 'blackbar-labelled.pdf');
+  await labelled.saveAs(labelledOut);
+  const labelledBytes = new Uint8Array(readFileSync(labelledOut));
+
+  const pdfjs2 = await import('pdfjs-dist/legacy/build/pdf.mjs');
+  const labelledDoc = await pdfjs2.getDocument({ data: labelledBytes }).promise;
+  check('the labelled export gains a legend page',
+    labelledDoc.numPages === 2, labelledDoc.numPages + ' pages');
+
+  let extracted = '';
+  for (let n = 1; n <= labelledDoc.numPages; n++) {
+    const p2 = await labelledDoc.getPage(n);
+    extracted += (await p2.getTextContent()).items.map(i => i.str).join(' ') + ' ';
+  }
+  check('the placeholders are extractable as real text',
+    extracted.includes('[CLAIMANT]') && extracted.includes('[EMAIL_1]'), extracted.slice(0, 200));
+  check('the legend page names each placeholder',
+    extracted.includes('Redaction legend') && extracted.includes("a person's name"),
+    extracted.slice(-300));
+
+  // The whole safety argument, checked against the finished bytes rather than
+  // against intentions: everything the labels replaced must be absent.
+  const labelledRaw = Buffer.from(labelledBytes).toString('latin1');
+  for (const secret of ['Jane Doe', 'jane.doe@example.com', '4242', '123-45-6789',
+    '555-0132', 'guarded.value']) {
+    check('a labelled export does not contain "' + secret + '"',
+      !labelledRaw.includes(secret) && !extracted.includes(secret));
+  }
+  check('nor does the legend page describe what anything was',
+    !extracted.toLowerCase().includes('jane'), extracted.slice(-300));
+
+  // The key is the opposite artefact, and exists only on request.
+  const [keyFile] = await Promise.all([
+    page.waitForEvent('download', { timeout: 30000 }),
+    page.click('#downloadkey'),
+  ]);
+  check('the key file is named so it cannot be mistaken for the document',
+    /KEY-KEEP-PRIVATE\.json$/.test(keyFile.suggestedFilename()), keyFile.suggestedFilename());
+  const keyOut = join(tmpdir(), 'blackbar-key.json');
+  await keyFile.saveAs(keyOut);
+  const key = JSON.parse(readFileSync(keyOut, 'utf8'));
+  check('the key warns what it is', /reconstructs everything/.test(key.warning), key.warning);
+  check('the key maps a placeholder back to its original',
+    key.entries.some(e => e.label === 'CLAIMANT' && e.original === 'Jane Doe'),
+    JSON.stringify(key.entries.slice(0, 3)));
+  check('the key covers the detected values too',
+    key.entries.some(e => e.original === 'jane.doe@example.com'));
+
+  await page.uncheck('#labelling');
+  check('turning labelling off hides the legend again', await page.isHidden('#legendbox'));
+
   // ---------- a wide wordmark ----------
   //
   // The shape that used to break the matcher outright: sized by its long side

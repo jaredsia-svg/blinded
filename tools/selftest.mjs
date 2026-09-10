@@ -21,7 +21,7 @@ const check = (label, ok, detail) => {
   else failures.push(label + (detail === undefined ? '' : ' — ' + detail));
 };
 
-for (const file of ['detect.js', 'boxes.js', 'pdfwrite.js', 'match.js', 'imagesearch.js']) {
+for (const file of ['detect.js', 'boxes.js', 'pdfwrite.js', 'match.js', 'imagesearch.js', 'labels.js']) {
   runInThisContext(readFileSync(join(root, 'lib', file), 'utf8'), { filename: file });
 }
 const Detect = globalThis.BlackbarDetect;
@@ -29,6 +29,7 @@ const Boxes = globalThis.BlackbarBoxes;
 const PdfWrite = globalThis.BlackbarPdfWrite;
 const Match = globalThis.BlackbarMatch;
 const ImageSearch = globalThis.BlackbarImageSearch;
+const Labels = globalThis.BlackbarLabels;
 
 // ---------- checksums ----------
 
@@ -492,6 +493,119 @@ check('cropping lifts out exactly the requested rectangle', (() => {
     bounds && Number(bounds[2]) / 100 > Match.THRESHOLD, bounds ? bounds[2] : 'no max');
 }
 
+// ---------- placeholder labels ----------
+//
+// The property that makes labels worth having is consistency: the same value
+// gets the same placeholder everywhere, so a reader can tell that the person
+// in paragraph two is the person in paragraph nine.
+
+{
+  const items = [
+    { id: 'a', kind: 'term', term: 'Jane Doe', text: 'Jane Doe' },
+    { id: 'b', kind: 'email', text: 'jane.doe@example.com' },
+    { id: 'c', kind: 'term', term: 'Jane Doe', text: 'JANE DOE' },
+    { id: 'd', kind: 'term', term: 'Jane Doe', text: 'jane doe' },
+    { id: 'e', kind: 'email', text: 'JANE.DOE@EXAMPLE.COM' },
+    { id: 'f', kind: 'term', term: 'Account 4471', text: 'Account 4471' },
+    { id: 'g', kind: 'image', templateId: 'tpl1' },
+    { id: 'h', kind: 'image', templateId: 'tpl1' },
+    { id: 'i', kind: 'image', templateId: 'tpl2' },
+    { id: 'j', kind: 'manual' },
+    { id: 'k', kind: 'manual' },
+    { id: 'l', kind: 'phone', text: '(415) 555-0132' },
+  ];
+  const { byId, entries } = Labels.assign(items, {});
+
+  check('a name typed once is one placeholder however it is cased',
+    byId.a === byId.c && byId.c === byId.d, JSON.stringify([byId.a, byId.c, byId.d]));
+  check('and that placeholder says it is a person', byId.a === 'PERSON_1', byId.a);
+  check('an email is one placeholder regardless of case',
+    byId.b === byId.e && byId.b === 'EMAIL_1', byId.b + ' vs ' + byId.e);
+  check('a typed term full of digits is not guessed to be a person',
+    byId.f === 'TERM_1', byId.f);
+  check('every match of one picked logo shares a placeholder',
+    byId.g === byId.h && byId.g === 'LOGO_1', byId.g + ' vs ' + byId.h);
+  check('a different logo gets a different one', byId.i === 'LOGO_2', byId.i);
+  check('hand-drawn boxes are numbered separately',
+    byId.j === 'REDACTED_1' && byId.k === 'REDACTED_2', byId.j + ' ' + byId.k);
+  check('a detector kind gets its own prefix', byId.l === 'PHONE_1', byId.l);
+  check('numbering follows first appearance in the document',
+    entries.map(e => e.label).join(',') ===
+    'PERSON_1,EMAIL_1,TERM_1,LOGO_1,LOGO_2,REDACTED_1,REDACTED_2,PHONE_1',
+    entries.map(e => e.label).join(','));
+  check('an entry counts every occurrence',
+    entries[0].count === 3 && entries[1].count === 2,
+    entries[0].count + ',' + entries[1].count);
+
+  // ---- the safety boundary ----
+  //
+  // The legend goes inside the redacted document; the key does not. A legend
+  // that carried the originals would undo the whole redaction, so this is the
+  // single most important assertion in this section.
+  const legend = Labels.legend(entries);
+  const legendText = JSON.stringify(legend);
+  for (const secret of ['Jane Doe', 'jane.doe@example.com', 'Account 4471', '555-0132']) {
+    check('the legend does not contain "' + secret + '"', !legendText.includes(secret));
+  }
+  check('the legend has no field that could hold an original value',
+    legend.every(row => Object.keys(row).sort().join(',') === 'count,description,label'),
+    JSON.stringify(Object.keys(legend[0])));
+  check('the legend still says what each placeholder stands for',
+    legend[0].description === "a person's name" && legend[0].label === 'PERSON_1');
+
+  const key = Labels.key(entries);
+  check('the key does map back to the originals, which is its whole purpose',
+    key[0].original === 'Jane Doe' && key[1].original === 'jane.doe@example.com',
+    JSON.stringify(key.slice(0, 2)));
+  check('the key records the reviewer\'s own wording, not the document\'s casing',
+    key[0].original === 'Jane Doe');
+
+  // ---- reviewer edits ----
+  const overrides = {};
+  overrides[entries[0].identity] = 'CLAIMANT';
+  const edited = Labels.assign(items, overrides);
+  check('an edited placeholder replaces every occurrence',
+    edited.byId.a === 'CLAIMANT' && edited.byId.c === 'CLAIMANT' && edited.byId.d === 'CLAIMANT');
+  check('and leaves the others alone', edited.byId.b === 'EMAIL_1');
+  check('an edited entry is marked as edited', edited.entries[0].edited === true);
+  check('an unedited entry is not', edited.entries[1].edited === false);
+}
+
+check('a label is normalised into something a machine can read', (() => {
+  return Labels.normalise("Jane's employer") === 'JANE_S_EMPLOYER'
+    && Labels.normalise('  spaced  out  ') === 'SPACED_OUT'
+    && Labels.normalise('a--b__c!') === 'A_B_C';
+})());
+check('an empty label normalises to nothing rather than to brackets',
+  Labels.normalise('') === '' && Labels.normalise('!!!') === '');
+check('a very long label is cut to something printable',
+  Labels.normalise('x'.repeat(200)).length === 40);
+check('a placeholder is rendered in brackets', Labels.render('PERSON_1') === '[PERSON_1]');
+
+check('a name is recognised as one', Labels.looksLikeName('Jane Doe'));
+check('a lower-case word is not assumed to be a name', !Labels.looksLikeName('invoice'));
+check('anything with digits is not assumed to be a name', !Labels.looksLikeName('Account 4471'));
+check('a whole sentence is not assumed to be a name',
+  !Labels.looksLikeName('The Quick Brown Fox Jumped Over'));
+
+// Placeholders in a redacted text file.
+{
+  const sample = 'Call Jane on (415) 555-0132 about jane@example.com.';
+  const spans = Detect.findAll(sample, { terms: ['Jane'] });
+  const assigned = Labels.assign(
+    spans.map(s => ({ id: s.id, kind: s.kind, text: s.text, term: s.term })), {});
+  const out = Detect.applyToText(sample, spans.map(s => ({
+    ...s, replacement: Labels.render(assigned.byId[s.id]),
+  })), 'replacement');
+
+  check('placeholders replace the values in a text export',
+    !out.includes('Jane') && !out.includes('555-0132') && !out.includes('jane@example.com'), out);
+  check('and the sentence still reads as a sentence',
+    /^Call \[PERSON_1\] on \[PHONE_1\] about \[EMAIL_1\]\.$/.test(out), out);
+  check('an unlabelled span in replacement mode removes rather than inventing',
+    Detect.applyToText('a b', [{ start: 0, end: 1 }], 'replacement') === ' b');
+}
+
 // ---------- pdf writer ----------
 
 const image = {
@@ -514,8 +628,10 @@ check('the declared page count matches', /\/Type \/Pages \/Count 2/.test(raw));
 check('a fractional page size is not written in exponential form', raw.includes('0 0 200.5 100'));
 
 const declared = Number(raw.match(/xref\n0 (\d+)/)[1]);
+// Catalog, page tree, info and the shared font, then three objects per page,
+// plus one for the free-list entry at index 0.
 check('the xref covers every object that was written',
-  declared === 4 + 2 * 3, 'declared ' + declared);
+  declared === 5 + 2 * 3, 'declared ' + declared);
 check('the highest object id written is inside /Size', (() => {
   const ids = [...raw.matchAll(/^(\d+) 0 obj$/gm)].map(m => Number(m[1]));
   return Math.max(...ids) === declared - 1;

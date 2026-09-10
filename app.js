@@ -12,6 +12,7 @@
   const PdfRead = window.BlackbarPdfRead;
   const PdfWrite = window.BlackbarPdfWrite;
   const Render = window.BlackbarRender;
+  const Labels = window.BlackbarLabels;
   const measure = window.BlackbarMeasure.create();
   const Match = window.BlackbarMatch;
   const ImageSearch = window.BlackbarImageSearch;
@@ -36,8 +37,17 @@
     // 'box' draws a redaction; 'pick' cuts a logo to search for. One drag
     // gesture, two meanings, so the mode is always visible on the page itself.
     mode: 'box',
+    // Placeholder labelling. Off by default: the plain black bar is still the
+    // right output for most documents, and labels are a deliberate choice to
+    // publish a little structure about what was removed.
+    labelling: false,
+    // Reviewer edits, keyed by the identity of the thing being labelled so an
+    // edit survives a rescan.
+    labelOverrides: {},
+    labels: { byId: {}, entries: [] },
   };
   let nextTemplateId = 1;
+  let nextManualId = 1;
 
   // ---------- chrome ----------
 
@@ -207,6 +217,99 @@
     }
     renderKinds();
     renderTermCounts();
+    applyLabels();
+    renderCounts();
+  }
+
+  // ---------- placeholder labels ----------
+
+  // Everything that will be covered, in the order a reader meets it. Order is
+  // what decides the numbering, so it has to be reading order — page by page,
+  // and within a page by position in the text — rather than whatever order the
+  // detectors happened to run in.
+  function labelItems() {
+    if (state.kind === 'text') {
+      return state.findings
+        .filter(f => !dismissedText.has(f.id))
+        .map(f => ({ id: f.id, kind: f.kind, text: f.text, term: f.term }));
+    }
+
+    const items = [];
+    for (const page of state.pages) {
+      for (const hit of page.hits) {
+        if (page.dismissed.has(hit.finding.id)) continue;
+        items.push({
+          id: hit.finding.id,
+          kind: hit.finding.kind,
+          text: hit.finding.text,
+          term: hit.finding.term,
+        });
+      }
+      for (const match of page.imageHits) {
+        if (page.dismissed.has(match.id)) continue;
+        items.push({ id: match.id, kind: 'image', templateId: match.templateId });
+      }
+      for (const box of page.manual) {
+        items.push({ id: box.id, kind: 'manual' });
+      }
+    }
+    return items;
+  }
+
+  function applyLabels() {
+    state.labels = Labels.assign(labelItems(), state.labelOverrides);
+    renderLegend();
+  }
+
+  function renderLegend() {
+    const host = el('legend');
+    const empty = el('legend-empty');
+    host.textContent = '';
+
+    const entries = state.labels.entries;
+    empty.hidden = entries.length > 0;
+    if (!entries.length) return;
+
+    for (const entry of entries) {
+      const row = document.createElement('li');
+
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.className = 'labelinput';
+      input.value = entry.label;
+      input.spellcheck = false;
+      input.setAttribute('aria-label', 'Placeholder for ' + entry.description);
+      if (entry.edited) input.classList.add('edited');
+      input.addEventListener('change', () => {
+        const cleaned = Labels.normalise(input.value);
+        // An empty or unusable edit falls back to the suggestion rather than
+        // writing "[]" into the document.
+        if (!cleaned || cleaned === entry.suggested) delete state.labelOverrides[entry.identity];
+        else state.labelOverrides[entry.identity] = cleaned;
+        applyLabels();
+        redrawAll();
+      });
+
+      const what = document.createElement('span');
+      what.className = 'what';
+      // The original value is shown here and only here: the reviewer is
+      // looking at their own document, so nothing is revealed that they do not
+      // already have. It never travels into the export.
+      what.textContent = entry.value ? entry.value : entry.description;
+      what.title = entry.description + (entry.value ? ' — "' + entry.value + '"' : '');
+
+      const count = document.createElement('span');
+      count.className = 'n';
+      count.textContent = String(entry.count);
+
+      row.append(input, what, count);
+      host.append(row);
+    }
+  }
+
+  function redrawAll() {
+    for (const page of state.pages) if (page.canvas) drawPage(page);
+    if (state.kind === 'text') drawTextView();
     renderCounts();
   }
 
@@ -317,11 +420,35 @@
   }
 
   function activeBoxes(page) {
-    const spans = page.hits.filter(h => !page.dismissed.has(h.finding.id)).map(h => h.finding);
-    const images = page.imageHits.filter(m => !page.dismissed.has(m.id)).map(m => m.rect);
-    return Boxes.boxesForSpans(page.items, spans, { advance: measure })
-      .concat(images)
-      .concat(page.manual);
+    const live = page.hits.filter(h => !page.dismissed.has(h.finding.id));
+    const images = page.imageHits.filter(m => !page.dismissed.has(m.id));
+
+    if (!state.labelling) {
+      // Merged across findings, which closes the gaps between adjacent bars.
+      return Boxes.boxesForSpans(page.items, live.map(h => h.finding), { advance: measure })
+        .concat(images.map(m => m.rect))
+        .concat(page.manual);
+    }
+
+    // Labelling keeps each finding's bars separate. Two findings merged into
+    // one bar could only carry one of their two labels, and a bar labelled
+    // [EMAIL_1] that also covers a phone number is worse than a small gap.
+    const boxes = [];
+    for (const hit of live) {
+      const label = state.labels.byId[hit.finding.id];
+      // A span broken across two lines gets its label on the longer piece;
+      // repeating it on both would read as two separate redactions.
+      let widest = 0;
+      hit.rects.forEach((r, i) => { if (r.w > hit.rects[widest].w) widest = i; });
+      hit.rects.forEach((r, i) => boxes.push({ ...r, label: i === widest ? label : undefined }));
+    }
+    for (const match of images) {
+      boxes.push({ ...match.rect, label: state.labels.byId[match.id] });
+    }
+    for (const box of page.manual) {
+      boxes.push({ ...box, label: state.labels.byId[box.id] });
+    }
+    return boxes;
   }
 
   function drawPage(page, preview) {
@@ -332,8 +459,17 @@
 
     // Solid black, exactly as it will be burned in — the preview must not be
     // more reassuring than the output.
+    const boxes = activeBoxes(page);
     ctx.fillStyle = '#000';
-    for (const box of activeBoxes(page)) ctx.fillRect(box.x, box.y, box.w, box.h);
+    for (const box of boxes) ctx.fillRect(box.x, box.y, box.w, box.h);
+
+    // Placeholders on top, through the same function the export uses, so what
+    // is on screen is what ends up in the file — including a label that turns
+    // out not to fit, which the reviewer needs to see here rather than
+    // discover in the finished document.
+    for (const box of boxes) {
+      if (box.label) Render.drawLabel(ctx, box, box.label);
+    }
 
     // Dismissed detections: dashed, so a mistaken dismissal is obvious and
     // can be clicked back on.
@@ -407,7 +543,9 @@
         toggleAt(page, end.x, end.y);
       } else {
         const at = page.manual.length;
-        page.manual.push(rect);
+        // An id, so a hand-drawn box can carry a label and keep it across a
+        // rescan.
+        page.manual.push({ ...rect, id: 'man' + (nextManualId++) });
         pushUndo('the box you drew', () => page.manual.splice(at, 1));
       }
 
@@ -709,24 +847,43 @@
     try {
       if (state.kind === 'text') {
         const spans = state.findings.filter(f => !dismissedText.has(f.id));
-        const blob = new Blob([Detect.applyToText(state.text, spans, 'block')], { type: 'text/plain' });
-        download(blob, redactedName('txt'));
+        let out;
+        if (state.labelling) {
+          // Placeholders instead of blocks, plus the legend at the foot so the
+          // file explains its own notation.
+          out = Detect.applyToText(state.text, spans.map(span => ({
+            ...span, replacement: Labels.render(state.labels.byId[span.id]),
+          })), 'replacement') + legendText();
+        } else {
+          out = Detect.applyToText(state.text, spans, 'block');
+        }
+        download(new Blob([out], { type: 'text/plain' }), redactedName('txt'));
       } else if (state.kind === 'image') {
         const page = state.pages[0];
         const flat = Render.flatten(page.source, activeBoxes(page));
         download(await Render.canvasToBlob(flat, 'image/png'), redactedName('png'));
       } else {
         const lossless = el('lossless').checked;
+        const machineReadable = state.labelling && el('textlayer').checked;
         const built = [];
+
         for (const page of state.pages) {
           busy(true, 'Flattening page ' + (page.index + 1) + ' of ' + state.pages.length + '…');
-          const flat = Render.flatten(page.source, activeBoxes(page));
+          const boxes = activeBoxes(page);
+          const flat = Render.flatten(page.source, boxes);
           built.push({
             widthPt: page.widthPt,
             heightPt: page.heightPt,
             image: await Render.encodeForPdf(flat, lossless),
+            labels: machineReadable ? textLayerFor(page, boxes) : undefined,
           });
         }
+
+        if (state.labelling && el('legendpage').checked && state.labels.entries.length) {
+          busy(true, 'Adding the legend…');
+          built.push(await legendPage(lossless, machineReadable));
+        }
+
         const bytes = PdfWrite.build(built);
         download(new Blob([bytes], { type: 'application/pdf' }), redactedName('pdf'));
       }
@@ -736,6 +893,86 @@
     } finally {
       busy(false);
     }
+  }
+
+  // Converts labelled boxes into the invisible text layer's coordinates.
+  //
+  // Canvas pixels run from the top left and PDF user space from the bottom
+  // left, so the y axis flips here. The text is placed over the bar it belongs
+  // to, which keeps extraction order the same as reading order.
+  function textLayerFor(page, boxes) {
+    const scaleX = page.widthPt / page.source.width;
+    const scaleY = page.heightPt / page.source.height;
+
+    return boxes.filter(box => box.label).map(box => {
+      const height = box.h * scaleY;
+      const size = Math.max(4, Math.min(height * 0.7, 14));
+      return {
+        text: Labels.render(box.label),
+        x: box.x * scaleX,
+        // Baseline sits a little above the bottom of the bar.
+        y: page.heightPt - (box.y + box.h) * scaleY + (height - size) / 2,
+        size,
+      };
+    });
+  }
+
+  // The legend, rendered as one more page image.
+  //
+  // Categories only. A legend inside the document that mapped a placeholder
+  // back to the name it replaced would undo the redaction completely, which is
+  // why the mapping is a separate download and why Labels.legend() is the
+  // function used here rather than Labels.key().
+  async function legendPage(lossless, machineReadable) {
+    const first = state.pages[0];
+    const built = Render.legendCanvas(Labels.legend(state.labels.entries), {
+      width: first.source.width,
+      height: first.source.height,
+    });
+
+    const scaleX = first.widthPt / built.canvas.width;
+    const scaleY = first.heightPt / built.canvas.height;
+
+    return {
+      widthPt: first.widthPt,
+      heightPt: first.heightPt,
+      image: await Render.encodeForPdf(built.canvas, lossless),
+      labels: machineReadable ? built.lines.map(line => ({
+        text: line.text,
+        x: line.x * scaleX,
+        y: first.heightPt - line.y * scaleY,
+        size: Math.max(4, line.size * scaleY),
+      })) : undefined,
+    };
+  }
+
+  // The legend as plain text, appended to a redacted text file.
+  function legendText() {
+    if (!state.labels.entries.length) return '';
+    const rows = Labels.legend(state.labels.entries).map(entry =>
+      '  ' + Labels.render(entry.label) + '  ' + entry.description +
+      ' — appears ' + (entry.count === 1 ? 'once' : entry.count + ' times'));
+    return '\n\n---\nRedaction legend\n' +
+      'Each placeholder above replaces content removed from this document. The same\n' +
+      'placeholder always stands for the same thing. This list does not record what\n' +
+      'any of them were.\n\n' + rows.join('\n') + '\n';
+  }
+
+  // The mapping back to the originals — the one artefact here that is as
+  // sensitive as the unredacted document, because it reconstructs everything
+  // the redaction removed. It is a separate file, requested by its own button,
+  // and it carries a header saying so. It is never written into the export.
+  function downloadKey() {
+    const payload = {
+      document: state.name,
+      generated: new Date().toISOString(),
+      warning: 'This file maps each placeholder back to the text it replaced. It '
+        + 'reconstructs everything the redaction removed. Keep it separate from the '
+        + 'redacted document and do not share the two together.',
+      entries: Labels.key(state.labels.entries),
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    download(blob, (state.name.replace(/\.[^.]+$/, '') || 'document') + '-KEY-KEEP-PRIVATE.json');
   }
 
   // ---------- wiring ----------
@@ -773,6 +1010,18 @@
   el('medium').addEventListener('change', e => { state.includeMedium = e.target.checked; rescan(); });
 
   el('pick').addEventListener('click', () => setMode(state.mode === 'pick' ? 'box' : 'pick'));
+
+  el('labelling').addEventListener('change', e => {
+    state.labelling = e.target.checked;
+    el('labelopts').hidden = !state.labelling;
+    el('legendbox').hidden = !state.labelling;
+    redrawAll();
+    // The legend is the point of turning this on and it sits below the fold of
+    // a long panel, so bring it to the reviewer rather than making them look
+    // for it.
+    if (state.labelling) el('legendbox').scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  });
+  el('downloadkey').addEventListener('click', downloadKey);
   el('undo').addEventListener('click', undoLast);
   window.addEventListener('keydown', event => {
     if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'z' && !event.shiftKey) {
@@ -803,6 +1052,8 @@
     el('terms').value = '';
     state.terms = [];
     state.templates = [];
+    state.labelOverrides = {};
+    state.labels = { byId: {}, entries: [] };
     undoStack.length = 0;
     refreshUndo();
     setMode('box');
@@ -811,5 +1062,6 @@
     show('drop');
   });
 
-  window.Blackbar = { state, rescan, loadFile, exportFile, setMode, runSearch, addTemplate, undoLast, undoStack };
+  window.Blackbar = { state, rescan, loadFile, exportFile, setMode, runSearch, addTemplate,
+    undoLast, undoStack, applyLabels, labelItems, legendText, downloadKey };
 })();

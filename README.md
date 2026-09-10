@@ -158,6 +158,55 @@ themselves from the settings whenever those change.
 Ctrl+Z inside the text box is left alone — there, it means the text box's undo,
 which is what anyone typing would expect.
 
+## Placeholders instead of blanks
+
+A black bar says something was removed. It does not say *what*, and that costs
+more than it sounds: "____ transferred the account to ____" is nearly
+unreadable, while "[PERSON_1] transferred the account to [PERSON_2]" carries
+the whole sentence. Tick **Label each redaction** and every bar gets a
+placeholder written into it.
+
+The property that makes this useful rather than decorative is **consistency**:
+the same value gets the same placeholder everywhere it appears, on every page.
+That is what lets a reader — or a model — tell that the person in paragraph two
+is the person in paragraph nine. Casing does not break it: `Jane Doe`, `JANE
+DOE` and `jane doe` are one person and one placeholder. Every match of one
+picked logo shares a placeholder too, for the same reason.
+
+Placeholders are suggested by kind — `PERSON_1`, `EMAIL_2`, `CARD_1`, `LOGO_1`,
+`REDACTED_3` — and **every one is editable**. Rename `PERSON_1` to `CLAIMANT`
+and all of its occurrences change together. A typed term is only guessed to be
+a person when it is shaped like a name; `Account 4471` becomes `TERM_1`, not a
+person.
+
+Two options come with it:
+
+- **Machine-readable placeholders** adds an invisible text layer containing the
+  placeholders *and nothing else*, so tools that extract text rather than look
+  at the page read them too. The visible white label and the invisible text
+  come from one list, so they cannot disagree.
+- **A legend page** is appended to the export, listing each placeholder and
+  what kind of thing it stands for.
+
+### The legend and the key are not the same file
+
+This is the part worth reading twice.
+
+The **legend** — the one in the document — carries placeholders and categories
+only: `[PERSON_1] — a person's name — appears 3 times`. It never records what
+anything was. A legend inside a redacted document that mapped `[PERSON_1]` back
+to a name would undo the entire redaction, which is the failure this whole
+program exists to prevent.
+
+The **key** is the mapping back to the originals. It is a separate download,
+behind its own button, named `…-KEY-KEEP-PRIVATE.json`, and it carries a header
+saying what it is. It reconstructs everything the redaction removed. Keep it
+somewhere else, and never send it with the document.
+
+The test suite asserts both halves: that a labelled export contains the
+placeholders as extractable text, and that none of the values they replaced
+appear anywhere in the finished bytes.
+
 ## Reviewing
 
 - Detected values and matched images are covered with a solid black bar —
@@ -194,7 +243,11 @@ which is what anyone typing would expect.
 
 The habit worth keeping, whatever tool you use: open the exported file, select
 all, copy, and paste it somewhere. If anything you redacted comes back, the
-redaction failed. With Blackbar nothing should — there is no text to select.
+redaction failed.
+
+With Blackbar nothing should. Without labelling there is no text to select at
+all. With labelling on there is exactly one kind of text — the placeholders —
+and if you can select `[PERSON_1]` but not the name it replaced, it worked.
 
 ## Tests
 
@@ -224,6 +277,7 @@ index.html        the page
 app.js            the controller: load, review, export
 app.css           all of the styling
 lib/detect.js     rules that propose spans, and the checksums behind them
+lib/labels.js     placeholder naming, and the legend/key boundary
 lib/boxes.js      character spans to rectangles on a page
 lib/measure.js    real glyph advances, so a bar lands on its text
 lib/match.js      normalised cross-correlation, trimming, on plain arrays
