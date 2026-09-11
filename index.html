@@ -90,12 +90,9 @@
             <ul id="termcounts" class="termcounts"></ul>
             <label class="check"><input type="checkbox" id="termimages">
               Also find these words as pictures
-              <button type="button" class="why" aria-label="What does this mean?" data-tip="Draws each word in eight typefaces — serif and sans, each regular, bold, italic and bold italic — and looks for it visually, for logos, scans and screenshots. Not OCR: it can miss unusual lettering. Adds time.">?</button>
+              <button type="button" class="why" aria-label="What does this mean?" data-tip="Reads the lettering on each page, so a word set as a picture is found whatever type it is in — italic, bold, small, unusual. The reader is about 7 MB, fetched from this site once and then kept by your browser; nothing is sent anywhere. If it cannot load, the word is hunted for by shape instead.">?</button>
             </label>
-            <label class="check" hidden><input type="checkbox" id="useocr">
-              Read the pages with OCR
-              <button type="button" class="why" aria-label="What does this mean?" data-tip="Reads the lettering on each page instead of matching drawn shapes, so italic, bold, small and unusual type are all found the same way. Slower on the first page while the engine loads, and it stays on your machine — nothing is sent anywhere. Does not apply to logos.">?</button>
-            </label>
+            <p class="hint warnhint" id="ocrnote" hidden></p>
             <label class="sens" for="wordsens" id="wordsensrow" hidden>
               <span>Word match</span>
               <input type="range" id="wordsens" min="45" max="95" value="66" step="1">

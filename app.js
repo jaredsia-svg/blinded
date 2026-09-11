@@ -64,8 +64,12 @@
     // costs a sweep of the document per word, and the text layer already
     // covers the ordinary case.
     termImages: false,
-    // Read the pages with OCR instead of matching drawn shapes.
-    useOcr: false,
+    // Words inside pictures are found by reading the page. Matching drawn
+    // shapes is the fallback for when the reader cannot be loaded at all.
+    useOcr: true,
+    ocrFailed: false,
+    // Whether the reader has already been fetched this session.
+    ocrLoaded: false,
     // Per page: the words OCR read, and the text they stitch into.
     ocrRead: false,
     // Terms whose picture search has already run, so pressing Redact twice
@@ -270,6 +274,20 @@
   }
 
   // Whether a document still needs reading before its terms can be found.
+  // The sensitivity slider belongs to the shape matcher, so it is shown only
+  // when the shape matcher is what is running.
+  function showWordControls() {
+    el('wordsensrow').hidden = !state.termImages || state.useOcr;
+    const note = el('ocrnote');
+    note.hidden = !(state.termImages && state.ocrFailed);
+    if (!note.hidden) {
+      note.textContent = 'The page reader could not be loaded, so these words '
+        + 'are being hunted for by shape instead. That is less reliable on '
+        + 'italic and on small lettering — check the marks, and the Word match '
+        + 'control below.';
+    }
+  }
+
   function ocrPending() {
     return Boolean(state.useOcr && state.termImages && state.kind !== 'text'
       && state.terms.length && (!state.ocrRead || !state.searchedTerms.length));
@@ -320,24 +338,32 @@
   // Runs every search that has not run yet, then switches the view to what the
   // exported file will contain.
   async function applyRedaction() {
-    const entries = pendingTemplates();
-    try {
-      if (ocrPending()) {
+    // Reading the pages comes first, because failing at it changes what else
+    // has to run: the shape matcher is the fallback, so the list of templates
+    // cannot be decided until it is known whether the reader worked.
+    if (ocrPending()) {
+      try {
         await readPages();
         matchOcr();
         markDuplicates();
         renderTermCounts();
         renderSectionNotes();
         renderCounts();
+      } catch (error) {
+        // Not an error to report and stop on. The reader is an optimisation
+        // over hunting for the word's shape, and the shape search still works,
+        // so fall back to it and say so rather than leaving the reviewer with
+        // an alert and no marks.
+        state.ocrFailed = true;
+        state.useOcr = false;
+        showWordControls();
+        console.warn('the page reader could not be loaded', error);
+      } finally {
+        busy(false);
       }
-    } catch (error) {
-      busy(false);
-      alert('The pages could not be read: ' + (error && error.message ? error.message : error)
-        + '\n\nThe word search by shape is still available: untick "Read the pages with OCR".');
-      return;
-    } finally {
-      busy(false);
     }
+
+    const entries = pendingTemplates();
     try {
       if (entries.length) await runSearches(entries);
     } catch (error) {
@@ -377,7 +403,11 @@
   async function readPages() {
     if (state.ocrRead || !state.pages.length) return;
     const total = state.pages.length;
-    busy(true, total === 1 ? 'Reading the page…' : 'Reading page 1 of ' + total + '…');
+    // The reader is about seven megabytes and is fetched the first time it is
+    // wanted. Without saying so, the first page looks like a hang.
+    busy(true, state.ocrLoaded
+      ? (total === 1 ? 'Reading the page…' : 'Reading page 1 of ' + total + '…')
+      : 'Fetching the page reader — about 7 MB, once…');
 
     const read = await Ocr.readPages(
       state.pages.map(page => page.source),
@@ -392,6 +422,7 @@
       page.ocrPlaced = stitched.items;
     });
     state.ocrRead = true;
+    state.ocrLoaded = true;
   }
 
   // Terms found in what OCR read, as the same kind of proposal the picture
@@ -1577,19 +1608,9 @@
 
   el('medium').addEventListener('change', e => { state.includeMedium = e.target.checked; rescan(); });
 
-  el('useocr').addEventListener('change', e => {
-    state.useOcr = e.target.checked;
-    // The two paths answer the same question, so only one control is shown.
-    el('wordsensrow').hidden = !state.termImages || state.useOcr;
-    clearTermImages();
-    renderTermCounts();
-    markPending();
-    redrawAll();
-  });
   el('termimages').addEventListener('change', e => {
     state.termImages = e.target.checked;
-    el('useocr').closest('label').hidden = !e.target.checked;
-    el('wordsensrow').hidden = !e.target.checked || state.useOcr;
+    showWordControls();
     clearTermImages();
     renderTermCounts();
     markPending();
@@ -1672,6 +1693,6 @@
     undoLast, undoStack, applyLabels, labelItems, legendText, downloadKey,
     sensitivity, wordSensitivity, wordBarFor,
     applyRedaction, markPending, plannedCount, pendingTemplates, termsNeedingPictures,
-    readPages, matchOcr, ocrPending,
+    readPages, matchOcr, ocrPending, showWordControls,
     renderTermCounts };
 })();

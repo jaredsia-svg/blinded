@@ -620,6 +620,12 @@ try {
   await page.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
   await page.fill('#terms', DOUBLE_TERM);
   await page.waitForTimeout(400);
+  // Reading the pages is the default, but this fixture exists to test the
+  // shape matcher — the fallback — so it is asked for explicitly.
+  await page.evaluate(() => {
+    window.Blinded.state.useOcr = false;
+    window.Blinded.showWordControls();
+  });
   await page.check('#termimages');
   await redact(page);
 
@@ -699,6 +705,12 @@ try {
     (await page.textContent('#termcounts')).includes('not found'),
     await page.textContent('#termcounts'));
 
+  // Reading the pages is the default, but this fixture exists to test the
+  // shape matcher — the fallback — so it is asked for explicitly.
+  await page.evaluate(() => {
+    window.Blinded.state.useOcr = false;
+    window.Blinded.showWordControls();
+  });
   await page.check('#termimages');
   await redact(page);
 
@@ -854,6 +866,12 @@ try {
   await page.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
   await page.fill('#terms', 'KAG');
   await page.waitForTimeout(400);
+  // Reading the pages is the default, but this fixture exists to test the
+  // shape matcher — the fallback — so it is asked for explicitly.
+  await page.evaluate(() => {
+    window.Blinded.state.useOcr = false;
+    window.Blinded.showWordControls();
+  });
   await page.check('#termimages');
   await redact(page);
 
@@ -1219,19 +1237,43 @@ try {
 
   // The control is meaningless if it is never shown, and pointless clutter
   // when the feature it belongs to is off.
+  // The shape matcher is the fallback now, so its sensitivity control is
+  // hidden until the fallback is what is actually running. A control for a
+  // method that is not in use is worse than no control.
   const rowShown = await page.evaluate(() => {
+    const B = window.Blinded;
     const row = document.getElementById('wordsensrow');
+    const note = document.getElementById('ocrnote');
     const box = document.getElementById('termimages');
-    const before = row.hidden;
-    if (!box.checked) { box.click(); }
-    const withFeature = row.hidden;
+    if (!box.checked) box.click();
+    // Do not inherit whatever an earlier test left behind: this one is about
+    // the default, so it states the default.
+    B.state.useOcr = true;
+    B.state.ocrFailed = false;
+    B.showWordControls();
+    const reading = { row: row.hidden, note: note.hidden };
+    // What the reviewer sees if the reader cannot be loaded.
+    B.state.ocrFailed = true;
+    B.state.useOcr = false;
+    B.showWordControls();
+    const fallen = { row: row.hidden, note: note.hidden, text: note.textContent };
+    B.state.ocrFailed = false;
+    B.state.useOcr = true;
+    B.showWordControls();
     box.click();
-    return { before, withFeature, without: row.hidden };
+    return { reading, fallen, off: row.hidden };
   });
-  check('the word control appears with the feature it belongs to',
-    rowShown.withFeature === false, JSON.stringify(rowShown));
-  check('and is out of the way when that feature is off',
-    rowShown.without === true, JSON.stringify(rowShown));
+  check('reading the pages needs no sensitivity control',
+    rowShown.reading.row === true, JSON.stringify(rowShown));
+  check('and says nothing about a fallback that has not happened',
+    rowShown.reading.note === true, JSON.stringify(rowShown));
+  check('if the reader fails, the shape control appears',
+    rowShown.fallen.row === false, JSON.stringify(rowShown));
+  check('and the reviewer is told why, not left guessing',
+    rowShown.fallen.note === false && /by shape/.test(rowShown.fallen.text),
+    JSON.stringify(rowShown.fallen));
+  check('everything is out of the way when the feature is off',
+    rowShown.off === true, JSON.stringify(rowShown));
 
   // ---------- small lettering ----------
   //
@@ -1297,6 +1339,58 @@ try {
   check('and it lands on the word, not somewhere else on the page',
     tiny.hit && Math.abs(tiny.hit.x - tiny.expectX) <= 14
       && Math.abs(tiny.hit.y - 52) <= 10, JSON.stringify(tiny));
+
+  // ---------- reading a page, which is now the default ----------
+  //
+  // Everything above about typefaces, resampling and thresholds is the shape
+  // matcher. This is the path a reviewer actually gets, and it has to be
+  // exercised end to end: the engine really loads, really reads a rendered
+  // page, and the words it read really become marks in the right places.
+  {
+    // Earlier sections may have left the document closed, so ask for the drop
+    // view rather than assuming which one is showing.
+    if (await page.isVisible('#view-review')) await page.click('#restart');
+    await page.waitForSelector('#view-drop:not([hidden])');
+    await page.setInputFiles('#file', fixturePath);
+    await page.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
+    await page.evaluate(() => {
+      window.Blinded.state.useOcr = true;
+      window.Blinded.state.ocrFailed = false;
+      window.Blinded.showWordControls();
+    });
+    await page.fill('#terms', 'Jane Doe');
+    await page.waitForTimeout(400);
+    await page.check('#termimages');
+
+    const started = Date.now();
+    await redact(page);
+    const took = Date.now() - started;
+
+    const read = await page.evaluate(() => {
+      const B = window.Blinded;
+      const p = B.state.pages[0];
+      const mine = p.imageHits.filter(m => m.term === 'Jane Doe');
+      return {
+        words: (p.ocrItems || []).length,
+        sawName: /Jane\s+Doe/i.test(p.ocrText || ''),
+        marks: mine.length,
+        insidePage: mine.every(m => m.rect.x >= 0 && m.rect.y >= 0
+          && m.rect.x + m.rect.w <= p.source.width
+          && m.rect.y + m.rect.h <= p.source.height),
+        allRead: mine.every(m => m.read === true),
+        failed: B.state.ocrFailed,
+      };
+    });
+    check('the reader loaded and did not fall back', read.failed === false, JSON.stringify(read));
+    check('the page came back as words', read.words > 10, String(read.words));
+    check('and the name is among what was read', read.sawName, JSON.stringify(read));
+    check('which becomes at least one mark', read.marks > 0, JSON.stringify(read));
+    check('every mark sits inside the page', read.insidePage, JSON.stringify(read));
+    check('and is recorded as read rather than matched', read.allRead, JSON.stringify(read));
+    // Not a benchmark, a tripwire: this was eight to ten seconds a page before
+    // the engine build was pinned and the reading was split across engines.
+    check('reading a page is not pathologically slow', took < 60000, took + 'ms');
+  }
 
   // ---------- slanted lettering ----------
   //
@@ -1405,7 +1499,7 @@ try {
   // actually becomes visible, so that is what is asserted, not that a handler
   // is attached.
   const whyCount = await page.evaluate(() => document.querySelectorAll('.why').length);
-  check('the panel still has its hints', whyCount === 6, String(whyCount));
+  check('the panel still has its hints', whyCount === 5, String(whyCount));
   check('every hint carries text to show',
     await page.evaluate(() => [...document.querySelectorAll('.why')]
       .every(b => (b.getAttribute('data-tip') || '').length > 20)));

@@ -165,10 +165,11 @@ comes from glyph positions rather than from correlating a rendering. The
 duplicate is set aside rather than deleted, so removing the term brings it
 back rather than leaving a hole.
 
-### Reading the pages instead
+### How a word inside a picture is found
 
-Tick **Read the pages with OCR** and each page is read rather than matched
-against drawn shapes. That is a different thing entirely: the matcher never
+Ticking **Also look for these words as pictures** reads each page rather than
+matching drawn shapes against it. That is a different thing entirely: matching
+never
 knows what the letters are, which is why italic needed its own typefaces,
 twelve-pixel captions needed the page resampled, and a four-letter acronym
 needed a bar of its own. Reading the glyphs makes all of those ordinary.
@@ -178,17 +179,22 @@ both italic ones, three of three on another including a caption that scored
 0.314 against a template, and none at all on a deck where the same acronym had
 matched 333 times. There is no threshold involved.
 
-It costs about 6.7 MB the first time, fetched from this site and then cached by
+It costs about 6.7 MB the first time, fetched from this site and then kept by
 the browser — there is nothing to install, and nothing is sent anywhere. Pages
-are read in parallel, a few at a time: about 0.8 seconds a page on four cores,
-against eight before the WebAssembly build was pinned correctly and the work
-was split.
+are read a few at a time: about 0.8 seconds a page on four cores, against eight
+before the WebAssembly build was pinned correctly and the reading was split
+across engines.
+
+If the reader cannot be loaded at all, the words are hunted for by shape
+instead and the panel says so. That is the older method, kept as the fallback:
+it is less reliable on italic and on small lettering, and it is the only thing
+that has a sensitivity control, which appears only when it is what is running.
 
 It does not replace the image search. A logo, a signature or a stamp has no
 letters in it, and those stay with the matcher.
 
-Words as pictures have their own **Word match** control, separate from the
-image sensitivity below it. They are not the same number for a reason: a logo
+When the shape fallback is in use it has its own **Word match** control,
+separate from the image sensitivity below it. They are not the same number for a reason: a logo
 you cut out of the document is matched against a copy of itself and should
 correlate almost perfectly, while a word drawn here in Helvetica is only ever
 an approximation of whatever typeface the document was really set in.
