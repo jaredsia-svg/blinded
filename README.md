@@ -675,3 +675,28 @@ The term list counts both together, as one number. It used to read
 "200 + 50 as picture", which split the answer along a line the reviewer has no
 use for: they asked how many times the word is in the document, and where each
 one happens to be written is the tool's business rather than theirs.
+
+## Drafts
+
+A review of a hundred-page document is an afternoon's work, and closing the tab
+loses it — deliberately, since nothing is stored anywhere. Save draft is the way
+back to it.
+
+A draft holds the work, not the document: the words, the marks, the boxes drawn
+by hand, where each logo was cut from, the settings. Not a page of content. That
+keeps it a few kilobytes rather than the size of the original and, the reason
+that matters, means the draft carries nothing confidential — a draft with the
+document inside it would be a file that looks like a redaction and is the
+opposite of one, and sooner or later somebody sends one on.
+
+The price is that reopening needs the original file again. The draft records a
+digest of it, so putting a draft on the wrong document — where the marks would
+cover the wrong things — is questioned rather than done.
+
+## Where a word is
+
+The tally beside each word is a button. The number answers "how many"; pressing
+it answers "where", listing every occurrence by page. Red for what the reading
+found, amber for what the thorough check turned up by shape — the same two
+colours they are drawn in on the page, because a mark the reading found and one
+a matcher guessed at do not deserve equal trust. Each row jumps to its page.

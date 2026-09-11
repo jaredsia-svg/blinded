@@ -426,6 +426,35 @@ button { font: inherit; cursor: pointer; border-radius: 8px; }
   font-size: 12.5px; padding: 3px 0; color: var(--ink-soft);
 }
 .termcounts .t, .templates .t { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); }
+/* ---------- where a word actually is ---------- */
+/*
+   The tally is a button: the number answers "how many", and pressing it
+   answers "where". Red for what the reading found, amber for what the shape
+   check turned up — the same two colours they are drawn in on the page, since
+   a mark the reading found and one a matcher guessed at do not deserve equal
+   trust.
+*/
+.termcounts .n:disabled { cursor: default; }
+.termcounts button.n { font: inherit; border: 0; cursor: pointer; }
+.termcounts button.n[aria-expanded="true"] { background: var(--accent); color: #fff; }
+
+li.tally { display: block; padding: 0 0 8px; border: 0; }
+.tallywhere { list-style: none; margin: 0; padding: 0 0 0 2px; }
+.tallywhere li { display: block; padding: 0; border: 0; }
+.tallyspot {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  font: inherit; font-size: 12.5px; text-align: left;
+  background: none; border: 0; border-radius: var(--radius);
+  padding: 4px 8px; color: var(--ink-soft); cursor: pointer;
+}
+.tallyspot:hover { background: #eef1f6; color: var(--ink); }
+.tallyspot .dot {
+  width: 8px; height: 8px; border-radius: 2px; flex: none;
+  background: #d92d20;
+}
+.tallyspot.shape .dot { background: #d98b1f; }
+.tallyspot .how { margin-left: auto; font-size: 11.5px; color: var(--ink-soft); }
+
 .termcounts .n, .templates .n {
   font-variant-numeric: tabular-nums; background: #eef1f6;
   border-radius: 20px; padding: 1px 8px; flex: none;
@@ -627,3 +656,10 @@ body.reviewing .exportbar { position: static; flex: none; margin: 14px 0 18px; }
 .confirmbody { margin: 0; color: var(--ink-soft); font-size: 13.5px; line-height: 1.55; }
 .primary.danger { background: #d92d20; border-color: #d92d20; }
 .primary.danger:hover { background: #b42318; }
+
+/* A draft is a few kilobytes of marks, not the document, so it is worth
+   saying what was and was not saved. */
+.drafthint {
+  margin: 0; font-size: 12.5px; color: var(--accent);
+  background: #eef4ff; border-radius: var(--radius); padding: 8px 10px;
+}

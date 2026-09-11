@@ -6,7 +6,7 @@
 <title>Blinded – Efficient redaction for your most sensitive documents, all done locally</title>
 <meta name="description" content="Redact PDFs, images and text in your browser. The file never leaves your machine.">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="app.css?v=f67e69e9">
+<link rel="stylesheet" href="app.css?v=0ac43d9e">
 </head>
 <body>
 
@@ -39,7 +39,7 @@
       </svg>
       <p class="drop-lead">Drop a document here</p>
       <p class="drop-sub">PDF, PNG, JPEG or plain text — or <span class="link">browse</span></p>
-      <input type="file" id="file" accept=".pdf,.png,.jpg,.jpeg,.txt,.md,.markdown,.csv,.log,application/pdf,image/png,image/jpeg,text/plain" hidden>
+      <input type="file" id="file" accept=".pdf,.png,.jpg,.jpeg,.txt,.md,.markdown,.csv,.log,.json,application/pdf,image/png,image/jpeg,text/plain,application/json" hidden>
     </div>
     <p id="drop-error" class="error" hidden></p>
 
@@ -106,12 +106,19 @@
                 <path d="M4 9h11a5 5 0 0 1 0 10h-6M4 9l4-4M4 9l4 4"/>
               </svg><span class="sr-only">Undo</span>
             </button>
+            <button type="button" id="savedraft" class="tool" title="Save a draft — your marks, to carry on later">
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+                <path d="M8 21v-7h8v7M8 3v5h6"/>
+              </svg><span class="sr-only">Save a draft</span>
+            </button>
             <button type="button" id="restart" class="tool" title="Open a different file">
               <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
                 <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8zm0 0v5h5M12 11v6m-3-3h6"/>
               </svg><span class="sr-only">Open a different file</span>
             </button>
           </div>
+          <p class="hint drafthint" id="draftnote" hidden></p>
           <p class="tip" id="tip">Drag on a page to add a box. Click a mark to drop it.
             Marks stay red until you press <strong>Redact</strong>.</p>
         </div>
@@ -250,7 +257,7 @@
 <script src="lib/pdfwrite.js?v=4b977425"></script>
 <script src="lib/pdfread.js?v=624c5ef9"></script>
 <script src="lib/render.js?v=7bf6e0a9"></script>
-<script src="app.js?v=1ff580f8"></script>
+<script src="app.js?v=d5a0b9fd"></script>
 <script type="module">
   // pdf.js ships as an ES module; everything else here is a classic script, so
   // it is bridged onto the global the other modules already look for. Both the

@@ -321,7 +321,8 @@ try {
   const bar = await page.evaluate(() => {
     const tools = document.querySelector('.tools').getBoundingClientRect();
     const panel = document.querySelector('.panel').getBoundingClientRect();
-    const ids = ['tool-pan', 'tool-mark', 'zoom-out', 'zoom-in', 'undo', 'restart'];
+    const ids = ['tool-pan', 'tool-mark', 'zoom-out', 'zoom-in', 'undo',
+                 'savedraft', 'restart'];
     const buttons = ids.map(id => document.getElementById(id));
     return {
       count: document.querySelectorAll('.tools .tool').length,
@@ -353,7 +354,7 @@ try {
       heights: buttons.map(b => Math.round(b.getBoundingClientRect().height)),
     };
   });
-  check('the toolbar is six buttons', bar.count === 6, JSON.stringify(bar.count));
+  check('the toolbar is seven buttons', bar.count === 7, JSON.stringify(bar.count));
 
   // The header is pinned, and the sentence explaining what dragging does sits
   // with the buttons that change it rather than at the foot of the panel.
@@ -401,7 +402,16 @@ try {
       // Nothing starts underneath it.
       roomReserved: pad >= Math.round(moved.height) - 1,
       panelClear: panelStick >= Math.round(moved.height),
-      tipUnderTheIcons: !!document.querySelector('.panel-head .tools + #tip'),
+      // In the panel head and below the tools, rather than the foot of the
+      // panel where it started. Not an adjacent-sibling test: what has to hold
+      // is the order, and something else may legitimately sit between them.
+      tipUnderTheIcons: (() => {
+        const tools = document.querySelector('.panel-head .tools');
+        const tip = document.querySelector('.panel-head #tip');
+        if (!tools || !tip) return false;
+        return tools.compareDocumentPosition(tip)
+          & Node.DOCUMENT_POSITION_FOLLOWING ? true : false;
+      })(),
       tipText: (document.getElementById('tip').textContent || '').trim().slice(0, 30),
     };
   });
@@ -420,7 +430,7 @@ try {
     chrome.roomReserved === true, JSON.stringify(chrome));
   check('and the panel beside it sticks below it, not under it',
     chrome.panelClear === true, JSON.stringify(chrome));
-  check('the note about dragging sits directly under the four icons',
+  check('the note about dragging sits under the icons, in the panel head',
     chrome.tipUnderTheIcons === true, JSON.stringify(chrome));
 
   check('and they fit inside the panel without scrolling sideways',
@@ -1211,6 +1221,182 @@ try {
   check('and it counts the text and the pictures together',
     tally.asPictures > 0 && tally.shown === String(tally.inText + tally.asPictures),
     JSON.stringify(tally));
+
+  // Pressing the number says where they are.
+  //
+  // Red for what the reading found and amber for what the shape check turned
+  // up — the same two colours they are drawn in on the page, because a mark
+  // the reading found and one a matcher guessed at do not deserve equal trust.
+  const where = await page.evaluate(async () => {
+    const B = window.Blinded;
+    const p = B.state.pages[0];
+    const term = B.state.terms[0];
+    // One mark from the shape check, so both kinds are represented.
+    p.imageHits.push({ id: 'sweep:x', term, rect: { x: 80, y: 900, w: 90, h: 24 },
+      score: 1, bySweep: true });
+    B.renderTermCounts();
+
+    const closed = document.querySelectorAll('#termcounts .tallyspot').length;
+    const button = document.querySelector('#termcounts button.n');
+    const total = button.textContent.trim();
+    button.click();
+    const rows = [...document.querySelectorAll('#termcounts .tallyspot')];
+    const open = rows.length;
+    const shown = rows.map(r => r.textContent.trim());
+    const shapes = rows.filter(r => r.classList.contains('shape')).length;
+    const colours = rows.map(r =>
+      getComputedStyle(r.querySelector('.dot')).backgroundColor);
+    const listed = B.occurrencesFor(term).length;
+    document.querySelector('#termcounts button.n').click();
+    const afterSecond = document.querySelectorAll('#termcounts .tallyspot').length;
+
+    p.imageHits = p.imageHits.filter(m => m.id !== 'sweep:x');
+    B.state.openTally = null;
+    B.renderTermCounts();
+    return { closed, open, shown, shapes, colours, listed, afterSecond, term, total };
+  });
+  check('the list is not there until the number is pressed',
+    where.closed === 0, JSON.stringify(where));
+  check('pressing it lists every occurrence',
+    where.open === where.listed && where.open === Number(where.total),
+    JSON.stringify(where));
+  check('each one says which page it is on',
+    where.shown.every(t => /^Page \d+/.test(t)), JSON.stringify(where.shown));
+  check('the shape check\'s find is marked as such',
+    where.shapes === 1, JSON.stringify(where));
+  check('and the two kinds are not the same colour',
+    new Set(where.colours).size === 2, JSON.stringify(where.colours));
+  check('pressing it again puts the list away',
+    where.afterSecond === 0, JSON.stringify(where));
+
+  // The rows are a way into the document, not just a readout.
+  const jumped = await page.evaluate(async () => {
+    const B = window.Blinded;
+    const stage = document.querySelector('.stage');
+    stage.scrollTop = 0;
+    B.goToPage(B.state.pages.length - 1);
+    await new Promise(r => setTimeout(r, 500));
+    const moved = stage.scrollTop;
+    stage.scrollTop = 0;
+    return { moved, pages: B.state.pages.length };
+  });
+  check('and a page named in the list can be jumped to',
+    jumped.pages < 2 || jumped.moved > 0, JSON.stringify(jumped));
+
+  // ---------- drafts ----------
+  //
+  // A draft holds the work, not the document: the words, the marks, the boxes
+  // drawn by hand, the logos picked out. Not a page of content — which keeps
+  // it a few kilobytes and, the reason that matters, means it carries nothing
+  // confidential. A draft with the document inside would be a file that looks
+  // like a redaction and is the opposite of one.
+  {
+    // Started from a known file, so that reopening is the same document and
+    // the mismatch guard is exercised deliberately below rather than by
+    // accident here.
+    await newFile();
+    await page.setInputFiles('#file', fixturePath);
+    await page.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
+    await page.evaluate(() => {
+      const box = document.getElementById('terms');
+      box.value = 'Jane';
+      box.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await page.waitForTimeout(400);
+
+    const planted = await page.evaluate(() => {
+      const B = window.Blinded;
+      const p = B.state.pages[0];
+      p.manual = [{ id: 'hand1', x: 40, y: 40, w: 120, h: 30 }];
+      p.imageHits = [{ id: 'sweep:d', term: B.state.terms[0],
+        rect: { x: 200, y: 300, w: 90, h: 24 }, score: 1, bySweep: true }];
+      p.dismissed = new Set(['nope']);
+      return { terms: B.state.terms.slice(), manual: p.manual.length };
+    });
+
+    const draft = await page.evaluate(() => JSON.stringify(window.Blinded.draftData()));
+    const parsed = JSON.parse(draft);
+    check('a draft records the words and the marks',
+      parsed.terms.includes(planted.terms[0]) && parsed.pages[0].manual.length === 1
+        && parsed.pages[0].imageHits.length === 1, draft.slice(0, 160));
+    check('and which file it belongs to',
+      typeof parsed.source.name === 'string' && parsed.source.name.length > 0,
+      JSON.stringify(parsed.source));
+
+    // The part that matters: no page content anywhere in it.
+    const pageText = await page.evaluate(() => window.Blinded.state.pages[0].text);
+    const sample = (pageText.match(/[A-Za-z]{6,}/g) || []).slice(0, 6);
+    check('the fixture gives us words to look for', sample.length > 0, JSON.stringify(sample));
+    const leaked = sample.filter(word =>
+      !parsed.terms.includes(word) && draft.includes(word));
+    check('a draft carries no page content', leaked.length === 0, JSON.stringify(leaked));
+    check('and is small enough to be a few kilobytes',
+      draft.length < 60000, String(draft.length));
+
+    // Saving it hands over a file, and does not count as having exported the
+    // redaction — the warning about unsaved work must not be switched off by
+    // a draft.
+    const [draftFile] = await Promise.all([
+      page.waitForEvent('download', { timeout: 30000 }),
+      page.click('#savedraft'),
+    ]);
+    check('saving a draft downloads it',
+      /\.blinded\.json$/.test(draftFile.suggestedFilename()),
+      draftFile.suggestedFilename());
+    check('and saving a draft is not exporting a redaction',
+      (await page.evaluate(() => window.Blinded.state.exported)) === false);
+
+    const draftPath = join(tmpdir(), 'blinded-draft.blinded.json');
+    await draftFile.saveAs(draftPath);
+
+    // Reopening: the draft is chosen first, and waits for its document.
+    await newFile();
+    await page.setInputFiles('#file', draftPath);
+    await page.waitForTimeout(400);
+    check('choosing a draft does not open a document on its own',
+      (await page.isVisible('#view-drop')) === true);
+    const asks = await page.textContent('#drop-error');
+    check('it asks for the file the draft belongs to',
+      /choose that file/i.test(asks || ''), asks);
+
+    await page.setInputFiles('#file', fixturePath);
+    await page.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
+    await page.waitForTimeout(600);
+    const restored = await page.evaluate(() => {
+      const B = window.Blinded;
+      const p = B.state.pages[0];
+      return { terms: B.state.terms.slice(),
+               manual: p.manual.length,
+               sweep: p.imageHits.filter(m => m.bySweep).length,
+               box: document.getElementById('terms').value.trim() };
+    });
+    check('the words come back', restored.terms.join() === planted.terms.join(),
+      JSON.stringify(restored));
+    check('and so does the box the reviewer drew', restored.manual === 1,
+      JSON.stringify(restored));
+    check('and the marks the shape check had found',
+      restored.sweep === 1, JSON.stringify(restored));
+    check('and the list of words is back in the panel, not just in the state',
+      restored.box.length > 0, JSON.stringify(restored));
+
+    // Marks are placed by position, so putting a draft on the wrong document
+    // would cover the wrong things. The draft knows which file it is for.
+    await newFile();
+    await page.setInputFiles('#file', draftPath);
+    await page.waitForTimeout(300);
+    await page.setInputFiles('#file', logoPath);
+    await page.waitForSelector('#confirmbox:not([hidden])', { timeout: 30000 });
+    const warned = await page.textContent('#confirmbody');
+    check('putting a draft on a different file is questioned',
+      /is not it/i.test(warned || ''), warned);
+    await page.click('#confirmno');
+    const declined = await page.evaluate(() => ({
+      manual: window.Blinded.state.pages[0].manual.length,
+      terms: window.Blinded.state.terms.length,
+    }));
+    check('and declining leaves that document untouched',
+      declined.manual === 0 && declined.terms === 0, JSON.stringify(declined));
+  }
 
   // ---------- one pass, spread across cores ----------
   //

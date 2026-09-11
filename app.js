@@ -105,6 +105,10 @@
     sweptTerms: [],
     sweepAdded: 0,
     zoom: 1,
+    sourceSize: 0,
+    sourceDigest: null,
+    // Which word's list of places is open, if any.
+    openTally: null,
     exported: false,
     redacting: false,
     sweepRunning: false,
@@ -306,11 +310,20 @@
     if (!file) return;
 
     try {
+      // A draft is not a document: it is the work that was done to one.
+      if (/\.json$/i.test(file.name) || file.type === 'application/json') {
+        const data = looksLikeDraft(await file.text());
+        if (data) { takeDraft(data); return; }
+        // Any other JSON is just a text file, and falls through as one.
+      }
+
       if (file.type === 'application/pdf' || /\.pdf$/i.test(file.name)) {
         busy(true, 'Reading the PDF…');
         busyNote('Your file is being rendered locally on your device. '
           + 'Nothing is uploaded.');
         const bytes = new Uint8Array(await file.arrayBuffer());
+        state.sourceSize = file.size;
+        state.sourceDigest = await fingerprint(bytes);
         // Every pass over the pages reports the same way: which page, and a
         // bar. Three different sentences for three loops that all mean "this
         // is taking a while" is three things to read instead of one.
@@ -318,6 +331,8 @@
           pageProgress(n - 1, total, 'Rendering pages'));
         startReview('pdf', file.name, pages);
       } else if (/^image\//.test(file.type) || /\.(png|jpe?g)$/i.test(file.name)) {
+        state.sourceSize = file.size;
+        state.sourceDigest = await fingerprint(new Uint8Array(await file.arrayBuffer()));
         busy(true, 'Reading the image…');
         busyNote('Your file is being read locally on your device. '
           + 'Nothing is uploaded.');
@@ -328,6 +343,15 @@
         startReview('text', file.name, []);
       } else {
         fail('Blinded can open PDFs, PNG and JPEG images, and plain text files. That looked like none of those.');
+        return;
+      }
+
+      // A draft was chosen first and has been waiting for its document.
+      if (pendingDraft) {
+        const draft = pendingDraft;
+        pendingDraft = null;
+        busy(false);
+        await restoreDraft(draft);
       }
     } catch (error) {
       // A failure here means the document was not fully understood, and a
@@ -378,6 +402,7 @@
     state.sweepStopped = false;
     state.sweepReached = 0;
     state.exported = false;
+    state.openTally = null;
     state.pages = pages.map(p => ({
       ...p,
       source: p.canvas,          // pristine; never drawn on
@@ -1656,25 +1681,61 @@
   // A term that matched nothing looks exactly like one that matched: the box
   // just sits there. Saying so is the difference between a reviewer noticing
   // they typed a name wrong and shipping a document with it still in.
+  // Where each occurrence of a word actually is.
+  //
+  // Sorted by page, and each one carries how it was found: read out of the
+  // text or the page's lettering, which is marked red, or turned up by the
+  // thorough shape check, which is marked amber. The two are shown apart here
+  // for the same reason they are drawn apart on the page — a mark the reading
+  // found and a mark a shape matcher guessed at do not deserve equal trust.
+  function occurrencesFor(term) {
+    const out = [];
+    if (state.kind === 'text') {
+      for (const span of Detect.findTerms(state.text, [term])) {
+        out.push({ pageIndex: 0, kind: 'text', at: span.start });
+      }
+      return out;
+    }
+    for (const page of state.pages) {
+      for (const span of Detect.findTerms(page.text, [term])) {
+        out.push({ pageIndex: page.index, kind: 'text', at: span.start });
+      }
+      for (const match of liveImageHits(page)) {
+        if (match.term !== term) continue;
+        out.push({
+          pageIndex: page.index,
+          kind: match.bySweep ? 'shape' : 'text',
+          at: match.rect ? match.rect.y : 0,
+        });
+      }
+    }
+    out.sort((a, b) => a.pageIndex - b.pageIndex || a.at - b.at);
+    return out;
+  }
+
+  // Brings a page into view in the document column. The panel scrolls
+  // separately, so this has to move the right one.
+  function goToPage(pageIndex) {
+    const page = state.pages[pageIndex];
+    if (!page || !page.canvas) return;
+    page.canvas.parentElement.scrollIntoView({ block: 'start', behavior: 'smooth' });
+  }
+
   function renderTermCounts() {
     const host = el('termcounts');
     host.textContent = '';
     if (!state.terms.length) return;
 
-    const texts = state.kind === 'text' ? [state.text] : state.pages.map(p => p.text);
     for (const term of state.terms) {
-      let n = 0;
-      for (const text of texts) n += Detect.findTerms(text, [term]).length;
+      const where = occurrencesFor(term);
+      const total = where.length;
 
       const row = document.createElement('li');
-      if (n === 0) row.className = 'none';
+      row.className = total === 0 ? 'none' : '';
 
       const label = document.createElement('span');
       label.className = 't';
       label.textContent = term;
-
-      const pictures = state.pages.reduce((sum, page) =>
-        sum + liveImageHits(page).filter(m => m.term === term).length, 0);
 
       // One number, not two.
       //
@@ -1683,17 +1744,57 @@
       // is in the document, and where each one happened to be written is the
       // tool's business rather than theirs. Counting them together also stops
       // the number moving about as the picture pass catches up.
-      const total = n + pictures;
-
-      const count = document.createElement('span');
+      //
+      // Where they are is a different question, and it is answered by asking
+      // rather than by making every row carry a list nobody has looked at.
+      const count = document.createElement('button');
+      count.type = 'button';
       count.className = 'n';
       count.textContent = total === 0 ? 'not found' : String(total);
-      if (n === 0 && pictures > 0) row.className = '';
+      count.disabled = total === 0 || state.kind === 'text';
+      if (!count.disabled) {
+        count.setAttribute('aria-expanded', String(state.openTally === term));
+        count.title = 'Where ' + (total === 1 ? 'it is' : 'they are');
+        count.addEventListener('click', () => {
+          state.openTally = state.openTally === term ? null : term;
+          renderTermCounts();
+        });
+      }
 
       row.append(label, count);
       host.append(row);
 
+      if (state.openTally === term && !count.disabled) {
+        host.append(tallyList(term, where));
+      }
     }
+  }
+
+  function tallyList(term, where) {
+    const box = document.createElement('li');
+    box.className = 'tally';
+
+    const list = document.createElement('ul');
+    list.className = 'tallywhere';
+    for (const spot of where) {
+      const item = document.createElement('li');
+      const jump = document.createElement('button');
+      jump.type = 'button';
+      jump.className = 'tallyspot ' + spot.kind;
+      const dot = document.createElement('span');
+      dot.className = 'dot';
+      const text = document.createElement('span');
+      text.textContent = 'Page ' + (spot.pageIndex + 1);
+      const how = document.createElement('span');
+      how.className = 'how';
+      how.textContent = spot.kind === 'shape' ? 'by shape' : 'in the text';
+      jump.append(dot, text, how);
+      jump.addEventListener('click', () => goToPage(spot.pageIndex));
+      item.append(jump);
+      list.append(item);
+    }
+    box.append(list);
+    return box;
   }
 
   // ---------- text documents ----------
@@ -1751,6 +1852,189 @@
   function redactedName(extension) {
     const base = state.name.replace(/\.[^.]+$/, '') || 'document';
     return base + '-redacted.' + extension;
+  }
+
+  // ---------- drafts ----------
+  //
+  // A review can take a long while on a hundred-page document, and closing the
+  // tab loses it — deliberately, since nothing is stored anywhere. A draft is
+  // the way to come back to it.
+  //
+  // What a draft holds is the work, not the document: the words, the marks,
+  // the boxes drawn by hand, the logos picked out, the settings. Not a single
+  // page of content. That keeps it a few kilobytes instead of the size of the
+  // original, and — the reason that matters — it means the draft carries
+  // nothing confidential. A draft with the document inside it would be a file
+  // that looks like a redaction and is the opposite of one, and sooner or
+  // later somebody sends one on.
+  //
+  // The price is that reopening needs the original file again, which is why
+  // the draft records enough to be sure it is the right one.
+  const DRAFT_VERSION = 1;
+
+  // Names the source file exactly enough to catch the wrong one being picked.
+  // The digest is the real test; name and size are what the message quotes,
+  // and are the fallback where crypto.subtle is missing (it needs a secure
+  // context, which a file:// page is not).
+  async function fingerprint(bytes) {
+    try {
+      const digest = await crypto.subtle.digest('SHA-256', bytes);
+      return [...new Uint8Array(digest)].slice(0, 8)
+        .map(b => b.toString(16).padStart(2, '0')).join('');
+    } catch { return null; }
+  }
+
+  function draftData() {
+    return {
+      blindedDraft: DRAFT_VERSION,
+      savedAt: new Date().toISOString(),
+      source: { name: state.name, size: state.sourceSize || 0,
+                digest: state.sourceDigest || null, kind: state.kind,
+                pages: state.pages.length },
+      terms: el('terms').value,
+      settings: {
+        sensitivity: el('sensitivity') ? el('sensitivity').value : null,
+        includeMedium: state.includeMedium,
+        labelling: state.labelling,
+        labelOverrides: state.labelOverrides,
+        zoom: state.zoom,
+      },
+      sweptTerms: state.sweptTerms,
+      sweepAdded: state.sweepAdded,
+      // A logo is stored as where it was cut from, not as the pixels: the
+      // pixels are in the document, and the document is not in the draft.
+      templates: state.templates.map(t => ({
+        id: t.id, pageIndex: t.pageIndex, rect: t.rect,
+      })),
+      pages: state.pages.map(page => ({
+        index: page.index,
+        manual: page.manual,
+        dismissed: [...page.dismissed],
+        // Only marks that came from a word or a logo. Anything the text
+        // scanner found is rebuilt from the words themselves on reopening.
+        imageHits: page.imageHits.map(m => ({
+          id: m.id, term: m.term, templateId: m.templateId, rect: m.rect,
+          score: m.score, inverted: m.inverted, bySweep: m.bySweep, read: m.read,
+        })),
+      })),
+      dismissedText: [...dismissedText],
+    };
+  }
+
+  function draftName() {
+    const base = state.name.replace(/\.[^.]+$/, '') || 'document';
+    return base + '.blinded.json';
+  }
+
+  async function saveDraft() {
+    if (!state.pages.length && !state.text) return;
+    const data = draftData();
+    download(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }),
+      draftName());
+    // Saving a draft is not exporting a redaction, and the flag that decides
+    // whether the reviewer is warned about losing work must not be set by it.
+    state.exported = false;
+    draftNote('Draft saved. It holds your marks, not the document \u2014 reopen '
+      + 'it and choose ' + state.name + ' again to carry on.');
+  }
+
+  function draftNote(text) {
+    const note = el('draftnote');
+    if (!note) return;
+    note.textContent = text || '';
+    note.hidden = !text;
+    clearTimeout(draftNoteTimer);
+    if (text) draftNoteTimer = setTimeout(() => { note.hidden = true; }, 9000);
+  }
+  let draftNoteTimer = null;
+
+  // A draft picked at the drop screen. Held until the document it belongs to
+  // is chosen.
+  let pendingDraft = null;
+
+  function looksLikeDraft(text) {
+    try {
+      const data = JSON.parse(text);
+      return data && typeof data === 'object' && data.blindedDraft ? data : null;
+    } catch { return null; }
+  }
+
+  function takeDraft(data) {
+    if (data.blindedDraft > DRAFT_VERSION) {
+      fail('That draft was saved by a newer version of Blinded than this one.');
+      return;
+    }
+    pendingDraft = data;
+    show('drop');
+    fail('This is a draft for "' + (data.source && data.source.name || 'a document')
+      + '". Choose that file to carry on where you left off.');
+    el('drop-error').hidden = false;
+  }
+
+  // Puts a draft back onto a freshly opened document.
+  async function restoreDraft(data) {
+    const source = data.source || {};
+    if (source.digest && state.sourceDigest && source.digest !== state.sourceDigest) {
+      const ok = await confirmAction({
+        title: 'This is a different file',
+        body: 'The draft was saved against "' + source.name + '", and this file '
+          + 'is not it. Marks are placed by position, so putting them on another '
+          + 'document would cover the wrong things.',
+        confirmLabel: 'Use the draft anyway',
+      });
+      if (!ok) return false;
+    }
+
+    el('terms').value = data.terms || '';
+    state.terms = (data.terms || '').split('\n').map(t => t.trim()).filter(Boolean);
+
+    const settings = data.settings || {};
+    if (settings.sensitivity && el('sensitivity')) {
+      el('sensitivity').value = settings.sensitivity;
+    }
+    state.includeMedium = Boolean(settings.includeMedium);
+    if (el('medium')) el('medium').checked = state.includeMedium;
+    state.labelling = Boolean(settings.labelling);
+    if (el('labelling')) el('labelling').checked = state.labelling;
+    state.labelOverrides = settings.labelOverrides || {};
+    if (settings.zoom) setZoom(settings.zoom);
+
+    state.sweptTerms = data.sweptTerms || [];
+    state.sweepAdded = data.sweepAdded || 0;
+
+    for (const saved of data.pages || []) {
+      const page = state.pages[saved.index];
+      if (!page) continue;
+      page.manual = saved.manual || [];
+      page.dismissed = new Set(saved.dismissed || []);
+      page.imageHits = (saved.imageHits || []).filter(m => m && m.rect);
+    }
+    dismissedText.clear();
+    for (const id of data.dismissedText || []) dismissedText.add(id);
+
+    // Logos are re-cut from the document they were picked from, since the
+    // draft holds where they were, not what they looked like.
+    for (const saved of data.templates || []) {
+      const page = state.pages[saved.pageIndex];
+      if (!page || !saved.rect) continue;
+      const cut = ImageSearch.templateFrom(page.source, saved.rect);
+      if (!cut) continue;
+      state.templates.push({
+        id: saved.id, cut, rect: saved.rect, pageIndex: saved.pageIndex,
+        thumbnail: thumbnailOf(page.source, saved.rect),
+        matches: 0, rawMatches: 0, best: 0, searched: true,
+      });
+    }
+
+    rescan();
+    renderTemplates();
+    renderTermCounts();
+    renderSectionNotes();
+    renderCounts();
+    redrawAll();
+    refreshApply();
+    draftNote('Draft restored.');
+    return true;
   }
 
   // Everything being covered inside the document, as plain strings.
@@ -2160,6 +2444,8 @@
           page.imageHits = page.imageHits.filter(m => !m.term || next.includes(m.term));
         }
       }
+      // A list left open for a word that is no longer listed.
+      if (state.openTally && !next.includes(state.openTally)) state.openTally = null;
       state.terms = next;
       rescan();
     }, 200);
@@ -2480,6 +2766,8 @@
     redrawAll();
   });
   el('export').addEventListener('click', exportFile);
+  el('savedraft').addEventListener('click', saveDraft);
+
   el('restart').addEventListener('click', async () => {
     // Nothing open means nothing to lose, and a confirmation for that would be
     // the kind of prompt people learn to click through.
@@ -2494,6 +2782,7 @@
       });
       if (!ok) return;
     }
+    pendingDraft = null;
     state.pages = [];
     state.text = '';
     state.findings = [];
@@ -2518,6 +2807,8 @@
     undoLast, undoStack, applyLabels, labelItems, legendText, downloadKey,
     sensitivity, wordSensitivity, wordBarFor, setZoom, stepZoom, ZOOM_STEPS,
     cleanName, coveredText, askName, redactedName, confirmAction,
+    saveDraft, draftData, restoreDraft, looksLikeDraft, fingerprint,
+    occurrencesFor, renderTermCounts, goToPage,
     scrollerFor, setTool, marking,
     applyRedaction, markPending, plannedCount, pendingTemplates, termsNeedingPictures,
     readPages, matchOcr, ocrPending, ocrMatchStale, showWordControls,
