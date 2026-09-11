@@ -100,14 +100,28 @@ body {
 /* Progress, where there is progress to report. A run whose length is not
    known keeps the spinner and shows no bar, rather than showing a bar that
    does not move. */
+/* One row per leg of the job. Both are drawn from the start, so the shape of
+   the work is visible before it begins — and when a run is paused, which part
+   of it got how far. */
+.leg { margin-top: 12px; }
+.leg-label {
+  margin: 0 0 5px; display: flex; justify-content: space-between;
+  gap: 12px; font-size: 12.5px; font-weight: 500; color: var(--ink-soft);
+}
+.leg-count { font-variant-numeric: tabular-nums; }
+
 .bar {
-  margin-top: 12px; height: 6px; border-radius: 999px;
+  height: 6px; border-radius: 999px;
   background: #e6eaf1; overflow: hidden;
 }
 .bar > i {
   display: block; height: 100%; width: 0;
   background: var(--accent); border-radius: inherit;
   transition: width 140ms linear;
+}
+.busy-note {
+  margin: 12px 0 0; font-size: 12px; line-height: 1.45;
+  color: var(--ink-soft); font-weight: 400;
 }
 #busy-pause { margin-top: 12px; width: 100%; }
 

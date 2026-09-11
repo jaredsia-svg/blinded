@@ -103,22 +103,89 @@
   // used to carry all of the first and none of the rest — "Searching for 1
   // word — page 30 of 100" spends most of its width restating a setting the
   // reviewer chose a moment ago.
-  function busy(on, message, done, total) {
+  function busy(on, message) {
     el('busy').hidden = !on;
     if (message !== undefined && message !== null) el('busy-text').textContent = message;
-
-    const bar = el('busy-bar');
-    const known = Number.isFinite(done) && Number.isFinite(total) && total > 0;
-    bar.hidden = !known;
-    if (known) {
-      const fraction = Math.max(0, Math.min(1, done / total));
-      el('busy-fill').style.width = (fraction * 100).toFixed(1) + '%';
-      bar.setAttribute('aria-valuenow', String(Math.round(fraction * 100)));
-    }
     if (!on) {
       el('busy-pause').hidden = true;
-      el('busy-fill').style.width = '0%';
+      legs([]);
+      busyNote('');
     }
+  }
+
+  // A line under the bars, for when the wait itself raises the question.
+  //
+  // Watching a file being worked on for the first time is exactly when someone
+  // wonders where it has gone. The answer is on the front page, but the front
+  // page is not what they are looking at.
+  function busyNote(text) {
+    const note = el('busy-note');
+    note.textContent = text || '';
+    note.hidden = !text;
+  }
+
+  // A run declares its legs up front, and each gets its own bar.
+  //
+  // This was one bar across the whole job, on the reasoning that two filling
+  // in sequence would read as the first one having lied. That is true of bars
+  // that appear one after another — but not of bars that are both there from
+  // the start. Shown together they say what the job consists of before it
+  // begins, and when a run is paused they say which part of it got how far:
+  // "the pages are read to 40 of 100, the images are not started" is a
+  // different situation from "everything is 40% done", and a reviewer deciding
+  // whether to wait needs to know which one they are in.
+  //
+  // A leg that has no work is not drawn at all. An empty bar for a search
+  // nobody asked for is a bar that will never move.
+  function legs(list) {
+    const host = el('busy-legs');
+    host.textContent = '';
+    host.hidden = !list.length;
+    for (const leg of list) {
+      if (!leg.total) continue;
+      const row = document.createElement('div');
+      row.className = 'leg';
+      row.dataset.leg = leg.key;
+
+      const label = document.createElement('p');
+      label.className = 'leg-label';
+      const what = document.createElement('span');
+      what.textContent = leg.label;
+      const count = document.createElement('span');
+      count.className = 'leg-count';
+      count.dataset.count = leg.key;
+      count.textContent = '0 of ' + leg.total;
+      label.append(what, count);
+
+      const bar = document.createElement('div');
+      bar.className = 'bar';
+      bar.setAttribute('role', 'progressbar');
+      bar.setAttribute('aria-valuemin', '0');
+      bar.setAttribute('aria-valuemax', String(leg.total));
+      bar.setAttribute('aria-label', leg.label);
+      const fill = document.createElement('i');
+      fill.dataset.fill = leg.key;
+      // Started explicitly at nothing rather than left unset: a leg that has
+      // not begun should read as zero, not as absent.
+      fill.style.width = '0%';
+      bar.append(fill);
+
+      row.append(label, bar);
+      host.append(row);
+      row.dataset.total = String(leg.total);
+    }
+    host.hidden = !host.children.length;
+  }
+
+  function leg(key, done) {
+    const row = el('busy-legs').querySelector('[data-leg="' + key + '"]');
+    if (!row) return;
+    const total = Number(row.dataset.total) || 0;
+    const at = Math.max(0, Math.min(total, done));
+    row.querySelector('[data-fill]').style.width =
+      (total ? (at / total) * 100 : 0).toFixed(1) + '%';
+    row.querySelector('[data-count]').textContent = at + ' of ' + total;
+    row.querySelector('.bar').setAttribute('aria-valuenow', String(at));
   }
 
   // Pausing.
@@ -142,9 +209,14 @@
     button.textContent = 'Finishing this page…';
   }
 
-  // How a long run reports itself: the page it is on, and nothing else.
-  function pageProgress(done, total) {
-    busy(true, 'Page ' + Math.min(done + 1, total) + ' of ' + total, done, total);
+  // A run with one leg, which is most of them.
+  function pageProgress(done, total, label) {
+    const key = 'only';
+    const host = el('busy-legs');
+    if (!host.querySelector('[data-leg="' + key + '"]')) {
+      legs([{ key, label: label || 'Pages', total }]);
+    }
+    leg(key, done);
   }
 
   function show(name) {
@@ -206,14 +278,19 @@
     try {
       if (file.type === 'application/pdf' || /\.pdf$/i.test(file.name)) {
         busy(true, 'Reading the PDF…');
+        busyNote('Your file is being rendered locally on your device. '
+          + 'Nothing is uploaded.');
         const bytes = new Uint8Array(await file.arrayBuffer());
         // Every pass over the pages reports the same way: which page, and a
         // bar. Three different sentences for three loops that all mean "this
         // is taking a while" is three things to read instead of one.
-        const pages = await PdfRead.load(bytes, (n, total) => pageProgress(n - 1, total));
+        const pages = await PdfRead.load(bytes, (n, total) =>
+          pageProgress(n - 1, total, 'Rendering pages'));
         startReview('pdf', file.name, pages);
       } else if (/^image\//.test(file.type) || /\.(png|jpe?g)$/i.test(file.name)) {
         busy(true, 'Reading the image…');
+        busyNote('Your file is being read locally on your device. '
+          + 'Nothing is uploaded.');
         startReview('image', file.name, [await loadImage(file)]);
       } else if (/^text\//.test(file.type) || TEXT_EXT.test(file.name)) {
         busy(true, 'Reading the file…');
@@ -447,20 +524,16 @@
     const pages = state.pages.length;
     const willRead = ocrPending() ? state.pages.filter(p => !p.ocrItems).length : 0;
     const willSearch = pendingTemplates().length ? pages : 0;
-    const totalUnits = willRead + willSearch;
-    let unitsDone = 0;
-    const overall = (done, of) => {
-      // `of` is the leg's own total; the bar is the whole job.
-      const legDone = Math.min(done, of);
-      pageProgress(unitsDone + legDone, totalUnits || of);
-    };
+    legs([
+      { key: 'read', label: 'Reading pages', total: willRead },
+      { key: 'search', label: 'Searching images', total: willSearch },
+    ]);
     // Reading the pages comes first, because failing at it changes what else
     // has to run: the shape matcher is the fallback, so the list of templates
     // cannot be decided until it is known whether the reader worked.
     if (ocrPending()) {
       try {
-        await readPages(overall);
-        unitsDone += willRead;
+        await readPages(done => leg('read', done));
         matchOcr();
         markDuplicates();
         renderTermCounts();
@@ -493,7 +566,7 @@
 
     const entries = pendingTemplates();
     try {
-      if (entries.length) await runSearches(entries, overall);
+      if (entries.length) await runSearches(entries, done => leg('search', done));
     } catch (error) {
       alert('The image search could not finish: ' + (error && error.message ? error.message : error));
       return;
@@ -532,7 +605,7 @@
   // when the reviewer edits the terms list, so re-reading would be pure cost.
   // Matching those words against the terms is cheap and rerun freely.
   async function readPages(report) {
-    const progress = report || pageProgress;
+    const progress = report || ((done, of) => pageProgress(done, of, 'Reading pages'));
     if (state.ocrRead || !state.pages.length) return;
     const total = state.pages.length;
     // Pages already read in an earlier, paused run are not read again.
@@ -554,8 +627,8 @@
     // The reader is about seven megabytes and is fetched the first time it is
     // wanted. Without saying so, the first page looks like a hang.
     const alreadyDone = total - outstanding.length;
-    if (!state.ocrLoaded) busy(true, 'Fetching the page reader — about 7 MB, once…');
-    else progress(0, outstanding.length);
+    busy(true, state.ocrLoaded ? 'Working…' : 'Fetching the page reader — about 7 MB, once…');
+    progress(0, outstanding.length);
     allowPause();
 
     const read = await Ocr.readPages(
@@ -592,7 +665,8 @@
 
     let done = 0;
     state.paused = false;
-    busy(true, 'Checking 1 of ' + doubts.length, 0, doubts.length);
+    busy(true, 'Working…');
+    legs([{ key: 'check', label: 'Checking spots', total: doubts.length }]);
     allowPause();
 
     const found = [];
@@ -632,8 +706,7 @@
             }
           }
           done++;
-          busy(true, 'Checking ' + Math.min(done + 1, doubts.length) + ' of ' + doubts.length,
-            done, doubts.length);
+          leg('check', done);
           await (window.BlindedSchedule
             ? window.BlindedSchedule.nextTask()
             : new Promise(r => setTimeout(r, 0)));
@@ -834,7 +907,7 @@
   // document, and a reviewer watching a bar does not care which one is
   // running — so the caller owns the counting and this reports into it.
   async function runSearches(entries, report) {
-    const progress = report || pageProgress;
+    const progress = report || ((done, of) => pageProgress(done, of, 'Searching images'));
     progress(0, state.pages.length);
     allowPause();
     let results;
@@ -1729,7 +1802,7 @@
         const built = [];
 
         for (const page of state.pages) {
-          pageProgress(page.index, state.pages.length);
+          pageProgress(page.index, state.pages.length, 'Flattening pages');
           const boxes = activeBoxes(page);
           const flat = Render.flatten(page.source, boxes);
           built.push({
@@ -2069,7 +2142,7 @@
     sensitivity, wordSensitivity, wordBarFor,
     applyRedaction, markPending, plannedCount, pendingTemplates, termsNeedingPictures,
     readPages, matchOcr, ocrPending, ocrMatchStale, showWordControls,
-    findDoubts, checkDoubts, renderDoubts, couldBeTerm, redrawAll,
+    findDoubts, checkDoubts, renderDoubts, couldBeTerm, redrawAll, legs, leg, busyNote,
     busy, pageProgress, requestPause,
     renderTermCounts };
 })();

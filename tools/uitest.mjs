@@ -1465,24 +1465,32 @@ try {
 
     const seen = page.evaluate(() => new Promise(resolve => {
       const texts = [];
+      const notes = [];
       const withBar = [];
       const watch = setInterval(() => {
         const busy = document.getElementById('busy');
         if (!busy.hidden) {
           const t = document.getElementById('busy-text').textContent;
           texts.push(t);
-          withBar.push(!document.getElementById('busy-bar').hidden);
+          notes.push(document.getElementById('busy-note').textContent);
+          withBar.push(!document.getElementById('busy-legs').hidden);
         }
       }, 25);
-      setTimeout(() => { clearInterval(watch); resolve({ texts, withBar }); }, 2600);
+      setTimeout(() => { clearInterval(watch); resolve({ texts, notes, withBar }); }, 2600);
     }));
     // Loading happens while that watcher runs.
     await page.setInputFiles('#file', logoPath);
     await page.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
     const sample = await seen;
-    const pageLines = sample.texts.filter(t => /^Page \d+ of \d+$/.test(t));
+    // Watching a file be worked on for the first time is exactly when someone
+    // wonders where it has gone.
+    check('loading a file says where the file is going',
+      sample.notes.some(n => /locally on your device/.test(n) && /Nothing is uploaded/.test(n)),
+      JSON.stringify([...new Set(sample.notes)].slice(0, 3)));
     check('rendering a document reports its pages like everything else',
-      pageLines.length > 0, JSON.stringify([...new Set(sample.texts)].slice(0, 4)));
+      sample.withBar.some(Boolean), JSON.stringify([...new Set(sample.texts)].slice(0, 4)));
+    check('and the note is gone once the file is open',
+      await page.evaluate(() => document.getElementById('busy-note').hidden) === true);
     check('and no pass announces itself in the old wording',
       !sample.texts.some(t => /Rendering page|Flattening page|Searching for/.test(t)),
       JSON.stringify([...new Set(sample.texts)].slice(0, 4)));
@@ -1506,11 +1514,10 @@ try {
       const texts = [];
       // Watch the bar while a run goes on.
       const watch = setInterval(() => {
-        const fill = document.getElementById('busy-fill');
-        const bar = document.getElementById('busy-bar');
-        if (!bar.hidden) {
-          widths.push(parseFloat(fill.style.width) || 0);
-          texts.push(document.getElementById('busy-text').textContent);
+        const row = document.querySelector('[data-leg="search"], [data-leg="only"]');
+        if (row) {
+          widths.push(parseFloat(row.querySelector('[data-fill]').style.width) || 0);
+          texts.push(row.querySelector('[data-count]').textContent);
         }
       }, 60);
       const wasOn = B.state.termImages;
@@ -1524,14 +1531,14 @@ try {
       B.state.termImages = wasOn;
       return out;
     });
-    check('an image search reports progress on the same bar',
+    check('an image search reports progress on a bar of its own',
       seen.widths.length > 0, JSON.stringify(seen).slice(0, 200));
     // Not just that a bar appeared: that it moved. Showing one and leaving it
     // at nothing for the whole search is worse than showing none.
     check('and the bar actually advances as pages are searched',
       new Set(seen.widths).size > 1, JSON.stringify(seen.widths));
-    check('and reports it as pages, like the reader does',
-      seen.texts.every(t => /^Page \d+ of \d+$/.test(t)), JSON.stringify(seen.texts));
+    check('and counts them the way every other leg does',
+      seen.texts.every(t => /^\d+ of \d+$/.test(t)), JSON.stringify(seen.texts));
     check('the bar only ever moves forward',
       seen.widths.every((w, i) => i === 0 || w >= seen.widths[i - 1]),
       JSON.stringify(seen.widths));
@@ -1705,47 +1712,96 @@ try {
     await page.waitForTimeout(300);
 
     const shape = await page.evaluate(() => {
-      const bar = document.getElementById('busy-bar');
+      const host = document.getElementById('busy-legs');
       const pause = document.getElementById('busy-pause');
-      return {
-        bar: Boolean(bar), fill: Boolean(document.getElementById('busy-fill')),
-        pause: Boolean(pause), hiddenAtRest: bar.hidden && pause.hidden,
-      };
+      return { host: Boolean(host), pause: Boolean(pause),
+               rows: host.children.length, hiddenAtRest: host.hidden && pause.hidden };
     });
-    check('the overlay has a progress bar and a pause button',
-      shape.bar && shape.fill && shape.pause, JSON.stringify(shape));
-    check('and neither shows when nothing is running',
-      shape.hiddenAtRest, JSON.stringify(shape));
+    check('the overlay can hold progress bars and a pause button',
+      shape.host && shape.pause, JSON.stringify(shape));
+    check('and shows neither when nothing is running',
+      shape.hiddenAtRest && shape.rows === 0, JSON.stringify(shape));
 
     const reported = await page.evaluate(() => {
       const B = window.Blinded;
-      B.pageProgress(29, 100);
+      B.busy(true, 'Working…');
+      B.legs([{ key: 'read', label: 'Reading pages', total: 100 }]);
+      B.leg('read', 29);
+      const row = document.querySelector('[data-leg="read"]');
       const out = {
-        text: document.getElementById('busy-text').textContent,
-        width: document.getElementById('busy-fill').style.width,
-        shown: !document.getElementById('busy-bar').hidden,
+        label: row.querySelector('.leg-label span').textContent,
+        count: row.querySelector('[data-count]').textContent,
+        width: row.querySelector('[data-fill]').style.width,
+        shown: !document.getElementById('busy-legs').hidden,
       };
       B.busy(false);
-      out.afterStop = document.getElementById('busy-bar').hidden;
+      out.afterStop = document.getElementById('busy-legs').hidden;
       return out;
     });
-    check('a long run says which page it is on, and nothing else',
-      reported.text === 'Page 30 of 100', JSON.stringify(reported.text));
+    check('a leg says what it is doing', reported.label === 'Reading pages',
+      JSON.stringify(reported));
+    check('and how far through it is', reported.count === '29 of 100',
+      JSON.stringify(reported));
     // The browser normalises the string, so compare the number, not the text.
-    check('the bar shows how far along it is',
+    check('its bar matches that',
       Math.abs(parseFloat(reported.width) - 29) < 0.5, reported.width);
-    check('the bar is shown while the length is known', reported.shown === true);
-    check('and is packed away when the run ends', reported.afterStop === true);
+    check('bars show while a run is going', reported.shown === true);
+    check('and are packed away when it ends', reported.afterStop === true);
 
     const unknown = await page.evaluate(() => {
       const B = window.Blinded;
       B.busy(true, 'Fetching the page reader…');
-      const shown = !document.getElementById('busy-bar').hidden;
+      const shown = !document.getElementById('busy-legs').hidden;
       B.busy(false);
       return shown;
     });
     check('a run whose length is not known shows no bar, rather than a still one',
       unknown === false);
+
+    // A leg with no work is not drawn. An empty bar for a search nobody asked
+    // for is a bar that will never move.
+    const skipped = await page.evaluate(() => {
+      const B = window.Blinded;
+      B.busy(true, 'Working…');
+      B.legs([
+        { key: 'read', label: 'Reading pages', total: 12 },
+        { key: 'search', label: 'Searching images', total: 0 },
+      ]);
+      const out = {
+        rows: [...document.querySelectorAll('[data-leg]')].map(r => r.dataset.leg),
+      };
+      B.busy(false);
+      return out;
+    });
+    check('a leg with nothing to do is not drawn',
+      skipped.rows.length === 1 && skipped.rows[0] === 'read', JSON.stringify(skipped));
+
+    // Both at once, which is the point: on a pause the reviewer can see that
+    // the pages are read to here and the images are not started.
+    const both = await page.evaluate(() => {
+      const B = window.Blinded;
+      B.busy(true, 'Working…');
+      B.legs([
+        { key: 'read', label: 'Reading pages', total: 100 },
+        { key: 'search', label: 'Searching images', total: 100 },
+      ]);
+      B.leg('read', 40);
+      const rows = [...document.querySelectorAll('[data-leg]')].map(r => ({
+        key: r.dataset.leg,
+        count: r.querySelector('[data-count]').textContent,
+        width: r.querySelector('[data-fill]').style.width,
+      }));
+      B.busy(false);
+      return rows;
+    });
+    check('both legs are shown together, not one after the other',
+      both.length === 2, JSON.stringify(both));
+    check('each carries its own count',
+      both[0].count === '40 of 100' && both[1].count === '0 of 100',
+      JSON.stringify(both));
+    check('so a pause says which part got how far, not just a percentage',
+      parseFloat(both[0].width) > 0 && parseFloat(both[1].width) === 0,
+      JSON.stringify(both));
 
     const paused = await page.evaluate(async () => {
       const B = window.Blinded;
