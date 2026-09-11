@@ -2580,6 +2580,8 @@ try {
   });
   check('the header carries a link to the questions',
     headerLink !== null && /faq/.test(headerLink.href), JSON.stringify(headerLink));
+  check('and it is labelled Q&A', headerLink && headerLink.text === 'Q&A',
+    headerLink && headerLink.text);
   check('and it is on the right of the strip, where it was asked for',
     headerLink && headerLink.visible && headerLink.onTheRight, JSON.stringify(headerLink));
 
