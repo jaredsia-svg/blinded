@@ -647,105 +647,160 @@
     state.ocrRead = state.pages.every(page => page.ocrItems);
   }
 
-  // Checking those spots by shape.
+  // Checking those spots by reading them again, closer.
   //
-  // The whole-page shape search costs about 40 seconds a page for one term.
-  // Searching only where the reading was doubtful is a fraction of that, and
-  // it uses two typefaces rather than eight — measured as enough to find every
-  // true occurrence across two real decks.
+  // The first version of this searched each doubtful spot by shape, and it was
+  // the wrong instrument. What goes wrong on a dense slide is not that the
+  // letters are unrecognisable — it is that the page-level layout analysis
+  // carves the page up badly and hands the recogniser a line that runs through
+  // three columns and a chart. Read the same lettering on its own and it comes
+  // back perfectly: the badge that read "KAS Kni Kni" as part of a whole page
+  // read as 'Kei & Wah Engineering ... Pte. Ltd. ("KNW")' in 166 milliseconds
+  // when the crop was one line tall.
+  //
+  // One line tall is not a detail. Measured on that page: a 58 pixel band read
+  // the badge at every width from 210 to 690 pixels, and bands of 94 and 158
+  // pixels read nothing whatever, returning in four milliseconds because the
+  // layout analysis had decided the crop was a picture. Width is free. Height
+  // is the whole game.
+  const BAND_PAD_Y = 0.25;      // of the doubt's own height, above and below
+  const BAND_PAD_X = 8;         // of its height, left and right: width is free
+  const BAND_MIN_PAD_X = 120;
+  const BAND_OVERLAP = 0.7;     // how much of a line two doubts must share
+
+  function bandFor(doubt) {
+    const padY = Math.max(4, doubt.rect.h * BAND_PAD_Y);
+    const padX = Math.max(BAND_MIN_PAD_X, doubt.rect.h * BAND_PAD_X);
+    return {
+      x: doubt.rect.x - padX, y: doubt.rect.y - padY,
+      w: doubt.rect.w + padX * 2, h: doubt.rect.h + padY * 2,
+      doubts: [doubt],
+    };
+  }
+
+  // Doubts merged along a line, never down the page. Two on the same line
+  // share one read, which is free; stacking two lines into one crop is the
+  // exact thing that breaks the read.
+  function bandsFor(doubts) {
+    const out = [];
+    for (const doubt of doubts) {
+      const band = bandFor(doubt);
+      const shared = out.find(r => {
+        const overlapY = Math.min(r.y + r.h, band.y + band.h) - Math.max(r.y, band.y);
+        const overlapX = Math.min(r.x + r.w, band.x + band.w) - Math.max(r.x, band.x);
+        return overlapY > Math.min(r.h, band.h) * BAND_OVERLAP && overlapX > 0;
+      });
+      if (!shared) { out.push(band); continue; }
+      const right = Math.max(shared.x + shared.w, band.x + band.w);
+      shared.x = Math.min(shared.x, band.x);
+      shared.w = right - shared.x;
+      shared.doubts.push(doubt);
+    }
+    return out;
+  }
+
+  function bandCanvas(page, band) {
+    const x = Math.max(0, Math.round(band.x));
+    const y = Math.max(0, Math.round(band.y));
+    const w = Math.min(page.source.width - x, Math.round(band.w));
+    const h = Math.min(page.source.height - y, Math.round(band.h));
+    if (w < 12 || h < 8) return null;
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d', { alpha: false });
+    ctx.drawImage(page.source, x, y, w, h, 0, 0, w, h);
+    return { canvas, x, y, w, h };
+  }
+
   async function checkDoubts(options) {
     const opts = options || {};
     const thorough = Boolean(opts.thorough);
     const doubts = thorough ? findDoubts(true) : state.doubts;
     if (!doubts.length) return 0;
 
-    // A spot that could be any of several terms is searched for each of them.
-    const byTerm = new Map();
+    const byPage = new Map();
     for (const doubt of doubts) {
-      for (const term of doubt.terms) {
-        if (!byTerm.has(term)) byTerm.set(term, []);
-        byTerm.get(term).push(doubt);
-      }
+      if (!byPage.has(doubt.pageIndex)) byPage.set(doubt.pageIndex, []);
+      byPage.get(doubt.pageIndex).push(doubt);
     }
-    const spotCount = doubts.length;
+    const work = [];
+    for (const [pageIndex, list] of byPage) {
+      for (const band of bandsFor(list)) work.push({ pageIndex, band });
+    }
 
     let done = 0;
     state.paused = false;
     busy(true, 'Working…');
-    const units = [...byTerm.values()].reduce((n, list) => n + list.length, 0);
-    legs([{ key: 'check', label: thorough ? 'Checking everywhere' : 'Checking spots',
-             total: units }]);
+    legs([{ key: 'check', label: thorough ? 'Re-reading everywhere' : 'Re-reading spots',
+             total: work.length }]);
     allowPause();
 
     const found = [];
+    // A doubt is settled either way: the term turns up in the closer read, or
+    // the band read cleanly and the term is not in it. The second is the half
+    // that makes the list usable — a spot the reader has now looked at twice
+    // and seen ordinary words in is not a spot worth showing anybody.
+    const settled = new Set();
     try {
-      for (const [term, spots] of byTerm) {
-        const faces = thorough ? TextImage.FACES : TextImage.FALLBACK_FACES;
-        const ready = TextImage.templatesFor(term, faces)
-          .map(t => ImageSearch.prepareTemplate(t, {}))
-          .filter(Boolean);
-        if (!ready.length) { done += spots.length; continue; }
+      for (const unit of work) {
+        if (state.paused) break;
+        const page = state.pages[unit.pageIndex];
+        if (!page) { done++; leg('check', done); continue; }
+        const crop = bandCanvas(page, unit.band);
+        if (!crop) { done++; leg('check', done); continue; }
 
-        for (const spot of spots) {
-          if (state.paused) break;
-          const page = state.pages[spot.pageIndex];
-          if (!page) { done++; continue; }
-          // Room around the doubt: the real word may run past the box OCR drew
-          // around its misreading of it.
-          const padX = Math.max(24, spot.rect.h * 4);
-          const padY = Math.max(14, spot.rect.h * 2);
-          const region = {
-            x: Math.max(0, Math.round(spot.rect.x - padX)),
-            y: Math.max(0, Math.round(spot.rect.y - padY)),
-            w: 0, h: 0,
-          };
-          region.w = Math.min(page.source.width - region.x, Math.round(spot.rect.w + padX * 2));
-          region.h = Math.min(page.source.height - region.y, Math.round(spot.rect.h + padY * 2));
-          if (region.w < 12 || region.h < 12) { done++; continue; }
-
-          const gray = ImageSearch.grayFor(page);
-          const sub = Match.crop(gray, page.source.width, page.source.height, region);
-          for (const prepared of ready) {
-            const hits = ImageSearch.searchPage(sub, region.w, region.h,
-              { ...prepared, smallText: true }, { threshold: wordBarFor(term) });
-            for (const hit of hits.matches) {
-              found.push({ term, pageIndex: spot.pageIndex, doubtId: spot.id,
-                rect: { x: hit.x + region.x, y: hit.y + region.y, w: hit.w, h: hit.h },
-                score: hit.score });
-            }
+        const items = await Ocr.readPage(crop.canvas);
+        const { text, items: placed } = Ocr.stitch(items);
+        const spans = Detect.resolveOverlaps(Detect.findTerms(text, state.terms));
+        for (const span of spans) {
+          for (const item of placed) {
+            if (item.start >= span.end || item.end <= span.start) continue;
+            found.push({
+              term: span.term, pageIndex: unit.pageIndex,
+              rect: { x: item.rect.x + crop.x, y: item.rect.y + crop.y,
+                      w: item.rect.w, h: item.rect.h },
+            });
           }
-          done++;
-          leg('check', done);
-          await (window.BlindedSchedule
-            ? window.BlindedSchedule.nextTask()
-            : new Promise(r => setTimeout(r, 0)));
         }
+        // "Read cleanly" means it came back looking like a line of prose, not
+        // like one salvaged fragment. Two confident words rather than one: a
+        // crop too narrow to hold the word can still yield a single neighbour
+        // read well, and discharging a doubt on that is exactly the false
+        // reassurance this whole prompt exists to avoid. A band that returns
+        // nothing has told us nothing, and its doubts stand.
+        const legible = placed.filter(i =>
+          /[A-Za-z]{2,}/.test(i.str) && i.confidence >= 70).length >= 2;
+        if (legible || spans.length) {
+          for (const doubt of unit.band.doubts) settled.add(doubt.id);
+        }
+        done++;
+        leg('check', done);
+        await (window.BlindedSchedule
+          ? window.BlindedSchedule.nextTask()
+          : new Promise(r => setTimeout(r, 0)));
       }
     } finally {
       busy(false);
     }
 
-    // Anything found becomes an ordinary proposal, and the doubt it answered
-    // stops being one. Both faces looking at the same spot is one find, not
-    // two, so they are folded together before anything is proposed.
-    const answered = new Set();
+    // Two bands overlapping the same word is one find, not two.
     const merged = [];
     for (const pageIndex of new Set(found.map(f => f.pageIndex))) {
       const mine = found.filter(f => f.pageIndex === pageIndex);
-      const kept = Match.suppress(mine.map(f => ({ ...f.rect, score: f.score, ref: f })), 0.3);
+      const kept = Match.suppress(mine.map(f => ({ ...f.rect, score: 1, ref: f })), 0.3);
       for (const box of kept) merged.push(box.ref);
     }
     for (const hit of merged) {
       const page = state.pages[hit.pageIndex];
       if (!page) continue;
-      answered.add(hit.doubtId);
       page.imageHits.push({
-        id: 'shape:' + hit.term + ':' + hit.pageIndex + ':'
+        id: 'reread:' + hit.term + ':' + hit.pageIndex + ':'
           + Math.round(hit.rect.x) + ':' + Math.round(hit.rect.y),
-        term: hit.term, rect: hit.rect, score: hit.score, byShape: true,
+        term: hit.term, rect: hit.rect, score: 1, read: true,
       });
     }
-    state.doubts = state.doubts.filter(d => !answered.has(d.id));
+    state.doubts = state.doubts.filter(d => !settled.has(d.id));
     if (thorough) state.thoroughDone = true;
     state.doubtsChecked = true;
     markDuplicates();
@@ -754,7 +809,7 @@
     renderCounts();
     redrawAll();
     refreshApply();
-    return found.length;
+    return merged.length;
   }
 
   // The prompt. Deliberately factual and conditional: it names how many spots
@@ -776,14 +831,13 @@
       + (pages > 1 ? ' across ' + pages + ' pages' : '')
       + ', outlined in amber. Most will be nothing, but one could be '
       + terms.map(t => '"' + t + '"').join(' or ')
-      + ' misread. A slower check by shape can settle it.';
+      + ' misread. Reading each of them again on its own can settle it.';
     el('doubtcheck').textContent = count === 1
-      ? 'Check that spot' : 'Check those ' + count + ' spots';
+      ? 'Re-read that spot' : 'Re-read those ' + count + ' spots';
 
-    // The wider sweep: everywhere the reader was unsure at all, in every
-    // typeface rather than two. Its cost is stated because it is the whole
-    // reason it is a separate button — measured at roughly a third of a second
-    // per spot with two faces, and it uses four times as many.
+    // The wider sweep: everywhere the reader was unsure at all, rather than
+    // only where it was unsure in a way that looks like the word. Its cost is
+    // stated because it is the whole reason it is a separate button.
     const everywhere = findDoubts(true).length;
     const extra = Math.max(0, everywhere - count);
     const wider = el('doubtall');
@@ -791,15 +845,15 @@
     wider.hidden = extra === 0;
     widerNote.hidden = extra === 0;
     if (extra === 0) return;
-    wider.textContent = 'Check everywhere instead';
-    // Every spot is searched for every term it could be, so the work is spots
-    // times terms — measured at a little under half a second each with all
-    // eight typefaces: 35 spots and two terms took 32 seconds.
-    const seconds = Math.round(everywhere * Math.max(1, state.terms.length) * 0.45);
-    widerNote.textContent = 'Or check all ' + everywhere + ' places the reader was '
-      + 'unsure of, in every typeface — including ' + extra + ' that do not look '
-      + 'like the word. Slower: about ' + describeTime(seconds) + ', and still '
-      + 'no guarantee.';
+    wider.textContent = 'Re-read everywhere instead';
+    // Spots on the same line share one read, so the work is bands rather than
+    // spots — measured at eight doubts to four bands, and about a tenth of a
+    // second a band. Every term is looked for in the same read, so this does
+    // not multiply by the number of words typed.
+    const seconds = Math.round(everywhere * 0.5 * 0.1);
+    widerNote.textContent = 'Or re-read all ' + everywhere + ' places the reader was '
+      + 'unsure of — including ' + extra + ' that do not look like the word. '
+      + 'Slower: about ' + describeTime(seconds) + ', and still no guarantee.';
   }
 
   function describeTime(seconds) {
@@ -2234,7 +2288,7 @@
     sensitivity, wordSensitivity, wordBarFor,
     applyRedaction, markPending, plannedCount, pendingTemplates, termsNeedingPictures,
     readPages, matchOcr, ocrPending, ocrMatchStale, showWordControls,
-    findDoubts, checkDoubts, renderDoubts, couldBeTerm, widthCouldHold,
+    findDoubts, checkDoubts, renderDoubts, couldBeTerm, widthCouldHold, bandsFor,
     redrawAll, legs, leg, busyNote,
     describeTime,
     busy, pageProgress, requestPause,

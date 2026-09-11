@@ -1527,6 +1527,72 @@ try {
     check('only boxes that could hold the word become doubts',
       applied.length === 1 && applied[0] === 'CRW)', JSON.stringify(applied));
 
+    // The band. Everything about the re-read depends on the crop being about
+    // one line tall: measured on a real page, a 58 pixel band read the word at
+    // every width from 210 to 690 pixels, and bands of 94 and 158 pixels read
+    // nothing at all. So height is asserted tightly and width is not.
+    const bands = await page.evaluate(() => {
+      const B = window.Blinded;
+      const doubt = (id, x, y) => ({ id, pageIndex: 0, terms: ['KNW'], read: 'ae',
+        confidence: 20, rect: { x, y, w: 90, h: 40 } });
+      const sameLine = B.bandsFor([doubt('a', 1090, 843), doubt('b', 1273, 842)]);
+      // Adjacent lines, not distant ones: two doubts far apart would never
+      // merge however loose the rule, so the gap here is one line.
+      const stacked = B.bandsFor([doubt('a', 1090, 798), doubt('b', 1090, 843)]);
+      const one = B.bandsFor([doubt('a', 1090, 843)])[0];
+      return {
+        sameLine: sameLine.length,
+        sameLineHeight: Math.round(sameLine[0].h),
+        sameLineHolds: sameLine[0].doubts.length,
+        stacked: stacked.length,
+        height: Math.round(one.h),
+        width: Math.round(one.w),
+      };
+    });
+    check('two doubts on one line share a single band',
+      bands.sameLine === 1 && bands.sameLineHolds === 2, JSON.stringify(bands));
+    check('and merging them does not make the band any taller',
+      bands.sameLineHeight === bands.height, JSON.stringify(bands));
+    check('two doubts on different lines never share a band',
+      bands.stacked === 2, JSON.stringify(bands));
+    // The measured cliff was at 94 pixels for a 40 pixel word. Anything close
+    // to that reads as a picture and comes back empty.
+    check('a band stays about one line tall',
+      bands.height <= 40 * 2, JSON.stringify(bands));
+    check('while being given room either side to hold the whole word',
+      bands.width >= 90 * 3, JSON.stringify(bands));
+
+    // And the whole point of it: a doubt re-read on its own is a doubt
+    // answered. Run against a real rendered page rather than a stub, because
+    // what is being tested is whether the recogniser reads a crop of a real
+    // page — which no amount of faked items would establish.
+    const settled = await page.evaluate(async () => {
+      const B = window.Blinded;
+      const p = B.state.pages[0];
+      // The fixture's fifth line, in canvas pixels: 13pt text on a 792pt page
+      // with a 740pt first baseline and 14pt leading.
+      const scale = p.source.width / 612;
+      const baseline = (792 - (740 - 4 * 14)) * scale;
+      const h = 10 * scale;
+      B.state.terms = ['Amphitheatre'];
+      B.state.doubts = [{ id: 'd-real', pageIndex: 0, terms: ['Amphitheatre'],
+        read: 'ae', confidence: 22,
+        rect: { x: 190 * scale, y: baseline - h, w: 30 * scale, h } }];
+      p.imageHits = [];
+      const marks = await B.checkDoubts({});
+      const out = { marks, left: B.state.doubts.length,
+        hit: p.imageHits.some(m => m.term === 'Amphitheatre') };
+      p.imageHits = [];
+      B.state.doubts = [];
+      B.state.terms = [];
+      B.renderDoubts();
+      return out;
+    });
+    check('re-reading a doubtful spot finds the word that was there',
+      settled.marks >= 1 && settled.hit === true, JSON.stringify(settled));
+    check('and the spot stops being doubtful',
+      settled.left === 0, JSON.stringify(settled));
+
     // Amber, not red: red says "this will be covered", and a doubt is the
     // opposite of a decision. Checked as pixels, because the distinction only
     // exists if it reaches the screen.
