@@ -147,7 +147,7 @@ try {
   // ---------- detection ----------
   const kinds = await page.evaluate(() =>
     window.Blinded.state.pages[0].findings.map(f => f.kind));
-  for (const kind of ['email', 'phone', 'card', 'ssn']) {
+  for (const kind of ['email', 'phone', 'card']) {
     check('the page view detected a ' + kind, kinds.includes(kind), kinds.join(','));
   }
 
@@ -520,7 +520,7 @@ try {
   check('the typed name is suggested as a person',
     legendRows.some(([label]) => label === 'P1'), JSON.stringify(legendRows));
   check('the detectors get their own kinds',
-    ['E1', 'PH1', 'C1', 'S1'].every(want =>
+    ['E1', 'PH1', 'C1', 'C2'].every(want =>
       legendRows.some(([label]) => label === want)), JSON.stringify(legendRows));
   check('every suggested placeholder is short enough for a narrow bar',
     legendRows.every(([label]) => label.length <= 4), JSON.stringify(legendRows));
@@ -1193,6 +1193,78 @@ try {
     bars.at45.word >= 0.35, JSON.stringify(bars.at45));
   check('the slider reaches below the score the missed heading got',
     bars.min / 100 < 0.598, String(bars.min));
+
+  // ---------- the "?" hints ----------
+  //
+  // These used to be title attributes, which wait a second or two, never
+  // appear on a touch screen, and cannot be reached from the keyboard — so
+  // they read as decoration that does nothing. What matters is that the text
+  // actually becomes visible, so that is what is asserted, not that a handler
+  // is attached.
+  const whyCount = await page.evaluate(() => document.querySelectorAll('.why').length);
+  check('the panel still has its hints', whyCount === 4, String(whyCount));
+  check('every hint carries text to show',
+    await page.evaluate(() => [...document.querySelectorAll('.why')]
+      .every(b => (b.getAttribute('data-tip') || '').length > 20)));
+  check('no hint is left relying on a title tooltip',
+    await page.evaluate(() => ![...document.querySelectorAll('.why')].some(b => b.hasAttribute('title'))));
+  check('each hint is a real button, so a keyboard can reach it',
+    await page.evaluate(() => [...document.querySelectorAll('.why')]
+      .every(b => b.tagName === 'BUTTON')));
+
+  const shown = await page.evaluate(async () => {
+    const b = document.querySelector('.why');
+    b.dispatchEvent(new PointerEvent('pointerenter', { bubbles: true }));
+    const bubble = document.querySelector('.tipbubble');
+    if (!bubble) return { visible: false };
+    const r = bubble.getBoundingClientRect();
+    return {
+      visible: !bubble.hidden && r.width > 0 && r.height > 0,
+      text: bubble.textContent,
+      matches: bubble.textContent === b.getAttribute('data-tip'),
+      onScreen: r.left >= 0 && r.top >= 0
+        && r.right <= window.innerWidth && r.bottom <= window.innerHeight,
+    };
+  });
+  check('hovering a hint shows it', shown.visible, JSON.stringify(shown));
+  check('and it shows that hint, not another', shown.matches, JSON.stringify(shown));
+  check('the bubble stays on screen', shown.onScreen, JSON.stringify(shown));
+
+  const afterLeave = await page.evaluate(() => {
+    document.querySelector('.why').dispatchEvent(new PointerEvent('pointerleave', { bubbles: true }));
+    const bubble = document.querySelector('.tipbubble');
+    return bubble ? bubble.hidden : 'no bubble';
+  });
+  check('moving away hides it again', afterLeave === true);
+
+  // A touch screen has no hover at all, so the tap path is the only one that
+  // works there — and it has to close again, or the hint sticks.
+  const tapped = await page.evaluate(() => {
+    const b = document.querySelectorAll('.why')[1];
+    b.click();
+    const shownNow = document.querySelector('.tipbubble');
+    const open = Boolean(shownNow) && !shownNow.hidden;
+    b.click();
+    const after = document.querySelector('.tipbubble');
+    return { open, closed: Boolean(after) && after.hidden };
+  });
+  check('tapping a hint opens it, for screens with no hover', tapped.open, JSON.stringify(tapped));
+  check('and tapping it again closes it', tapped.closed, JSON.stringify(tapped));
+
+  // The hints sit inside <label>s. A click that reached the label would
+  // silently toggle the checkbox the hint is explaining.
+  const toggled = await page.evaluate(() => {
+    const box = document.getElementById('medium');
+    const before = box.checked;
+    document.querySelector('#medium').closest('label').querySelector('.why').click();
+    return { before, after: box.checked };
+  });
+  check('asking what a checkbox means does not tick it',
+    toggled.before === toggled.after, JSON.stringify(toggled));
+  await page.evaluate(() => {
+    const bubble = document.querySelector('.tipbubble');
+    if (bubble) bubble.hidden = true;
+  });
 
   // ---------- the footer link ----------
   //

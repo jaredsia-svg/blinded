@@ -26,8 +26,8 @@ will do, and `npm start` is one.
 - **Gone, not covered.** Each page is rebuilt from pixels, so there is nothing
   underneath the bars — no text, no fonts, no annotations, and none of the
   original author, title or history.
-- **It finds them for you.** Emails, cards, IBANs and Social Security numbers,
-  validated against real checksums rather than guessed at. Type any name or
+- **It finds them for you.** Emails, cards and IBANs, validated against real
+  checksums rather than guessed at. Type any name or
   word and every occurrence is caught.
 - **Logos and pictures too.** Pick a logo, signature or stamp and every other
   copy is found across the document, at any size and in any colours. Typed
@@ -84,7 +84,6 @@ hundreds of false positives trains you to approve everything, which loses both.
 | Email addresses | structure |
 | Payment card numbers | Luhn checksum |
 | Bank accounts (IBAN) | mod-97 checksum |
-| US Social Security numbers | issued-range rules |
 | Phone numbers | E.164 and NANP shapes |
 | IP addresses | octet range |
 | Web addresses | scheme and host |

@@ -451,8 +451,11 @@
   function reportSearch(found, threshold) {
     const hint = el('pickhint');
     if (found.matches.length) {
-      hint.textContent = 'Draw a box around a logo, stamp, signature or face. '
-        + 'Every place it appears again is found and proposed.';
+      hint.textContent = found.matches.length === 1
+        ? 'Found once. Every copy is proposed, never applied on its own.'
+        : 'Found ' + found.matches.length + ' times. Every copy is proposed, '
+          + 'never applied on its own.';
+      hint.hidden = false;
       hint.classList.remove('warnhint');
       return;
     }
@@ -462,6 +465,7 @@
       ? 'No match at ' + bar.toFixed(2) + '. The closest thing scored '
         + near + ' — lower the sensitivity below that to include it.'
       : 'Nothing resembling that was found anywhere in the document.';
+    hint.hidden = false;
     hint.classList.add('warnhint');
   }
 
@@ -970,7 +974,7 @@
     state.mode = mode;
     const button = el('pick');
     button.classList.toggle('on', mode === 'pick');
-    button.textContent = mode === 'pick' ? 'Cancel — drag a box around a logo' : 'Pick a logo to match';
+    button.textContent = mode === 'pick' ? 'Cancel — drag a box around the image' : 'Select an image to redact';
     for (const page of state.pages) {
       if (page.canvas) page.canvas.parentElement.classList.toggle('picking', mode === 'pick');
     }
@@ -1327,6 +1331,85 @@
   // along with everything in it, is gone.
   window.addEventListener('dragover', e => e.preventDefault());
   window.addEventListener('drop', e => e.preventDefault());
+
+  // ---------- the "?" hints ----------
+  //
+  // These were title attributes. A title tooltip waits a second or two before
+  // it appears, never appears at all on a touch screen, and cannot be reached
+  // from the keyboard — so the hints read as decoration that does nothing.
+  //
+  // One bubble is shared and parented to <body> rather than to each button,
+  // because the panel scrolls and a tooltip inside it gets clipped by its own
+  // container. That means placing it in viewport coordinates, and closing it
+  // when anything moves underneath it.
+  const tip = (() => {
+    let bubble = null;
+    let owner = null;
+
+    const close = () => {
+      if (!owner) return;
+      owner.setAttribute('aria-expanded', 'false');
+      owner = null;
+      if (bubble) bubble.hidden = true;
+    };
+
+    const open = button => {
+      const text = button.getAttribute('data-tip');
+      if (!text) return;
+      if (!bubble) {
+        bubble = document.createElement('div');
+        bubble.className = 'tipbubble';
+        bubble.setAttribute('role', 'tooltip');
+        bubble.id = 'tipbubble';
+        document.body.appendChild(bubble);
+      }
+      bubble.textContent = text;
+      bubble.hidden = false;
+      button.setAttribute('aria-describedby', bubble.id);
+      button.setAttribute('aria-expanded', 'true');
+      owner = button;
+
+      // Measure after filling it, then keep it on screen. Anchored under the
+      // button where there is room and above it where there is not, so a hint
+      // on the last row of the panel is not drawn off the bottom.
+      const at = button.getBoundingClientRect();
+      const size = bubble.getBoundingClientRect();
+      const margin = 8;
+      let left = at.left + at.width / 2 - size.width / 2;
+      left = Math.max(margin, Math.min(left, window.innerWidth - size.width - margin));
+      let top = at.bottom + 6;
+      if (top + size.height > window.innerHeight - margin) top = at.top - size.height - 6;
+      bubble.style.left = Math.round(left) + 'px';
+      bubble.style.top = Math.round(Math.max(margin, top)) + 'px';
+    };
+
+    return { open, close, isOpen: button => owner === button };
+  })();
+
+  for (const button of document.querySelectorAll('.why')) {
+    button.setAttribute('aria-expanded', 'false');
+    // Hover and focus for a pointer and a keyboard; click for a touch screen,
+    // which has neither. Click also has to close an already-open hint, or
+    // tapping one on a phone leaves it stuck open.
+    button.addEventListener('pointerenter', () => tip.open(button));
+    button.addEventListener('pointerleave', () => tip.close());
+    button.addEventListener('focus', () => tip.open(button));
+    button.addEventListener('blur', () => tip.close());
+    button.addEventListener('click', event => {
+      event.preventDefault();
+      // A "?" inside a <label> would otherwise toggle the checkbox it sits
+      // beside, so the click stops here.
+      event.stopPropagation();
+      if (tip.isOpen(button)) tip.close(); else tip.open(button);
+    });
+  }
+  window.addEventListener('keydown', event => { if (event.key === 'Escape') tip.close(); });
+  document.addEventListener('pointerdown', event => {
+    if (!event.target.closest('.why')) tip.close();
+  });
+  // Anything that moves the anchor invalidates the placement.
+  window.addEventListener('scroll', () => tip.close(), true);
+  window.addEventListener('resize', () => tip.close());
 
   // Refreshing loses the document, and there is no recovering it.
   //

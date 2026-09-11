@@ -69,11 +69,18 @@ check('a separated number is reported at high confidence', (() => {
 
 check('finds a Luhn-valid card', kindsIn('card 4242 4242 4242 4242 ok').includes('card'));
 check('ignores a sixteen-digit non-card', !kindsIn('ref 1234 5678 9012 3456 ok').includes('card'));
-check('finds a dashed SSN', kindsIn('ssn 123-45-6789').includes('ssn'));
-check('rejects SSN area 666', !kindsIn('ssn 666-45-6789').includes('ssn'));
-check('rejects SSN serial 0000', !kindsIn('ssn 123-45-0000').includes('ssn'));
-check('finds a bare SSN only when labelled', kindsIn('SSN: 123456789').includes('ssn'));
-check('ignores nine bare digits with no label', !kindsIn('order 123456789 shipped').includes('ssn'));
+// The US Social Security detector was removed: it is one country's identifier
+// in a tool that is not otherwise US-specific, and a nine-digit rule earns its
+// keep only where those numbers actually appear. Anyone who needs them can
+// type the number into the terms box like any other string.
+check('no detector claims to find Social Security numbers',
+  !Detect.DETECTORS.some(d => d.kind === 'ssn'),
+  Detect.DETECTORS.map(d => d.kind).join(', '));
+check('and a Social Security number is no longer picked up on its own',
+  Detect.findAll('ssn 123-45-6789').length === 0,
+  JSON.stringify(Detect.findAll('ssn 123-45-6789').map(s => s.kind)));
+check('while a typed term still covers one for anyone who wants it',
+  Detect.findAll('ssn 123-45-6789', { terms: ['123-45-6789'] }).length === 1);
 check('finds an IPv4 address', kindsIn('host 192.168.1.44 up').includes('ip'));
 check('rejects an out-of-range dotted quad', !kindsIn('build 999.1.1.1 failed').includes('ip'));
 check('finds a URL', kindsIn('see https://example.com/a?token=abc for more').includes('url'));
