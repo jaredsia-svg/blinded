@@ -571,9 +571,16 @@
       : state.applied ? 'Redacted' : 'Redact';
     button.classList.toggle('done', state.applied);
     button.title = state.applied ? 'Press to uncover and look at the marks again' : '';
-    button.disabled = !state.searched
+    // Not while the comprehensive check is running: it is a pass over the same
+    // pages, and the two cannot both own the document. Stopping it is a button
+    // in the panel, not a dialog thrown in front of this one.
+    button.disabled = state.sweepRunning || (!state.searched
       ? state.kind !== 'text' && !state.pages.length
-      : !state.applied && marks === 0 && unsearched === 0;
+      : !state.applied && marks === 0 && unsearched === 0);
+    if (state.sweepRunning) {
+      button.title = 'The comprehensive check is running \u2014 let it finish, '
+        + 'or stop it in the panel';
+    }
 
     el('export').disabled = !state.applied || marks === 0;
 
@@ -583,7 +590,10 @@
 
     const note = el('exportnote');
     const unread = state.pages.filter(page => !page.ocrItems).length;
-    if (!state.searched) {
+    if (state.sweepRunning) {
+      note.textContent = 'The comprehensive check is running. Let it finish, or '
+        + 'stop it in the panel.';
+    } else if (!state.searched) {
       note.textContent = state.terms.length || state.templates.length
         ? 'Press Search to find them.'
         : 'Press Search to find what is in this document.';
@@ -624,28 +634,13 @@
   // Runs every search that has not run yet and proposes what it found. This is
   // the first of the three presses; it does not cover anything.
   async function runSearch() {
-    // The thorough check and a redaction are two passes over the same pages,
-    // and they cannot both own the document.
-    //
-    // Left to race, the check would spawn its own workers alongside the
-    // redaction's, and — worse — would finish afterwards and call markPending,
-    // putting the document back into review seconds after the reviewer had
-    // just redacted it. So the check stands down, and it is asked rather than
-    // assumed, because stopping it throws away however many pages it had left.
-    if (state.sweepRunning) {
-      const ok = await confirmAction({
-        title: 'Stop the thorough check?',
-        body: 'The thorough check is still running. Redacting now stops it at '
-          + 'page ' + (state.sweepDone + 1) + ' of ' + state.sweepTotal
-          + '. Anything it has already found is kept, and you can start it '
-          + 'again afterwards.',
-        confirmLabel: 'Stop it and redact',
-      });
-      if (!ok) return;
-      // Waited for, not just signalled: its marks have to be on the page
-      // before the redaction decides what to cover.
-      await settleSweep();
-    }
+    // The comprehensive check and a search are two passes over the same pages,
+    // and they cannot both own the document. Pressing Search used to put a
+    // dialog in the way offering to stop the check — a question asked at the
+    // worst moment, about work the reviewer had not been thinking about. The
+    // button is simply not pressable while the check runs, and the panel says
+    // why and offers the Stop button that was always there.
+    if (state.sweepRunning) return;
 
     state.redacting = true;
     state.paused = false;
@@ -1706,6 +1701,11 @@
       id: 'tpl' + (nextTemplateId++),
       cut,
       rect,
+      // Which page it was cut from. Without this a draft could record where a
+      // logo was but not what it was cut out of, so restoring one silently
+      // skipped every picked image — and there is now a second reader of it,
+      // the full-size view behind the thumbnail.
+      pageIndex: page.index,
       thumbnail: thumbnailOf(page.source, rect),
       matches: 0,
       // Not searched yet, and deliberately so: sweeping the document here is
@@ -1750,6 +1750,43 @@
 
   // A small picture of what was picked, so a list of three logos is
   // distinguishable at a glance.
+  // The picked image, at the size it actually is on the page.
+  //
+  // The thumbnail in the panel is 42 pixels wide — enough to tell two picks
+  // apart, not enough to check that the right thing was picked. This draws the
+  // same region from the page it was cut from, scaled up if it is small and
+  // down only if it would not otherwise fit.
+  function showTemplate(templateId) {
+    const template = state.templates.find(t => t.id === templateId);
+    if (!template) return;
+    const page = state.pages[template.pageIndex];
+    const canvas = el('imagefull');
+    const rect = template.rect;
+    const wide = Math.max(1, Math.round(rect.w));
+    const tall = Math.max(1, Math.round(rect.h));
+
+    // Small picks are the common case — a stamp, a signature — and showing one
+    // at its own size in a 560px box would answer nothing.
+    const room = 500;
+    const scale = Math.min(4, Math.max(1, room / wide));
+    canvas.width = Math.round(wide * scale);
+    canvas.height = Math.round(tall * scale);
+    const ctx = canvas.getContext('2d', { alpha: false });
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    if (page && page.source) {
+      ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(page.source, rect.x, rect.y, wide, tall,
+        0, 0, canvas.width, canvas.height);
+    }
+
+    el('imagenote').textContent = wide + ' by ' + tall + ' pixels, from page '
+      + ((template.pageIndex || 0) + 1)
+      + (scale > 1 ? ', shown ' + (Math.round(scale * 10) / 10) + ' times larger.' : '.');
+    el('imagebox').hidden = false;
+    el('imageclose').focus();
+  }
+
   function thumbnailOf(source, rect) {
     const canvas = document.createElement('canvas');
     const scale = Math.min(1, 84 / Math.max(rect.w, rect.h));
@@ -1815,6 +1852,11 @@
       remove.textContent = '\u00d7';
       remove.title = 'Stop matching this image';
       remove.addEventListener('click', () => removeTemplate(template.id));
+
+      // The thumbnail is the way to a proper look at what was picked.
+      template.thumbnail.title = 'See the picked image full size';
+      template.thumbnail.style.cursor = 'zoom-in';
+      template.thumbnail.onclick = () => showTemplate(template.id);
 
       row.append(template.thumbnail, name, count, remove);
       host.append(row);
@@ -2804,6 +2846,9 @@
     state.sweepStopped = false;
     sweepProgress(0, state.pages.length);
     renderSweep();
+    // The Search button greys out for as long as this runs, so it has to be
+    // told the moment it starts and not only when it ends.
+    refreshApply();
 
     let results;
     try {
@@ -3035,6 +3080,12 @@
   });
   el('export').addEventListener('click', exportFile);
   el('savedraft').addEventListener('click', saveDraft);
+  el('imageclose').addEventListener('click', () => { el('imagebox').hidden = true; });
+  el('imagebox').addEventListener('click', event => {
+    // Clicking the backdrop closes it, the way every other overlay of this
+    // shape behaves.
+    if (event.target === el('imagebox')) el('imagebox').hidden = true;
+  });
 
   // The answers are a view, not a page.
   //
@@ -3088,7 +3139,7 @@
     undoLast, undoStack, applyLabels, labelItems, legendText, downloadKey,
     sensitivity, wordSensitivity, wordBarFor, setZoom, stepZoom, ZOOM_STEPS,
     MARK_GREEN,
-    cleanName, coveredText, askName, redactedName, confirmAction,
+    cleanName, coveredText, askName, redactedName, confirmAction, showTemplate,
     addTerm, dropTerm,
     saveDraft, draftData, restoreDraft, looksLikeDraft, fingerprint,
     occurrencesFor, placesFor, renderTermCounts, renderTemplates, goToPage,

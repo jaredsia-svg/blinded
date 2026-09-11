@@ -6,7 +6,7 @@
 <title>Blinded – Efficient redaction for your most sensitive documents, all done locally</title>
 <meta name="description" content="Redact PDFs, images and text in your browser. The file never leaves your machine.">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="app.css?v=7488ec94">
+<link rel="stylesheet" href="app.css?v=73657755">
 </head>
 <body>
 
@@ -317,7 +317,18 @@
 
 </section>
 
-  <div id="confirmbox" class="busy" hidden>
+  <div id="imagebox" class="busy" hidden>
+  <div class="busy-inner imageinner">
+    <h2 class="namehead">The image you picked</h2>
+    <div class="imageframe"><canvas id="imagefull"></canvas></div>
+    <p class="hint" id="imagenote"></p>
+    <div class="namego">
+      <button type="button" id="imageclose" class="primary">Close</button>
+    </div>
+  </div>
+</div>
+
+<div id="confirmbox" class="busy" hidden>
   <div class="busy-inner nameinner">
     <h2 class="namehead" id="confirmhead">Are you sure?</h2>
     <p class="confirmbody" id="confirmbody"></p>
@@ -369,7 +380,7 @@
 <script src="lib/pdfwrite.js?v=4b977425"></script>
 <script src="lib/pdfread.js?v=624c5ef9"></script>
 <script src="lib/render.js?v=7bf6e0a9"></script>
-<script src="app.js?v=fdedee7c"></script>
+<script src="app.js?v=4fa9c318"></script>
 <script type="module">
   // pdf.js ships as an ES module; everything else here is a classic script, so
   // it is bridged onto the global the other modules already look for. Both the

@@ -1040,6 +1040,50 @@ try {
   check('and one above double it',
     matched.scales.some(w => w > 60 * 2 * 1.8), JSON.stringify(matched.scales));
   check('the decoy mark is not matched', matched.total === 4);
+  // The thumbnail is 42 pixels wide — enough to tell two picks apart, not
+  // enough to check that the right thing was picked.
+  const bigger = await page.evaluate(() => {
+    const B = window.Blinded;
+    const template = B.state.templates[0];
+    const thumb = document.querySelector('#templates canvas');
+    const closed = document.getElementById('imagebox').hidden;
+    thumb.click();
+    const shot = document.getElementById('imagefull');
+    const out = {
+      closed,
+      open: !document.getElementById('imagebox').hidden,
+      // Bigger than the thumbnail, and drawn rather than left blank.
+      thumbWidth: thumb.width,
+      shownWidth: shot.width,
+      note: document.getElementById('imagenote').textContent,
+      // Which page it came from, which a template did not used to record —
+      // so a draft could say where a logo was but not what it was cut out of.
+      pageIndex: template.pageIndex,
+      inked: (() => {
+        const data = shot.getContext('2d').getImageData(0, 0, shot.width, shot.height).data;
+        for (let i = 0; i < data.length; i += 4) {
+          if (data[i] < 200 || data[i + 1] < 200 || data[i + 2] < 200) return true;
+        }
+        return false;
+      })(),
+    };
+    document.getElementById('imageclose').click();
+    out.closedAgain = document.getElementById('imagebox').hidden;
+    return out;
+  });
+  check('the picked image is not shown full size until it is asked for',
+    bigger.closed === true, JSON.stringify(bigger));
+  check('clicking the thumbnail shows it', bigger.open === true, JSON.stringify(bigger));
+  check('and larger than the thumbnail was',
+    bigger.shownWidth > bigger.thumbWidth, JSON.stringify(bigger));
+  check('with the image actually drawn in it, not an empty box',
+    bigger.inked === true, JSON.stringify(bigger));
+  check('it says which page the image came from',
+    /from page \d+/.test(bigger.note), bigger.note);
+  check('which means a template records the page it was cut from',
+    typeof bigger.pageIndex === 'number', JSON.stringify(bigger));
+  check('and it closes again', bigger.closedAgain === true, JSON.stringify(bigger));
+
   // The number is the answer; "found 4 times" beside a 4 said it twice.
   check('the picked logo is listed with its count',
     (await page.textContent('#templates .n')).trim() === '4',
@@ -2535,71 +2579,57 @@ try {
     check('and the page keeps painting while it runs',
       background.frames >= 5, JSON.stringify(background));
 
-    // Redacting while the check is running.
+    // Searching while the check is running.
     //
-    // Left to race, the two would spawn competing workers and — worse — the
-    // check would finish afterwards and call markPending, putting the document
-    // back into review seconds after the reviewer had just redacted it. So the
-    // check stands down first, and is asked about rather than killed silently.
+    // The two are passes over the same pages and cannot both own the document.
+    // This used to put a dialog in the way offering to stop the check — a
+    // question asked at the worst moment, about work the reviewer had not been
+    // thinking about. The button is simply not pressable until the check ends.
     const raced = await page.evaluate(async () => {
       const B = window.Blinded;
       const p = B.state.pages[0];
       B.state.terms = ['Parkway'];
-      B.state.applied = true;
+      B.state.searched = true;
       p.imageHits = [];
 
       const sweeping = B.runSweep();
-      // Press the button while it is still going.
-      const redaction = B.runSearch().then(() => B.coverMarks());
-      const asked = !document.getElementById('confirmbox').hidden;
-      const wording = document.getElementById('confirmbody').textContent;
-      document.getElementById('confirmyes').click();
-      await redaction;
-      await sweeping;
-      const out = {
-        asked, wording,
-        running: B.state.sweepRunning,
-        // The document must be redacted when the dust settles, not flipped
-        // back into review by the check landing late.
-        applied: B.state.applied,
+      await new Promise(r => setTimeout(r, 50));
+      const button = document.getElementById('apply');
+      const during = {
+        disabled: button.disabled,
+        title: button.title,
+        note: document.getElementById('exportnote').textContent,
+        // Pressing it anyway must do nothing at all.
+        asked: !document.getElementById('confirmbox').hidden,
       };
-      p.imageHits = [];
-      B.state.sweptTerms = [];
-      B.state.terms = [];
-      return out;
-    });
-    check('redacting during the check asks before stopping it',
-      raced.asked === true, JSON.stringify(raced));
-    check('and says what will be lost', /stops it at page/i.test(raced.wording || ''),
-      raced.wording);
-    check('the check is not left running afterwards',
-      raced.running === false, JSON.stringify(raced));
-    check('and the document stays redacted rather than being flipped back',
-      raced.applied === true, JSON.stringify(raced));
+      button.click();
+      await new Promise(r => setTimeout(r, 50));
+      const afterPress = { asked: !document.getElementById('confirmbox').hidden,
+                           running: B.state.sweepRunning };
 
-    // Declining leaves both alone.
-    const declined = await page.evaluate(async () => {
-      const B = window.Blinded;
-      B.state.terms = ['Parkway'];
-      B.state.applied = true;
-      const sweeping = B.runSweep();
-      // Not awaited before answering: the redaction is sitting on the
-      // question, so awaiting it here would wait for a click that has not
-      // happened yet and never return.
-      const redaction = B.applyRedaction();
-      const asked = !document.getElementById('confirmbox').hidden;
-      document.getElementById('confirmno').click();
-      await redaction;
-      const stillSweeping = B.state.sweepRunning;
       await B.settleSweep();
       await sweeping;
+      const after = { disabled: document.getElementById('apply').disabled,
+                      running: B.state.sweepRunning };
+      p.imageHits = [];
       B.state.sweptTerms = [];
       B.state.terms = [];
-      for (const p of B.state.pages) p.imageHits = [];
-      return { asked, stillSweeping };
+      return { during, afterPress, after };
     });
-    check('declining leaves the check running', declined.stillSweeping === true,
-      JSON.stringify(declined));
+    check('the search button is greyed out while the check runs',
+      raced.during.disabled === true, JSON.stringify(raced));
+    check('and says why', /comprehensive check is running/i.test(raced.during.title),
+      raced.during.title);
+    check('the panel says so too and points at the stop button',
+      /stop it in the panel/i.test(raced.during.note), raced.during.note);
+    check('no dialog is thrown in front of the reviewer',
+      raced.during.asked === false && raced.afterPress.asked === false,
+      JSON.stringify(raced));
+    check('and pressing it does not stop the check',
+      raced.afterPress.running === true, JSON.stringify(raced));
+    check('once the check ends the button comes back',
+      raced.after.disabled === false && raced.after.running === false,
+      JSON.stringify(raced));
 
     // And the check cannot be started on top of a redaction either.
     const blocked = await page.evaluate(async () => {
@@ -3433,18 +3463,17 @@ try {
                       searched: B.state.searched, running: B.state.sweepRunning,
                       canStop: !document.getElementById('sweepstop').hidden };
 
-      // Pressing Search now asks, and cancelling leaves it running.
-      const search = B.runSearch();
-      await new Promise(r => setTimeout(r, 60));
-      const asked = !document.getElementById('confirmbox').hidden;
-      document.getElementById('confirmno').click();
-      await search;
+      // The Search button is dead while the check runs, and pressing it
+      // changes nothing: the check keeps going and keeps its bar.
+      const button = document.getElementById('apply');
+      const greyed = button.disabled;
+      await B.runSearch();
       const declined = { running: B.state.sweepRunning, box: !box.hidden,
-                         bar: !bar.hidden };
+                         bar: !bar.hidden, greyed };
 
       await B.settleSweep();
       await sweeping;
-      return { started, after, asked, declined };
+      return { started, after, declined };
     });
 
     check('the check shows its progress when it starts',
@@ -3457,9 +3486,9 @@ try {
       during.after.searched === false, JSON.stringify(during));
     check('and it can still be stopped', during.after.canStop === true,
       JSON.stringify(during));
-    check('pressing Search asks before stopping it', during.asked === true,
-      JSON.stringify(during));
-    check('and declining leaves it running and on screen',
+    check('the Search button is greyed out while it runs',
+      during.declined.greyed === true, JSON.stringify(during));
+    check('and pressing it leaves the check running and on screen',
       during.declined.running === true && during.declined.bar === true,
       JSON.stringify(during));
   }

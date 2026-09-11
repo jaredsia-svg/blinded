@@ -756,3 +756,18 @@ body.reviewing .exportbar { position: static; flex: none; margin: 14px 0 18px; }
   margin: 0; font-size: 12.5px; color: var(--accent);
   background: #eef4ff; border-radius: var(--radius); padding: 8px 10px;
 }
+
+/* ---------- the picked image, full size ---------- */
+/*
+   The thumbnail is 42 pixels wide, which is enough to tell two picks apart and
+   not enough to check that the right thing was picked. Clicking it shows what
+   was actually cut out.
+*/
+.imageinner { max-width: 560px; text-align: left; background: #f4f6fa; border: 1px solid #dfe4ec; }
+.imageframe {
+  background: #fff; border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 12px; display: flex; align-items: center; justify-content: center;
+  max-height: 60vh; overflow: auto;
+}
+#imagefull { max-width: 100%; height: auto; display: block; image-rendering: auto; }
+.templates canvas { cursor: zoom-in; }
