@@ -11,7 +11,7 @@ import { dirname, extname, join, normalize, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { chromium } from 'playwright';
-import { buildTextPdf, buildLogoPdf, LOGO_PLACEMENTS,
+import { buildTextPdf, buildReadablePdf, buildLogoPdf, LOGO_PLACEMENTS,
   buildWordmarkPdf, WORDMARK_PLACEMENTS, WORDMARK_ASPECT,
   buildSmallLogoPdf, SMALL_LOGO_PLACEMENTS, WORDMARK_BOX,
   buildDoubleFoundPdf, DOUBLE_TERM } from './fixture.mjs';
@@ -48,6 +48,8 @@ const base = 'http://127.0.0.1:' + port + '/';
 
 const fixturePath = join(tmpdir(), 'blinded-fixture.pdf');
 writeFileSync(fixturePath, buildTextPdf());
+const readablePath = join(tmpdir(), 'blinded-readable.pdf');
+writeFileSync(readablePath, buildReadablePdf());
 const logoPath = join(tmpdir(), 'blinded-logo.pdf');
 writeFileSync(logoPath, buildLogoPdf());
 const doublePath = join(tmpdir(), 'blinded-double.pdf');
@@ -1286,7 +1288,7 @@ try {
     // view rather than assuming which one is showing.
     if (await page.isVisible('#view-review')) await page.click('#restart');
     await page.waitForSelector('#view-drop:not([hidden])');
-    await page.setInputFiles('#file', fixturePath);
+    await page.setInputFiles('#file', readablePath);
     await page.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
     await page.evaluate(() => {
       window.Blinded.state.useOcr = true;
@@ -1346,6 +1348,203 @@ try {
     check('and the box says so', fresh.box === true, JSON.stringify(fresh));
     check('the box and the state agree', fresh.box === fresh.state, JSON.stringify(fresh));
     check('reading is what does it', fresh.reading === true, JSON.stringify(fresh));
+  }
+
+  // ---------- one bar for both passes ----------
+  //
+  // Reading the pages and searching them for a picked image are separate jobs,
+  // but they are two passes over the same document, one after the other. Two
+  // bars filling in sequence reads as the first one having lied, so the work
+  // is counted once and both legs report into it.
+  {
+    if (await page.isVisible('#view-review')) await page.click('#restart');
+    await page.waitForSelector('#view-drop:not([hidden])');
+    await page.setInputFiles('#file', logoPath);
+    await page.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
+
+    const seen = await page.evaluate(async () => {
+      const B = window.Blinded;
+      const widths = [];
+      const texts = [];
+      // Watch the bar while a run goes on.
+      const watch = setInterval(() => {
+        const fill = document.getElementById('busy-fill');
+        const bar = document.getElementById('busy-bar');
+        if (!bar.hidden) {
+          widths.push(parseFloat(fill.style.width) || 0);
+          texts.push(document.getElementById('busy-text').textContent);
+        }
+      }, 60);
+      const wasOn = B.state.termImages;
+      B.state.termImages = false;         // a picked image only, no reading
+      await B.addTemplate(B.state.pages[0], { x: 40, y: 40, w: 120, h: 120 });
+      await B.applyRedaction();
+      clearInterval(watch);
+      const out = { widths, texts: [...new Set(texts)].slice(0, 4),
+                    templates: B.state.templates.length };
+      // Put back what the later sections expect to find.
+      B.state.termImages = wasOn;
+      return out;
+    });
+    check('an image search reports progress on the same bar',
+      seen.widths.length > 0, JSON.stringify(seen).slice(0, 200));
+    // Not just that a bar appeared: that it moved. Showing one and leaving it
+    // at nothing for the whole search is worse than showing none.
+    check('and the bar actually advances as pages are searched',
+      new Set(seen.widths).size > 1, JSON.stringify(seen.widths));
+    check('and reports it as pages, like the reader does',
+      seen.texts.every(t => /^Page \d+ of \d+$/.test(t)), JSON.stringify(seen.texts));
+    check('the bar only ever moves forward',
+      seen.widths.every((w, i) => i === 0 || w >= seen.widths[i - 1]),
+      JSON.stringify(seen.widths));
+  }
+
+  // ---------- the Images hint belongs to the Images section ----------
+  //
+  // It sits under "Select an image to redact". A word search used to report
+  // into it, so a reviewer who had picked no image at all was told "Found 2
+  // times" underneath a button they had never pressed — a count of something
+  // else entirely, in the one place it could only be read as being about an
+  // image.
+  {
+    if (await page.isVisible('#view-review')) await page.click('#restart');
+    await page.waitForSelector('#view-drop:not([hidden])');
+    await page.setInputFiles('#file', readablePath);
+    await page.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
+
+    const before = await page.evaluate(() => ({
+      hidden: document.getElementById('pickhint').hidden,
+      templates: window.Blinded.state.templates.length,
+    }));
+    check('with no image picked the Images hint says nothing',
+      before.hidden === true && before.templates === 0, JSON.stringify(before));
+
+    // A word search, by the shape fallback, with no image picked at all.
+    await page.evaluate(() => {
+      window.Blinded.state.useOcr = false;
+      window.Blinded.showWordControls();
+    });
+    await page.fill('#terms', 'Jane');
+    await page.waitForTimeout(300);
+    await redact(page);
+
+    const after = await page.evaluate(() => ({
+      hidden: document.getElementById('pickhint').hidden,
+      text: document.getElementById('pickhint').textContent,
+      templates: window.Blinded.state.templates.length,
+      termCounts: document.getElementById('termcounts').textContent.replace(/\s+/g, ' ').trim(),
+    }));
+    check('and still says nothing after a word search finds things',
+      after.hidden === true, JSON.stringify(after));
+    check('no image having been picked', after.templates === 0, JSON.stringify(after));
+    // What the word search found is reported where words are listed.
+    check('the term list is where the word count appears',
+      /Jane/.test(after.termCounts), JSON.stringify(after.termCounts));
+  }
+
+  // ---------- changing the terms after a run ----------
+  //
+  // Reading a page and matching terms against what was read are different jobs
+  // with different costs, and only one depends on the settings. A term added
+  // after a run — or during a pause — has to be matched against every page
+  // already read, but those pages must not be read again: on a hundred-page
+  // document that would turn a change of mind into another minute of waiting.
+  {
+    if (await page.isVisible('#view-review')) await page.click('#restart');
+    await page.waitForSelector('#view-drop:not([hidden])');
+    await page.setInputFiles('#file', readablePath);
+    await page.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
+    await page.fill('#terms', 'Jane');
+    await page.waitForTimeout(300);
+    await redact(page);
+
+    const first = await page.evaluate(() => {
+      const p = window.Blinded.state.pages[0];
+      // Stamp the read words so a second reading can be told from a re-match.
+      p.ocrItems.__stamp = 'first';
+      return {
+        marks: p.imageHits.filter(m => m.term).length,
+        terms: window.Blinded.state.searchedTerms.slice(),
+      };
+    });
+    check('the first term is matched in what was read',
+      first.marks > 0, JSON.stringify(first));
+
+    // Add a second term, as a reviewer would after looking at the marks.
+    await page.fill('#terms', 'Jane\nAccount');
+    await page.waitForTimeout(400);
+    const stale = await page.evaluate(() => window.Blinded.ocrMatchStale());
+    check('a newly typed term leaves the matching out of date', stale === true);
+    check('which the Redact button notices',
+      await page.evaluate(() => window.Blinded.ocrPending()) === true);
+
+    await redact(page);
+    const second = await page.evaluate(() => {
+      const B = window.Blinded;
+      const p = B.state.pages[0];
+      return {
+        stamp: p.ocrItems.__stamp,
+        terms: B.state.searchedTerms.slice(),
+        byTerm: B.state.terms.map(t => ({
+          term: t, marks: p.imageHits.filter(m => m.term === t).length })),
+      };
+    });
+    check('the pages are not read a second time',
+      second.stamp === 'first', JSON.stringify(second));
+    check('but the new term is matched against them',
+      second.terms.includes('Account'), JSON.stringify(second));
+    check('and both terms are now accounted for',
+      second.byTerm.every(t => t.marks >= 0) && second.terms.length === 2,
+      JSON.stringify(second));
+  }
+
+  // ---------- pages that cannot hide anything ----------
+  //
+  // A page with no images and no filled paths has nowhere to put lettering the
+  // text layer does not already report, so reading it can only find what is
+  // already known. Worth saying what this is and is not worth: on a slide deck
+  // it skips nothing, because every page has images, and the asking costs
+  // about half a second. That is why the asking stops at the first page that
+  // has to be read.
+  {
+    if (await page.isVisible('#view-review')) await page.click('#restart');
+    await page.waitForSelector('#view-drop:not([hidden])');
+    await page.setInputFiles('#file', fixturePath);
+    await page.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
+    const plain = await page.evaluate(() => window.Blinded.state.pages.map(p => p.couldHideText));
+    check('a page of nothing but text is known to hide nothing',
+      plain.every(v => v === false), JSON.stringify(plain));
+
+    await page.fill('#terms', 'Jane Doe');
+    await page.waitForTimeout(300);
+    const started = Date.now();
+    await redact(page);
+    const skipped = await page.evaluate(() => {
+      const B = window.Blinded;
+      return {
+        skipped: B.state.pages.filter(p => p.ocrSkipped).length,
+        total: B.state.pages.length,
+        textHits: B.state.pages.reduce((n, p) => n + (p.hits || []).length, 0),
+        applied: B.state.applied,
+      };
+    });
+    check('so it is not read at all', skipped.skipped === skipped.total, JSON.stringify(skipped));
+    check('and the words in its text are still covered',
+      skipped.textHits > 0, JSON.stringify(skipped));
+    check('the redaction still completes', skipped.applied === true, JSON.stringify(skipped));
+    // The saving is the whole of the reading, so this should be quick. Loose,
+    // because it is a tripwire and not a benchmark.
+    check('skipping is much faster than reading would have been',
+      Date.now() - started < 1500, (Date.now() - started) + 'ms');
+
+    // A page with pictures on it is never skipped, whatever else is true.
+    await page.click('#restart');
+    await page.waitForSelector('#view-drop:not([hidden])');
+    await page.setInputFiles('#file', logoPath);
+    await page.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
+    const drawn = await page.evaluate(() => window.Blinded.state.pages.map(p => p.couldHideText));
+    check('a page with pictures on it is always read',
+      drawn.every(v => v === true), JSON.stringify(drawn));
   }
 
   // ---------- progress, and stopping to look ----------
@@ -1469,7 +1668,7 @@ try {
   {
     if (await page.isVisible('#view-review')) await page.click('#restart');
     await page.waitForSelector('#view-drop:not([hidden])');
-    await page.setInputFiles('#file', fixturePath);
+    await page.setInputFiles('#file', readablePath);
     await page.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
     await page.fill('#terms', 'Jane Doe');
     await page.waitForTimeout(300);

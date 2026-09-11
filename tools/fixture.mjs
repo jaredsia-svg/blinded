@@ -56,6 +56,30 @@ export function buildTextPdf(lines = LINES) {
   return Buffer.concat(chunks);
 }
 
+// The same text, with one filled rectangle on it.
+//
+// A page of nothing but text is not read at all now — it has nowhere to hide
+// lettering the text layer does not already report — which is correct, and
+// makes it useless for testing the reader. This is the smallest page that both
+// carries real words and has to be read.
+export function buildReadablePdf(lines = LINES) {
+  const pdf = buildTextPdf(lines);
+  const text = pdf.toString('latin1');
+  const open = text.indexOf('stream\n') + 'stream\n'.length;
+  const close = text.indexOf('endstream');
+  const body = text.slice(open, close);
+  // A small grey square, well clear of the words.
+  const withMark = body + '0.6 0.6 0.6 rg\n40 60 40 40 re f\n';
+  const head = text.slice(0, text.lastIndexOf('<< /Length', open));
+  const rest = text.slice(close);
+  const rebuilt = head + '<< /Length ' + Buffer.byteLength(withMark, 'latin1')
+    + ' >>\nstream\n' + withMark + rest;
+  // The xref offsets after the content stream are now wrong. pdf.js recovers
+  // by rebuilding the table, which is enough for a fixture; nothing here
+  // depends on the file being byte-perfect.
+  return Buffer.from(rebuilt, 'latin1');
+}
+
 export const FIXTURE_LINES = LINES;
 
 

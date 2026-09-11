@@ -352,9 +352,27 @@
     }
   }
 
+  // Whether what was matched still answers the terms as they stand now.
+  //
+  // Reading a page and matching terms against what was read are different
+  // jobs with different costs, and only one of them depends on the settings.
+  // The words on a page do not change when a term is added, so reading is not
+  // redone; the matching is, every time, because it is milliseconds and being
+  // wrong about it means a term the reviewer typed is never looked for.
+  //
+  // This used to ask only whether anything had been matched at all. Adding a
+  // second term after a redaction therefore matched nothing: something had
+  // been searched, so nothing was pending, and the new term was silently
+  // never looked for in the pictures.
+  function ocrMatchStale() {
+    const want = state.terms;
+    const have = state.searchedTerms;
+    return want.length !== have.length || want.some(term => !have.includes(term));
+  }
+
   function ocrPending() {
     return Boolean(state.useOcr && state.termImages && state.kind !== 'text'
-      && state.terms.length && (!state.ocrRead || !state.searchedTerms.length));
+      && state.terms.length && (!state.ocrRead || ocrMatchStale()));
   }
 
   function refreshApply() {
@@ -409,12 +427,33 @@
   // exported file will contain.
   async function applyRedaction() {
     state.paused = false;
+
+    // One bar across both passes.
+    //
+    // Reading the pages and searching them for a picked image are separate
+    // jobs — one reads letters, the other correlates pixels, and neither can
+    // use the other's answer — but they are two passes over the same
+    // document, one after the other. A reviewer watching a bar does not care
+    // which is running; two bars filling in sequence just looks like the first
+    // one lied. So the work is counted once, here, in pages: those left to
+    // read, plus those to search if anything is going to be searched.
+    const pages = state.pages.length;
+    const willRead = ocrPending() ? state.pages.filter(p => !p.ocrItems).length : 0;
+    const willSearch = pendingTemplates().length ? pages : 0;
+    const totalUnits = willRead + willSearch;
+    let unitsDone = 0;
+    const overall = (done, of) => {
+      // `of` is the leg's own total; the bar is the whole job.
+      const legDone = Math.min(done, of);
+      pageProgress(unitsDone + legDone, totalUnits || of);
+    };
     // Reading the pages comes first, because failing at it changes what else
     // has to run: the shape matcher is the fallback, so the list of templates
     // cannot be decided until it is known whether the reader worked.
     if (ocrPending()) {
       try {
-        await readPages();
+        await readPages(overall);
+        unitsDone += willRead;
         matchOcr();
         markDuplicates();
         renderTermCounts();
@@ -447,7 +486,7 @@
 
     const entries = pendingTemplates();
     try {
-      if (entries.length) await runSearches(entries);
+      if (entries.length) await runSearches(entries, overall);
     } catch (error) {
       alert('The image search could not finish: ' + (error && error.message ? error.message : error));
       return;
@@ -482,24 +521,36 @@
   // OCR runs once per document and is kept: the words on a page do not change
   // when the reviewer edits the terms list, so re-reading would be pure cost.
   // Matching those words against the terms is cheap and rerun freely.
-  async function readPages() {
+  async function readPages(report) {
+    const progress = report || pageProgress;
     if (state.ocrRead || !state.pages.length) return;
     const total = state.pages.length;
     // Pages already read in an earlier, paused run are not read again.
+    // Pages that cannot hide lettering are not read at all. A page with no
+    // images and no filled paths has nowhere to put a word the text layer
+    // does not already report, so reading it can only find what is already
+    // known. On a slide deck this skips nothing — every page has both — but a
+    // contract or a report is skipped entirely.
+    for (const page of state.pages) {
+      if (!page.ocrItems && page.couldHideText === false) {
+        page.ocrItems = [];
+        page.ocrText = '';
+        page.ocrPlaced = [];
+        page.ocrSkipped = true;
+      }
+    }
     const outstanding = state.pages.filter(page => !page.ocrItems);
     if (!outstanding.length) { state.ocrRead = true; return; }
     // The reader is about seven megabytes and is fetched the first time it is
     // wanted. Without saying so, the first page looks like a hang.
     const alreadyDone = total - outstanding.length;
-    busy(true, state.ocrLoaded
-      ? 'Page ' + (alreadyDone + 1) + ' of ' + total
-      : 'Fetching the page reader — about 7 MB, once…',
-      alreadyDone, total);
+    if (!state.ocrLoaded) busy(true, 'Fetching the page reader — about 7 MB, once…');
+    else progress(0, outstanding.length);
     allowPause();
 
     const read = await Ocr.readPages(
       outstanding.map(page => page.source),
-      done => pageProgress(alreadyDone + done, total),
+      done => progress(done, outstanding.length),
       () => state.paused);
 
     outstanding.forEach((page, i) => {
@@ -577,21 +628,19 @@
   }
 
   // Runs every outstanding search in one sweep of the document.
-  async function runSearches(entries) {
-    const logos = entries.filter(e => e.logo).length;
-    const words = new Set(entries.filter(e => e.term).map(e => e.term)).size;
-    const what = [
-      logos ? logos + (logos === 1 ? ' image' : ' images') : null,
-      words ? words + (words === 1 ? ' word' : ' words') : null,
-    ].filter(Boolean).join(' and ');
-
-    busy(true, 'Searching for ' + what + '…');
+  // `report` is how this leg tells the overlay where it has got to. Searching
+  // for a picked image and reading the pages are two passes over the same
+  // document, and a reviewer watching a bar does not care which one is
+  // running — so the caller owns the counting and this reports into it.
+  async function runSearches(entries, report) {
+    const progress = report || pageProgress;
+    progress(0, state.pages.length);
+    allowPause();
     let results;
     try {
       results = await ImageSearch.searchAllParallel(state.pages, entries,
         { threshold: sensitivity() },
-        (done, total) => busy(true,
-          'Searching for ' + what + ' — page ' + done + ' of ' + total + '…'));
+        (done, total) => progress(done, total));
     } finally {
       busy(false);
     }
@@ -648,7 +697,13 @@
         }
       }
       state.searchedTerms.push(term);
-      reportSearch({ matches: pooled, best }, wordBarFor(term));
+      // Deliberately not reported into the Images section. That hint sits
+      // under "Select an image to redact", and a line about a typed word
+      // appearing there reads as being about an image the reviewer never
+      // picked — "Found 2 times" under a button they have not pressed. The
+      // term list in the Text section already says what each word found, and
+      // the advice this used to give ("lower the sensitivity") pointed at a
+      // control that no longer exists.
     }
 
     markDuplicates();
@@ -665,9 +720,12 @@
     }
   }
 
+  // What a picked image found, under the button that picked it.
+  //
   // "0 found" on its own reads as a broken feature. Saying what the best score
-  // actually was turns it into a decision the reviewer can act on.
-  function reportSearch(found, threshold) {
+  // actually was turns it into a decision the reviewer can act on — and the
+  // sensitivity named here is the one control that still governs this search.
+  function reportSearch(found) {
     const hint = el('pickhint');
     if (found.matches.length) {
       hint.textContent = found.matches.length === 1
@@ -679,9 +737,8 @@
       return;
     }
     const near = found.best > 0 ? found.best.toFixed(2) : null;
-    const bar = threshold === undefined ? sensitivity() : threshold;
     hint.textContent = near
-      ? 'No match at ' + bar.toFixed(2) + '. The closest thing scored '
+      ? 'No match at ' + sensitivity().toFixed(2) + '. The closest thing scored '
         + near + ' — lower the sensitivity below that to include it.'
       : 'Nothing resembling that was found anywhere in the document.';
     hint.hidden = false;
@@ -1291,6 +1348,19 @@
   function renderTemplates() {
     const host = el('templates');
     host.textContent = '';
+
+    // The hint under the pick button describes the last search for a picked
+    // image. With no image picked there is no such search to describe, and a
+    // sentence left standing from a previous one — or from a previous
+    // document, since this survived starting over — reads as a report about an
+    // image the reviewer has not chosen.
+    if (!state.templates.length) {
+      const hint = el('pickhint');
+      hint.hidden = true;
+      hint.textContent = '';
+      hint.classList.remove('warnhint');
+    }
+
     for (const template of state.templates) {
       const row = document.createElement('li');
       const name = document.createElement('span');
@@ -1770,7 +1840,7 @@
     undoLast, undoStack, applyLabels, labelItems, legendText, downloadKey,
     sensitivity, wordSensitivity, wordBarFor,
     applyRedaction, markPending, plannedCount, pendingTemplates, termsNeedingPictures,
-    readPages, matchOcr, ocrPending, showWordControls,
+    readPages, matchOcr, ocrPending, ocrMatchStale, showWordControls,
     busy, pageProgress, requestPause,
     renderTermCounts };
 })();
