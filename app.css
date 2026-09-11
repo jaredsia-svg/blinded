@@ -519,14 +519,32 @@ li.tally { display: block; padding: 0 0 8px; border: 0; }
   font-variant-numeric: tabular-nums; background: #eef1f6;
   border-radius: 20px; padding: 1px 8px; flex: none;
 }
+
+/* Circles, and two of them.
+   Green is what the reading found, amber what the comprehensive check added —
+   the same two colours they are drawn in on the page, so the panel and the
+   document agree about which is which. A round badge rather than a pill
+   because it holds a count, not a label. */
+.termcounts .n {
+  min-width: 24px; height: 24px; border-radius: 999px;
+  padding: 0 6px; display: inline-flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 650; box-sizing: border-box;
+}
+.termcounts .n.dot-green { background: #e3f3ea; color: #0f6b3d; }
+.termcounts .n.dot-shape { background: #fdf0dc; color: #9a5b06; }
+.termcounts .n.dot-green:not(:disabled):hover { background: #cfe9db; }
+.termcounts .n.dot-shape:not(:disabled):hover { background: #f7e3c2; }
+.termcounts .n.dot-green[aria-expanded="true"] { background: #118a4e; color: #fff; }
+.termcounts .n.dot-shape[aria-expanded="true"] { background: #d98b1f; color: #fff; }
 /* A term that matched nothing is the one thing in this panel a reviewer must
    not skim past: it looks identical to a term that worked. */
 /* Not "nothing found" but "nothing has looked yet" — red, because it marks
    the one thing on the panel that is not an answer. */
-.termcounts .n.unknown, .templates .n.unknown {
+.termcounts .n.unknown, .templates .n.unknown,
+.termcounts .n.dot-green.unknown {
   background: #fdecea; color: #d92d20; font-weight: 650;
 }
-.termcounts li.none .n { background: var(--warn-bg); color: var(--warn); }
+.termcounts li.none .n.dot-green { background: var(--warn-bg); color: var(--warn); }
 .termcounts li.none .t { color: var(--warn); }
 
 .templates li { padding: 5px 0; border-bottom: 1px solid var(--line); }

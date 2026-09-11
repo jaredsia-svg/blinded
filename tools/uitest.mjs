@@ -749,8 +749,16 @@ try {
     return p.dismissed.size;
   });
   check('clicking a detection dismisses it', clicked === before + 1, before + ' -> ' + clicked);
-  check('the sidebar reports what was turned off',
-    (await page.textContent('#counts')).includes('turned off'));
+  // The panel's running total is gone — every number in it was already beside
+  // the thing it counted. What a dismissal has to do is stop the mark being
+  // covered, which is checked on the page itself rather than in a summary.
+  check('a dismissed detection stops counting towards the redaction',
+    await page.evaluate(() => {
+      const p = window.Blinded.state.pages[0];
+      const live = window.Blinded.activeBoxes(p).length;
+      const all = p.hits.length + p.manual.length;
+      return live < all;
+    }));
 
   const restored = await page.evaluate(() => {
     // Driving the pointer at a page is about marking, so it asks for the
@@ -972,7 +980,8 @@ try {
   // Entering pick mode changes what a drag means, and says so.
   await page.click('#pick');
   check('pick mode is announced on the button',
-    (await page.textContent('#pick')).includes('drag a box'));
+    (await page.textContent('#pick')).trim() === 'Cancel',
+    await page.textContent('#pick'));
 
   // Drag around the first logo. Its PDF coordinates are known, so convert:
   // pdf y is measured up from the bottom, the canvas is 2x, and a little
@@ -1031,8 +1040,6 @@ try {
   check('and one above double it',
     matched.scales.some(w => w > 60 * 2 * 1.8), JSON.stringify(matched.scales));
   check('the decoy mark is not matched', matched.total === 4);
-  check('the panel reports the image matches',
-    (await page.textContent('#counts')).includes('image match'));
   // The number is the answer; "found 4 times" beside a 4 said it twice.
   check('the picked logo is listed with its count',
     (await page.textContent('#templates .n')).trim() === '4',
@@ -1364,7 +1371,8 @@ try {
       pictures: pictures.length,
       superseded: pictures.filter(m => m.superseded).length,
       live: pictures.filter(m => !m.superseded).length,
-      counts: document.getElementById('counts').textContent,
+      // What the word's own tally says, which is where the count lives now.
+      tally: (document.querySelector('#termcounts .dot-green') || {}).textContent,
     };
   });
 
@@ -1378,8 +1386,12 @@ try {
   check('and the suppression is what did it, not an empty search',
     doubled.superseded === doubled.pictures,
     doubled.superseded + ' of ' + doubled.pictures);
+  // The tally beside the word is the count now, and a duplicate suppressed on
+  // the page must not reappear as a number in the panel.
   check('so the panel counts the word once, not twice',
-    !doubled.counts.includes('image match'), doubled.counts.replace(/\s+/g, ' '));
+    Number(doubled.tally) === doubled.text,
+    JSON.stringify({ tally: doubled.tally, text: doubled.text,
+                     pictures: doubled.pictures }));
 
   // Taking the word away brings the picture matches back rather than leaving a
   // hole: they were marked, not deleted.
@@ -1506,41 +1518,65 @@ try {
     const B = window.Blinded;
     const p = B.state.pages[0];
     const term = B.state.terms[0];
-    // One mark from the shape check, so both kinds are represented.
+    // One mark from the shape check, so both circles are represented.
     p.imageHits.push({ id: 'sweep:x', term, rect: { x: 80, y: 900, w: 90, h: 24 },
       score: 1, bySweep: true });
     B.renderTermCounts();
 
     const closed = document.querySelectorAll('#termcounts .tallyspot').length;
-    const button = document.querySelector('#termcounts button.n');
-    const total = button.textContent.trim();
-    button.click();
-    const rows = [...document.querySelectorAll('#termcounts .tallyspot')];
-    const open = rows.length;
-    const shown = rows.map(r => r.textContent.trim());
-    const shapes = rows.filter(r => r.classList.contains('shape')).length;
-    const colours = rows.map(r =>
-      getComputedStyle(r.querySelector('.dot')).backgroundColor);
-    const listed = B.occurrencesFor(term).length;
-    document.querySelector('#termcounts button.n').click();
+    const green = document.querySelector('#termcounts .dot-green');
+    const amber = document.querySelector('#termcounts .dot-shape');
+    const counts = { green: green && green.textContent.trim(),
+                     amber: amber && amber.textContent.trim() };
+
+    green.click();
+    const greenRows = [...document.querySelectorAll('#termcounts .tallyspot')];
+    const fromReading = { rows: greenRows.length,
+      shapes: greenRows.filter(r => r.classList.contains('shape')).length,
+      shown: greenRows.map(r => r.textContent.trim()),
+      colour: greenRows[0] && getComputedStyle(greenRows[0].querySelector('.dot')).backgroundColor };
+    green.click();
+
+    amber.click();
+    const amberRows = [...document.querySelectorAll('#termcounts .tallyspot')];
+    const fromShape = { rows: amberRows.length,
+      shapes: amberRows.filter(r => r.classList.contains('shape')).length,
+      shown: amberRows.map(r => r.textContent.trim()),
+      colour: amberRows[0] && getComputedStyle(amberRows[0].querySelector('.dot')).backgroundColor };
+    amber.click();
     const afterSecond = document.querySelectorAll('#termcounts .tallyspot').length;
 
+    const listed = B.occurrencesFor(term);
     p.imageHits = p.imageHits.filter(m => m.id !== 'sweep:x');
     B.state.openTally = null;
     B.renderTermCounts();
-    return { closed, open, shown, shapes, colours, listed, afterSecond, term, total };
+    return { closed, counts, fromReading, fromShape, afterSecond,
+             reading: listed.filter(s => s.kind !== 'shape').length,
+             shape: listed.filter(s => s.kind === 'shape').length };
   });
-  check('the list is not there until the number is pressed',
+  check('the list is not there until a circle is pressed',
     where.closed === 0, JSON.stringify(where));
-  check('pressing it lists every occurrence',
-    where.open === where.listed && where.open === Number(where.total),
+  // Two circles: green for what the reading found, amber for what the
+  // comprehensive check added. Adding them together asked the reviewer to
+  // hold a distinction the page is at pains to make.
+  check('the green circle counts what the reading found',
+    Number(where.counts.green) === where.reading, JSON.stringify(where));
+  check('and the amber one counts the check separately',
+    Number(where.counts.amber) === where.shape && where.shape > 0,
     JSON.stringify(where));
-  check('each one says which page it is on',
-    where.shown.every(t => /^Page \d+/.test(t)), JSON.stringify(where.shown));
-  check('the shape check\'s find is marked as such',
-    where.shapes === 1, JSON.stringify(where));
-  check('and the two kinds are not the same colour',
-    new Set(where.colours).size === 2, JSON.stringify(where.colours));
+  check('the green circle lists only the reading\'s finds',
+    where.fromReading.rows === where.reading && where.fromReading.shapes === 0,
+    JSON.stringify(where.fromReading));
+  check('and the amber one only the check\'s',
+    where.fromShape.rows === where.shape
+      && where.fromShape.shapes === where.shape, JSON.stringify(where.fromShape));
+  check('each one names its page',
+    where.fromReading.shown.every(s => /^Page \d+/.test(s))
+      && where.fromShape.shown.every(s => /^Page \d+/.test(s)),
+    JSON.stringify(where));
+  check('and the two lists are not marked the same colour',
+    where.fromReading.colour !== where.fromShape.colour,
+    JSON.stringify([where.fromReading.colour, where.fromShape.colour]));
   check('pressing it again puts the list away',
     where.afterSecond === 0, JSON.stringify(where));
 

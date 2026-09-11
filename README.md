@@ -695,11 +695,14 @@ cover the wrong things — is questioned rather than done.
 
 ## Where a word is
 
-The tally beside each word is a button. The number answers "how many"; pressing
-it answers "where", listing every occurrence by page. Green for what the reading
-found, amber for what the thorough check turned up by shape — the same two
-colours they are drawn in on the page, because a mark the reading found and one
-a matcher guessed at do not deserve equal trust. Each row jumps to its page.
+Each word carries two circles. The green one counts what the reading found; the
+amber one beside it, only when there is one, counts what the comprehensive
+check added. They are the same two colours those marks are drawn in on the
+page, so the panel and the document agree about which is which — adding them
+together asked the reviewer to hold a distinction the page is at pains to make.
+
+Either circle is a button. The number answers "how many"; pressing it answers
+"where", listing those occurrences by page, and each row jumps to its page.
 
 ## Search, Redact, Redacted
 

@@ -313,7 +313,6 @@
     for (const page of state.pages) if (page.canvas) drawPage(page);
     if (state.kind === 'text') drawTextView();
     renderTemplates();
-    renderCounts();
     refreshUndo();
   }
 
@@ -483,7 +482,6 @@
     renderTermCounts();
     renderSectionNotes();
     applyLabels();
-    renderCounts();
     // A rescan only ever happens because the reviewer changed what should be
     // looked for — a term, a detector, the confidence setting — so what was
     // found no longer answers the question and the document goes back to
@@ -698,7 +696,6 @@
         markDuplicates();
         renderTermCounts();
         renderSectionNotes();
-        renderCounts();
       } catch (error) {
         // Not an error to report and stop on. The reader is an optimisation
         // over hunting for the word's shape, and the shape search still works,
@@ -1018,7 +1015,6 @@
     renderTemplates();
     renderTermCounts();
     renderSectionNotes();
-    renderCounts();
   }
 
   function distribute(matches, make) {
@@ -1217,7 +1213,6 @@
   function redrawAll() {
     for (const page of state.pages) if (page.canvas) drawPage(page);
     if (state.kind === 'text') drawTextView();
-    renderCounts();
   }
 
   // ---------- sidebar ----------
@@ -1279,26 +1274,13 @@
     }
   }
 
-  function renderCounts() {
-    const covered = state.kind === 'text'
-      ? state.findings.filter(f => !dismissedText.has(f.id)).length
-      : state.pages.reduce((sum, p) => sum + p.hits.filter(h => !p.dismissed.has(h.finding.id)).length, 0);
-    const manual = state.pages.reduce((sum, p) => sum + p.manual.length, 0);
-    const images = state.pages.reduce(
-      (sum, p) => sum + liveImageHits(p).filter(m => !p.dismissed.has(m.id)).length, 0);
-    const skipped = state.kind === 'text'
-      ? dismissedText.size
-      : state.pages.reduce((sum, p) => sum + p.dismissed.size, 0);
-
-    const parts = ['<strong>' + covered + '</strong> text match' + (covered === 1 ? '' : 'es') + ' will be covered'];
-    if (images) parts.push('<strong>' + images + '</strong> image match' + (images === 1 ? '' : 'es'));
-    if (manual) parts.push('<strong>' + manual + '</strong> box' + (manual === 1 ? '' : 'es') + ' you drew');
-    if (skipped) parts.push('<strong>' + skipped + '</strong> you turned off');
-    el('counts').innerHTML = parts.join('<br>');
-
-    // Whether Export is available is decided by refreshApply, since it depends
-    // on the phase rather than only on the count.
-  }
+  // The panel used to end with a tally of everything — so many text matches,
+  // so many image matches, so many boxes you drew. Every one of those numbers
+  // is already beside the thing it counts, and a second copy of them in a
+  // different order at the foot of the panel was one more thing to read and
+  // one more thing to keep in step. Whether Export is available was never
+  // decided here; refreshApply owns that, because it depends on the phase
+  // rather than only on the count.
 
   // ---------- page rendering ----------
 
@@ -1550,7 +1532,6 @@
       }
 
       drawPage(page);
-      renderCounts();
     });
 
     canvas.addEventListener('pointercancel', () => { start = null; panning = null; drawPage(page); });
@@ -1704,7 +1685,7 @@
     state.mode = mode;
     const button = el('pick');
     button.classList.toggle('on', mode === 'pick');
-    button.textContent = mode === 'pick' ? 'Cancel — drag a box around the image' : 'Select an image to redact';
+    button.textContent = mode === 'pick' ? 'Cancel' : 'Select an image to redact';
     for (const page of state.pages) {
       if (page.canvas) page.canvas.parentElement.classList.toggle('picking', mode === 'pick');
     }
@@ -1944,31 +1925,58 @@
       //
       // Where they are is a different question, and it is answered by asking
       // rather than by making every row carry a list nobody has looked at.
-      // A number if this word has been searched for, and a red question mark
-      // if it has not. Blanking every tally the moment anything changed threw
-      // away answers that were still good: a word counted an hour ago is
-      // still counted, and only the word just typed has no answer yet.
+      // Two circles, not one number.
+      //
+      // The reading and the comprehensive check are different kinds of answer
+      // — one recognised the letters, the other matched a shape — and they are
+      // already drawn apart on the page in green and amber. Adding them
+      // together in the panel asked the reviewer to hold a distinction the
+      // page was at pains to make. The green circle is what the reading found;
+      // the amber one beside it, only when there is one, is what the check
+      // added.
       const counted = state.countedTerms.includes(term);
-      const count = document.createElement('button');
-      count.type = 'button';
-      count.className = counted ? 'n' : 'n unknown';
-      count.textContent = counted ? (total === 0 ? 'not found' : String(total)) : '?';
-      count.disabled = !counted || total === 0 || state.kind === 'text';
-      if (!counted) count.title = 'Not searched for yet \u2014 press Search';
-      if (!count.disabled) {
-        count.setAttribute('aria-expanded', String(state.openTally === term));
-        count.title = 'Where ' + (total === 1 ? 'it is' : 'they are');
-        count.addEventListener('click', () => {
-          state.openTally = state.openTally === term ? null : term;
-          renderTermCounts();
-        });
-      }
+      const byReading = where.filter(spot => spot.kind !== 'shape');
+      const byShape = where.filter(spot => spot.kind === 'shape');
 
-      row.append(label, count, drop);
+      const circle = (kind, places) => {
+        const key = term + '::' + kind;
+        const dot = document.createElement('button');
+        dot.type = 'button';
+        dot.className = 'n dot-' + kind;
+        if (!counted && kind === 'green') {
+          dot.classList.add('unknown');
+          dot.textContent = '?';
+          dot.disabled = true;
+          dot.title = 'Not searched for yet \u2014 press Search';
+          return dot;
+        }
+        dot.textContent = String(places.length);
+        dot.disabled = places.length === 0 || state.kind === 'text';
+        if (!dot.disabled) {
+          dot.title = kind === 'shape'
+            ? 'Where the comprehensive check found it'
+            : 'Where it is';
+          dot.setAttribute('aria-expanded', String(state.openTally === key));
+          dot.addEventListener('click', () => {
+            state.openTally = state.openTally === key ? null : key;
+            renderTermCounts();
+          });
+        }
+        return dot;
+      };
+
+      const count = circle('green', byReading);
+      const shapeCount = byShape.length ? circle('shape', byShape) : null;
+      row.append(label, count);
+      if (shapeCount) row.append(shapeCount);
+      row.append(drop);
       host.append(row);
 
-      if (state.openTally === term && !count.disabled) {
-        host.append(tallyList(term, where));
+      if (state.openTally === term + '::green' && !count.disabled) {
+        host.append(tallyList(term, byReading));
+      }
+      if (shapeCount && state.openTally === term + '::shape' && !shapeCount.disabled) {
+        host.append(tallyList(term, byShape));
       }
     }
   }
@@ -2027,7 +2035,6 @@
           () => { if (wasOff) dismissedText.add(f.id); else dismissedText.delete(f.id); });
         markPending();
         drawTextView();
-        renderCounts();
       });
       view.append(mark);
       cursor = f.end;
@@ -2237,7 +2244,6 @@
     renderTemplates();
     renderTermCounts();
     renderSectionNotes();
-    renderCounts();
     redrawAll();
     refreshApply();
     draftNote('Draft restored.');
@@ -2860,7 +2866,6 @@
     markDuplicates();
     renderTermCounts();
     renderSweep();
-    renderCounts();
     redrawAll();
     refreshApply();
     return added;
