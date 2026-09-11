@@ -22,7 +22,7 @@ const check = (label, ok, detail) => {
 };
 
 for (const file of ['schedule.js', 'detect.js', 'boxes.js', 'pdfwrite.js', 'match.js',
-  'textimage.js', 'imagesearch.js', 'labels.js']) {
+  'textimage.js', 'imagesearch.js', 'labels.js', 'ocr.js']) {
   runInThisContext(readFileSync(join(root, 'lib', file), 'utf8'), { filename: file });
 }
 const Detect = globalThis.BlindedDetect;
@@ -32,6 +32,7 @@ const Match = globalThis.BlindedMatch;
 const ImageSearch = globalThis.BlindedImageSearch;
 const Labels = globalThis.BlindedLabels;
 const TextImage = globalThis.BlindedTextImage;
+const Ocr = globalThis.BlindedOcr;
 const Schedule = globalThis.BlindedSchedule;
 
 // ---------- checksums ----------
@@ -545,6 +546,52 @@ check('a degenerate size does not throw',
   check('without letting the coarse pass grow without limit',
     cols <= Match.COARSE_SIZE_WIDE.maxLong, cols + ' columns');
 })();
+
+// ---------- stitching what OCR read ----------
+//
+// lib/boxes.js has to guess where the spaces are, because pdf.js hands it runs
+// of glyphs and a gap that may or may not be a word break. OCR needs no
+// guessing: every item is one word. Guessing anyway cost real matches — small
+// footnote text stitched as "veryyearwithKAG", and a search for the name found
+// nothing there, because the word boundary it needs had gone.
+(() => {
+  const word = (str, x, y, hasEOL) => ({ str, x, y, w: str.length * 6, h: 12, hasEOL });
+  const items = [
+    word('every', 10, 100, false), word('year', 50, 100, false),
+    word('with', 80, 100, false), word('KAG', 110, 100, true),
+    word('Since', 10, 120, false), word('then', 50, 120, true),
+  ];
+  const out = Ocr.stitch(items);
+  check('every word is separated from the next',
+    out.text === 'every year with KAG\nSince then', JSON.stringify(out.text));
+  check('so the term is findable in what was read',
+    Detect.findAll(out.text, { terms: ['KAG'] }).length === 1);
+  check('a line end becomes a line break, not a space',
+    out.text.includes('KAG\nSince'), JSON.stringify(out.text));
+  check('each word knows where it landed in the text',
+    out.items[3].start === out.text.indexOf('KAG')
+      && out.items[3].end === out.text.indexOf('KAG') + 3,
+    JSON.stringify(out.items[3]));
+  check('the words themselves are carried through',
+    out.items.length === items.length && out.items[0].str === 'every');
+  check('stitching nothing is harmless',
+    Ocr.stitch([]).text === '' && Ocr.stitch([]).items.length === 0);
+  // The geometric rule this replaced produced the failure above. Prove the
+  // separator does not depend on the gap between words at all: these two sit
+  // flush against each other and must still be two words.
+  const flush = Ocr.stitch([word('with', 0, 10, false), word('KAG', 24, 10, true)]);
+  check('words that touch are still separated',
+    flush.text === 'with KAG', JSON.stringify(flush.text));
+})();
+
+// The build of the engine is pinned rather than left to the engine to choose:
+// it picks between six, each about four megabytes, and only the pinned ones
+// are shipped.
+check('the OCR core is pinned to a vendored build',
+  /vendor\/tesseract\/tesseract-core-(simd-)?lstm\.wasm\.js$/.test(Ocr.corePath()),
+  Ocr.corePath());
+check('and it is served from this origin, never a CDN',
+  Ocr.BASE.startsWith('vendor/') && !/^https?:/.test(Ocr.BASE), Ocr.BASE);
 
 // How much of the bar a word earns back for being long, measured on three real
 // documents rather than reasoned about. Short words resemble a great deal of a

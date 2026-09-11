@@ -17,6 +17,7 @@
   const measure = window.BlindedMeasure.create();
   const Match = window.BlindedMatch;
   const ImageSearch = window.BlindedImageSearch;
+  const Ocr = window.BlindedOcr;
 
   const el = id => document.getElementById(id);
   const views = { drop: el('view-drop'), review: el('view-review') };
@@ -63,6 +64,10 @@
     // costs a sweep of the document per word, and the text layer already
     // covers the ordinary case.
     termImages: false,
+    // Read the pages with OCR instead of matching drawn shapes.
+    useOcr: false,
+    // Per page: the words OCR read, and the text they stitch into.
+    ocrRead: false,
     // Terms whose picture search has already run, so pressing Redact twice
     // does not repeat it.
     searchedTerms: [],
@@ -264,11 +269,21 @@
     refreshApply();
   }
 
+  // Whether a document still needs reading before its terms can be found.
+  function ocrPending() {
+    return Boolean(state.useOcr && state.termImages && state.kind !== 'text'
+      && state.terms.length && (!state.ocrRead || !state.searchedTerms.length));
+  }
+
   function refreshApply() {
     const button = el('apply');
     const marks = plannedCount();
     const unsearched = state.templates.filter(t => !t.searched).length
-      + termsNeedingPictures().length;
+      + termsNeedingPictures().length
+      // Reading the pages is work that has not happened yet either, and
+      // without this the button stays dead: OCR has found nothing, so nothing
+      // is pending, so there is nothing to press.
+      + (ocrPending() ? 1 : 0);
 
     button.disabled = marks === 0 && unsearched === 0;
     button.textContent = state.applied ? 'Redacted' : 'Redact';
@@ -307,6 +322,23 @@
   async function applyRedaction() {
     const entries = pendingTemplates();
     try {
+      if (ocrPending()) {
+        await readPages();
+        matchOcr();
+        markDuplicates();
+        renderTermCounts();
+        renderSectionNotes();
+        renderCounts();
+      }
+    } catch (error) {
+      busy(false);
+      alert('The pages could not be read: ' + (error && error.message ? error.message : error)
+        + '\n\nThe word search by shape is still available: untick "Read the pages with OCR".');
+      return;
+    } finally {
+      busy(false);
+    }
+    try {
       if (entries.length) await runSearches(entries);
     } catch (error) {
       alert('The image search could not finish: ' + (error && error.message ? error.message : error));
@@ -324,6 +356,9 @@
   // so that editing the list only costs a search for what actually changed.
   function termsNeedingPictures() {
     if (!state.termImages || state.kind === 'text') return [];
+    // With OCR on, the same job is done by reading the page, and running both
+    // would propose every word twice.
+    if (state.useOcr) return [];
     return state.terms.filter(term => !state.searchedTerms.includes(term));
   }
 
@@ -332,6 +367,61 @@
     for (const page of state.pages) {
       page.imageHits = page.imageHits.filter(m => !m.term);
     }
+  }
+
+  // ---------- reading the pages ----------
+  //
+  // OCR runs once per document and is kept: the words on a page do not change
+  // when the reviewer edits the terms list, so re-reading would be pure cost.
+  // Matching those words against the terms is cheap and rerun freely.
+  async function readPages() {
+    if (state.ocrRead || !state.pages.length) return;
+    for (const page of state.pages) {
+      busy(true, 'Reading page ' + (page.index + 1) + ' of ' + state.pages.length + '…');
+      page.ocrItems = await Ocr.readPage(page.source);
+      const stitched = Ocr.stitch(page.ocrItems);
+      page.ocrText = stitched.text;
+      page.ocrPlaced = stitched.items;
+      // Let the page paint between sheets, or the progress line never appears.
+      await (window.BlindedSchedule
+        ? window.BlindedSchedule.nextTask()
+        : new Promise(r => setTimeout(r, 0)));
+    }
+    state.ocrRead = true;
+  }
+
+  // Terms found in what OCR read, as the same kind of proposal the picture
+  // search produces — keyed to the word, so a placeholder is shared with the
+  // written occurrences and duplicates are folded together.
+  function matchOcr() {
+    for (const page of state.pages) {
+      page.imageHits = page.imageHits.filter(m => !m.term);
+      if (!page.ocrText) continue;
+      const spans = Detect.resolveOverlaps(Detect.findTerms(page.ocrText, state.terms));
+      for (const span of spans) {
+        // Every word the match touches is covered whole.
+        //
+        // Slicing part of a word out would mean knowing where its letters sit
+        // inside it, and OCR reports one box for the word, not one per glyph.
+        // Dividing that box evenly is what a fallback would do, and it is
+        // wrong in exactly the direction that matters: "KAG" inside the word
+        // "KAG's" came out three fifths of the way across, and the bar landed
+        // over "KA" with the G still legible. Covering the apostrophe-s too is
+        // the harmless error; leaving a letter showing is not.
+        for (const item of page.ocrPlaced) {
+          if (item.start >= span.end || item.end <= span.start) continue;
+          page.imageHits.push({
+            id: 'ocr:' + span.term + ':' + page.index + ':'
+              + Math.round(item.rect.x) + ':' + Math.round(item.rect.y),
+            term: span.term,
+            rect: { ...item.rect },
+            score: 1,
+            read: true,
+          });
+        }
+      }
+    }
+    state.searchedTerms = state.terms.slice();
   }
 
   // Everything that needs looking for, as one list.
@@ -1483,9 +1573,19 @@
 
   el('medium').addEventListener('change', e => { state.includeMedium = e.target.checked; rescan(); });
 
+  el('useocr').addEventListener('change', e => {
+    state.useOcr = e.target.checked;
+    // The two paths answer the same question, so only one control is shown.
+    el('wordsensrow').hidden = !state.termImages || state.useOcr;
+    clearTermImages();
+    renderTermCounts();
+    markPending();
+    redrawAll();
+  });
   el('termimages').addEventListener('change', e => {
     state.termImages = e.target.checked;
-    el('wordsensrow').hidden = !e.target.checked;
+    el('useocr').closest('label').hidden = !e.target.checked;
+    el('wordsensrow').hidden = !e.target.checked || state.useOcr;
     clearTermImages();
     renderTermCounts();
     markPending();
@@ -1568,5 +1668,6 @@
     undoLast, undoStack, applyLabels, labelItems, legendText, downloadKey,
     sensitivity, wordSensitivity, wordBarFor,
     applyRedaction, markPending, plannedCount, pendingTemplates, termsNeedingPictures,
+    readPages, matchOcr, ocrPending,
     renderTermCounts };
 })();

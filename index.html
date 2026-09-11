@@ -92,6 +92,10 @@
               Also find these words as pictures
               <button type="button" class="why" aria-label="What does this mean?" data-tip="Draws each word in eight typefaces — serif and sans, each regular, bold, italic and bold italic — and looks for it visually, for logos, scans and screenshots. Not OCR: it can miss unusual lettering. Adds time.">?</button>
             </label>
+            <label class="check" hidden><input type="checkbox" id="useocr">
+              Read the pages with OCR
+              <button type="button" class="why" aria-label="What does this mean?" data-tip="Reads the lettering on each page instead of matching drawn shapes, so italic, bold, small and unusual type are all found the same way. Slower on the first page while the engine loads, and it stays on your machine — nothing is sent anywhere. Does not apply to logos.">?</button>
+            </label>
             <label class="sens" for="wordsens" id="wordsensrow" hidden>
               <span>Word match</span>
               <input type="range" id="wordsens" min="45" max="95" value="66" step="1">
@@ -194,6 +198,7 @@
 <script src="lib/measure.js"></script>
 <script src="lib/match.js"></script>
 <script src="lib/imagesearch.js"></script>
+<script src="lib/ocr.js"></script>
 <script src="lib/textimage.js"></script>
 <script src="lib/pdfwrite.js"></script>
 <script src="lib/pdfread.js"></script>

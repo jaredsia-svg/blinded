@@ -1405,7 +1405,7 @@ try {
   // actually becomes visible, so that is what is asserted, not that a handler
   // is attached.
   const whyCount = await page.evaluate(() => document.querySelectorAll('.why').length);
-  check('the panel still has its hints', whyCount === 5, String(whyCount));
+  check('the panel still has its hints', whyCount === 6, String(whyCount));
   check('every hint carries text to show',
     await page.evaluate(() => [...document.querySelectorAll('.why')]
       .every(b => (b.getAttribute('data-tip') || '').length > 20)));
