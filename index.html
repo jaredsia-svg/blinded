@@ -92,6 +92,12 @@
               Also find these words as pictures
               <button type="button" class="why" aria-label="What does this mean?" data-tip="Draws each word in four typefaces and looks for it visually, for logos, scans and screenshots. Not OCR — it can miss unusual lettering. Adds time.">?</button>
             </label>
+            <label class="sens" for="wordsens" id="wordsensrow" hidden>
+              <span>Word match</span>
+              <input type="range" id="wordsens" min="45" max="95" value="75" step="1">
+              <span id="wordsensvalue">0.75</span>
+              <button type="button" class="why" aria-label="What does this mean?" data-tip="Separate from the image sensitivity below, because a word drawn here is only a guess at the document's typeface. Short words resemble far more things than long ones: lower this if a word is missed, raise it if unrelated text is being covered.">?</button>
+            </label>
           </div>
         </details>
 

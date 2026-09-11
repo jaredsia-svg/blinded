@@ -952,22 +952,28 @@
     return Number(el('sens').value) / 100;
   }
 
-  // The bar a word drawn as a picture has to clear.
+  // The bar a word drawn as a picture has to clear, on its own control.
   //
-  // Measured, not guessed. On a real deck whose box heading "KAG's value" was
-  // outlined vector art rather than text, the true occurrences scored 0.735
-  // and 0.598 while the best thing that was not a KAG — the letters of a "BDA"
-  // logo — scored 0.465. The word bar has to sit in that gap. A cut-out logo
-  // is matched against a copy of itself and scores far higher, so it keeps the
-  // slider's own value.
+  // This was one slider with a fixed offset under it, and the offset was
+  // wrong: it came from a single document, where a heading that really was
+  // the word scored 0.598 and the best thing that was not scored 0.465. On
+  // the next document a four-letter acronym matched 333 times, because a
+  // short word resembles far more of a page than a long one does — in the
+  // same panel, "TDTC" was matching everywhere while "Tokenomics Digital
+  // Tech" matched once.
   //
-  // Expressed as an offset rather than a constant so the slider still means
-  // something for words: drag it up and both bars tighten together.
-  const WORD_OFFSET = 0.20;
-  const WORD_FLOOR = 0.35;
+  // No constant satisfies both: one needs 0.60 or lower, the other 0.65 or
+  // higher. So it is a control rather than a number chosen here, it starts
+  // where the image search starts, and the reviewer moves it with the
+  // reported scores in front of them.
+  // When a word's picture matches start looking like noise. Both have to be
+  // true: a big number on its own is fine in a long document where the word
+  // really is everywhere.
+  const PICTURE_GLUT = 12;
+  const PICTURE_RATIO = 3;
 
   function wordSensitivity() {
-    return Math.max(WORD_FLOOR, Math.round((sensitivity() - WORD_OFFSET) * 100) / 100);
+    return Number(el('wordsens').value) / 100;
   }
 
   function setMode(mode) {
@@ -1121,6 +1127,21 @@
 
       row.append(label, count);
       host.append(row);
+
+      // A word that matches as a picture far more often than it appears as
+      // text is matching the page, not the word, and a reviewer scanning a
+      // long document will not notice until the export is ruined. Short words
+      // are where this happens: "TDTC" matched 333 times in a deck where the
+      // full company name matched once.
+      if (pictures >= PICTURE_GLUT && pictures > Math.max(3, n * PICTURE_RATIO)) {
+        const warn = document.createElement('p');
+        warn.className = 'hint warnhint';
+        warn.textContent = 'That is a lot of picture matches: ' + pictures
+          + (n ? ', against ' + n + ' in the text' : ', with none in the text')
+          + '. Short words resemble a great deal of a page — raise "Word match" '
+          + 'until only the real ones are left.';
+        host.append(warn);
+      }
     }
   }
 
@@ -1452,6 +1473,7 @@
 
   el('termimages').addEventListener('change', e => {
     state.termImages = e.target.checked;
+    el('wordsensrow').hidden = !e.target.checked;
     clearTermImages();
     renderTermCounts();
     markPending();
@@ -1501,6 +1523,14 @@
     markPending();
     redrawAll();
   });
+  el('wordsens').addEventListener('input', () => {
+    el('wordsensvalue').textContent = wordSensitivity().toFixed(2);
+    clearTermImages();
+    state.searchedTerms = [];
+    renderTermCounts();
+    markPending();
+    redrawAll();
+  });
   el('export').addEventListener('click', exportFile);
   el('restart').addEventListener('click', () => {
     state.pages = [];
@@ -1525,5 +1555,6 @@
   window.Blinded = { state, rescan, loadFile, exportFile, setMode, addTemplate,
     undoLast, undoStack, applyLabels, labelItems, legendText, downloadKey,
     sensitivity, wordSensitivity,
-    applyRedaction, markPending, plannedCount, pendingTemplates, termsNeedingPictures };
+    applyRedaction, markPending, plannedCount, pendingTemplates, termsNeedingPictures,
+    renderTermCounts };
 })();

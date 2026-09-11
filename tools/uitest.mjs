@@ -1167,32 +1167,100 @@ try {
     String(await control.evaluate(() => window.__rafCalls)));
   await control.close();
 
-  // ---------- two bars in one sweep ----------
+  // ---------- two bars, two controls ----------
   //
-  // A word drawn here as a picture is a guess at the document's typeface and
-  // never scores as well as a logo cut from the page itself, so it gets a
-  // lower bar. The slider still governs both: drag it and they move together.
+  // These used to be one slider with a fixed offset beneath it. The offset
+  // came from a single document and was wrong on the next one, where a
+  // four-letter acronym matched 333 times while the full company name in the
+  // same panel matched once. No constant satisfies both documents, so the
+  // reviewer gets the control.
   const bars = await page.evaluate(() => {
     const B = window.Blinded;
-    const set = v => { const s = document.getElementById('sens'); s.value = String(v);
+    const set = (id, v) => { const s = document.getElementById(id); s.value = String(v);
       s.dispatchEvent(new Event('input', { bubbles: true })); };
-    const read = () => ({ image: B.sensitivity(), word: B.wordSensitivity() });
-    const at75 = (set(75), read());
-    const at90 = (set(90), read());
-    const at45 = (set(45), read());
-    set(75);
-    return { at75, at90, at45, min: Number(document.getElementById('sens').min) };
+    const out = {};
+    set('sens', 75); set('wordsens', 75);
+    out.together = { image: B.sensitivity(), word: B.wordSensitivity() };
+    set('wordsens', 55);
+    out.wordLowered = { image: B.sensitivity(), word: B.wordSensitivity() };
+    set('sens', 90);
+    out.imageRaised = { image: B.sensitivity(), word: B.wordSensitivity() };
+    out.wordMin = Number(document.getElementById('wordsens').min) / 100;
+    out.wordMax = Number(document.getElementById('wordsens').max) / 100;
+    set('sens', 75); set('wordsens', 75);
+    return out;
   });
-  check('a typed word is searched at a lower bar than a cut-out logo',
-    bars.at75.word < bars.at75.image, JSON.stringify(bars.at75));
-  check('and that bar is low enough for the case that failed',
-    bars.at75.word <= 0.6 && bars.at75.word > 0.465, JSON.stringify(bars.at75));
-  check('raising the slider tightens the word bar too',
-    bars.at90.word > bars.at75.word, JSON.stringify(bars.at90));
-  check('the word bar never falls through the floor',
-    bars.at45.word >= 0.35, JSON.stringify(bars.at45));
-  check('the slider reaches below the score the missed heading got',
-    bars.min / 100 < 0.598, String(bars.min));
+  check('the word bar has its own control',
+    bars.together.word === 0.75 && bars.together.image === 0.75, JSON.stringify(bars));
+  check('lowering the word bar leaves the image bar alone',
+    bars.wordLowered.word === 0.55 && bars.wordLowered.image === 0.75, JSON.stringify(bars));
+  check('and raising the image bar leaves the word bar alone',
+    bars.imageRaised.image === 0.9 && bars.imageRaised.word === 0.55, JSON.stringify(bars));
+  // The two documents that forced this apart: one needed 0.60 or below, the
+  // other 0.65 or above. The control is useless if it cannot reach both.
+  check('the word control reaches low enough for a word set as vector art',
+    bars.wordMin <= 0.598, String(bars.wordMin));
+  check('and high enough to shake off a short acronym matching everything',
+    bars.wordMax >= 0.65, String(bars.wordMax));
+
+  // The control is meaningless if it is never shown, and pointless clutter
+  // when the feature it belongs to is off.
+  const rowShown = await page.evaluate(() => {
+    const row = document.getElementById('wordsensrow');
+    const box = document.getElementById('termimages');
+    const before = row.hidden;
+    if (!box.checked) { box.click(); }
+    const withFeature = row.hidden;
+    box.click();
+    return { before, withFeature, without: row.hidden };
+  });
+  check('the word control appears with the feature it belongs to',
+    rowShown.withFeature === false, JSON.stringify(rowShown));
+  check('and is out of the way when that feature is off',
+    rowShown.without === true, JSON.stringify(rowShown));
+
+  // ---------- the over-matching warning ----------
+  //
+  // The failure this catches is silent: a short word matching the page rather
+  // than the word, hundreds of times, in a document too long to eyeball. The
+  // reviewer found out by looking at the exported file.
+  const glut = await page.evaluate(() => {
+    const B = window.Blinded;
+    const savedPages = B.state.pages;
+    const savedTerms = B.state.terms;
+    const read = () => document.getElementById('termcounts').textContent;
+
+    // By this point in the suite the document has been closed, so the fixture
+    // brings its own page. renderTermCounts only reads imageHits off a page.
+    B.state.pages = [{ index: 0, imageHits: [] }];
+    B.state.terms = ['TDTC'];
+
+    const seed = n => {
+      B.state.pages[0].imageHits = Array.from({ length: n }, (_, k) => ({
+        id: 'term:TDTC:0:' + k, term: 'TDTC',
+        rect: { x: k * 3, y: k * 3, w: 20, h: 10 }, score: 0.6,
+      }));
+      B.renderTermCounts();
+      return read();
+    };
+
+    const few = seed(2);
+    const many = seed(40);
+    const seeded = B.state.pages[0].imageHits.length;
+    B.state.pages = savedPages;
+    B.state.terms = savedTerms;
+    B.renderTermCounts();
+    return { few, many, seeded };
+  });
+  check('the warning fixture renders a row at all',
+    /TDTC/.test(glut.few) && /TDTC/.test(glut.many),
+    'seeded=' + glut.seeded + ' ' + JSON.stringify(glut.many));
+  check('a handful of picture matches is reported without alarm',
+    !/lot of picture matches/.test(glut.few), glut.few.slice(0, 120));
+  check('but a word matching the page rather than the word is called out',
+    /lot of picture matches/.test(glut.many), glut.many.slice(0, 200));
+  check('and the warning says which control to move',
+    /Word match/.test(glut.many), glut.many.slice(0, 200));
 
   // ---------- the "?" hints ----------
   //
@@ -1202,7 +1270,7 @@ try {
   // actually becomes visible, so that is what is asserted, not that a handler
   // is attached.
   const whyCount = await page.evaluate(() => document.querySelectorAll('.why').length);
-  check('the panel still has its hints', whyCount === 4, String(whyCount));
+  check('the panel still has its hints', whyCount === 5, String(whyCount));
   check('every hint carries text to show',
     await page.evaluate(() => [...document.querySelectorAll('.why')]
       .every(b => (b.getAttribute('data-tip') || '').length > 20)));

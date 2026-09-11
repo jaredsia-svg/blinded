@@ -154,16 +154,26 @@ comes from glyph positions rather than from correlating a rendering. The
 duplicate is set aside rather than deleted, so removing the term brings it
 back rather than leaving a hole.
 
-Two different bars are in play, and they are not the same number for a reason.
-A logo you cut out of the document is matched against a copy of itself and
-should correlate almost perfectly. A word drawn here in Helvetica is only ever
-an approximation of whatever typeface the document was really set in, and never
-reaches those scores. On a real deck whose box heading was outlined vector art
-rather than text, the two true occurrences of a word scored 0.74 and 0.60 while
-the best thing that was *not* the word — the letters of an unrelated logo —
-scored 0.47. One number for both means either the logos let rubbish through or
-the words are never found. So the word bar sits below the slider's value, and
-the slider still moves both together.
+Words as pictures have their own **Word match** control, separate from the
+image sensitivity below it. They are not the same number for a reason: a logo
+you cut out of the document is matched against a copy of itself and should
+correlate almost perfectly, while a word drawn here in Helvetica is only ever
+an approximation of whatever typeface the document was really set in.
+
+There is no single right value, which is why it is a control and not a
+constant. Two real documents settle it. In one, a box heading set as vector
+art scored 0.598 while the best thing that was *not* the word scored 0.465, so
+the bar had to go below 0.60. In another, the four-letter acronym "TDTC"
+matched 333 times — it was matching the page, not the word — and needed 0.65
+or above, while "Tokenomics Digital Tech" in the same panel matched once at
+any setting. A short word resembles a great deal of a page; a long one
+resembles almost nothing else.
+
+Both start at 0.75. If a word is missed, lower **Word match** — the panel
+reports what the closest thing scored, so there is a number to aim at. If
+unrelated text is being covered, raise it, and a word that matches as a
+picture far more often than it appears as text is called out rather than left
+for the exported file to reveal.
 
 ## Matching a logo everywhere it appears
 
