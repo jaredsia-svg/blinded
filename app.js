@@ -350,7 +350,8 @@
     for (const term of termsNeedingPictures()) {
       TextImage.templatesFor(term).forEach((template, i) => {
         entries.push({
-          key: 'term:' + term + ':' + i, template, term, threshold: wordSensitivity(),
+          key: 'term:' + term + ':' + i, template, term,
+          threshold: wordBarFor(term),
           // Typed words are usually looked for in body text and captions,
           // which is exactly where they are too small to match at the page's
           // own resolution. A cut-out logo is not swept this way: it is
@@ -434,7 +435,7 @@
         }
       }
       state.searchedTerms.push(term);
-      reportSearch({ matches: pooled, best }, wordSensitivity());
+      reportSearch({ matches: pooled, best }, wordBarFor(term));
     }
 
     markDuplicates();
@@ -979,6 +980,12 @@
 
   function wordSensitivity() {
     return Number(el('wordsens').value) / 100;
+  }
+
+  // The bar this particular word has to clear: the slider, less whatever its
+  // length earns back. See lib/textimage.js for the measurements behind it.
+  function wordBarFor(term) {
+    return Math.max(0.3, Math.round((wordSensitivity() - TextImage.shapeRelief(term)) * 1000) / 1000);
   }
 
   function setMode(mode) {
@@ -1559,7 +1566,7 @@
 
   window.Blinded = { state, rescan, loadFile, exportFile, setMode, addTemplate,
     undoLast, undoStack, applyLabels, labelItems, legendText, downloadKey,
-    sensitivity, wordSensitivity,
+    sensitivity, wordSensitivity, wordBarFor,
     applyRedaction, markPending, plannedCount, pendingTemplates, termsNeedingPictures,
     renderTermCounts };
 })();

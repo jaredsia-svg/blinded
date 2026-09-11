@@ -21,7 +21,8 @@ const check = (label, ok, detail) => {
   else failures.push(label + (detail === undefined ? '' : ' — ' + detail));
 };
 
-for (const file of ['schedule.js', 'detect.js', 'boxes.js', 'pdfwrite.js', 'match.js', 'imagesearch.js', 'labels.js']) {
+for (const file of ['schedule.js', 'detect.js', 'boxes.js', 'pdfwrite.js', 'match.js',
+  'textimage.js', 'imagesearch.js', 'labels.js']) {
   runInThisContext(readFileSync(join(root, 'lib', file), 'utf8'), { filename: file });
 }
 const Detect = globalThis.BlindedDetect;
@@ -30,6 +31,7 @@ const PdfWrite = globalThis.BlindedPdfWrite;
 const Match = globalThis.BlindedMatch;
 const ImageSearch = globalThis.BlindedImageSearch;
 const Labels = globalThis.BlindedLabels;
+const TextImage = globalThis.BlindedTextImage;
 const Schedule = globalThis.BlindedSchedule;
 
 // ---------- checksums ----------
@@ -543,6 +545,41 @@ check('a degenerate size does not throw',
   check('without letting the coarse pass grow without limit',
     cols <= Match.COARSE_SIZE_WIDE.maxLong, cols + ' columns');
 })();
+
+// How much of the bar a word earns back for being long, measured on three real
+// documents rather than reasoned about. Short words resemble a great deal of a
+// page; long ones resemble much less, but they also score lower, so the bar has
+// to come down with them or they are never found.
+check('a short word gets no relief at all', TextImage.shapeRelief('KAG') === 0);
+check('nor does a four-letter acronym', TextImage.shapeRelief('TDTC') === 0);
+check('a long word gets some', TextImage.shapeRelief('proprietary') > 0);
+check('and a longer word gets more',
+  TextImage.shapeRelief('proprietaryness') > TextImage.shapeRelief('proprietary'));
+check('the relief is capped', TextImage.shapeRelief('a'.repeat(200)) === TextImage.RELIEF_MAX);
+// The numbers that made this worth doing: on one page "KAG" was true from
+// 0.679 up with the best false at 0.554, while "proprietary" was true at 0.639
+// with its best false at 0.587. A bar of 0.66 serves the first and misses the
+// second; 0.66 less this relief serves both.
+check('at the default bar a short word is held at 0.66',
+  Math.abs((0.66 - TextImage.shapeRelief('KAG')) - 0.66) < 1e-9);
+check('and a long word is let down far enough to catch it, but not its noise',
+  (() => {
+    const bar = 0.66 - TextImage.shapeRelief('proprietary');
+    return bar < 0.639 && bar > 0.587;
+  })(), String(0.66 - TextImage.shapeRelief('proprietary')));
+
+// A phrase is matched as one picture, and the space in the template is rarely
+// the width of the space in the document, so the second word lands misaligned.
+// Measured: "proprietary innovation" scores 0.455 where it really appears,
+// below four things on that page which are not it. Relief there would admit
+// those four and still miss the real one.
+check('a phrase gets no relief, however long',
+  TextImage.shapeRelief('proprietary innovation') === 0);
+check('nor does a two-word name', TextImage.shapeRelief('KA Group') === 0);
+check('leading and trailing space does not make a word a phrase',
+  TextImage.shapeRelief('  proprietary  ') === TextImage.shapeRelief('proprietary'));
+check('an empty term is harmless', TextImage.shapeRelief('') === 0
+  && TextImage.shapeRelief(null) === 0);
 
 // The resampled copy a small-lettering sweep works on is shared between every
 // template in the sweep, or four typefaces for each of several words would

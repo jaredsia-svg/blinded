@@ -1176,6 +1176,7 @@ try {
   // reviewer gets the control.
   const bars = await page.evaluate(() => {
     const B = window.Blinded;
+    const defaults = { word: B.wordSensitivity(), image: B.sensitivity() };
     const set = (id, v) => { const s = document.getElementById(id); s.value = String(v);
       s.dispatchEvent(new Event('input', { bubbles: true })); };
     const out = {};
@@ -1185,13 +1186,26 @@ try {
     out.wordLowered = { image: B.sensitivity(), word: B.wordSensitivity() };
     set('sens', 90);
     out.imageRaised = { image: B.sensitivity(), word: B.wordSensitivity() };
+    out.shortBar = B.wordBarFor('KAG');
+    out.longBar = B.wordBarFor('proprietary');
+    out.phraseBar = B.wordBarFor('proprietary innovation');
     out.wordMin = Number(document.getElementById('wordsens').min) / 100;
     out.wordMax = Number(document.getElementById('wordsens').max) / 100;
-    set('sens', 75); set('wordsens', 75);
+    set('sens', 75); set('wordsens', 66);
+    out.defaultWord = defaults.word;
+    out.defaultImage = defaults.image;
     return out;
   });
   check('the word bar has its own control',
     bars.together.word === 0.75 && bars.together.image === 0.75, JSON.stringify(bars));
+  check('and its own default, lower than the image bar',
+    bars.defaultWord === 0.66 && bars.defaultImage === 0.75, JSON.stringify(bars));
+  // The relief is what lets one setting serve a three-letter acronym and an
+  // eleven-letter word, which no single number did.
+  check('a long word is held to a lower bar than a short one at the same setting',
+    bars.longBar < bars.shortBar, JSON.stringify(bars));
+  check('and a phrase is held to the short-word bar, not the long-word one',
+    bars.phraseBar === bars.shortBar, JSON.stringify(bars));
   check('lowering the word bar leaves the image bar alone',
     bars.wordLowered.word === 0.55 && bars.wordLowered.image === 0.75, JSON.stringify(bars));
   check('and raising the image bar leaves the word bar alone',
