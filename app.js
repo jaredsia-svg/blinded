@@ -606,8 +606,7 @@
       return state.findings.filter(f => !dismissedText.has(f.id)).length;
     }
     if (!state.searched) {
-      return state.pages.reduce((sum, page) => sum + page.manual.length
-        + liveImageHits(page).filter(m => m.bySweep && !page.dismissed.has(m.id)).length, 0);
+      return state.pages.reduce((sum, page) => sum + page.manual.length, 0);
     }
     return state.pages.reduce((sum, page) =>
       sum + page.hits.filter(h => !page.dismissed.has(h.finding.id)).length
@@ -784,15 +783,6 @@
     // would propose every word twice.
     if (state.useOcr) return [];
     return state.terms.filter(term => !state.searchedTerms.includes(term));
-  }
-
-  function clearTermImages() {
-    state.searchedTerms = [];
-    state.sweptTerms = [];
-    state.sweepAdded = 0;
-    for (const page of state.pages) {
-      page.imageHits = page.imageHits.filter(m => !m.term);
-    }
   }
 
   // ---------- reading the pages ----------
@@ -1319,16 +1309,13 @@
     // have not asked yet — and while they were still typing a word, an answer
     // to half of it.
     //
-    // The comprehensive check is the exception. It is minutes of work the
-    // reviewer asked for explicitly, and having it vanish because a slider
-    // moved is a worse surprise than the inconsistency: its marks stay until
-    // the word they belong to is deleted.
-    if (!state.searched) {
-      const kept = liveImageHits(page)
-        .filter(m => m.bySweep && !page.dismissed.has(m.id))
-        .map(m => ({ ...m.rect, label: state.labels.byId[m.id], sweep: true }));
-      return page.manual.map(box => ({ ...box })).concat(kept);
-    }
+    // The comprehensive check's marks are no exception: they answered the
+    // search that has just been set aside, so they come off the page with
+    // everything else. They are not thrown away, though — the next search
+    // keeps them and puts them back, because re-running a check that takes
+    // minutes to say the same thing is not a reasonable price for moving a
+    // slider.
+    if (!state.searched) return page.manual.map(box => ({ ...box }));
 
     const live = page.hits.filter(h => !page.dismissed.has(h.finding.id));
     const images = liveImageHits(page).filter(m => !page.dismissed.has(m.id));
@@ -2077,7 +2064,10 @@
                 pages: state.pages.length },
       terms: state.terms.slice(),
       settings: {
-        sensitivity: el('sensitivity') ? el('sensitivity').value : null,
+        // The slider's id is 'sens'. Guarded against a missing element, this
+        // read the wrong one and quietly stored null in every draft ever
+        // saved — a setting silently not kept is worse than one that throws.
+        sensitivity: el('sens').value,
         includeMedium: state.includeMedium,
         labelling: state.labelling,
         labelOverrides: state.labelOverrides,
@@ -2175,9 +2165,7 @@
       : String(data.terms || '').split('\n').map(t => t.trim()).filter(Boolean);
 
     const settings = data.settings || {};
-    if (settings.sensitivity && el('sensitivity')) {
-      el('sensitivity').value = settings.sensitivity;
-    }
+    if (settings.sensitivity) el('sens').value = settings.sensitivity;
     state.includeMedium = Boolean(settings.includeMedium);
     if (el('medium')) el('medium').checked = state.includeMedium;
     state.labelling = Boolean(settings.labelling);
@@ -2982,8 +2970,18 @@
     for (const template of state.templates) {
       if (template.searched) { template.searched = false; template.matches = 0; }
     }
-    for (const page of state.pages) page.imageHits = [];
+    // Everything the searches found goes, because every one of them was run
+    // at the old setting — except what the comprehensive check turned up,
+    // which is minutes of work the reviewer asked for by hand. Those marks
+    // are kept and come back with the next search.
+    for (const page of state.pages) {
+      page.imageHits = page.imageHits.filter(m => m.bySweep);
+    }
     state.searchedTerms = [];
+    // The check's own results were found at the old setting too, so it is
+    // offered again — the marks stay, and re-running is a choice rather than
+    // the only way to get them back.
+    state.sweptTerms = [];
     renderTemplates();
     renderTermCounts();
     needsSearch();

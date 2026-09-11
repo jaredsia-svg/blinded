@@ -746,8 +746,9 @@ that read the pages and then searched them spent the whole second half with
 nothing on screen. It now goes up as the button is pressed, waits a frame to be
 painted, and comes down once, at the end of the run.
 
-What the comprehensive check found stays on the page when the settings change.
-It is minutes of work the reviewer asked for explicitly, and having it vanish
-because a slider moved is a worse surprise than the inconsistency with
-"nothing is drawn before a search". Those marks go only when the word they
-belong to is deleted.
+What the comprehensive check found comes off the page when the settings
+change, like every other found mark: it answered the search that has just been
+set aside. What it does not do is go for good. The next search keeps those
+marks and puts them back, because re-running a check that takes minutes to say
+the same thing is not a reasonable price for moving a slider. They are removed
+only when the word they belong to is deleted.

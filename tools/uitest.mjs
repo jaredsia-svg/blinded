@@ -3221,6 +3221,81 @@ try {
   await page.goBack();
   await page.waitForSelector('#view-drop:not([hidden])', { timeout: 15000 });
 
+  // ---------- what the comprehensive check found outlives a re-search ----------
+  //
+  // Its marks come off the page when a setting changes, like every other
+  // found mark: they answered the search that has just been set aside. What
+  // they must not do is go for good. Re-running a check that takes minutes to
+  // say the same thing is not a reasonable price for moving a slider.
+  {
+    if (await page.isVisible('#view-review')) await newFile();
+    await page.waitForSelector('#view-drop:not([hidden])', { timeout: 15000 });
+    await page.setInputFiles('#file', fixturePath);
+    await page.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
+    await setTerms(page, ['Jane']);
+    await redact(page);
+
+    const planted = await page.evaluate(() => {
+      const B = window.Blinded;
+      const p = B.state.pages[0];
+      // What a finished comprehensive check leaves behind.
+      p.imageHits.push({ id: 'sweep:kept', term: 'Jane',
+        rect: { x: 300, y: 500, w: 90, h: 24 }, score: 1, bySweep: true });
+      B.state.sweptTerms = ['Jane'];
+      B.state.sweepAdded = 1;
+      B.redrawAll();
+      return {
+        held: p.imageHits.filter(m => m.bySweep).length,
+        drawn: B.activeBoxes(p).filter(b => b.sweep).length,
+      };
+    });
+    check('a mark from the check is on the page to begin with',
+      planted.held === 1 && planted.drawn === 1, JSON.stringify(planted));
+
+    // Move a setting: anything that changes what to look for.
+    await page.evaluate(() => {
+      const slider = document.getElementById('sens');
+      slider.value = String(Math.max(45, Number(slider.value) - 5));
+      slider.dispatchEvent(new Event('input', { bubbles: true }));
+      slider.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    await page.waitForTimeout(400);
+    const afterChange = await page.evaluate(() => {
+      const B = window.Blinded;
+      const p = B.state.pages[0];
+      return {
+        searched: B.state.searched,
+        held: p.imageHits.filter(m => m.bySweep).length,
+        drawn: B.activeBoxes(p).filter(b => b.sweep).length,
+      };
+    });
+    check('changing a setting takes it off the page',
+      afterChange.searched === false && afterChange.drawn === 0,
+      JSON.stringify(afterChange));
+    check('but does not throw it away',
+      afterChange.held === 1, JSON.stringify(afterChange));
+
+    await redact(page);
+    const afterSearch = await page.evaluate(() => {
+      const B = window.Blinded;
+      const p = B.state.pages[0];
+      return {
+        held: p.imageHits.filter(m => m.bySweep).length,
+        drawn: B.activeBoxes(p).filter(b => b.sweep).length,
+      };
+    });
+    check('and searching again puts it back on the page',
+      afterSearch.held === 1 && afterSearch.drawn === 1, JSON.stringify(afterSearch));
+
+    // Deleting the word it belongs to is the one thing that does remove it.
+    await page.evaluate(() => window.Blinded.dropTerm('Jane'));
+    await page.waitForTimeout(300);
+    const afterDelete = await page.evaluate(() =>
+      window.Blinded.state.pages[0].imageHits.filter(m => m.bySweep).length);
+    check('deleting the word it belongs to does remove it',
+      afterDelete === 0, String(afterDelete));
+  }
+
   // ---------- the overlay covers the whole search ----------
   //
   // Reported twice as "the button is dead but it is clearly working". The
