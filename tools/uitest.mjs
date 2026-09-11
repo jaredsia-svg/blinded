@@ -1470,284 +1470,142 @@ try {
     check('reading is what does it', fresh.reading === true, JSON.stringify(fresh));
   }
 
-  // ---------- spots the reader was unsure of ----------
+  // ---------- the thorough sweep ----------
   //
-  // OCR misreads, and says so when it does: the word that should have been
-  // ("KNW") came back as CRW) at 41 confidence while its neighbours read at 90
-  // or better. But three to thirteen per cent of the words on every page score
-  // under 50, nearly all of it rubbish off rules and icons, so the signal only
-  // means something once it is narrowed to readings that could be the term.
+  // What replaced the amber doubt boxes. Nothing is flagged on suspicion any
+  // more; instead the whole document can be searched for the shape of each
+  // word, and whatever that turns up beyond what the reading found is added as
+  // a mark and drawn amber.
   {
     if (await page.isVisible('#view-review')) await page.click('#restart');
     await page.waitForSelector('#view-drop:not([hidden])');
     await page.setInputFiles('#file', readablePath);
     await page.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
 
-    const shape = await page.evaluate(() => {
+    // Nothing is offered before there is a redaction to be thorough about.
+    const early = await page.evaluate(() => {
       const B = window.Blinded;
-      return {
-        knwLikeCrw: B.couldBeTerm('CRW)', 'KNW'),
-        knwLikeAe: B.couldBeTerm('ae', 'KNW'),
-        knwLikeLong: B.couldBeTerm('Engineering', 'KNW'),
-        knwLikeSingle: B.couldBeTerm('l', 'KNW'),
-        punctuationIgnored: B.couldBeTerm('(\u201cKNW\u201d)', 'KNW'),
-        emptyIsNot: B.couldBeTerm('', 'KNW') || B.couldBeTerm('---', 'KNW'),
-      };
-    });
-    check('a misreading of the right length could be the term',
-      shape.knwLikeCrw === true, JSON.stringify(shape));
-    check('and so could one a letter out', shape.knwLikeAe === true, JSON.stringify(shape));
-    check('a whole word longer could not', shape.knwLikeLong === false, JSON.stringify(shape));
-    check('nor could a single speck', shape.knwLikeSingle === false, JSON.stringify(shape));
-    check('the punctuation a badge wraps it in does not count',
-      shape.punctuationIgnored === true, JSON.stringify(shape));
-    check('and nothing at all is not a doubt', shape.emptyIsNot === false, JSON.stringify(shape));
-
-    // The prompt appears only when there is something to say.
-    const quiet = await page.evaluate(() => {
-      const B = window.Blinded;
-      B.state.doubts = [];
-      B.renderDoubts();
-      return document.getElementById('doubtbox').hidden;
-    });
-    check('with nothing doubtful the prompt stays out of the way', quiet === true);
-
-    const spoken = await page.evaluate(() => {
-      const B = window.Blinded;
-      B.state.terms = ['KNW'];
-      B.state.doubts = [
-        { id: 'd1', pageIndex: 0, terms: ['KNW'], read: 'CRW)', confidence: 41,
-          rect: { x: 40, y: 40, w: 30, h: 12 } },
-        { id: 'd2', pageIndex: 0, terms: ['KNW'], read: 'ae', confidence: 18,
-          rect: { x: 90, y: 40, w: 20, h: 12 } },
-      ];
-      B.renderDoubts();
-      return {
-        hidden: document.getElementById('doubtbox').hidden,
-        note: document.getElementById('doubtnote').textContent,
-        button: document.getElementById('doubtcheck').textContent,
-      };
-    });
-    check('with doubtful spots the prompt appears', spoken.hidden === false, JSON.stringify(spoken));
-    check('it counts them', /2 places/.test(spoken.note), JSON.stringify(spoken.note));
-    check('names the term it might be', /"KNW"/.test(spoken.note), JSON.stringify(spoken.note));
-    // A warning that overstates is one a reviewer learns to dismiss.
-    check('and says most of them will be nothing',
-      /Most will be nothing/.test(spoken.note), JSON.stringify(spoken.note));
-    check('the button says how much work it is asking for',
-      /2 spots/.test(spoken.button), JSON.stringify(spoken.button));
-
-    // A doubt is not silenced by marks found elsewhere.
-    //
-    // The question worth being sure about: with one term found and another
-    // missed, the spots that could be the missed one still have to be raised.
-    // Judging the document as a whole — "something was found, so all is well"
-    // — would hide exactly the case this exists for.
-    const alongside = await page.evaluate(() => {
-      const B = window.Blinded;
-      const p = B.state.pages[0];
-      B.state.terms = ['KNW'];
-      p.ocrItems = [
-        { str: 'CRW)', confidence: 41, rect: { x: 200, y: 200, w: 40, h: 14 },
-          x: 200, y: 214, w: 40, h: 17 },
-        { str: 'Engineering', confidence: 95, rect: { x: 300, y: 200, w: 90, h: 14 },
-          x: 300, y: 214, w: 90, h: 17 },
-      ];
-      // A mark somewhere else entirely.
-      p.imageHits = [{ id: 'x', term: 'KNW', rect: { x: 600, y: 600, w: 40, h: 14 }, score: 1 }];
-      const found = B.findDoubts();
-      p.imageHits = [];
-      return { doubts: found.length, terms: found.map(d => d.terms) };
-    });
-    check('a mark elsewhere does not silence a doubt here',
-      alongside.doubts === 1, JSON.stringify(alongside));
-
-    // A doubt sitting under something already covered is not a doubt.
-    const covered = await page.evaluate(() => {
-      const B = window.Blinded;
-      const p = B.state.pages[0];
-      p.imageHits = [{ id: 'x', term: 'KNW', rect: { x: 200, y: 200, w: 40, h: 14 }, score: 1 }];
-      const found = B.findDoubts();
-      p.imageHits = [];
-      p.ocrItems = [];
-      B.state.doubts = [];
-      B.renderDoubts();
-      return found.length;
-    });
-    check('but one already covered is settled', covered === 0, String(covered));
-
-    // Every term a reading could be, not whichever was typed first. With two
-    // terms of the same length this was wrong in both directions: the note
-    // named the wrong word, and the check searched only for that one — so the
-    // thorough sweep found nothing at all for the word it existed to find.
-    const multi = await page.evaluate(() => {
-      const B = window.Blinded;
-      const p = B.state.pages[0];
-      B.state.terms = ['KAP', 'KNW'];
-      p.ocrItems = [{ str: 'CRW)', confidence: 41, rect: { x: 200, y: 200, w: 40, h: 14 },
-        x: 200, y: 214, w: 40, h: 17 }];
-      const found = B.findDoubts();
-      B.state.doubts = found;
-      B.renderDoubts();
-      const note = document.getElementById('doubtnote').textContent;
-      p.ocrItems = [];
-      B.state.doubts = [];
-      B.renderDoubts();
-      return { terms: found[0] ? found[0].terms : [], note };
-    });
-    check('a doubt carries every term it could be',
-      multi.terms.length === 2, JSON.stringify(multi.terms));
-    check('and the note names them all, not just the first typed',
-      /"KAP"/.test(multi.note) && /"KNW"/.test(multi.note), JSON.stringify(multi.note));
-
-    // A box has to be able to hold the word.
-    //
-    // Counting letters is weak: a misreading of a three-letter word has two to
-    // four letters, and so does a great deal of ordinary text. On a hundred
-    // page deck that came to 853 spots, most of them whole phrases — which
-    // cannot be a three-letter word whatever confidence they were read at.
-    const shapes = await page.evaluate(() => {
-      const B = window.Blinded;
-      const tall = { x: 0, y: 0, w: 45, h: 14 };      // about right for "KNW"
-      return {
-        rightShape: B.widthCouldHold(tall, 'KNW'),
-        aPhrase: B.widthCouldHold({ x: 0, y: 0, w: 400, h: 14 }, 'KNW'),
-        aSpeck: B.widthCouldHold({ x: 0, y: 0, w: 4, h: 14 }, 'KNW'),
-        unknowable: B.widthCouldHold({ x: 0, y: 0, w: 40, h: 0 }, 'KNW'),
-      };
-    });
-    check('a box the shape of the word could hold it', shapes.rightShape === true,
-      JSON.stringify(shapes));
-    check('a whole phrase could not be a three-letter word',
-      shapes.aPhrase === false, JSON.stringify(shapes));
-    check('nor could a speck', shapes.aSpeck === false, JSON.stringify(shapes));
-    // When the shape says nothing, it must not be used to exclude.
-    check('a box of no height excludes nothing', shapes.unknowable === true,
-      JSON.stringify(shapes));
-
-    // And the rule has to be applied where the list is built, not merely
-    // available to be applied.
-    const applied = await page.evaluate(() => {
-      const B = window.Blinded;
-      const p = B.state.pages[0];
-      B.state.terms = ['KNW'];
-      const item = (str, x, w, h) => ({ str, confidence: 41,
-        rect: { x, y: 400, w, h }, x, y: 400 + h, w, h });
-      p.ocrItems = [
-        item('CRW)', 100, 45, 14),                      // the shape of the word
-        item('very year with KAG since', 300, 400, 14), // a phrase, same letters-ish
-        item('to', 800, 300, 14),                       // short, but far too wide
-      ];
-      const found = B.findDoubts();
-      p.ocrItems = [];
-      B.state.doubts = [];
-      B.renderDoubts();
-      return found.map(d => d.read);
-    });
-    check('only boxes that could hold the word become doubts',
-      applied.length === 1 && applied[0] === 'CRW)', JSON.stringify(applied));
-
-    // The band. Everything about the re-read depends on the crop being about
-    // one line tall: measured on a real page, a 58 pixel band read the word at
-    // every width from 210 to 690 pixels, and bands of 94 and 158 pixels read
-    // nothing at all. So height is asserted tightly and width is not.
-    const bands = await page.evaluate(() => {
-      const B = window.Blinded;
-      const doubt = (id, x, y) => ({ id, pageIndex: 0, terms: ['KNW'], read: 'ae',
-        confidence: 20, rect: { x, y, w: 90, h: 40 } });
-      const sameLine = B.bandsFor([doubt('a', 1090, 843), doubt('b', 1273, 842)]);
-      // Adjacent lines, not distant ones: two doubts far apart would never
-      // merge however loose the rule, so the gap here is one line.
-      const stacked = B.bandsFor([doubt('a', 1090, 798), doubt('b', 1090, 843)]);
-      const one = B.bandsFor([doubt('a', 1090, 843)])[0];
-      return {
-        sameLine: sameLine.length,
-        sameLineHeight: Math.round(sameLine[0].h),
-        sameLineHolds: sameLine[0].doubts.length,
-        stacked: stacked.length,
-        height: Math.round(one.h),
-        width: Math.round(one.w),
-      };
-    });
-    check('two doubts on one line share a single band',
-      bands.sameLine === 1 && bands.sameLineHolds === 2, JSON.stringify(bands));
-    check('and merging them does not make the band any taller',
-      bands.sameLineHeight === bands.height, JSON.stringify(bands));
-    check('two doubts on different lines never share a band',
-      bands.stacked === 2, JSON.stringify(bands));
-    // The measured cliff was at 94 pixels for a 40 pixel word. Anything close
-    // to that reads as a picture and comes back empty.
-    check('a band stays about one line tall',
-      bands.height <= 40 * 2, JSON.stringify(bands));
-    check('while being given room either side to hold the whole word',
-      bands.width >= 90 * 3, JSON.stringify(bands));
-
-    // And the whole point of it: a doubt re-read on its own is a doubt
-    // answered. Run against a real rendered page rather than a stub, because
-    // what is being tested is whether the recogniser reads a crop of a real
-    // page — which no amount of faked items would establish.
-    const settled = await page.evaluate(async () => {
-      const B = window.Blinded;
-      const p = B.state.pages[0];
-      // The fixture's fifth line, in canvas pixels: 13pt text on a 792pt page
-      // with a 740pt first baseline and 14pt leading.
-      const scale = p.source.width / 612;
-      const baseline = (792 - (740 - 4 * 14)) * scale;
-      const h = 10 * scale;
       B.state.terms = ['Amphitheatre'];
-      B.state.doubts = [{ id: 'd-real', pageIndex: 0, terms: ['Amphitheatre'],
-        read: 'ae', confidence: 22,
-        rect: { x: 190 * scale, y: baseline - h, w: 30 * scale, h } }];
+      B.state.applied = false;
+      B.renderSweep();
+      return document.getElementById('sweepbox').hidden;
+    });
+    check('the thorough check is not offered before anything has been redacted',
+      early === true, String(early));
+
+    const offered = await page.evaluate(() => {
+      const B = window.Blinded;
+      B.state.applied = true;
+      B.renderSweep();
+      return {
+        hidden: document.getElementById('sweepbox').hidden,
+        button: document.getElementById('sweep').hidden,
+        note: document.getElementById('sweepnote').textContent,
+      };
+    });
+    check('and is offered once one has been', offered.hidden === false
+      && offered.button === false, JSON.stringify(offered));
+    // It is slow enough that springing it on someone would be a trap.
+    check('the offer says how long it will take',
+      /about .*(second|minute)/.test(offered.note), JSON.stringify(offered.note));
+
+    // The sweep draws every typeface, not the two the old fallback used: the
+    // whole reason to run it is that the reading was defeated by unusual type.
+    const faces = await page.evaluate(() => {
+      const B = window.Blinded;
+      B.state.terms = ['KNW'];
+      const entries = B.sweepTemplates();
+      return { count: entries.length, all: window.BlindedTextImage.FACES.length,
+        everyOneSmall: entries.every(e => e.smallText === true) };
+    });
+    check('the sweep looks in every typeface',
+      faces.count === faces.all && faces.all === 8, JSON.stringify(faces));
+    check('and treats them all as small text, which is where reading fails',
+      faces.everyOneSmall === true, JSON.stringify(faces));
+
+    // A sweep that re-proposed what was already marked would bury its genuine
+    // additions in duplicates, which is the failure this feature replaces.
+    const dedupe = await page.evaluate(() => {
+      const B = window.Blinded;
+      const p = B.state.pages[0];
+      const kept = { x: 100, y: 100, w: 60, h: 20 };
+      p.imageHits = [{ id: 'existing', term: 'KNW', rect: kept, score: 1 }];
+      const out = {
+        onTop: B.alreadyCovered(p, { x: 104, y: 102, w: 60, h: 20 }),
+        elsewhere: B.alreadyCovered(p, { x: 400, y: 400, w: 60, h: 20 }),
+      };
       p.imageHits = [];
-      const marks = await B.checkDoubts({});
-      const out = { marks, left: B.state.doubts.length,
-        hit: p.imageHits.some(m => m.term === 'Amphitheatre') };
-      p.imageHits = [];
-      B.state.doubts = [];
-      B.state.terms = [];
-      B.renderDoubts();
       return out;
     });
-    check('re-reading a doubtful spot finds the word that was there',
-      settled.marks >= 1 && settled.hit === true, JSON.stringify(settled));
-    check('and the spot stops being doubtful',
-      settled.left === 0, JSON.stringify(settled));
+    check('a spot already marked is not proposed again',
+      dedupe.onTop === true, JSON.stringify(dedupe));
+    check('but a spot nothing has touched is', dedupe.elsewhere === false,
+      JSON.stringify(dedupe));
 
-    // Amber, not red: red says "this will be covered", and a doubt is the
-    // opposite of a decision. Checked as pixels, because the distinction only
-    // exists if it reaches the screen.
+    // Amber has to reach the screen, or the distinction does not exist.
+    // Checked as pixels for that reason.
     const drawn = await page.evaluate(() => {
       const B = window.Blinded;
       const p = B.state.pages[0];
       const ctx = p.canvas.getContext('2d');
-      const at = () => ctx.getImageData(100, 75, 1, 1).data;
+      const at = () => [...ctx.getImageData(100, 75, 1, 1).data].slice(0, 3);
+      const rect = { x: 60, y: 60, w: 80, h: 30 };
 
-      B.state.doubts = [];
       B.state.applied = false;
+      p.imageHits = [];
       B.redrawAll();
-      const plain = [...at()].slice(0, 3);
+      const plain = at();
 
-      B.state.doubts = [{ id: 'd1', pageIndex: 0, terms: ['KNW'], read: 'CRW)',
-        confidence: 41, rect: { x: 60, y: 60, w: 80, h: 30 } }];
+      p.imageHits = [{ id: 'ordinary', term: 'KNW', rect, score: 1 }];
       B.redrawAll();
-      const amber = [...at()].slice(0, 3);
+      const red = at();
 
-      B.state.doubts = [];
+      p.imageHits = [{ id: 'found', term: 'KNW', rect, score: 1, bySweep: true }];
       B.redrawAll();
-      return { plain, amber };
+      const amber = at();
+
+      p.imageHits = [];
+      B.redrawAll();
+      return { plain, red, amber };
     });
-    check('a doubt changes what is on the page', 
-      drawn.plain.join(',') !== drawn.amber.join(','), JSON.stringify(drawn));
-    // Amber is warm: more red than blue. A red mark would be warm too, so the
-    // green channel is what separates them — amber keeps it, red does not.
-    check('and it is painted amber rather than red',
-      drawn.amber[0] > drawn.amber[2] && drawn.amber[1] > drawn.amber[2]
-        && drawn.amber[1] > drawn.plain[2] * 0.5, JSON.stringify(drawn));
+    check('a mark the sweep added changes what is on the page',
+      drawn.plain.join() !== drawn.amber.join(), JSON.stringify(drawn));
+    // Amber and red are both warm, so the green channel is what separates
+    // them. Comparing against the ordinary red mark rather than a constant
+    // means this fails if the two are ever painted the same.
+    check('and it is amber, not the red an ordinary mark gets',
+      drawn.amber[1] > drawn.red[1] && drawn.amber.join() !== drawn.red.join(),
+      JSON.stringify(drawn));
 
-    await page.evaluate(() => {
-      window.Blinded.state.doubts = [];
-      window.Blinded.renderDoubts();
+    // Running it end to end on a real page: the word is in the fixture, so a
+    // sweep must find it, mark it, and say what it did.
+    const swept = await page.evaluate(async () => {
+      const B = window.Blinded;
+      const p = B.state.pages[0];
+      B.state.terms = ['Parkway'];
+      B.state.applied = true;
+      p.imageHits = [];
+      p.hits = [];
+      const added = await B.runSweep();
+      const out = {
+        added,
+        marks: p.imageHits.filter(m => m.bySweep).length,
+        note: document.getElementById('sweepnote').textContent,
+        buttonGone: document.getElementById('sweep').hidden,
+      };
+      p.imageHits = [];
+      B.state.sweptTerms = [];
+      B.state.terms = [];
+      return out;
     });
+    check('the sweep finds a word that is really on the page',
+      swept.added >= 1 && swept.marks === swept.added, JSON.stringify(swept));
+    check('and every mark it adds is flagged as its own',
+      swept.marks >= 1, JSON.stringify(swept));
+    check('afterwards it says what it added', /added \d+ mark/.test(swept.note),
+      JSON.stringify(swept.note));
+    check('and stops offering itself for the same words',
+      swept.buttonGone === true, JSON.stringify(swept));
   }
 
   // ---------- every long pass reports the same way ----------
@@ -1764,22 +1622,30 @@ try {
       const texts = [];
       const notes = [];
       const withBar = [];
-      const watch = setInterval(() => {
+      // Watched rather than sampled. A poll every 25ms missed the bar on a
+      // short document perhaps one run in three — not because the bar was
+      // absent but because rendering two pages is quicker than the sampler.
+      // An observer sees every change to the overlay whether or not the
+      // browser happened to yield while it was on screen.
+      const sample = () => {
         const busy = document.getElementById('busy');
-        if (!busy.hidden) {
-          const t = document.getElementById('busy-text').textContent;
-          texts.push(t);
-          notes.push(document.getElementById('busy-note').textContent);
-          withBar.push(!document.getElementById('busy-legs').hidden);
-        }
-      }, 25);
+        if (busy.hidden) return;
+        texts.push(document.getElementById('busy-text').textContent);
+        notes.push(document.getElementById('busy-note').textContent);
+        withBar.push(!document.getElementById('busy-legs').hidden);
+      };
+      const observer = new MutationObserver(sample);
+      observer.observe(document.getElementById('busy'),
+        { attributes: true, childList: true, characterData: true, subtree: true });
+      sample();
+      const watch = setInterval(sample, 25);
       // Watch until the document is open rather than for a fixed stretch: a
       // window long enough today is a race tomorrow, and a flaky check is
       // worse than no check.
       const until = setInterval(() => {
         const open = !document.getElementById('view-review').hidden;
         if (open || Date.now() - started > 15000) {
-          clearInterval(watch); clearInterval(until);
+          clearInterval(watch); clearInterval(until); observer.disconnect();
           resolve({ texts, notes, withBar });
         }
       }, 20);

@@ -194,53 +194,41 @@ are read a few at a time: about 0.8 seconds a page on four cores, against eight
 before the WebAssembly build was pinned correctly and the reading was split
 across engines.
 
-### When the reading is shaky
+### Checking the reading, thoroughly
 
 OCR misreads, and it says so when it does. On a real slide the badge reading
 `("KNW")` came back as `CRW)` at 41 confidence while every word around it read
 at 90 or better — the reading was wrong, and the number said so.
 
-That signal cannot be used bluntly. Measured across four decks, three to
-thirteen per cent of the words on *every* page score under 50, and nearly all
-of it is rubbish picked off rules, icons and chart furniture: "Hl", "ae", "ee".
-A warning keyed to that alone would fire on every document ever opened, which
-is the same as no warning.
+The tool used to act on that directly, outlining every poorly-read spot that
+could plausibly be one of the terms. Three rounds of narrowing went into making
+that list short: the reading had to be about the right length once a badge's
+punctuation was stripped, about the size of the other words on the page rather
+than a speck, and in a box the word could actually fill at that size. It was
+still 583 spots across 96 pages on a real deck.
 
-So a spot is only called doubtful if it was read poorly **and** could be one of
-the terms — about the right length once the punctuation a badge wraps it in is
-removed, and about the size of the other words on the page rather than a speck.
-On that slide, 15 spots out of 206 words, one of which was the real thing.
+That is not a warning. At that volume it is a texture a reviewer learns to
+scroll past, and worse, it asks them to adjudicate something they have no way
+to judge: nothing on the page tells a human whether `ae` at 18 confidence was
+once a name. The feature was removed.
 
-Those spots are outlined in **amber**, never red. Red means "this will be
-covered when you press Redact"; amber means "something here might need covering
-and the tool cannot tell". Using one colour for both would turn a question into
-a promise.
+What replaced it is a button, offered once a redaction has been done, that
+searches every page for the *shape* of each word in all eight typefaces —
+the method the reader replaced, run in full as a second opinion. Anything it
+turns up that the reading missed becomes an ordinary mark, drawn in **amber**
+so it is obvious which ones are new. A found word is a fact a reviewer can
+check at a glance; a doubtful spot was a question they could not answer.
 
-A box also has to be able to hold the word. Counting letters is a weak test on
-its own: a misreading of a three-letter word has two to four letters, and so
-does a great deal of ordinary text — on a hundred-page deck that came to 853
-spots, most of them whole phrases like "every year with KAG since initial
-engagement", which cannot be a three-letter word whatever confidence it was
-read at. A word has a shape, and the reading's box has to be roughly the shape
-the word would make at that size. On the page this was measured against it took
-twelve spots to seven, and kept the one that mattered.
+Spots already marked are not proposed again, or the handful of genuine
+additions would be buried in hundreds of duplicates — which is exactly how the
+old list failed.
 
-The panel offers to check them by shape. That search is the old method, and on
-the whole page it costs about 40 seconds a page for one term; confined to the
-doubtful spots it took 4.3 seconds and found the word at 0.81. It uses two
-typefaces rather than eight — measured as enough to find every true occurrence
-across two real decks, where a single upright face misses italic captions
-outright.
-
-There is a wider sweep behind it: every place the reader was unsure at all,
-including the ones that do not look like the word, in all eight typefaces
-rather than two. It states its own cost, because that is the only reason it is
-a separate button — on the page above, 35 places against 7, and 32 seconds
-against 4.
-
-Checking is offered, not done: on a long document it is minutes, and most of
-the spots will be nothing. A spot that the check settles becomes an ordinary
-proposal; one it does not stays amber, for a human to look at before exporting.
+It is slow, which is why it is a button. Measured on pages the size of a real
+slide, about two megapixels: one word in eight typefaces took 7.9 seconds on a
+single dense page of text, and 3.3 seconds a page across two lighter ones, the
+difference being parallelism and how much of each page survives the coarse
+pass. A second word roughly doubles it. The panel states the estimate for the
+document actually open, scaled by its own page size.
 
 If the reader cannot be loaded at all, the words are hunted for by shape
 instead and the panel says so. That is the older method, kept as the fallback:

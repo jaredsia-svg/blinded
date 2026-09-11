@@ -92,8 +92,10 @@
     // Set while a run is being stopped between pages.
     paused: false,
     // Places the reader was unsure of, that could be one of the terms.
-    doubts: [],
-    doubtsChecked: false,
+    // The thorough sweep: whether it has run for the terms as they stand, and
+    // what it added when it did.
+    sweptTerms: [],
+    sweepAdded: 0,
     // Per page: the words OCR read, and the text they stitch into.
     ocrRead: false,
     // Terms whose picture search has already run, so pressing Redact twice
@@ -352,8 +354,8 @@
     state.ocrRead = false;
     state.ocrFailed = false;
     state.useOcr = true;
-    state.doubts = [];
-    state.doubtsChecked = false;
+    state.sweptTerms = [];
+    state.sweepAdded = 0;
     state.pages = pages.map(p => ({
       ...p,
       source: p.canvas,          // pristine; never drawn on
@@ -484,6 +486,10 @@
 
     el('export').disabled = !state.applied || marks === 0;
 
+    // The thorough sweep is offered on the back of a finished redaction, so
+    // whether it shows at all follows the same state this button reflects.
+    renderSweep();
+
     const note = el('exportnote');
     const unread = state.pages.filter(page => !page.ocrItems).length;
     if (state.applied) {
@@ -600,9 +606,8 @@
 
   function clearTermImages() {
     state.searchedTerms = [];
-    state.doubts = [];
-    state.doubtsChecked = false;
-    renderDoubts();
+    state.sweptTerms = [];
+    state.sweepAdded = 0;
     for (const page of state.pages) {
       page.imageHits = page.imageHits.filter(m => !m.term);
     }
@@ -656,332 +661,10 @@
     state.ocrRead = state.pages.every(page => page.ocrItems);
   }
 
-  // Checking those spots by reading them again, closer.
-  //
-  // The first version of this searched each doubtful spot by shape, and it was
-  // the wrong instrument. What goes wrong on a dense slide is not that the
-  // letters are unrecognisable — it is that the page-level layout analysis
-  // carves the page up badly and hands the recogniser a line that runs through
-  // three columns and a chart. Read the same lettering on its own and it comes
-  // back perfectly: the badge that read "KAS Kni Kni" as part of a whole page
-  // read as 'Kei & Wah Engineering ... Pte. Ltd. ("KNW")' in 166 milliseconds
-  // when the crop was one line tall.
-  //
-  // One line tall is not a detail. Measured on that page: a 58 pixel band read
-  // the badge at every width from 210 to 690 pixels, and bands of 94 and 158
-  // pixels read nothing whatever, returning in four milliseconds because the
-  // layout analysis had decided the crop was a picture. Width is free. Height
-  // is the whole game.
-  const BAND_PAD_Y = 0.25;      // of the doubt's own height, above and below
-  const BAND_PAD_X = 8;         // of its height, left and right: width is free
-  const BAND_MIN_PAD_X = 120;
-  const BAND_OVERLAP = 0.7;     // how much of a line two doubts must share
-
-  function bandFor(doubt) {
-    const padY = Math.max(4, doubt.rect.h * BAND_PAD_Y);
-    const padX = Math.max(BAND_MIN_PAD_X, doubt.rect.h * BAND_PAD_X);
-    return {
-      x: doubt.rect.x - padX, y: doubt.rect.y - padY,
-      w: doubt.rect.w + padX * 2, h: doubt.rect.h + padY * 2,
-      doubts: [doubt],
-    };
-  }
-
-  // Doubts merged along a line, never down the page. Two on the same line
-  // share one read, which is free; stacking two lines into one crop is the
-  // exact thing that breaks the read.
-  function bandsFor(doubts) {
-    const out = [];
-    for (const doubt of doubts) {
-      const band = bandFor(doubt);
-      const shared = out.find(r => {
-        const overlapY = Math.min(r.y + r.h, band.y + band.h) - Math.max(r.y, band.y);
-        const overlapX = Math.min(r.x + r.w, band.x + band.w) - Math.max(r.x, band.x);
-        return overlapY > Math.min(r.h, band.h) * BAND_OVERLAP && overlapX > 0;
-      });
-      if (!shared) { out.push(band); continue; }
-      const right = Math.max(shared.x + shared.w, band.x + band.w);
-      shared.x = Math.min(shared.x, band.x);
-      shared.w = right - shared.x;
-      shared.doubts.push(doubt);
-    }
-    return out;
-  }
-
-  function bandCanvas(page, band) {
-    const x = Math.max(0, Math.round(band.x));
-    const y = Math.max(0, Math.round(band.y));
-    const w = Math.min(page.source.width - x, Math.round(band.w));
-    const h = Math.min(page.source.height - y, Math.round(band.h));
-    if (w < 12 || h < 8) return null;
-    const canvas = document.createElement('canvas');
-    canvas.width = w;
-    canvas.height = h;
-    const ctx = canvas.getContext('2d', { alpha: false });
-    ctx.drawImage(page.source, x, y, w, h, 0, 0, w, h);
-    return { canvas, x, y, w, h };
-  }
-
-  async function checkDoubts(options) {
-    const opts = options || {};
-    const thorough = Boolean(opts.thorough);
-    const doubts = thorough ? findDoubts(true) : state.doubts;
-    if (!doubts.length) return 0;
-
-    const byPage = new Map();
-    for (const doubt of doubts) {
-      if (!byPage.has(doubt.pageIndex)) byPage.set(doubt.pageIndex, []);
-      byPage.get(doubt.pageIndex).push(doubt);
-    }
-    const work = [];
-    for (const [pageIndex, list] of byPage) {
-      for (const band of bandsFor(list)) work.push({ pageIndex, band });
-    }
-
-    let done = 0;
-    state.paused = false;
-    busy(true, 'Working…');
-    legs([{ key: 'check', label: thorough ? 'Re-reading everywhere' : 'Re-reading spots',
-             total: work.length }]);
-    allowPause();
-
-    const found = [];
-    // A doubt is settled either way: the term turns up in the closer read, or
-    // the band read cleanly and the term is not in it. The second is the half
-    // that makes the list usable — a spot the reader has now looked at twice
-    // and seen ordinary words in is not a spot worth showing anybody.
-    const settled = new Set();
-    try {
-      for (const unit of work) {
-        if (state.paused) break;
-        const page = state.pages[unit.pageIndex];
-        if (!page) { done++; leg('check', done); continue; }
-        const crop = bandCanvas(page, unit.band);
-        if (!crop) { done++; leg('check', done); continue; }
-
-        const items = await Ocr.readPage(crop.canvas);
-        const { text, items: placed } = Ocr.stitch(items);
-        const spans = Detect.resolveOverlaps(Detect.findTerms(text, state.terms));
-        for (const span of spans) {
-          for (const item of placed) {
-            if (item.start >= span.end || item.end <= span.start) continue;
-            found.push({
-              term: span.term, pageIndex: unit.pageIndex,
-              rect: { x: item.rect.x + crop.x, y: item.rect.y + crop.y,
-                      w: item.rect.w, h: item.rect.h },
-            });
-          }
-        }
-        // "Read cleanly" means it came back looking like a line of prose, not
-        // like one salvaged fragment. Two confident words rather than one: a
-        // crop too narrow to hold the word can still yield a single neighbour
-        // read well, and discharging a doubt on that is exactly the false
-        // reassurance this whole prompt exists to avoid. A band that returns
-        // nothing has told us nothing, and its doubts stand.
-        const legible = placed.filter(i =>
-          /[A-Za-z]{2,}/.test(i.str) && i.confidence >= 70).length >= 2;
-        if (legible || spans.length) {
-          for (const doubt of unit.band.doubts) settled.add(doubt.id);
-        }
-        done++;
-        leg('check', done);
-        await (window.BlindedSchedule
-          ? window.BlindedSchedule.nextTask()
-          : new Promise(r => setTimeout(r, 0)));
-      }
-    } finally {
-      busy(false);
-    }
-
-    // Two bands overlapping the same word is one find, not two.
-    const merged = [];
-    for (const pageIndex of new Set(found.map(f => f.pageIndex))) {
-      const mine = found.filter(f => f.pageIndex === pageIndex);
-      const kept = Match.suppress(mine.map(f => ({ ...f.rect, score: 1, ref: f })), 0.3);
-      for (const box of kept) merged.push(box.ref);
-    }
-    for (const hit of merged) {
-      const page = state.pages[hit.pageIndex];
-      if (!page) continue;
-      page.imageHits.push({
-        id: 'reread:' + hit.term + ':' + hit.pageIndex + ':'
-          + Math.round(hit.rect.x) + ':' + Math.round(hit.rect.y),
-        term: hit.term, rect: hit.rect, score: 1, read: true,
-      });
-    }
-    state.doubts = state.doubts.filter(d => !settled.has(d.id));
-    if (thorough) state.thoroughDone = true;
-    state.doubtsChecked = true;
-    markDuplicates();
-    renderTermCounts();
-    renderDoubts();
-    renderCounts();
-    redrawAll();
-    refreshApply();
-    return merged.length;
-  }
-
-  // The prompt. Deliberately factual and conditional: it names how many spots
-  // and what they might be, rather than announcing a general risk. A banner
-  // that says "things may have been missed" on every document teaches the
-  // reviewer to close it.
-  function renderDoubts() {
-    const box = el('doubtbox');
-    const note = el('doubtnote');
-    const count = state.doubts.length;
-    box.hidden = count === 0;
-    if (!count) return;
-    const pages = new Set(state.doubts.map(d => d.pageIndex)).size;
-    const terms = [...new Set(state.doubts.flatMap(d => d.terms))];
-    // Most of these are nothing, and saying so is the difference between a
-    // note a reviewer reads and a warning they learn to dismiss.
-    note.textContent = 'The reader was unsure of ' + count
-      + (count === 1 ? ' place' : ' places')
-      + (pages > 1 ? ' across ' + pages + ' pages' : '')
-      + ', outlined in amber. Most will be nothing, but one could be '
-      + terms.map(t => '"' + t + '"').join(' or ')
-      + ' misread. Reading each of them again on its own can settle it.';
-    el('doubtcheck').textContent = count === 1
-      ? 'Re-read that spot' : 'Re-read those ' + count + ' spots';
-
-    // The wider sweep: everywhere the reader was unsure at all, rather than
-    // only where it was unsure in a way that looks like the word. Its cost is
-    // stated because it is the whole reason it is a separate button.
-    const everywhere = findDoubts(true).length;
-    const extra = Math.max(0, everywhere - count);
-    const wider = el('doubtall');
-    const widerNote = el('doubtallnote');
-    wider.hidden = extra === 0;
-    widerNote.hidden = extra === 0;
-    if (extra === 0) return;
-    wider.textContent = 'Re-read everywhere instead';
-    // Spots on the same line share one read, so the work is bands rather than
-    // spots — measured at eight doubts to four bands, and about a tenth of a
-    // second a band. Every term is looked for in the same read, so this does
-    // not multiply by the number of words typed.
-    const seconds = Math.round(everywhere * 0.5 * 0.1);
-    widerNote.textContent = 'Or re-read all ' + everywhere + ' places the reader was '
-      + 'unsure of — including ' + extra + ' that do not look like the word. '
-      + 'Slower: about ' + describeTime(seconds) + ', and still no guarantee.';
-  }
-
   function describeTime(seconds) {
     if (seconds < 90) return Math.max(1, Math.round(seconds)) + ' seconds';
     const minutes = Math.round(seconds / 60);
     return minutes + (minutes === 1 ? ' minute' : ' minutes');
-  }
-
-  // ---------- where the reading was shaky ----------
-  //
-  // OCR misreads, and when it does it says so: the word that should have been
-  // ("KNW") came back as CRW) at 41 confidence while everything around it read
-  // at 90 or better. That is the signal — but it cannot be used bluntly.
-  // Measured across four documents, three to thirteen per cent of the words on
-  // every single page score under 50, nearly all of them rubbish picked off
-  // rules and icons ("Hl", "ae", "ee"). Flagging pages that contain a doubtful
-  // word would flag every page ever, and a warning that always fires is a
-  // warning nobody reads.
-  //
-  // So a doubt has to look like it could be the term: read poorly, and about
-  // the right length once the punctuation a badge wraps it in is taken off.
-  const DOUBT_CONFIDENCE = 60;
-  const DOUBT_LENGTH_SLACK = 1;
-
-  function lettersOf(text) {
-    return String(text || '').replace(/[^A-Za-z0-9]/g, '');
-  }
-
-  function couldBeTerm(word, term) {
-    const seen = lettersOf(word).length;
-    const want = lettersOf(term).length;
-    if (!seen || !want) return false;
-    return Math.abs(seen - want) <= DOUBT_LENGTH_SLACK;
-  }
-
-  // How wide the word is for its height, which is a property of the word and
-  // not of the document it is in.
-  const aspectOfTerm = new Map();
-
-  function termAspect(term) {
-    if (aspectOfTerm.has(term)) return aspectOfTerm.get(term);
-    let aspect = 0;
-    try {
-      const drawn = TextImage.templatesFor(term, TextImage.FALLBACK_FACES)[0];
-      if (drawn && drawn.height) aspect = drawn.width / drawn.height;
-    } catch { aspect = 0; }
-    aspectOfTerm.set(term, aspect);
-    return aspect;
-  }
-
-  // Could a box of this shape hold this word at all?
-  //
-  // This is what cuts the list from unusable to useful. Counting letters is a
-  // weak test, because a misreading of a three-letter word has two to four
-  // letters and so does a great deal of ordinary text: on a hundred-page deck
-  // that came to 853 spots, most of them whole phrases — "every year with KAG
-  // since initial engagement" — which cannot be a three-letter word whatever
-  // its confidence. A word has a shape, and a box four times too wide is not
-  // that shape. On the page this was measured against it took twelve spots to
-  // seven, and kept the one that mattered.
-  const WIDTH_LOW = 0.45;
-  const WIDTH_HIGH = 2.2;
-
-  function widthCouldHold(rect, term) {
-    const aspect = termAspect(term);
-    if (!aspect || !rect || !rect.h) return true;   // cannot tell: do not exclude
-    const expected = rect.h * aspect;
-    return rect.w >= expected * WIDTH_LOW && rect.w <= expected * WIDTH_HIGH;
-  }
-
-  // Every spot worth a second look, across the document.
-  // `loose` drops the two filters that make this a short list: the reading no
-  // longer has to be about the right length for a term, and it no longer has
-  // to be about the size of the words around it. That is the thorough sweep —
-  // everywhere the reader was unsure at all, rather than everywhere it was
-  // unsure in a way that looks like the word being hunted.
-  function findDoubts(loose) {
-    const out = [];
-    if (!state.terms.length) return out;
-    for (const page of state.pages) {
-      // Most low-confidence readings are specks off rules, icons and chart
-      // furniture, and they are tiny. Lettering a reader could mistake for a
-      // word is about the size of the other words on the page, so the words
-      // read confidently set the scale that a doubt has to reach.
-      const sure = (page.ocrItems || [])
-        .filter(i => i.confidence >= 70 && /[A-Za-z]{2,}/.test(i.str))
-        .map(i => i.rect.h).sort((a, b) => a - b);
-      const typical = sure.length ? sure[Math.floor(sure.length / 2)] : 0;
-      const floor = typical * 0.6;
-
-      for (const item of page.ocrItems || []) {
-        if (!(item.confidence < DOUBT_CONFIDENCE)) continue;
-        if (!/[A-Za-z]/.test(item.str)) continue;
-        if (!loose && item.rect.h < floor) continue;
-        // Already covered? Then there is nothing to be unsure about.
-        const covered = liveImageHits(page).some(m =>
-          m.rect && Match.overlapFraction(m.rect, item.rect) > 0.4);
-        if (covered) continue;
-        // Every term it could be, not the first one in the list.
-        //
-        // Tagging a doubt with one term looked harmless while there was one
-        // term. With two of the same length it was not: every doubt took
-        // whichever was typed first, so the note named that word when the
-        // other was the one missing, and the check only ever searched for the
-        // first — the thorough sweep found nothing at all for the second,
-        // which is the word it existed to find.
-        const could = loose
-          ? state.terms.slice()
-          : state.terms.filter(term =>
-              couldBeTerm(item.str, term) && widthCouldHold(item.rect, term));
-        if (!could.length) continue;
-        out.push({
-          id: 'doubt:' + page.index + ':' + Math.round(item.rect.x) + ':' + Math.round(item.rect.y),
-          pageIndex: page.index, terms: could, read: item.str,
-          confidence: item.confidence, rect: { ...item.rect },
-        });
-      }
-    }
-    return out;
   }
 
   // Terms found in what OCR read, as the same kind of proposal the picture
@@ -1016,9 +699,6 @@
       }
     }
     state.searchedTerms = state.terms.slice();
-    state.doubts = findDoubts();
-    state.doubtsChecked = false;
-    renderDoubts();
   }
 
   // Everything that needs looking for, as one list.
@@ -1447,7 +1127,10 @@
     if (!state.labelling) {
       // Merged across findings, which closes the gaps between adjacent bars.
       return Boxes.boxesForSpans(page.items, live.map(h => h.finding), { advance: measure })
-        .concat(images.map(m => m.rect))
+        // The flag rides along with the rect: this is the path the page draws
+        // through unless labelling is on, so dropping it here would mean the
+        // sweep's marks were amber only for reviewers using placeholders.
+        .concat(images.map(m => ({ ...m.rect, sweep: Boolean(m.bySweep) })))
         .concat(page.manual);
     }
 
@@ -1464,7 +1147,8 @@
       hit.rects.forEach((r, i) => boxes.push({ ...r, label: i === widest ? label : undefined }));
     }
     for (const match of images) {
-      boxes.push({ ...match.rect, label: state.labels.byId[match.id] });
+      boxes.push({ ...match.rect, label: state.labels.byId[match.id],
+                   sweep: Boolean(match.bySweep) });
     }
     for (const box of page.manual) {
       boxes.push({ ...box, label: state.labels.byId[box.id] });
@@ -1498,32 +1182,17 @@
       // Being able to read what is about to disappear is the whole point of
       // reviewing, and a filled bar removes that before the decision is made.
       ctx.save();
-      ctx.strokeStyle = '#d92d20';
-      ctx.fillStyle = 'rgba(217, 45, 32, 0.13)';
       ctx.lineWidth = Math.max(2, page.canvas.width / 600);
       for (const box of boxes) {
+        // Amber for what the thorough sweep added, red for everything else.
+        // Both will be covered when Redact is pressed — the colour says where
+        // the mark came from, not whether it counts. A reviewer who has just
+        // asked "did you miss anything" needs the answer to be visible on the
+        // page without hunting for it.
+        ctx.strokeStyle = box.sweep ? '#d98b1f' : '#d92d20';
+        ctx.fillStyle = box.sweep ? 'rgba(217, 139, 31, 0.18)' : 'rgba(217, 45, 32, 0.13)';
         ctx.fillRect(box.x, box.y, box.w, box.h);
         ctx.strokeRect(box.x, box.y, box.w, box.h);
-      }
-      ctx.restore();
-    }
-
-    // Places the reader was unsure of, which nothing has decided about yet.
-    //
-    // Amber and dashed, never red: red means "this will be covered when you
-    // press Redact", and these are the opposite — "something here might need
-    // covering and the tool cannot tell". Drawing them in the same colour as a
-    // decision would turn a question into a promise.
-    const doubts = state.doubts.filter(d => d.pageIndex === page.index);
-    if (doubts.length) {
-      ctx.save();
-      ctx.strokeStyle = '#d98b1f';
-      ctx.fillStyle = 'rgba(217, 139, 31, 0.16)';
-      ctx.lineWidth = Math.max(2, page.canvas.width / 600);
-      ctx.setLineDash([7, 4]);
-      for (const doubt of doubts) {
-        ctx.fillRect(doubt.rect.x, doubt.rect.y, doubt.rect.w, doubt.rect.h);
-        ctx.strokeRect(doubt.rect.x, doubt.rect.y, doubt.rect.w, doubt.rect.h);
       }
       ctx.restore();
     }
@@ -2246,18 +1915,184 @@
   showWordControls();
 
   el('busy-pause').addEventListener('click', requestPause);
-  el('doubtcheck').addEventListener('click', () => runDoubtCheck({ thorough: false }));
-  el('doubtall').addEventListener('click', () => runDoubtCheck({ thorough: true }));
+  el('sweep').addEventListener('click', runSweep);
 
-  async function runDoubtCheck(options) {
-    const found = await checkDoubts(options);
-    if (found === 0) {
-      el('doubtnote').textContent = options.thorough
-        ? 'Nothing matched anywhere the reader was unsure. Whatever is on those '
-          + 'pages, it is not a shape this can recognise — look at them before exporting.'
-        : 'Nothing matched at those spots. They are still outlined in amber — '
-          + 'look at them before exporting.';
+  // ---------- the thorough sweep ----------
+  //
+  // Reading the pages finds the words, and on the documents this was built
+  // against it finds nearly all of them. Nearly is the problem: a word set in
+  // a typeface the reader stumbles over, or small, or at an angle, can be read
+  // as something else and then it is simply not there.
+  //
+  // The tool used to guess at this, flagging every place the reader sounded
+  // unsure. On a hundred-page deck that was 583 amber boxes over 96 pages, and
+  // a warning at that volume is not a warning — it is a texture the reviewer
+  // learns to scroll past. Worse, it asked the reviewer to adjudicate
+  // something they have no way to judge.
+  //
+  // So nothing is flagged on suspicion any more. Instead this searches the
+  // whole document for the shape of each word, in every typeface, and anything
+  // it turns up that the reading missed becomes an ordinary mark, drawn in
+  // amber so it is obvious which ones are new. A found word is a fact a
+  // reviewer can check at a glance; a doubtful spot was a question they could
+  // not answer.
+  //
+  // It is slow, which is why it is a button and not the default.
+
+  // Every typed word, in all eight typefaces, whether or not it has been
+  // looked for already: the point is to look again, harder.
+  function sweepTemplates() {
+    const entries = [];
+    for (const term of state.terms) {
+      TextImage.templatesFor(term, TextImage.FACES).forEach((template, i) => {
+        entries.push({
+          key: 'sweep:' + term + ':' + i, template, term,
+          threshold: wordBarFor(term),
+          smallText: true,
+        });
+      });
     }
+    return entries;
+  }
+
+  // Is this spot already accounted for? A sweep that re-proposes what the
+  // reader already found would bury the handful of genuine additions in
+  // hundreds of duplicates, which is the failure this feature replaces.
+  function alreadyCovered(page, rect) {
+    for (const hit of page.hits || []) {
+      for (const r of hit.rects) if (Match.overlapFraction(r, rect) > 0.3) return true;
+    }
+    for (const match of page.imageHits || []) {
+      if (match.rect && Match.overlapFraction(match.rect, rect) > 0.3) return true;
+    }
+    for (const box of page.manual || []) {
+      if (Match.overlapFraction(box, rect) > 0.3) return true;
+    }
+    return false;
+  }
+
+  async function runSweep() {
+    const entries = sweepTemplates();
+    if (!entries.length) return 0;
+
+    state.paused = false;
+    busy(true, 'Working…');
+    legs([{ key: 'sweep', label: 'Checking every page by shape', total: state.pages.length }]);
+    allowPause();
+
+    let results;
+    try {
+      results = await ImageSearch.searchAllParallel(state.pages, entries,
+        { threshold: sensitivity() },
+        done => leg('sweep', done));
+    } catch (error) {
+      busy(false);
+      alert('The thorough check could not finish: '
+        + (error && error.message ? error.message : error));
+      return 0;
+    } finally {
+      busy(false);
+    }
+
+    // Several typefaces finding the same word in the same place is one find,
+    // so they are pooled per page and suppressed before anything is proposed.
+    let added = 0;
+    for (const term of new Set(entries.map(e => e.term))) {
+      const perPage = new Map();
+      for (const entry of entries.filter(e => e.term === term)) {
+        const found = results.get(entry.key);
+        if (!found) continue;
+        for (const hit of found.matches) {
+          if (!perPage.has(hit.pageIndex)) perPage.set(hit.pageIndex, []);
+          perPage.get(hit.pageIndex).push(hit);
+        }
+      }
+      for (const [pageIndex, hits] of perPage) {
+        const page = state.pages[pageIndex];
+        if (!page) continue;
+        for (const hit of Match.suppress(hits, 0.3)) {
+          const rect = { x: hit.x, y: hit.y, w: hit.w, h: hit.h };
+          if (alreadyCovered(page, rect)) continue;
+          page.imageHits.push({
+            id: 'sweep:' + term + ':' + pageIndex + ':'
+              + Math.round(hit.x) + ':' + Math.round(hit.y),
+            term, rect, score: hit.score,
+            inverted: Boolean(hit.inverted),
+            // What makes it amber on the page and countable in the note.
+            bySweep: true,
+          });
+          added++;
+        }
+      }
+    }
+
+    state.sweptTerms = state.terms.slice();
+    state.sweepAdded = added;
+    // New marks are not yet covered, so the document is no longer redacted.
+    if (added) markPending();
+    markDuplicates();
+    renderTermCounts();
+    renderSweep();
+    renderCounts();
+    redrawAll();
+    refreshApply();
+    return added;
+  }
+
+  // The button, and what it says afterwards.
+  //
+  // Offered only once a redaction has been done, because it is the second
+  // opinion on that redaction: there is nothing to be thorough about before
+  // there is a result to check.
+  function renderSweep() {
+    const box = el('sweepbox');
+    const note = el('sweepnote');
+    const button = el('sweep');
+    const swept = state.sweptTerms.length
+      && state.sweptTerms.length === state.terms.length
+      && state.sweptTerms.every((t, i) => t === state.terms[i]);
+
+    // Visible once a redaction has been done — and it stays visible after the
+    // sweep has run, even though adding marks un-applies that redaction. It
+    // was hidden by its own success at first: the marks it found set the
+    // document back to unredacted, which took away the note saying what it
+    // had found.
+    box.hidden = !((state.applied || state.sweptTerms.length)
+      && state.terms.length && state.kind !== 'text');
+    if (box.hidden) return;
+
+    if (!swept) {
+      button.hidden = false;
+      button.textContent = 'Check every page by shape';
+      // Honest about the cost, because it is the whole reason this is a
+      // button rather than the default.
+      //
+      // Measured, on pages the size of a real slide (1224x1584, about two
+      // megapixels): one word in eight typefaces took 7.9 seconds on a single
+      // dense page of text and 3.3 seconds a page across two lighter ones,
+      // the difference being parallelism and how much of the page survives
+      // the coarse pass. A second word roughly doubles it. So the estimate is
+      // scaled by the document's own page size rather than assuming one, and
+      // 2.5 seconds per megapixel per word sits between the two measurements.
+      const first = state.pages[0];
+      const megapixels = first ? (first.source.width * first.source.height) / 1e6 : 2;
+      const seconds = Math.round(
+        state.pages.length * state.terms.length * megapixels * 2.5);
+      note.textContent = 'The reader finds words by recognising letters, which '
+        + 'means unusual type can defeat it. This searches every page for the '
+        + 'shape of ' + (state.terms.length === 1 ? 'your word' : 'each word')
+        + ' instead, in eight typefaces, and adds anything it finds in amber. '
+        + 'Slow: about ' + describeTime(seconds) + ' for this document.';
+      return;
+    }
+
+    button.hidden = true;
+    note.textContent = state.sweepAdded === 0
+      ? 'The thorough check found nothing the reading had missed.'
+      : 'The thorough check added ' + state.sweepAdded
+        + (state.sweepAdded === 1 ? ' mark' : ' marks')
+        + ', outlined in amber. Press Redact to cover '
+        + (state.sweepAdded === 1 ? 'it' : 'them') + '.';
   }
 
   el('termimages').addEventListener('change', e => {
@@ -2341,7 +2176,7 @@
     sensitivity, wordSensitivity, wordBarFor, setTool, marking,
     applyRedaction, markPending, plannedCount, pendingTemplates, termsNeedingPictures,
     readPages, matchOcr, ocrPending, ocrMatchStale, showWordControls,
-    findDoubts, checkDoubts, renderDoubts, couldBeTerm, widthCouldHold, bandsFor,
+    sweepTemplates, runSweep, renderSweep, alreadyCovered,
     redrawAll, legs, leg, busyNote,
     describeTime,
     busy, pageProgress, requestPause,
