@@ -194,6 +194,39 @@ are read a few at a time: about 0.8 seconds a page on four cores, against eight
 before the WebAssembly build was pinned correctly and the reading was split
 across engines.
 
+### When the reading is shaky
+
+OCR misreads, and it says so when it does. On a real slide the badge reading
+`("KNW")` came back as `CRW)` at 41 confidence while every word around it read
+at 90 or better — the reading was wrong, and the number said so.
+
+That signal cannot be used bluntly. Measured across four decks, three to
+thirteen per cent of the words on *every* page score under 50, and nearly all
+of it is rubbish picked off rules, icons and chart furniture: "Hl", "ae", "ee".
+A warning keyed to that alone would fire on every document ever opened, which
+is the same as no warning.
+
+So a spot is only called doubtful if it was read poorly **and** could be one of
+the terms — about the right length once the punctuation a badge wraps it in is
+removed, and about the size of the other words on the page rather than a speck.
+On that slide, 15 spots out of 206 words, one of which was the real thing.
+
+Those spots are outlined in **amber**, never red. Red means "this will be
+covered when you press Redact"; amber means "something here might need covering
+and the tool cannot tell". Using one colour for both would turn a question into
+a promise.
+
+The panel offers to check them by shape. That search is the old method, and on
+the whole page it costs about 40 seconds a page for one term; confined to the
+doubtful spots it took 4.3 seconds and found the word at 0.81. It uses two
+typefaces rather than eight — measured as enough to find every true occurrence
+across two real decks, where a single upright face misses italic captions
+outright.
+
+Checking is offered, not done: on a long document it is minutes, and most of
+the spots will be nothing. A spot that the check settles becomes an ordinary
+proposal; one it does not stays amber, for a human to look at before exporting.
+
 If the reader cannot be loaded at all, the words are hunted for by shape
 instead and the panel says so. That is the older method, kept as the fallback:
 it is less reliable on italic and on small lettering, and it is the only thing

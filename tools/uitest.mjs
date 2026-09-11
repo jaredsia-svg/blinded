@@ -1350,6 +1350,110 @@ try {
     check('reading is what does it', fresh.reading === true, JSON.stringify(fresh));
   }
 
+  // ---------- spots the reader was unsure of ----------
+  //
+  // OCR misreads, and says so when it does: the word that should have been
+  // ("KNW") came back as CRW) at 41 confidence while its neighbours read at 90
+  // or better. But three to thirteen per cent of the words on every page score
+  // under 50, nearly all of it rubbish off rules and icons, so the signal only
+  // means something once it is narrowed to readings that could be the term.
+  {
+    if (await page.isVisible('#view-review')) await page.click('#restart');
+    await page.waitForSelector('#view-drop:not([hidden])');
+    await page.setInputFiles('#file', readablePath);
+    await page.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
+
+    const shape = await page.evaluate(() => {
+      const B = window.Blinded;
+      return {
+        knwLikeCrw: B.couldBeTerm('CRW)', 'KNW'),
+        knwLikeAe: B.couldBeTerm('ae', 'KNW'),
+        knwLikeLong: B.couldBeTerm('Engineering', 'KNW'),
+        knwLikeSingle: B.couldBeTerm('l', 'KNW'),
+        punctuationIgnored: B.couldBeTerm('(\u201cKNW\u201d)', 'KNW'),
+        emptyIsNot: B.couldBeTerm('', 'KNW') || B.couldBeTerm('---', 'KNW'),
+      };
+    });
+    check('a misreading of the right length could be the term',
+      shape.knwLikeCrw === true, JSON.stringify(shape));
+    check('and so could one a letter out', shape.knwLikeAe === true, JSON.stringify(shape));
+    check('a whole word longer could not', shape.knwLikeLong === false, JSON.stringify(shape));
+    check('nor could a single speck', shape.knwLikeSingle === false, JSON.stringify(shape));
+    check('the punctuation a badge wraps it in does not count',
+      shape.punctuationIgnored === true, JSON.stringify(shape));
+    check('and nothing at all is not a doubt', shape.emptyIsNot === false, JSON.stringify(shape));
+
+    // The prompt appears only when there is something to say.
+    const quiet = await page.evaluate(() => {
+      const B = window.Blinded;
+      B.state.doubts = [];
+      B.renderDoubts();
+      return document.getElementById('doubtbox').hidden;
+    });
+    check('with nothing doubtful the prompt stays out of the way', quiet === true);
+
+    const spoken = await page.evaluate(() => {
+      const B = window.Blinded;
+      B.state.terms = ['KNW'];
+      B.state.doubts = [
+        { id: 'd1', pageIndex: 0, term: 'KNW', read: 'CRW)', confidence: 41,
+          rect: { x: 40, y: 40, w: 30, h: 12 } },
+        { id: 'd2', pageIndex: 0, term: 'KNW', read: 'ae', confidence: 18,
+          rect: { x: 90, y: 40, w: 20, h: 12 } },
+      ];
+      B.renderDoubts();
+      return {
+        hidden: document.getElementById('doubtbox').hidden,
+        note: document.getElementById('doubtnote').textContent,
+        button: document.getElementById('doubtcheck').textContent,
+      };
+    });
+    check('with doubtful spots the prompt appears', spoken.hidden === false, JSON.stringify(spoken));
+    check('it counts them', /2 places/.test(spoken.note), JSON.stringify(spoken.note));
+    check('names the term it might be', /"KNW"/.test(spoken.note), JSON.stringify(spoken.note));
+    // A warning that overstates is one a reviewer learns to dismiss.
+    check('and says most of them will be nothing',
+      /Most will be nothing/.test(spoken.note), JSON.stringify(spoken.note));
+    check('the button says how much work it is asking for',
+      /2 spots/.test(spoken.button), JSON.stringify(spoken.button));
+
+    // Amber, not red: red says "this will be covered", and a doubt is the
+    // opposite of a decision. Checked as pixels, because the distinction only
+    // exists if it reaches the screen.
+    const drawn = await page.evaluate(() => {
+      const B = window.Blinded;
+      const p = B.state.pages[0];
+      const ctx = p.canvas.getContext('2d');
+      const at = () => ctx.getImageData(100, 75, 1, 1).data;
+
+      B.state.doubts = [];
+      B.state.applied = false;
+      B.redrawAll();
+      const plain = [...at()].slice(0, 3);
+
+      B.state.doubts = [{ id: 'd1', pageIndex: 0, term: 'KNW', read: 'CRW)',
+        confidence: 41, rect: { x: 60, y: 60, w: 80, h: 30 } }];
+      B.redrawAll();
+      const amber = [...at()].slice(0, 3);
+
+      B.state.doubts = [];
+      B.redrawAll();
+      return { plain, amber };
+    });
+    check('a doubt changes what is on the page', 
+      drawn.plain.join(',') !== drawn.amber.join(','), JSON.stringify(drawn));
+    // Amber is warm: more red than blue. A red mark would be warm too, so the
+    // green channel is what separates them — amber keeps it, red does not.
+    check('and it is painted amber rather than red',
+      drawn.amber[0] > drawn.amber[2] && drawn.amber[1] > drawn.amber[2]
+        && drawn.amber[1] > drawn.plain[2] * 0.5, JSON.stringify(drawn));
+
+    await page.evaluate(() => {
+      window.Blinded.state.doubts = [];
+      window.Blinded.renderDoubts();
+    });
+  }
+
   // ---------- every long pass reports the same way ----------
   //
   // Rendering the pages, reading them, searching them and flattening them for

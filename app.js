@@ -82,6 +82,9 @@
     ocrLoaded: false,
     // Set while a run is being stopped between pages.
     paused: false,
+    // Places the reader was unsure of, that could be one of the terms.
+    doubts: [],
+    doubtsChecked: false,
     // Per page: the words OCR read, and the text they stitch into.
     ocrRead: false,
     // Terms whose picture search has already run, so pressing Redact twice
@@ -263,6 +266,8 @@
     state.ocrRead = false;
     state.ocrFailed = false;
     state.useOcr = true;
+    state.doubts = [];
+    state.doubtsChecked = false;
     state.pages = pages.map(p => ({
       ...p,
       source: p.canvas,          // pristine; never drawn on
@@ -513,6 +518,9 @@
 
   function clearTermImages() {
     state.searchedTerms = [];
+    state.doubts = [];
+    state.doubtsChecked = false;
+    renderDoubts();
     for (const page of state.pages) {
       page.imageHits = page.imageHits.filter(m => !m.term);
     }
@@ -566,6 +574,194 @@
     state.ocrRead = state.pages.every(page => page.ocrItems);
   }
 
+  // Checking those spots by shape.
+  //
+  // The whole-page shape search costs about 40 seconds a page for one term.
+  // Searching only where the reading was doubtful is a fraction of that, and
+  // it uses two typefaces rather than eight — measured as enough to find every
+  // true occurrence across two real decks.
+  async function checkDoubts() {
+    const doubts = state.doubts;
+    if (!doubts.length) return;
+
+    const byTerm = new Map();
+    for (const doubt of doubts) {
+      if (!byTerm.has(doubt.term)) byTerm.set(doubt.term, []);
+      byTerm.get(doubt.term).push(doubt);
+    }
+
+    let done = 0;
+    state.paused = false;
+    busy(true, 'Checking 1 of ' + doubts.length, 0, doubts.length);
+    allowPause();
+
+    const found = [];
+    try {
+      for (const [term, spots] of byTerm) {
+        const ready = TextImage.templatesFor(term, TextImage.FALLBACK_FACES)
+          .map(t => ImageSearch.prepareTemplate(t, {}))
+          .filter(Boolean);
+        if (!ready.length) { done += spots.length; continue; }
+
+        for (const spot of spots) {
+          if (state.paused) break;
+          const page = state.pages[spot.pageIndex];
+          if (!page) { done++; continue; }
+          // Room around the doubt: the real word may run past the box OCR drew
+          // around its misreading of it.
+          const padX = Math.max(24, spot.rect.h * 4);
+          const padY = Math.max(14, spot.rect.h * 2);
+          const region = {
+            x: Math.max(0, Math.round(spot.rect.x - padX)),
+            y: Math.max(0, Math.round(spot.rect.y - padY)),
+            w: 0, h: 0,
+          };
+          region.w = Math.min(page.source.width - region.x, Math.round(spot.rect.w + padX * 2));
+          region.h = Math.min(page.source.height - region.y, Math.round(spot.rect.h + padY * 2));
+          if (region.w < 12 || region.h < 12) { done++; continue; }
+
+          const gray = ImageSearch.grayFor(page);
+          const sub = Match.crop(gray, page.source.width, page.source.height, region);
+          for (const prepared of ready) {
+            const hits = ImageSearch.searchPage(sub, region.w, region.h,
+              { ...prepared, smallText: true }, { threshold: wordBarFor(term) });
+            for (const hit of hits.matches) {
+              found.push({ term, pageIndex: spot.pageIndex, doubtId: spot.id,
+                rect: { x: hit.x + region.x, y: hit.y + region.y, w: hit.w, h: hit.h },
+                score: hit.score });
+            }
+          }
+          done++;
+          busy(true, 'Checking ' + Math.min(done + 1, doubts.length) + ' of ' + doubts.length,
+            done, doubts.length);
+          await (window.BlindedSchedule
+            ? window.BlindedSchedule.nextTask()
+            : new Promise(r => setTimeout(r, 0)));
+        }
+      }
+    } finally {
+      busy(false);
+    }
+
+    // Anything found becomes an ordinary proposal, and the doubt it answered
+    // stops being one. Both faces looking at the same spot is one find, not
+    // two, so they are folded together before anything is proposed.
+    const answered = new Set();
+    const merged = [];
+    for (const pageIndex of new Set(found.map(f => f.pageIndex))) {
+      const mine = found.filter(f => f.pageIndex === pageIndex);
+      const kept = Match.suppress(mine.map(f => ({ ...f.rect, score: f.score, ref: f })), 0.3);
+      for (const box of kept) merged.push(box.ref);
+    }
+    for (const hit of merged) {
+      const page = state.pages[hit.pageIndex];
+      if (!page) continue;
+      answered.add(hit.doubtId);
+      page.imageHits.push({
+        id: 'shape:' + hit.term + ':' + hit.pageIndex + ':'
+          + Math.round(hit.rect.x) + ':' + Math.round(hit.rect.y),
+        term: hit.term, rect: hit.rect, score: hit.score, byShape: true,
+      });
+    }
+    state.doubts = state.doubts.filter(d => !answered.has(d.id));
+    state.doubtsChecked = true;
+    markDuplicates();
+    renderTermCounts();
+    renderDoubts();
+    renderCounts();
+    redrawAll();
+    refreshApply();
+    return found.length;
+  }
+
+  // The prompt. Deliberately factual and conditional: it names how many spots
+  // and what they might be, rather than announcing a general risk. A banner
+  // that says "things may have been missed" on every document teaches the
+  // reviewer to close it.
+  function renderDoubts() {
+    const box = el('doubtbox');
+    const note = el('doubtnote');
+    const count = state.doubts.length;
+    box.hidden = count === 0;
+    if (!count) return;
+    const pages = new Set(state.doubts.map(d => d.pageIndex)).size;
+    const terms = [...new Set(state.doubts.map(d => d.term))];
+    // Most of these are nothing, and saying so is the difference between a
+    // note a reviewer reads and a warning they learn to dismiss.
+    note.textContent = 'The reader was unsure of ' + count
+      + (count === 1 ? ' place' : ' places')
+      + (pages > 1 ? ' across ' + pages + ' pages' : '')
+      + ', outlined in amber. Most will be nothing, but one could be '
+      + terms.map(t => '"' + t + '"').join(' or ')
+      + ' misread. A slower check by shape can settle it.';
+    el('doubtcheck').textContent = count === 1
+      ? 'Check that spot' : 'Check those ' + count + ' spots';
+  }
+
+  // ---------- where the reading was shaky ----------
+  //
+  // OCR misreads, and when it does it says so: the word that should have been
+  // ("KNW") came back as CRW) at 41 confidence while everything around it read
+  // at 90 or better. That is the signal — but it cannot be used bluntly.
+  // Measured across four documents, three to thirteen per cent of the words on
+  // every single page score under 50, nearly all of them rubbish picked off
+  // rules and icons ("Hl", "ae", "ee"). Flagging pages that contain a doubtful
+  // word would flag every page ever, and a warning that always fires is a
+  // warning nobody reads.
+  //
+  // So a doubt has to look like it could be the term: read poorly, and about
+  // the right length once the punctuation a badge wraps it in is taken off.
+  const DOUBT_CONFIDENCE = 60;
+  const DOUBT_LENGTH_SLACK = 1;
+
+  function lettersOf(text) {
+    return String(text || '').replace(/[^A-Za-z0-9]/g, '');
+  }
+
+  function couldBeTerm(word, term) {
+    const seen = lettersOf(word).length;
+    const want = lettersOf(term).length;
+    if (!seen || !want) return false;
+    return Math.abs(seen - want) <= DOUBT_LENGTH_SLACK;
+  }
+
+  // Every spot worth a second look, across the document.
+  function findDoubts() {
+    const out = [];
+    if (!state.terms.length) return out;
+    for (const page of state.pages) {
+      // Most low-confidence readings are specks off rules, icons and chart
+      // furniture, and they are tiny. Lettering a reader could mistake for a
+      // word is about the size of the other words on the page, so the words
+      // read confidently set the scale that a doubt has to reach.
+      const sure = (page.ocrItems || [])
+        .filter(i => i.confidence >= 70 && /[A-Za-z]{2,}/.test(i.str))
+        .map(i => i.rect.h).sort((a, b) => a - b);
+      const typical = sure.length ? sure[Math.floor(sure.length / 2)] : 0;
+      const floor = typical * 0.6;
+
+      for (const item of page.ocrItems || []) {
+        if (!(item.confidence < DOUBT_CONFIDENCE)) continue;
+        if (!/[A-Za-z]/.test(item.str)) continue;
+        if (item.rect.h < floor) continue;
+        // Already covered? Then there is nothing to be unsure about.
+        const covered = liveImageHits(page).some(m =>
+          m.rect && Match.overlapFraction(m.rect, item.rect) > 0.4);
+        if (covered) continue;
+        for (const term of state.terms) {
+          if (!couldBeTerm(item.str, term)) continue;
+          out.push({
+            id: 'doubt:' + page.index + ':' + Math.round(item.rect.x) + ':' + Math.round(item.rect.y),
+            pageIndex: page.index, term, read: item.str,
+            confidence: item.confidence, rect: { ...item.rect },
+          });
+          break;
+        }
+      }
+    }
+    return out;
+  }
+
   // Terms found in what OCR read, as the same kind of proposal the picture
   // search produces — keyed to the word, so a placeholder is shared with the
   // written occurrences and duplicates are folded together.
@@ -598,6 +794,9 @@
       }
     }
     state.searchedTerms = state.terms.slice();
+    state.doubts = findDoubts();
+    state.doubtsChecked = false;
+    renderDoubts();
   }
 
   // Everything that needs looking for, as one list.
@@ -1083,6 +1282,26 @@
       for (const box of boxes) {
         ctx.fillRect(box.x, box.y, box.w, box.h);
         ctx.strokeRect(box.x, box.y, box.w, box.h);
+      }
+      ctx.restore();
+    }
+
+    // Places the reader was unsure of, which nothing has decided about yet.
+    //
+    // Amber and dashed, never red: red means "this will be covered when you
+    // press Redact", and these are the opposite — "something here might need
+    // covering and the tool cannot tell". Drawing them in the same colour as a
+    // decision would turn a question into a promise.
+    const doubts = state.doubts.filter(d => d.pageIndex === page.index);
+    if (doubts.length) {
+      ctx.save();
+      ctx.strokeStyle = '#d98b1f';
+      ctx.fillStyle = 'rgba(217, 139, 31, 0.16)';
+      ctx.lineWidth = Math.max(2, page.canvas.width / 600);
+      ctx.setLineDash([7, 4]);
+      for (const doubt of doubts) {
+        ctx.fillRect(doubt.rect.x, doubt.rect.y, doubt.rect.w, doubt.rect.h);
+        ctx.strokeRect(doubt.rect.x, doubt.rect.y, doubt.rect.w, doubt.rect.h);
       }
       ctx.restore();
     }
@@ -1764,6 +1983,13 @@
   showWordControls();
 
   el('busy-pause').addEventListener('click', requestPause);
+  el('doubtcheck').addEventListener('click', async () => {
+    const found = await checkDoubts();
+    if (found === 0) {
+      el('doubtnote').textContent = 'Nothing matched at those spots. They are '
+        + 'still outlined in amber — look at them before exporting.';
+    }
+  });
 
   el('termimages').addEventListener('change', e => {
     state.termImages = e.target.checked;
@@ -1843,6 +2069,7 @@
     sensitivity, wordSensitivity, wordBarFor,
     applyRedaction, markPending, plannedCount, pendingTemplates, termsNeedingPictures,
     readPages, matchOcr, ocrPending, ocrMatchStale, showWordControls,
+    findDoubts, checkDoubts, renderDoubts, couldBeTerm, redrawAll,
     busy, pageProgress, requestPause,
     renderTermCounts };
 })();

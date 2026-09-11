@@ -111,6 +111,18 @@ body {
 }
 #busy-pause { margin-top: 12px; width: 100%; }
 
+/* Places the reader was unsure of. Amber, not red: red is "this will be
+   covered", and these are "this might need covering, and nothing has decided
+   yet". Using the same colour for both would make a warning look like a
+   promise. */
+.doubthint { color: #7a4100; }
+#doubtbox {
+  margin-top: 10px; padding: 10px 11px;
+  background: var(--warn-bg); border-left: 3px solid #d98b1f;
+  border-radius: 0 var(--radius) var(--radius) 0;
+}
+#doubtbox .hint { margin: 0 0 8px; }
+
 /* ---------- review ---------- */
 
 .review { display: grid; grid-template-columns: 320px minmax(0, 1fr); gap: 22px; align-items: start; }
