@@ -317,6 +317,18 @@ too strict from a mark that genuinely is not there.
 
 ### How long it takes
 
+A run shows one bar per leg of the job — reading the pages, searching them for
+a picked image — both drawn from the start, and a leg with no work in it not
+drawn at all. This was a single bar across the whole job for a while, on the
+reasoning that two filling in sequence would read as the first having lied.
+That is true of bars that appear one after the other, and not of bars that are
+both there from the beginning: together they say what the job consists of
+before it starts, and when a run is paused they say which part of it got how
+far. "Read to 40 of 100, images not started" is a different situation from "40
+per cent done", and someone deciding whether to keep waiting needs to know
+which one they are in.
+
+
 Everything you have marked is searched for in **one pass over the document**,
 not one pass per image. That matters more than it sounds on a long file: the
 first version swept all hundred pages for the first logo, then all hundred
