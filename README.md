@@ -700,3 +700,26 @@ it answers "where", listing every occurrence by page. Red for what the reading
 found, amber for what the thorough check turned up by shape — the same two
 colours they are drawn in on the page, because a mark the reading found and one
 a matcher guessed at do not deserve equal trust. Each row jumps to its page.
+
+## Search, Redact, Redacted
+
+One button, three states, and it says which one it is in.
+
+Marks used to appear the instant a word was typed. That put an outline on the
+page while the reviewer was still in the middle of typing the word, and showed
+a half-typed word's matches as though they were an answer. Nothing found is
+drawn now until the reviewer asks for it — only boxes they drew themselves,
+which are their own marks and appear at once.
+
+**Search** reads the pages, runs the image searches, and proposes what it
+found: red for the reading, amber for the thorough check. Nothing is covered.
+**Redact** covers what was proposed — no work, just the decision. The button
+then reads **Redacted** in green, and pressing it uncovers them again without
+redoing the search, because a reviewer who wants one more look at what a bar is
+hiding should not have to pay for the search twice.
+
+Changing what to look for — a word, a detector, the confidence setting, a
+picked logo — puts it back to Search and takes the old marks off the page: they
+answered a question that is no longer the one being asked. Changing what to
+cover — dismissing a mark, drawing a box, undoing — does not; those are review
+actions on marks that have already been found.

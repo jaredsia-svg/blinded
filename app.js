@@ -104,6 +104,14 @@
     // what it added when it did.
     sweptTerms: [],
     sweepAdded: 0,
+    // Three states, in order: nothing looked for yet, looked for and proposed,
+    // covered.
+    //
+    // Marks used to appear the instant a word was typed, which put a red
+    // outline on the page while the reviewer was still in the middle of typing
+    // the word — and worse, showed a half-typed word's matches as if they were
+    // an answer. Nothing is drawn now until the reviewer asks.
+    searched: false,
     zoom: 1,
     sourceSize: 0,
     sourceDigest: null,
@@ -402,6 +410,7 @@
     state.sweepStopped = false;
     state.sweepReached = 0;
     state.exported = false;
+    state.searched = false;
     state.openTally = null;
     state.pages = pages.map(p => ({
       ...p,
@@ -463,9 +472,10 @@
     applyLabels();
     renderCounts();
     // A rescan only ever happens because the reviewer changed what should be
-    // covered — a term, a detector, the confidence setting — so the document
-    // goes back into review along with it.
-    markPending();
+    // looked for — a term, a detector, the confidence setting — so what was
+    // found no longer answers the question and the document goes back to
+    // before the search.
+    needsSearch();
   }
 
   // ---------- marking up, then redacting ----------
@@ -474,9 +484,22 @@
   // review. Appearance-only settings — how a placeholder is spelled, whether a
   // legend page is appended — deliberately do not, since they cannot make the
   // bars on screen wrong.
+  // The document is no longer redacted, but what was found still stands.
+  // Dismissing a mark, drawing a box by hand, undoing — review actions, which
+  // change what gets covered rather than what was looked for.
   function markPending() {
     if (!state.applied) { refreshApply(); return; }
     state.applied = false;
+    redrawAll();
+    refreshApply();
+  }
+
+  // What to look for has changed, so what was found no longer answers it.
+  // Back to the beginning: nothing is drawn until the reviewer asks again.
+  function needsSearch() {
+    state.searched = false;
+    state.applied = false;
+    state.openTally = null;
     redrawAll();
     refreshApply();
   }
@@ -527,9 +550,16 @@
       // is pending, so there is nothing to press.
       + (ocrPending() ? 1 : 0);
 
-    button.disabled = marks === 0 && unsearched === 0;
-    button.textContent = state.applied ? 'Redacted' : 'Redact';
+    // One button, three states, and it says which one it is in: Search finds
+    // things and proposes them, Redact covers what was proposed, and Redacted
+    // is a state the reviewer can step back out of rather than a dead end.
+    button.textContent = !state.searched ? 'Search'
+      : state.applied ? 'Redacted' : 'Redact';
     button.classList.toggle('done', state.applied);
+    button.title = state.applied ? 'Press to uncover and look at the marks again' : '';
+    button.disabled = !state.searched
+      ? state.kind !== 'text' && !state.pages.length
+      : !state.applied && marks === 0 && unsearched === 0;
 
     el('export').disabled = !state.applied || marks === 0;
 
@@ -539,13 +569,17 @@
 
     const note = el('exportnote');
     const unread = state.pages.filter(page => !page.ocrItems).length;
-    if (state.applied) {
+    if (!state.searched) {
+      note.textContent = state.terms.length || state.templates.length
+        ? 'Press Search to find them.'
+        : 'Press Search to find what is in this document.';
+    } else if (state.applied) {
       note.textContent = marks === 0 ? 'Nothing is covered.' : '';
     } else if (unread && unread < state.pages.length && ocrPending()) {
       // A paused run. Say how much of the document has actually been looked
       // at, because the marks on screen are the answer for part of it only.
       note.textContent = (state.pages.length - unread) + ' of ' + state.pages.length
-        + ' pages read \u2014 press Redact to carry on.';
+        + ' pages read \u2014 press Search to carry on.';
     } else if (unsearched) {
       note.textContent = unsearched === 1
         ? '1 search still to run.'
@@ -553,7 +587,7 @@
     } else if (marks === 0) {
       note.textContent = 'Nothing marked yet.';
     } else {
-      note.textContent = 'Outlined in red — press Redact to cover them.';
+      note.textContent = 'Outlined \u2014 press Redact to cover them.';
     }
   }
 
@@ -561,7 +595,11 @@
   // applied. Image matches only exist once their search has run.
   function plannedCount() {
     if (state.kind === 'text') {
+      if (!state.searched) return 0;
       return state.findings.filter(f => !dismissedText.has(f.id)).length;
+    }
+    if (!state.searched) {
+      return state.pages.reduce((sum, page) => sum + page.manual.length, 0);
     }
     return state.pages.reduce((sum, page) =>
       sum + page.hits.filter(h => !page.dismissed.has(h.finding.id)).length
@@ -569,9 +607,9 @@
         + page.manual.length, 0);
   }
 
-  // Runs every search that has not run yet, then switches the view to what the
-  // exported file will contain.
-  async function applyRedaction() {
+  // Runs every search that has not run yet and proposes what it found. This is
+  // the first of the three presses; it does not cover anything.
+  async function runSearch() {
     // The thorough check and a redaction are two passes over the same pages,
     // and they cannot both own the document.
     //
@@ -659,11 +697,41 @@
       alert('The image search could not finish: ' + (error && error.message ? error.message : error));
       return;
     }
-    state.applied = true;
+    // Found, proposed, and drawn — but not covered. Covering is the next
+    // press, so that the reviewer sees what is about to disappear before it
+    // does, which is the whole point of reviewing.
+    state.searched = true;
     state.redacting = false;
     applyLabels();
     redrawAll();
     refreshApply();
+  }
+
+  // The second press: what was proposed becomes what is covered. No work,
+  // just a decision — everything was found by the search.
+  function coverMarks() {
+    if (!state.searched) return;
+    state.applied = true;
+    applyLabels();
+    redrawAll();
+    refreshApply();
+  }
+
+  // And the third: stepping back out of it. "Redacted" is a state, not a dead
+  // end — a reviewer who wants one more look at what a bar is covering should
+  // not have to redo the search to get it.
+  function uncoverMarks() {
+    if (!state.applied) return;
+    state.applied = false;
+    redrawAll();
+    refreshApply();
+  }
+
+  // Which of the three the button means this time.
+  async function applyButton() {
+    if (state.applied) { uncoverMarks(); return; }
+    if (state.searched) { coverMarks(); return; }
+    await runSearch();
   }
 
   // ---------- searching for every image at once ----------
@@ -1206,6 +1274,12 @@
   }
 
   function activeBoxes(page) {
+    // Before the search has run there is nothing to show but what the reviewer
+    // drew themselves. Everything else would be an answer to a question they
+    // have not asked yet — and while they were still typing a word, an answer
+    // to half of it.
+    if (!state.searched) return page.manual.map(box => ({ ...box }));
+
     const live = page.hits.filter(h => !page.dismissed.has(h.finding.id));
     const images = liveImageHits(page).filter(m => !page.dismissed.has(m.id));
 
@@ -1545,7 +1619,7 @@
       ? 'Drag a box around the logo you want found everywhere else.'
       : state.tool === 'pan'
         ? 'Drag to move the pages. To draw a box or drop a mark, choose the ✛ tool above.'
-        : 'Drag on a page to add a box. Click a mark to drop it. Marks stay red until you press Redact.';
+        : 'Drag on a page to add a box. Click a mark to drop it. Marks stay outlined until you press Redact.';
   }
 
   function setMode(mode) {
@@ -1583,7 +1657,7 @@
     pushUndo('picking that logo', () => dropTemplate(template.id));
     renderTemplates();
     renderSectionNotes();
-    markPending();
+    needsSearch();
     drawPage(page);
   }
 
@@ -2737,7 +2811,7 @@
   });
   el('downloadkey').addEventListener('click', downloadKey);
   el('undo').addEventListener('click', undoLast);
-  el('apply').addEventListener('click', applyRedaction);
+  el('apply').addEventListener('click', applyButton);
   window.addEventListener('keydown', event => {
     if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'z' && !event.shiftKey) {
       // Not while typing into the terms box — there, undo means the textarea's.
@@ -2762,7 +2836,7 @@
     state.searchedTerms = [];
     renderTemplates();
     renderTermCounts();
-    markPending();
+    needsSearch();
     redrawAll();
   });
   el('export').addEventListener('click', exportFile);
@@ -2810,7 +2884,9 @@
     saveDraft, draftData, restoreDraft, looksLikeDraft, fingerprint,
     occurrencesFor, renderTermCounts, goToPage,
     scrollerFor, setTool, marking,
-    applyRedaction, markPending, plannedCount, pendingTemplates, termsNeedingPictures,
+    runSearch, applyRedaction: runSearch, coverMarks, uncoverMarks, applyButton,
+    activeBoxes,
+    markPending, needsSearch, plannedCount, pendingTemplates, termsNeedingPictures,
     readPages, matchOcr, ocrPending, ocrMatchStale, showWordControls,
     sweepTemplates, runSweep, renderSweep, alreadyCovered, sweepProgress,
     settleSweep,

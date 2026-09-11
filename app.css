@@ -550,11 +550,13 @@ code {
 .primary.ghostly:hover:not(:disabled) { background: #f2f7ff; border-color: var(--accent); }
 .primary.ghostly:disabled { background: transparent; color: #9db8e6; border-color: #dbe6f8; }
 
-/* Once applied the button stops inviting a press without disappearing, so the
-   state of the document stays legible at a glance. */
+/* Once applied the button says so in green, and stays pressable: "Redacted" is
+   a state the reviewer can step back out of for another look at what a bar is
+   covering, not a dead end. */
 .primary.done, .primary.done:hover {
   background: #e8f3ec; color: #1a6b3c; border-color: #bfe0cb;
 }
+.primary.done:hover { background: #d9ebe1; }
 
 .templates .waiting { color: var(--warn); font-style: italic; }
 

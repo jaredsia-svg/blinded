@@ -80,10 +80,25 @@ async function reveal(page, id) {
   }, id);
 }
 
+// Two presses now, not one: the first searches and proposes, the second
+// covers. Tests that want a redacted document want both.
 async function redact(page) {
   await page.click('#apply');
-  await page.waitForFunction(() => window.Blinded.state.applied === true, undefined, { timeout: 240000 });
-  await page.waitForFunction(() => document.getElementById('busy').hidden, undefined, { timeout: 240000 });
+  await page.waitForFunction(() => window.Blinded.state.searched === true,
+    undefined, { timeout: 240000 });
+  await page.waitForFunction(() => document.getElementById('busy').hidden,
+    undefined, { timeout: 240000 });
+  // Only if there is something to cover: with nothing found the button is
+  // rightly dead, and a test that only wanted the search is finished.
+  const canCover = await page.evaluate(() => !window.Blinded.state.applied
+    && !document.getElementById('apply').disabled);
+  if (canCover) {
+    await page.click('#apply');
+    await page.waitForFunction(() => window.Blinded.state.applied === true,
+      undefined, { timeout: 60000 });
+  }
+  await page.waitForFunction(() => document.getElementById('busy').hidden,
+    undefined, { timeout: 240000 });
 }
 
 const consoleErrors = [];
@@ -181,11 +196,93 @@ try {
   check('every detection produced at least one box', boxCount === kinds.length,
     boxCount + ' of ' + kinds.length);
 
+  // ---------- search, redact, redacted ----------
+  //
+  // One button, three states. Marks used to appear the instant a word was
+  // typed, which put an outline on the page while the reviewer was still
+  // typing — showing a half-typed word's matches as if they were an answer.
+  {
+    const state = () => page.evaluate(() => ({
+      label: document.getElementById('apply').textContent.trim(),
+      green: document.getElementById('apply').classList.contains('done'),
+      searched: window.Blinded.state.searched,
+      applied: window.Blinded.state.applied,
+      drawn: window.Blinded.state.pages.reduce(
+        (n, p) => n + window.Blinded.activeBoxes(p).length, 0),
+      exportOff: document.getElementById('export').disabled,
+    }));
+
+    await newFile();
+    await page.setInputFiles('#file', fixturePath);
+    await page.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
+
+    const opened = await state();
+    check('a document opens asking to be searched, not redacted',
+      opened.label === 'Search', JSON.stringify(opened));
+
+    await page.fill('#terms', 'Jane');
+    await page.waitForTimeout(400);
+    const typed = await state();
+    check('typing a word marks nothing on the page',
+      typed.drawn === 0, JSON.stringify(typed));
+    check('and the button still says Search',
+      typed.label === 'Search' && typed.searched === false, JSON.stringify(typed));
+
+    await page.click('#apply');
+    await page.waitForFunction(() => window.Blinded.state.searched === true,
+      undefined, { timeout: 240000 });
+    await page.waitForFunction(() => document.getElementById('busy').hidden,
+      undefined, { timeout: 240000 });
+    const found = await state();
+    check('searching proposes what it found', found.drawn > 0, JSON.stringify(found));
+    check('but covers nothing yet', found.applied === false, JSON.stringify(found));
+    check('and the button now offers to redact',
+      found.label === 'Redact' && !found.green, JSON.stringify(found));
+    check('the export stays shut until it is redacted',
+      found.exportOff === true, JSON.stringify(found));
+
+    await page.click('#apply');
+    const covered = await state();
+    check('redacting covers them', covered.applied === true, JSON.stringify(covered));
+    check('and the button says Redacted, in green',
+      covered.label === 'Redacted' && covered.green === true, JSON.stringify(covered));
+    check('and the export opens', covered.exportOff === false, JSON.stringify(covered));
+
+    // Redacted is a state to step back out of, not a dead end.
+    await page.click('#apply');
+    const back = await state();
+    check('pressing Redacted uncovers them again',
+      back.applied === false && back.searched === true, JSON.stringify(back));
+    check('the marks are still there, just not covered',
+      back.drawn === found.drawn, JSON.stringify({ back, found }));
+    check('and the button offers to redact once more',
+      back.label === 'Redact' && back.green === false, JSON.stringify(back));
+    // Stepping back out must not need the search run again.
+    check('stepping back does not undo the search',
+      back.searched === true, JSON.stringify(back));
+
+    // Changing what to look for is a different question, so the answer goes.
+    await page.fill('#terms', 'Jane\nAmphitheatre');
+    await page.waitForTimeout(400);
+    const changed = await state();
+    check('editing the words puts it back to Search',
+      changed.label === 'Search' && changed.searched === false,
+      JSON.stringify(changed));
+    check('and takes the old marks off the page',
+      changed.drawn === 0, JSON.stringify(changed));
+  }
+
   // ---------- marked in red, then covered in black ----------
   //
   // Nothing is covered until Redact is pressed. Before it, a mark is outlined
   // so the reviewer can still read what is about to disappear — which is the
   // whole point of reviewing, and impossible once it is filled in.
+  //
+  // Searching first, because nothing at all is drawn before that: the marks
+  // this checks the colour of do not exist until the reviewer asks for them.
+  await page.evaluate(async () => { await window.Blinded.runSearch(); });
+  await page.waitForFunction(() => window.Blinded.state.searched === true,
+    undefined, { timeout: 240000 });
   const sample = () => page.evaluate(() => {
     const p = window.Blinded.state.pages[0];
     const hit = p.hits.find(h => h.finding.kind === 'email');
@@ -2101,6 +2198,9 @@ try {
       const rect = { x: 60, y: 60, w: 80, h: 30 };
 
       B.state.applied = false;
+      // Planted marks, so the search that would normally have produced them
+      // has to be declared: nothing found is drawn before one has run.
+      B.state.searched = true;
       p.imageHits = [];
       B.redrawAll();
       const plain = at();
@@ -2200,8 +2300,8 @@ try {
       p.imageHits = [];
 
       const sweeping = B.runSweep();
-      // Press Redact while it is still going.
-      const redaction = B.applyRedaction();
+      // Press the button while it is still going.
+      const redaction = B.runSearch().then(() => B.coverMarks());
       const asked = !document.getElementById('confirmbox').hidden;
       const wording = document.getElementById('confirmbody').textContent;
       document.getElementById('confirmyes').click();
@@ -2715,7 +2815,8 @@ try {
     const resumed = await page.evaluate(async () => {
       const B = window.Blinded;
       B.state.paused = false;
-      await B.applyRedaction();
+      await B.runSearch();
+      B.coverMarks();
       return {
         applied: B.state.applied,
         read: B.state.pages.filter(p => p.ocrItems).length,
