@@ -299,7 +299,7 @@ try {
   const bar = await page.evaluate(() => {
     const tools = document.querySelector('.tools').getBoundingClientRect();
     const panel = document.querySelector('.panel').getBoundingClientRect();
-    const ids = ['tool-pan', 'tool-mark', 'undo', 'restart'];
+    const ids = ['tool-pan', 'tool-mark', 'zoom-out', 'zoom-in', 'undo', 'restart'];
     const buttons = ids.map(id => document.getElementById(id));
     return {
       count: document.querySelectorAll('.tools .tool').length,
@@ -331,16 +331,22 @@ try {
       heights: buttons.map(b => Math.round(b.getBoundingClientRect().height)),
     };
   });
-  check('the toolbar is four buttons', bar.count === 4, JSON.stringify(bar.count));
+  check('the toolbar is six buttons', bar.count === 6, JSON.stringify(bar.count));
 
   // The header is pinned, and the sentence explaining what dragging does sits
   // with the buttons that change it rather than at the foot of the panel.
   const chrome = await page.evaluate(async () => {
     const top = document.querySelector('.top');
     const resting = top.getBoundingClientRect();
-    window.scrollTo(0, 500);
+    // The document column is what scrolls now, not the window. That is the
+    // point of the layout: the header and the export bar stay put, and each
+    // column moves on its own.
+    const stage = document.querySelector('.stage');
+    stage.scrollTop = 500;
     await new Promise(r => requestAnimationFrame(r));
-    const scrolledTo = window.scrollY;
+    const scrolledTo = stage.scrollTop;
+    const windowMoved = window.scrollY;
+    const barBefore = document.querySelector('.exportbar').getBoundingClientRect().top;
     const moved = top.getBoundingClientRect();
     const panel = document.querySelector('.panel').getBoundingClientRect();
     // Read from the computed style, not from a rect measured mid-scroll: the
@@ -355,7 +361,7 @@ try {
       document.querySelector('.panel')).top);
     const panelTop = panel.top;
     const headerBottom = moved.bottom;
-    window.scrollTo(0, 0);
+    stage.scrollTop = 0;
     return {
       height: Math.round(resting.height),
       atTopBefore: Math.round(resting.top),
@@ -364,6 +370,12 @@ try {
       scrolledTo,
       pad, panelTop: Math.round(panelTop), panelStick,
       headerBottom: Math.round(headerBottom),
+      windowMoved,
+      barStaysPut: Math.round(barBefore)
+        === Math.round(document.querySelector('.exportbar').getBoundingClientRect().top),
+      pageScrolls: document.documentElement.scrollHeight
+        > document.documentElement.clientHeight + 1,
+      stageScrolls: stage.scrollHeight > stage.clientHeight + 1,
       // Nothing starts underneath it.
       roomReserved: pad >= Math.round(moved.height) - 1,
       panelClear: panelStick >= Math.round(moved.height),
@@ -374,6 +386,12 @@ try {
   check('the header stays at the top when the document is scrolled',
     chrome.atTopBefore === 0 && chrome.atTopAfter === 0 && chrome.scrolledTo >= 400,
     JSON.stringify(chrome));
+  // One scroll for the document, one for the panel, and none for the page.
+  check('the document column is what scrolls, not the whole page',
+    chrome.stageScrolls === true && chrome.pageScrolls === false
+      && chrome.windowMoved === 0, JSON.stringify(chrome));
+  check('and the export bar does not move with it',
+    chrome.barStaysPut === true, JSON.stringify(chrome));
   check('and it is thin, because pinned space is space the document loses',
     chrome.height <= 52, JSON.stringify(chrome));
   check('the page reserves exactly the room the header takes',
@@ -406,17 +424,62 @@ try {
       return 0.2126 * r + 0.7152 * g + 0.0722 * b;
     };
     B.setTool('pan');
+    const colour = id => getComputedStyle(document.getElementById(id)).backgroundColor;
+    const blue = colour('tool-pan');
+    const probe = document.createElement('div');
+    probe.style.background = getComputedStyle(document.documentElement)
+      .getPropertyValue('--accent').trim();
+    document.body.appendChild(probe);
+    const accent = getComputedStyle(probe).backgroundColor;
+    probe.remove();
     const held = lum('tool-pan');
     const idle = lum('tool-mark');
     B.setTool('mark');
     const swapped = { held: lum('tool-mark'), idle: lum('tool-pan') };
     B.setTool('pan');
-    return { held, idle, swapped };
+    return { held, idle, swapped, blue, accent };
   });
-  check('the selected tool is darkened',
+  // Zoom is a property of the view, never of the canvases. A reviewer who
+  // leans in to check a bar must be looking at the same bar that gets burned
+  // in, so the pixels a redaction is measured against cannot move.
+  const zoom = await page.evaluate(() => {
+    const B = window.Blinded;
+    const p = B.state.pages[0];
+    const pixels = { w: p.source.width, h: p.source.height };
+    const shown = () => Math.round(p.canvas.getBoundingClientRect().width);
+    B.setZoom(1);
+    const at100 = shown();
+    document.getElementById('zoom-in').click();
+    const zoomed = { scale: B.state.zoom, width: shown() };
+    document.getElementById('zoom-out').click();
+    document.getElementById('zoom-out').click();
+    const out = { scale: B.state.zoom, width: shown() };
+    // And the limits stop rather than run off the end.
+    for (let i = 0; i < 12; i++) document.getElementById('zoom-out').click();
+    const floor = { scale: B.state.zoom, disabled: document.getElementById('zoom-out').disabled };
+    for (let i = 0; i < 20; i++) document.getElementById('zoom-in').click();
+    const ceiling = { scale: B.state.zoom, disabled: document.getElementById('zoom-in').disabled };
+    B.setZoom(1);
+    return { at100, zoomed, out, floor, ceiling,
+      samePixels: p.source.width === pixels.w && p.source.height === pixels.h };
+  });
+  check('zooming in makes the page bigger on screen',
+    zoom.zoomed.scale > 1 && zoom.zoomed.width > zoom.at100, JSON.stringify(zoom));
+  check('and zooming out makes it smaller',
+    zoom.out.scale < 1 && zoom.out.width < zoom.at100, JSON.stringify(zoom));
+  check('but the page it is measured against never changes size',
+    zoom.samePixels === true, JSON.stringify(zoom));
+  check('zooming stops at both ends rather than running off',
+    zoom.floor.disabled === true && zoom.ceiling.disabled === true, JSON.stringify(zoom));
+
+  check('the selected tool stands out against the others',
     shade.held < shade.idle - 60, JSON.stringify(shade));
-  check('and the darkening follows the selection',
+  check('and it follows the selection',
     shade.swapped.held < shade.swapped.idle - 60, JSON.stringify(shade));
+  // Blue, specifically: the same accent the rest of the tool uses for "this
+  // is the thing you chose".
+  check('the selected tool is the accent blue',
+    shade.blue === shade.accent && /^rgb/.test(shade.blue), JSON.stringify(shade));
 
   // ---------- clicking a box turns it off, and back on ----------
   const before = await page.evaluate(() => window.Blinded.state.pages[0].dismissed.size);
@@ -478,12 +541,83 @@ try {
   });
   check('dragging on the page adds a box', manual === 1, String(manual));
 
+  // Exporting now asks what to call the file first, so every export in these
+  // tests goes through that step rather than around it.
+  const exportFile = async () => {
+    const [download] = await Promise.all([
+      page.waitForEvent('download', { timeout: 60000 }),
+      (async () => {
+        await page.click('#export');
+        await page.waitForSelector('#namebox:not([hidden])', { timeout: 15000 });
+        await page.click('#namesave');
+      })(),
+    ]);
+    return download;
+  };
+
+  // ---------- naming the file on the way out ----------
+  //
+  // A document can be redacted perfectly and still name its own secret in an
+  // attachment line. The name is offered for editing before anything is
+  // saved, with anything covered inside the document taken out of it first.
+  const naming = await page.evaluate(() => {
+    const B = window.Blinded;
+    const was = B.state.terms.slice();
+    B.state.terms = ['Falcon', 'KAG'];
+    const out = {
+      stripped: B.cleanName('Project Falcon - KAG term sheet'),
+      leavesTheRest: B.cleanName('Board pack Q3'),
+      // Case is not a hiding place.
+      anyCase: B.cleanName('project falcon summary'),
+      // Nor is a name that is nothing but the secret.
+      allOfIt: B.cleanName('Falcon'),
+      covered: B.coveredText().includes('Falcon'),
+    };
+    B.state.terms = was;
+    return out;
+  });
+  check('a covered word is taken out of the file name',
+    !/Falcon/i.test(naming.stripped) && !/KAG/.test(naming.stripped),
+    JSON.stringify(naming));
+  check('and what is left still reads as a name',
+    /term sheet/.test(naming.stripped), JSON.stringify(naming.stripped));
+  check('a name with nothing covered in it is left alone',
+    naming.leavesTheRest === 'Board pack Q3', JSON.stringify(naming.leavesTheRest));
+  check('matching the name ignores case',
+    !/falcon/i.test(naming.anyCase), JSON.stringify(naming.anyCase));
+  check('a name that was only the covered word does not survive as one',
+    naming.allOfIt === '', JSON.stringify(naming.allOfIt));
+  check('the detectors\' matches count as covered too, not just typed words',
+    naming.covered === true, JSON.stringify(naming));
+
+  // The dialog itself: offered, editable, and obeyed.
+  await redact(page);
+  await page.click('#export');
+  await page.waitForSelector('#namebox:not([hidden])', { timeout: 15000 });
+  const offeredName = await page.inputValue('#savename');
+  check('the export asks what to call the file first',
+    typeof offeredName === 'string' && offeredName.endsWith('.pdf'), offeredName);
+  await page.click('#namecancel');
+  const cancelled = await page.evaluate(() =>
+    document.getElementById('namebox').hidden);
+  check('and cancelling saves nothing', cancelled === true);
+
+  const [renamedFile] = await Promise.all([
+    page.waitForEvent('download', { timeout: 60000 }),
+    (async () => {
+      await page.click('#export');
+      await page.waitForSelector('#namebox:not([hidden])', { timeout: 15000 });
+      await page.fill('#savename', 'board-pack.pdf');
+      await page.click('#namesave');
+    })(),
+  ]);
+  check('the name the reviewer types is the name it saves under',
+    renamedFile.suggestedFilename() === 'board-pack.pdf',
+    renamedFile.suggestedFilename());
+
   // ---------- export ----------
   await redact(page);
-  const [download] = await Promise.all([
-    page.waitForEvent('download', { timeout: 60000 }),
-    page.click('#export'),
-  ]);
+  const download = await exportFile();
   check('the export is named after the original',
     download.suggestedFilename().endsWith('-redacted.pdf'), download.suggestedFilename());
 
@@ -675,9 +809,12 @@ try {
   // does not exercise pointer capture, which is what holds a drag together
   // when the pointer leaves the canvas, and a hand tool that fails only under
   // a real hand would pass a synthetic test every time.
-  await page.evaluate(() => { window.Blinded.setTool('pan'); window.scrollTo(0, 0); });
+  await page.evaluate(() => {
+    window.Blinded.setTool('pan');
+    document.querySelector('.stage').scrollTop = 0;
+  });
   const canvasBox = await page.locator('.page canvas').first().boundingBox();
-  const beforeDrag = await page.evaluate(() => window.scrollY);
+  const beforeDrag = await page.evaluate(() => document.querySelector('.stage').scrollTop);
   const boxesBeforeDrag = await page.evaluate(() =>
     window.Blinded.state.pages.reduce((n, p) => n + p.manual.length, 0));
   await page.mouse.move(canvasBox.x + canvasBox.width / 2, canvasBox.y + 260);
@@ -688,10 +825,13 @@ try {
   }
   await page.mouse.up();
   const moved = await page.evaluate(() => ({
-    to: window.scrollY,
+    to: document.querySelector('.stage').scrollTop,
     boxes: window.Blinded.state.pages.reduce((n, p) => n + p.manual.length, 0),
   }));
-  await page.evaluate(() => { window.scrollTo(0, 0); window.Blinded.setTool('mark'); });
+  await page.evaluate(() => {
+    document.querySelector('.stage').scrollTop = 0;
+    window.Blinded.setTool('mark');
+  });
   check('and dragging with it moves the pages',
     moved.to > beforeDrag, JSON.stringify({ from: beforeDrag, ...moved }));
   check('and a real drag across a page leaves no mark behind',
@@ -803,10 +943,7 @@ try {
     renamed === 'CLAIMANT', renamed);
 
   await redact(page);
-  const [labelled] = await Promise.all([
-    page.waitForEvent('download', { timeout: 90000 }),
-    page.click('#export'),
-  ]);
+  const labelled = await exportFile();
   const labelledOut = join(tmpdir(), 'blinded-labelled.pdf');
   await labelled.saveAs(labelledOut);
   const labelledBytes = new Uint8Array(readFileSync(labelledOut));
@@ -1364,10 +1501,7 @@ try {
     (await page.locator('#textview mark.off').count()) === 0);
 
   await redact(page);
-  const [textDownload] = await Promise.all([
-    page.waitForEvent('download', { timeout: 30000 }),
-    page.click('#export'),
-  ]);
+  const textDownload = await exportFile();
   const outText2 = join(tmpdir(), 'blinded-out.txt');
   await textDownload.saveAs(outText2);
   const redacted = readFileSync(outText2, 'utf8');
@@ -2429,26 +2563,58 @@ try {
     if (bubble) bubble.hidden = true;
   });
 
-  // ---------- the footer link ----------
+  // ---------- the questions page ----------
   //
   // The claim on the front page is that nothing is uploaded. That claim is
   // only checkable if a reader can reach the source, so the link is part of
-  // the argument rather than decoration.
-  const foot = await page.evaluate(() => {
-    const a = document.querySelector('.foot a[href*="github.com"]');
+  // the argument rather than decoration. It used to sit in the footer; it now
+  // lives on the questions page, reached from the header, and the test follows
+  // the same route a reader would.
+  const headerLink = await page.evaluate(() => {
+    const a = document.querySelector('.top .top-link');
     if (!a) return null;
     const r = a.getBoundingClientRect();
     return { href: a.getAttribute('href'), text: a.textContent.trim(),
              visible: r.width > 0 && r.height > 0,
-             icon: !!a.querySelector('svg') };
+             onTheRight: r.left > window.innerWidth / 2 };
   });
-  check('the footer carries a link to the source', foot !== null);
-  check('and it points at the public repository',
-    foot && foot.href === 'https://github.com/jaredsia-svg/blinded', foot && foot.href);
-  check('the link is actually rendered, not just present',
-    foot && foot.visible, JSON.stringify(foot));
-  check('and it says where it goes', foot && /github/i.test(foot.text), foot && foot.text);
-  check('the link carries its mark', foot && foot.icon);
+  check('the header carries a link to the questions',
+    headerLink !== null && /faq/.test(headerLink.href), JSON.stringify(headerLink));
+  check('and it is on the right of the strip, where it was asked for',
+    headerLink && headerLink.visible && headerLink.onTheRight, JSON.stringify(headerLink));
+
+  await page.click('.top .top-link');
+  await page.waitForSelector('.faq', { timeout: 15000 });
+  const faq = await page.evaluate(() => {
+    const link = document.querySelector('.faq a[href*="github.com"]');
+    const r = link && link.getBoundingClientRect();
+    return {
+      questions: document.querySelectorAll('.faq h2').length,
+      answered: [...document.querySelectorAll('.faq')].every(s =>
+        s.querySelector('p') && s.querySelector('p').textContent.trim().length > 40),
+      href: link && link.getAttribute('href'),
+      visible: !!(r && r.width > 0 && r.height > 0),
+      icon: !!(link && link.querySelector('svg')),
+      // The claim the whole tool rests on should be the first thing answered.
+      firstQuestion: (document.querySelector('.faq h2') || {}).textContent,
+      openSource: /free and open source/i.test(document.body.textContent),
+      back: !!document.querySelector('a[href="index.html"]'),
+    };
+  });
+  check('the questions page asks between five and ten things',
+    faq.questions >= 5 && faq.questions <= 10, String(faq.questions));
+  check('and every one of them is actually answered', faq.answered === true);
+  check('it leads with whether the document is uploaded',
+    /upload/i.test(faq.firstQuestion || ''), faq.firstQuestion);
+  check('it carries the link to the source', faq.href === 'https://github.com/jaredsia-svg/blinded',
+    faq.href);
+  check('the link is actually rendered, not just present', faq.visible === true);
+  check('the link carries its mark', faq.icon === true);
+  check('and it still says the tool is free and open source', faq.openSource === true);
+  check('there is a way back to the tool', faq.back === true);
+
+  await page.goBack();
+  await page.waitForSelector('#view-drop:not([hidden])', { timeout: 15000 });
 
   // ---------- the front page on a laptop ----------
   //

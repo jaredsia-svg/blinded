@@ -96,6 +96,7 @@
     // what it added when it did.
     sweptTerms: [],
     sweepAdded: 0,
+    zoom: 1,
     sweepRunning: false,
     sweepStopped: false,
     sweepReached: 0,
@@ -235,6 +236,11 @@
 
   function show(name) {
     for (const key of Object.keys(views)) views[key].hidden = key !== name;
+    // Reviewing is a fixed-height layout: the header and the export bar stay
+    // put and the panel and the document each scroll on their own. The front
+    // page is an ordinary scrolling page, so the class comes and goes with the
+    // view rather than living on the body for good.
+    document.body.classList.toggle('reviewing', name === 'review');
   }
 
   function fail(message) {
@@ -1246,6 +1252,22 @@
     return state.mode === 'pick' || state.tool === 'mark';
   }
 
+  // What actually scrolls under this canvas.
+  //
+  // It used to be the window, and the hand tool simply called scrollBy on it.
+  // Once the document got a scrolling column of its own that stopped moving
+  // anything, so the element is found rather than assumed.
+  function scrollerFor(node) {
+    for (let at = node.parentElement; at; at = at.parentElement) {
+      const style = getComputedStyle(at);
+      const scrolls = /(auto|scroll)/.test(style.overflowY + ' ' + style.overflowX);
+      if (scrolls && (at.scrollHeight > at.clientHeight || at.scrollWidth > at.clientWidth)) {
+        return at;
+      }
+    }
+    return window;
+  }
+
   function attachDrawing(page, canvas) {
     let start = null;
     let panning = null;
@@ -1278,7 +1300,11 @@
 
     canvas.addEventListener('pointermove', event => {
       if (panning) {
-        window.scrollBy(panning.x - event.clientX, panning.y - event.clientY);
+        const dx = panning.x - event.clientX;
+        const dy = panning.y - event.clientY;
+        const scroller = scrollerFor(canvas);
+        if (scroller === window) window.scrollBy(dx, dy);
+        else { scroller.scrollLeft += dx; scroller.scrollTop += dy; }
         panning = { x: event.clientX, y: event.clientY };
         return;
       }
@@ -1411,6 +1437,32 @@
   // length earns back. See lib/textimage.js for the measurements behind it.
   function wordBarFor(term) {
     return Math.max(0.3, Math.round((wordSensitivity() - TextImage.shapeRelief(term)) * 1000) / 1000);
+  }
+
+  // Zooming.
+  //
+  // The pages are drawn at the width of the column and scaled from there, so
+  // this changes nothing about the canvases themselves — a mark is still
+  // measured in the page's own pixels, and a reviewer who leans in to check a
+  // bar is looking at the same bar that will be burned in.
+  const ZOOM_STEPS = [0.5, 0.75, 1, 1.25, 1.5, 2, 3];
+
+  function setZoom(zoom) {
+    const wanted = ZOOM_STEPS.reduce((best, step) =>
+      Math.abs(step - zoom) < Math.abs(best - zoom) ? step : best, ZOOM_STEPS[0]);
+    state.zoom = wanted;
+    el('pages').style.setProperty('--zoom', String(wanted));
+    el('zoom-out').disabled = wanted === ZOOM_STEPS[0];
+    el('zoom-in').disabled = wanted === ZOOM_STEPS[ZOOM_STEPS.length - 1];
+    const percent = Math.round(wanted * 100) + '%';
+    el('zoom-in').title = 'Zoom in (now ' + percent + ')';
+    el('zoom-out').title = 'Zoom out (now ' + percent + ')';
+  }
+
+  function stepZoom(by) {
+    const at = ZOOM_STEPS.indexOf(state.zoom);
+    const next = Math.max(0, Math.min(ZOOM_STEPS.length - 1, (at < 0 ? 2 : at) + by));
+    setZoom(ZOOM_STEPS[next]);
   }
 
   function setTool(tool) {
@@ -1648,7 +1700,101 @@
     return base + '-redacted.' + extension;
   }
 
+  // Everything being covered inside the document, as plain strings.
+  //
+  // The typed words, and whatever the detectors matched — an address, a card
+  // number — but only the ones that are actually going to be covered, since a
+  // match the reviewer has clicked off is a match they have decided to keep.
+  function coveredText() {
+    const out = new Set();
+    for (const term of state.terms) if (term) out.add(term);
+    const pages = state.kind === 'text'
+      ? [{ findings: state.findings, dismissed: dismissedText }]
+      : state.pages;
+    for (const page of pages) {
+      for (const finding of page.findings || []) {
+        if (page.dismissed && page.dismissed.has(finding.id)) continue;
+        if (finding.text) out.add(finding.text);
+      }
+    }
+    return [...out].filter(s => s.trim().length >= 3);
+  }
+
+  // The same words, taken out of the file name.
+  //
+  // A document can be redacted perfectly and still name its own secret in the
+  // title bar of whoever opens it, in the attachment line of an email, in a
+  // shared folder listing. Nothing inside the file is wrong; the leak is the
+  // name. So the name is cleaned before it is offered, and the reviewer sees
+  // what happened and can edit it further.
+  function cleanName(name, covered) {
+    let out = String(name || '');
+    for (const phrase of covered || coveredText()) {
+      const pattern = new RegExp(phrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+      out = out.replace(pattern, '');
+    }
+    // Whatever punctuation the removal left stranded.
+    out = out.replace(/[ \t]{2,}/g, ' ')
+      .replace(/[-_\u2013\u2014]{2,}/g, '-')
+      .replace(/\s*[-_\u2013\u2014]\s*(?=[-_\u2013\u2014.]|$)/g, '')
+      .replace(/^[\s\-_\u2013\u2014.]+/, '')
+      .replace(/[\s\-_\u2013\u2014]+$/, '')
+      .trim();
+    return out;
+  }
+
+  // Offers the name, and resolves to the one to save under, or null if the
+  // reviewer changes their mind.
+  function askName(suggested) {
+    return new Promise(resolve => {
+      const box = el('namebox');
+      const input = el('savename');
+      const note = el('namenote');
+      const covered = coveredText();
+      const extension = (suggested.match(/\.[^.]+$/) || [''])[0];
+      const stem = suggested.slice(0, suggested.length - extension.length);
+      const cleaned = cleanName(stem, covered);
+      const changed = cleaned !== stem;
+
+      input.value = (cleaned || 'document') + extension;
+      note.hidden = !changed;
+      if (changed) {
+        note.textContent = 'The name of the file you opened contained something '
+          + 'this redaction covers, so it has been taken out of the name as well.';
+      }
+      box.hidden = false;
+      input.focus();
+      // The stem only, so typing replaces the name and not the extension.
+      input.setSelectionRange(0, Math.max(0, input.value.length - extension.length));
+
+      const done = value => {
+        box.hidden = true;
+        el('namesave').removeEventListener('click', save);
+        el('namecancel').removeEventListener('click', cancel);
+        input.removeEventListener('keydown', key);
+        resolve(value);
+      };
+      const save = () => {
+        const typed = input.value.trim();
+        if (!typed) { input.focus(); return; }
+        done(typed.endsWith(extension) ? typed : typed + extension);
+      };
+      const cancel = () => done(null);
+      const key = event => {
+        if (event.key === 'Enter') { event.preventDefault(); save(); }
+        if (event.key === 'Escape') { event.preventDefault(); cancel(); }
+      };
+      el('namesave').addEventListener('click', save);
+      el('namecancel').addEventListener('click', cancel);
+      input.addEventListener('keydown', key);
+    });
+  }
+
   async function exportFile() {
+    const extension = state.kind === 'text' ? 'txt' : state.kind === 'image' ? 'png' : 'pdf';
+    const chosen = await askName(redactedName(extension));
+    if (!chosen) return;                 // changed their mind; nothing is built
+    state.saveAs = chosen;
     busy(true, 'Building the redacted file…');
     try {
       if (state.kind === 'text') {
@@ -1663,11 +1809,11 @@
         } else {
           out = Detect.applyToText(state.text, spans, 'block');
         }
-        download(new Blob([out], { type: 'text/plain' }), redactedName('txt'));
+        download(new Blob([out], { type: 'text/plain' }), state.saveAs);
       } else if (state.kind === 'image') {
         const page = state.pages[0];
         const flat = Render.flatten(page.source, activeBoxes(page));
-        download(await Render.canvasToBlob(flat, 'image/png'), redactedName('png'));
+        download(await Render.canvasToBlob(flat, 'image/png'), state.saveAs);
       } else {
         const lossless = el('lossless').checked;
         const machineReadable = state.labelling && el('textlayer').checked;
@@ -1691,7 +1837,7 @@
         }
 
         const bytes = PdfWrite.build(built);
-        download(new Blob([bytes], { type: 'application/pdf' }), redactedName('pdf'));
+        download(new Blob([bytes], { type: 'application/pdf' }), state.saveAs);
       }
     } catch (error) {
       alert('The redacted file could not be built: ' + (error && error.message ? error.message : error) +
@@ -2183,6 +2329,9 @@
   });
 
   el('pick').addEventListener('click', () => setMode(state.mode === 'pick' ? 'box' : 'pick'));
+  el('zoom-in').addEventListener('click', () => stepZoom(1));
+  el('zoom-out').addEventListener('click', () => stepZoom(-1));
+  setZoom(state.zoom);
   el('tool-pan').addEventListener('click', () => setTool('pan'));
   el('tool-mark').addEventListener('click', () => setTool('mark'));
   setTool(state.tool);
@@ -2251,7 +2400,9 @@
 
   window.Blinded = { state, rescan, loadFile, exportFile, setMode, addTemplate,
     undoLast, undoStack, applyLabels, labelItems, legendText, downloadKey,
-    sensitivity, wordSensitivity, wordBarFor, setTool, marking,
+    sensitivity, wordSensitivity, wordBarFor, setZoom, stepZoom, ZOOM_STEPS,
+    cleanName, coveredText, askName, redactedName,
+    scrollerFor, setTool, marking,
     applyRedaction, markPending, plannedCount, pendingTemplates, termsNeedingPictures,
     readPages, matchOcr, ocrPending, ocrMatchStale, showWordControls,
     sweepTemplates, runSweep, renderSweep, alreadyCovered, sweepProgress,

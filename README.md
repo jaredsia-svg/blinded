@@ -620,3 +620,24 @@ that looked selected and did nothing.
 
 Run `node tools/stamp.mjs` after editing any asset. The test suite fails if the
 stamps are stale, so it cannot be forgotten.
+
+## The review layout
+
+While a document is open the page itself does not scroll. The header and the
+export bar stay where they are, and the panel and the document each scroll on
+their own — so reaching Redact never means scrolling past the document, and
+scrolling the document never takes the controls away with it. The front page is
+left alone: it is an ordinary page and reads like one.
+
+Zoom is a property of the view, never of the canvases. The pages are laid out
+at the width of the column and scaled from there, so a reviewer who leans in to
+check a bar is looking at the same bar that gets burned in.
+
+## The file name
+
+A document can be redacted perfectly and still name its own secret in an
+attachment line, a shared folder listing, or the title bar of whoever opens it.
+Nothing inside the file is wrong; the leak is the name. So on export the name is
+offered for editing, with anything covered inside the document — typed words and
+detector matches alike — taken out of it first, and the reviewer told that it
+happened.

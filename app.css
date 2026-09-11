@@ -69,6 +69,14 @@ body { padding-top: var(--top-h); }
 /* Narrow enough that the tagline would crowd the name out of its own bar. */
 @media (max-width: 640px) { .claim { display: none; } }
 
+a.mark { color: inherit; text-decoration: none; }
+.top-link {
+  margin-left: auto; flex: none; color: #c7ced8; text-decoration: none;
+  font-size: 13px; border: 1px solid #2a313c; border-radius: var(--radius);
+  padding: 5px 11px;
+}
+.top-link:hover { color: #fff; border-color: #48505c; }
+
 /* ---------- drop ---------- */
 
 .view { padding: 28px 0 40px; }
@@ -221,16 +229,17 @@ body { padding-top: var(--top-h); }
   fill: none; stroke: currentColor; stroke-width: 1.7;
   stroke-linecap: round; stroke-linejoin: round;
 }
-/* A divider between the two that change what dragging does and the two that
-   do something once. Seamless is not the same as undifferentiated. */
-#undo { border-left: 1px solid var(--line); }
+/* Dividers between the three kinds: what dragging does, how big the pages
+   are, and the two that do something once. Seamless is not the same as
+   undifferentiated. */
+#zoom-out, #undo { border-left: 1px solid var(--line); }
 
 .tool:hover:not(:disabled) { background: #eef1f6; }
 /* Selected is darkened, not tinted: the reviewer has to be able to tell at a
    glance which of the two dragging means, and a pale highlight on a pale
    panel does not carry that. */
 .tool[aria-pressed="true"] {
-  background: var(--ink); border-color: var(--ink); color: #fff;
+  background: var(--accent); border-color: var(--accent); color: #fff;
   position: relative; z-index: 1;
 }
 .tool:disabled { color: var(--ink-soft); opacity: .55; cursor: default; }
@@ -328,7 +337,15 @@ textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; border-
 /* ---------- pages ---------- */
 
 .stage { min-width: 0; }
-.pages { display: flex; flex-direction: column; gap: 18px; }
+/* --zoom is what the two magnifier buttons move. The pages are laid out at
+   the width of the column and then scaled from there, so zooming is a
+   property of the view and never of the canvases: the pixels a redaction is
+   measured against do not change when the reviewer leans in. */
+.pages {
+  display: flex; flex-direction: column; gap: 18px; align-items: flex-start;
+  --zoom: 1;
+}
+.page { width: calc(100% * var(--zoom)); flex: none; }
 .page {
   position: relative; background: var(--card); border: 1px solid var(--line);
   border-radius: var(--radius); overflow: hidden; box-shadow: 0 1px 3px rgba(16, 22, 32, .06);
@@ -534,3 +551,69 @@ code {
   display: block; height: 100%; width: 0;
   background: var(--accent); transition: width .2s linear;
 }
+
+/* ---------- reviewing: a fixed frame, two scrolling columns ---------- */
+/*
+   While a document is open the page itself does not scroll. The header and
+   the export bar are always where they were, and the panel and the document
+   each scroll on their own — so reaching the Redact button never means
+   scrolling past the document, and scrolling the document never takes the
+   controls away with it.
+
+   The front page is left alone: it is an ordinary page and reads like one.
+*/
+body.reviewing { height: 100vh; overflow: hidden; }
+body.reviewing > main.wrap {
+  height: calc(100vh - var(--top-h));
+  display: flex; flex-direction: column; min-height: 0;
+}
+body.reviewing > footer.foot { display: none; }
+body.reviewing #view-review {
+  flex: 1; min-height: 0; display: flex; flex-direction: column;
+  padding: 18px 0 0;
+}
+body.reviewing .review { flex: 1; min-height: 0; align-items: stretch; }
+body.reviewing .panel {
+  position: static; max-height: none; height: 100%;
+  overflow-y: auto; overflow-x: hidden;
+}
+body.reviewing .stage {
+  height: 100%; overflow: auto;
+  /* Room for the shadow the export bar casts, so the last page does not sit
+     flush against it. */
+  padding-bottom: 4px;
+}
+body.reviewing .exportbar { position: static; flex: none; margin: 14px 0 18px; }
+
+/* ---------- questions ---------- */
+.faqmain { padding: 30px 20px 60px; max-width: 760px; }
+.faqtitle { font-size: 30px; letter-spacing: -0.02em; margin: 0 0 6px; }
+.faq { border-top: 1px solid var(--line); padding: 20px 0 4px; }
+.faq h2 { font-size: 17px; margin: 0 0 8px; letter-spacing: -0.01em; }
+.faq p { margin: 0 0 12px; color: var(--ink-soft); line-height: 1.6; }
+.faq .ph {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px;
+  background: #eef1f6; border-radius: 4px; padding: 1px 5px; color: var(--ink);
+}
+.faqlink a, .faqback a { color: var(--accent); text-decoration: none; font-weight: 600; }
+.faqlink a:hover, .faqback a:hover { text-decoration: underline; }
+.faqlink a { display: inline-flex; align-items: center; gap: 7px; }
+.faqback { margin-top: 28px; border-top: 1px solid var(--line); padding-top: 20px; }
+
+/* ---------- naming the file on the way out ---------- */
+/*
+   A file called "Project Falcon - KAG term sheet.pdf" undoes a redaction the
+   moment it is attached to an email, and nothing inside the document is to
+   blame. So the name is offered for editing before anything is saved, with
+   anything that was covered inside the document taken out of it first.
+*/
+.nameinner { max-width: 460px; text-align: left; }
+.namehead { margin: 0 0 14px; font-size: 17px; letter-spacing: -0.01em; }
+.namelabel { display: block; font-size: 12.5px; color: var(--ink-soft); margin-bottom: 6px; }
+.nameinput {
+  width: 100%; box-sizing: border-box; font: inherit; font-size: 14px;
+  padding: 9px 11px; border: 1px solid var(--line); border-radius: var(--radius);
+  background: #fff; color: var(--ink);
+}
+.nameinput:focus { outline: 2px solid var(--accent); outline-offset: -1px; border-color: var(--accent); }
+.namego { display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; }
