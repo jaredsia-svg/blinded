@@ -189,7 +189,8 @@ both italic ones, three of three on another including a caption that scored
 matched 333 times. There is no threshold involved.
 
 It costs about 6.7 MB the first time, fetched from this site and then kept by
-the browser — there is nothing to install, and nothing is sent anywhere. Pages
+the browser (the overlay does not say so: it is not something a reviewer can
+act on, and reading is not optional any more) — there is nothing to install, and nothing is sent anywhere. Pages
 are read a few at a time: about 0.8 seconds a page on four cores, against eight
 before the WebAssembly build was pinned correctly and the reading was split
 across engines.
@@ -661,3 +662,16 @@ beforeunload and the browser offers to stop it; opening another file discards
 the document without navigating anywhere, so nothing fires and the browser has
 nothing to offer. The cancel button holds the focus, so a stray Enter is not
 what loses the document.
+
+## Finding words in pictures is not optional
+
+It was a checkbox, on by default, from when reading the pages was slow enough
+to be worth opting out of. Switching it off is not a trade a reviewer can make
+sensibly — it turns off the one thing this tool does that a text search cannot,
+and a document whose name appears only in a screenshot would come out looking
+redacted and not be. The checkbox is gone and the behaviour is always on.
+
+The term list counts both together, as one number. It used to read
+"200 + 50 as picture", which split the answer along a line the reviewer has no
+use for: they asked how many times the word is in the document, and where each
+one happens to be written is the tool's business rather than theirs.

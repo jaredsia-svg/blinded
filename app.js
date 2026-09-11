@@ -82,6 +82,14 @@
     // The cost is real and bounded: the reader is fetched once, and only when
     // Redact is actually pressed, so nobody who does not redact pays for it.
     // Under-covering silently is not bounded at all.
+    // Words are always looked for in pictures as well as in the text.
+    //
+    // This was a checkbox, on by default, from when reading the pages was slow
+    // enough to be worth opting out of. Switching it off is not a trade a
+    // reviewer can make sensibly — it turns off the one thing this tool does
+    // that a text search cannot — and a document where the name only appears
+    // in a screenshot comes out looking redacted and is not. The flag stays
+    // because the fallback path and the text-file case both read it.
     termImages: true,
     // Words inside pictures are found by reading the page. Matching drawn
     // shapes is the fallback for when the reader cannot be loaded at all.
@@ -680,9 +688,12 @@
     const outstanding = state.pages.filter(page => !page.ocrItems);
     if (!outstanding.length) { state.ocrRead = true; return; }
     // The reader is about seven megabytes and is fetched the first time it is
-    // wanted. Without saying so, the first page looks like a hang.
+    // wanted. The overlay used to say so, from when this was an optional extra
+    // a reviewer had just switched on and might wonder about. It is not
+    // optional any more, the bar below says which page it is on, and a size in
+    // megabytes is not something a reviewer can do anything with.
     const alreadyDone = total - outstanding.length;
-    busy(true, state.ocrLoaded ? 'Working…' : 'Fetching the page reader — about 7 MB, once…');
+    busy(true, 'Working…');
     progress(0, outstanding.length);
     allowPause();
 
@@ -1665,11 +1676,18 @@
       const pictures = state.pages.reduce((sum, page) =>
         sum + liveImageHits(page).filter(m => m.term === term).length, 0);
 
+      // One number, not two.
+      //
+      // It used to read "200 + 50 as picture", which split the answer along a
+      // line the reviewer has no use for: they asked how many times the word
+      // is in the document, and where each one happened to be written is the
+      // tool's business rather than theirs. Counting them together also stops
+      // the number moving about as the picture pass catches up.
+      const total = n + pictures;
+
       const count = document.createElement('span');
       count.className = 'n';
-      if (n === 0 && pictures === 0) count.textContent = 'not found';
-      else if (pictures) count.textContent = n + ' + ' + pictures + ' as picture';
-      else count.textContent = String(n);
+      count.textContent = total === 0 ? 'not found' : String(total);
       if (n === 0 && pictures > 0) row.className = '';
 
       row.append(label, count);
@@ -2151,7 +2169,6 @@
 
   // The box and the state start from the same value, rather than each
   // asserting a default of its own.
-  el('termimages').checked = state.termImages;
   showWordControls();
 
   el('busy-pause').addEventListener('click', requestPause);
@@ -2412,14 +2429,6 @@
         + (state.sweepAdded === 1 ? 'it' : 'them') + '.';
   }
 
-  el('termimages').addEventListener('change', e => {
-    state.termImages = e.target.checked;
-    showWordControls();
-    clearTermImages();
-    renderTermCounts();
-    markPending();
-    redrawAll();
-  });
 
   el('pick').addEventListener('click', () => setMode(state.mode === 'pick' ? 'box' : 'pick'));
   el('zoom-in').addEventListener('click', () => stepZoom(1));

@@ -1079,7 +1079,6 @@ try {
     window.Blinded.state.useOcr = false;
     window.Blinded.showWordControls();
   });
-  await page.check('#termimages');
   await redact(page);
 
   const doubled = await page.evaluate(() => {
@@ -1164,7 +1163,6 @@ try {
     window.Blinded.state.useOcr = false;
     window.Blinded.showWordControls();
   });
-  await page.check('#termimages');
   await redact(page);
 
   const pictured = await page.evaluate(() => {
@@ -1195,16 +1193,24 @@ try {
   check('an acronym is not labelled as a person',
     pictured.labels[0].startsWith('T'), pictured.labels[0]);
 
-  check('the term list reports the pictured matches separately',
-    (await page.textContent('#termcounts')).includes('as picture'),
-    await page.textContent('#termcounts'));
-
-  // Turning the option off withdraws them.
-  await page.uncheck('#termimages');
-  check('turning the option off removes the pictured matches',
-    await page.evaluate(() => window.Blinded.state.pages[0].imageHits.length) === 0);
-  check('and returns the document to review',
-    await page.evaluate(() => window.Blinded.state.applied) === false);
+  // One number, not two. The reviewer asked how many times the word is in the
+  // document; which of those happen to be pictures is the tool's business.
+  const tally = await page.evaluate(() => {
+    const B = window.Blinded;
+    const term = B.state.terms[0];
+    const row = document.querySelector('#termcounts li');
+    const inText = B.state.pages.reduce((sum, p) =>
+      sum + window.BlindedDetect.findTerms(p.text, [term]).length, 0);
+    const asPictures = B.state.pages.reduce((sum, p) =>
+      sum + p.imageHits.filter(m => m.term === term && !m.superseded).length, 0);
+    return { shown: row ? row.querySelector('.n').textContent.trim() : null,
+             inText, asPictures };
+  });
+  check('the tally is one number, not a sum of two',
+    !/\+|picture/.test(tally.shown || ''), JSON.stringify(tally));
+  check('and it counts the text and the pictures together',
+    tally.asPictures > 0 && tally.shown === String(tally.inText + tally.asPictures),
+    JSON.stringify(tally));
 
   // ---------- one pass, spread across cores ----------
   //
@@ -1325,7 +1331,6 @@ try {
     window.Blinded.state.useOcr = false;
     window.Blinded.showWordControls();
   });
-  await page.check('#termimages');
   await redact(page);
 
   const coloured = await page.evaluate((combos) => {
@@ -1757,8 +1762,7 @@ try {
     });
     await page.fill('#terms', 'Jane Doe');
     await page.waitForTimeout(400);
-    await page.check('#termimages');
-
+  
     const started = Date.now();
     await redact(page);
     const took = Date.now() - started;
@@ -1799,14 +1803,17 @@ try {
     await page.setInputFiles('#file', fixturePath);
     await page.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
     const fresh = await page.evaluate(() => ({
-      box: document.getElementById('termimages').checked,
+      box: document.getElementById('termimages'),
       state: window.Blinded.state.termImages,
       reading: window.Blinded.state.useOcr,
     }));
     check('words are looked for inside pictures without being asked',
       fresh.state === true, JSON.stringify(fresh));
-    check('and the box says so', fresh.box === true, JSON.stringify(fresh));
-    check('the box and the state agree', fresh.box === fresh.state, JSON.stringify(fresh));
+    // And it cannot be turned off. Switching it off is not a trade a reviewer
+    // can make sensibly: a document whose name appears only in a screenshot
+    // would come out looking redacted and not be.
+    check('and there is no way to turn it off', fresh.box === null,
+      JSON.stringify(fresh));
     check('reading is what does it', fresh.reading === true, JSON.stringify(fresh));
   }
 
@@ -2642,8 +2649,11 @@ try {
   // they read as decoration that does nothing. What matters is that the text
   // actually becomes visible, so that is what is asserted, not that a handler
   // is attached.
+  // Three, not four: the fourth explained the "find these words as pictures"
+  // checkbox, which is gone — the tool always does that now, and what it means
+  // is answered on the questions page instead.
   const whyCount = await page.evaluate(() => document.querySelectorAll('.why').length);
-  check('the panel still has its hints', whyCount === 4, String(whyCount));
+  check('the panel still has its hints', whyCount === 3, String(whyCount));
   check('every hint carries text to show',
     await page.evaluate(() => [...document.querySelectorAll('.why')]
       .every(b => (b.getAttribute('data-tip') || '').length > 20)));

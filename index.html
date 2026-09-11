@@ -121,10 +121,6 @@
           <div class="s-body">
             <textarea id="terms" rows="3" placeholder="One per line&#10;Jane Doe&#10;Account 4471"></textarea>
             <ul id="termcounts" class="termcounts"></ul>
-            <label class="check"><input type="checkbox" id="termimages" checked>
-              Also find these words as pictures
-              <button type="button" class="why" aria-label="What does this mean?" data-tip="Reads the lettering on each page, so a word set as a picture is found whatever type it is in — italic, bold, small, unusual. The reader is about 7 MB, fetched from this site once and then kept by your browser; nothing is sent anywhere. If it cannot load, the word is hunted for by shape instead.">?</button>
-            </label>
             <p class="hint warnhint" id="ocrnote" hidden></p>
             <div id="sweepbox" hidden>
               <button type="button" id="sweep" class="ghost wide">Check every page by shape</button>
@@ -254,7 +250,7 @@
 <script src="lib/pdfwrite.js?v=4b977425"></script>
 <script src="lib/pdfread.js?v=624c5ef9"></script>
 <script src="lib/render.js?v=7bf6e0a9"></script>
-<script src="app.js?v=9b2f5fac"></script>
+<script src="app.js?v=1ff580f8"></script>
 <script type="module">
   // pdf.js ships as an ES module; everything else here is a classic script, so
   // it is bridged onto the global the other modules already look for. Both the
