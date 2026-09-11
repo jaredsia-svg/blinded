@@ -169,6 +169,15 @@ or above, while "Tokenomics Digital Tech" in the same panel matched once at
 any setting. A short word resembles a great deal of a page; a long one
 resembles almost nothing else.
 
+Words are hunted twice on each page: once at the page's own resolution, and
+once on a copy resampled half again as large. Body text set as a picture is
+only a dozen pixels tall, and a template shrunk to meet it smears into a blob
+— on a real slide a caption reading "KAG" scored 0.314, in the wrong place,
+while the same word in that page's title scored 0.725. What is lost there is
+the template's shape, not the page's detail: resampling the page already in
+hand scored 0.677, matching a genuine re-render at three times the size. The
+second pass is additive, so nothing found without it is lost.
+
 Both start at 0.75. If a word is missed, lower **Word match** — the panel
 reports what the closest thing scored, so there is a number to aim at. If
 unrelated text is being covered, raise it, and a word that matches as a

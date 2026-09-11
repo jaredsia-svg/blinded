@@ -351,6 +351,11 @@
       TextImage.templatesFor(term).forEach((template, i) => {
         entries.push({
           key: 'term:' + term + ':' + i, template, term, threshold: wordSensitivity(),
+          // Typed words are usually looked for in body text and captions,
+          // which is exactly where they are too small to match at the page's
+          // own resolution. A cut-out logo is not swept this way: it is
+          // already whatever size it is on the page.
+          smallText: true,
         });
       });
     }

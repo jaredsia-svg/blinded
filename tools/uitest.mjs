@@ -1219,6 +1219,71 @@ try {
   check('and is out of the way when that feature is off',
     rowShown.without === true, JSON.stringify(rowShown));
 
+  // ---------- small lettering ----------
+  //
+  // A word set as a picture in body text or a caption is only a dozen pixels
+  // tall, and the template has to shrink to meet it. At that size letterforms
+  // smear: on a real slide a caption reading "KAG" scored 0.314, in the wrong
+  // place, while the same word in the title scored 0.725. Searching a
+  // resampled copy of the page recovers it without re-rendering anything.
+  //
+  // Drawn here at a real small size rather than with a synthetic motif: a
+  // blocky test pattern survives downsampling perfectly well and would make
+  // this pass whether the code worked or not.
+  const tiny = await page.evaluate(async () => {
+    const c = document.createElement('canvas');
+    c.width = 420; c.height = 120;
+    const ctx = c.getContext('2d', { alpha: false });
+    ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, c.width, c.height);
+    ctx.fillStyle = '#222222';
+    // Roughly the size the caption was on the slide.
+    ctx.font = '600 13px Helvetica, Arial, sans-serif';
+    ctx.textBaseline = 'top';
+    ctx.fillText('Singapore, within KAG\u2019s HQ', 20, 52);
+    // Some other text, so the page is not one word on a blank field.
+    ctx.font = '13px Helvetica, Arial, sans-serif';
+    ctx.fillText('Innovation and design under one roof', 20, 20);
+    ctx.fillText('10+ specialists, supported by 20 more', 20, 84);
+
+    const gray = BlindedImageSearch.grayOf(c);
+    const M = BlindedMatch, S = BlindedImageSearch;
+    const run = smallText => {
+      const pooled = [];
+      for (const t of BlindedTextImage.templatesFor('KAG')) {
+        const ready = S.prepareTemplate(t, {});
+        if (!ready) continue;
+        const r = S.searchPage(gray, c.width, c.height, { ...ready, smallText },
+          { threshold: 0.70 });
+        for (const h of r.matches) pooled.push(h);
+      }
+      return M.suppress(pooled, 0.3).sort((a, b) => b.score - a.score);
+    };
+    const off = run(false), on = run(true);
+    const ink = ctx.measureText('Singapore, within ');
+    return {
+      off: off.length,
+      on: on.length,
+      best: on.length ? +on[0].score.toFixed(3) : 0,
+      hit: on.length ? { x: Math.round(on[0].x), y: Math.round(on[0].y),
+                         w: Math.round(on[0].w), h: Math.round(on[0].h) } : null,
+      pageW: c.width, pageH: c.height,
+      expectX: Math.round(20 + ink.width),
+    };
+  });
+  check('small lettering is missed at the page\'s own resolution',
+    tiny.off === 0, JSON.stringify(tiny));
+  check('and found once the page is resampled for it',
+    tiny.on > 0, JSON.stringify(tiny));
+  // The pass runs on a larger copy, so every coordinate has to come back
+  // scaled down again. Getting that wrong would draw the bar in the wrong
+  // place — worse than not finding the word at all, because it looks covered.
+  check('the hit is reported in page coordinates, not the resampled ones',
+    tiny.hit && tiny.hit.x + tiny.hit.w <= tiny.pageW
+      && tiny.hit.y + tiny.hit.h <= tiny.pageH, JSON.stringify(tiny));
+  check('and it lands on the word, not somewhere else on the page',
+    tiny.hit && Math.abs(tiny.hit.x - tiny.expectX) <= 14
+      && Math.abs(tiny.hit.y - 52) <= 10, JSON.stringify(tiny));
+
   // ---------- the over-matching warning ----------
   //
   // The failure this catches is silent: a short word matching the page rather

@@ -544,6 +544,25 @@ check('a degenerate size does not throw',
     cols <= Match.COARSE_SIZE_WIDE.maxLong, cols + ' columns');
 })();
 
+// The resampled copy a small-lettering sweep works on is shared between every
+// template in the sweep, or four typefaces for each of several words would
+// each pay to build the same thing.
+(() => {
+  const gray = new Float32Array(40 * 20);
+  for (let i = 0; i < gray.length; i++) gray[i] = (i % 7) / 7;
+  const up = ImageSearch.upscaledOf(gray, 40, 20);
+  check('the resampled page is larger by the stated factor',
+    up.width === Math.round(40 * ImageSearch.SMALL_TEXT_UPSCALE)
+      && up.height === Math.round(20 * ImageSearch.SMALL_TEXT_UPSCALE),
+    up.width + 'x' + up.height);
+  check('and it holds that many samples', up.gray.length === up.width * up.height);
+  check('asking twice does not build it twice',
+    ImageSearch.upscaledOf(gray, 40, 20) === up);
+  const other = new Float32Array(40 * 20);
+  check('but a different page gets its own',
+    ImageSearch.upscaledOf(other, 40, 20) !== up);
+})();
+
 // A template may carry its own threshold, because not every template
 // deserves the same bar. A logo cut from the document is matched against a
 // copy of itself; a word drawn here in Helvetica is a guess at whatever
