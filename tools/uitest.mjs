@@ -1284,6 +1284,62 @@ try {
     tiny.hit && Math.abs(tiny.hit.x - tiny.expectX) <= 14
       && Math.abs(tiny.hit.y - 52) <= 10, JSON.stringify(tiny));
 
+  // ---------- slanted lettering ----------
+  //
+  // Bold was always covered by a bold face. Italic was not, and a slanted word
+  // is a different shape rather than the same shape drawn differently: on a
+  // real slide an italic "KAG\u2019s" in a caption scored 0.386 against the
+  // upright faces, indistinguishable from the page around it.
+  const slanted = await page.evaluate(() => {
+    const M = BlindedMatch, S = BlindedImageSearch, TI = BlindedTextImage;
+    const draw = style => {
+      const c = document.createElement('canvas');
+      c.width = 460; c.height = 90;
+      const ctx = c.getContext('2d', { alpha: false });
+      ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height);
+      ctx.fillStyle = '#1a1a1a';
+      ctx.font = style + ' 15px Helvetica, Arial, sans-serif';
+      ctx.textBaseline = 'top';
+      ctx.fillText('supported by KAG\u2019s proprietary innovation', 16, 36);
+      ctx.font = '15px Helvetica, Arial, sans-serif';
+      ctx.fillText('Resolves complex technical issues on-site', 16, 10);
+      return c;
+    };
+    const hunt = canvas => {
+      const gray = S.grayOf(canvas);
+      const pooled = [];
+      for (const t of TI.templatesFor('KAG')) {
+        const ready = S.prepareTemplate(t, {});
+        if (!ready) continue;
+        const r = S.searchPage(gray, canvas.width, canvas.height,
+          { ...ready, smallText: true }, { threshold: 0.60 });
+        for (const h of r.matches) pooled.push({ ...h, face: t.face });
+      }
+      const best = M.suppress(pooled, 0.3).sort((a, b) => b.score - a.score)[0];
+      return best ? { s: +best.score.toFixed(3), face: best.face, x: Math.round(best.x) } : null;
+    };
+    return {
+      faces: TI.FACES.map(f => f.name),
+      upright: hunt(draw('')),
+      italic: hunt(draw('italic')),
+      bold: hunt(draw('bold')),
+      boldItalic: hunt(draw('bold italic')),
+    };
+  });
+  check('there is a slanted face for each upright one',
+    slanted.faces.filter(n => n.includes('italic')).length === 4,
+    JSON.stringify(slanted.faces));
+  check('an upright word is still found', slanted.upright !== null, JSON.stringify(slanted));
+  check('a bold word is found', slanted.bold !== null, JSON.stringify(slanted));
+  check('an italic word is found', slanted.italic !== null, JSON.stringify(slanted));
+  check('a bold italic word is found', slanted.boldItalic !== null, JSON.stringify(slanted));
+  // The point of the new faces: a slanted word has to be matched by a slanted
+  // template, or it is only ever found by accident.
+  check('and the italic word is matched by an italic face',
+    slanted.italic && slanted.italic.face.includes('italic'), JSON.stringify(slanted.italic));
+  check('while the upright word is still matched by an upright one',
+    slanted.upright && !slanted.upright.face.includes('italic'), JSON.stringify(slanted.upright));
+
   // ---------- the over-matching warning ----------
   //
   // The failure this catches is silent: a short word matching the page rather

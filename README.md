@@ -115,8 +115,19 @@ letters, and the ends still have to be word boundaries, so `KAG` does not match
 ### Words that are not text
 
 Tick **Also look for these words as pictures** and each typed word is drawn in
-four common typefaces — a grotesque and a serif, each regular and bold — and
-hunted for visually as well as read out of the text layer.
+eight common typefaces — a grotesque and a serif, each of those regular, bold,
+italic and bold italic — and hunted for visually as well as read out of the
+text layer.
+
+Italic earns its place there. A slanted word is a different shape, not the same
+shape drawn differently: an italic "KAG's" in a real slide's caption scored
+0.386 against upright faces, which is indistinguishable from the page around
+it, and 0.564 once a slanted template was among them — while the upright
+occurrence on the same page was unaffected. Underlining needs nothing special:
+the rule is a separate stroke below the baseline, and the letters still
+dominate the match. Eight faces is twice the sweep of four, and this is the
+slow half of the search; it is spent because a word the tool cannot match in
+italics is a word it silently leaves in the document.
 
 This is for the case the text layer cannot reach at all: a word inside a logo,
 a scanned page, a screenshot, a chart label baked into a bitmap. On a page that
@@ -268,7 +279,7 @@ page from its canvas again each time.
 
 That pass is also split across cores, since no page's result depends on any
 other's. Measured on a twelve-page fixture with five templates — one picked
-logo and one word in four typefaces:
+logo and one word in the four typefaces of the time (there are eight now):
 
 | | |
 | --- | ---: |
