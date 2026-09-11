@@ -112,6 +112,7 @@
     // the word — and worse, showed a half-typed word's matches as if they were
     // an answer. Nothing is drawn now until the reviewer asks.
     searched: false,
+    countedTerms: [],
     zoom: 1,
     sourceSize: 0,
     sourceDigest: null,
@@ -411,6 +412,7 @@
     state.sweepReached = 0;
     state.exported = false;
     state.searched = false;
+    state.countedTerms = [];
     state.openTally = null;
     state.pages = pages.map(p => ({
       ...p,
@@ -662,10 +664,17 @@
     // one lied. So the work is counted once, here, in pages: those left to
     // read, plus those to search if anything is going to be searched.
     const pages = state.pages.length;
-    const willRead = ocrPending() ? state.pages.filter(p => !p.ocrItems).length : 0;
+    const unread = state.pages.filter(p => !p.ocrItems).length;
+    // The text leg covers both halves of the text work, because from the
+    // outside they are one thing. On a document already read there is nothing
+    // to read, but every page is still walked to match the words against it —
+    // and showing only "Searching images" for a run that was plainly handling
+    // a new word as well reads as the tool ignoring half of what was asked.
+    const willRead = ocrPending() ? (unread || pages) : 0;
     const willSearch = pendingTemplates().length ? pages : 0;
     legs([
-      { key: 'read', label: 'Reading pages', total: willRead },
+      { key: 'read', label: unread ? 'Reading pages' : 'Matching words',
+        total: willRead },
       { key: 'search', label: 'Searching images', total: willSearch },
     ]);
     // And a frame to actually draw it in. Everything below this line runs in
@@ -678,7 +687,7 @@
     if (ocrPending()) {
       try {
         await readPages(done => leg('read', done));
-        matchOcr();
+        matchOcr(done => leg('read', done));
         markDuplicates();
         renderTermCounts();
         renderSectionNotes();
@@ -725,6 +734,9 @@
     // press, so that the reviewer sees what is about to disappear before it
     // does, which is the whole point of reviewing.
     state.searched = true;
+    // Which words this search answered. A word added afterwards has no number
+    // yet, and must not borrow the confidence of the ones that do.
+    state.countedTerms = state.terms.slice();
     state.redacting = false;
     // The word list shows a tally only once something has counted, so it has
     // to be redrawn when that becomes true.
@@ -848,7 +860,8 @@
   // Terms found in what OCR read, as the same kind of proposal the picture
   // search produces — keyed to the word, so a placeholder is shared with the
   // written occurrences and duplicates are folded together.
-  function matchOcr() {
+  function matchOcr(report) {
+    let done = 0;
     for (const page of state.pages) {
       // Everything this function owns is rebuilt from the current terms, so
       // the old set goes first — but the thorough sweep's marks are not this
@@ -856,6 +869,8 @@
       // here meant a reviewer who edited one word and pressed Redact lost
       // every amber mark while the note still said they were on the page.
       page.imageHits = page.imageHits.filter(m => !m.term || m.bySweep);
+      done++;
+      if (report) report(done);
       if (!page.ocrText) continue;
       const spans = Detect.resolveOverlaps(Detect.findTerms(page.ocrText, state.terms));
       for (const span of spans) {
@@ -1774,21 +1789,17 @@
       const live = state.pages.reduce((sum, page) =>
         sum + liveImageHits(page).filter(m => m.templateId === template.id).length, 0);
 
-      // "found 3 times" beside a 3 said the same thing twice. The number is
-      // the answer; what the row needs to say in words is only the case the
-      // number cannot cover, which is not having looked yet.
-      if (!template.searched) {
-        name.textContent = 'not searched yet';
-        name.classList.add('waiting');
-      } else {
-        name.textContent = 'picked image';
-      }
+      // Nothing in words at all. The thumbnail says which image this is and
+      // the number says how many of it were found; "picked image" beside a
+      // picture of it was a caption for something already on screen.
+      name.textContent = '';
 
       const count = document.createElement('button');
       count.type = 'button';
-      count.className = 'n';
-      count.textContent = template.searched ? String(live) : '\u2014';
+      count.className = template.searched ? 'n' : 'n unknown';
+      count.textContent = template.searched ? String(live) : '?';
       count.disabled = !template.searched || live === 0;
+      if (!template.searched) count.title = 'Not searched for yet \u2014 press Search';
       if (!count.disabled) {
         count.title = 'Where ' + (live === 1 ? 'it is' : 'they are');
         count.setAttribute('aria-expanded', String(state.openTally === template.id));
@@ -1891,7 +1902,8 @@
       const row = document.createElement('li');
       // "Not found" is only true once something has looked. Before the search
       // every word would wear it, which reads as an answer and is not one.
-      row.className = 'word' + (state.searched && total === 0 ? ' none' : '');
+      row.className = 'word'
+        + (state.countedTerms.includes(term) && total === 0 ? ' none' : '');
 
       const label = document.createElement('span');
       label.className = 't';
@@ -1915,13 +1927,17 @@
       //
       // Where they are is a different question, and it is answered by asking
       // rather than by making every row carry a list nobody has looked at.
+      // A number if this word has been searched for, and a red question mark
+      // if it has not. Blanking every tally the moment anything changed threw
+      // away answers that were still good: a word counted an hour ago is
+      // still counted, and only the word just typed has no answer yet.
+      const counted = state.countedTerms.includes(term);
       const count = document.createElement('button');
       count.type = 'button';
-      count.className = 'n';
-      count.textContent = total === 0 ? 'not found' : String(total);
-      count.disabled = total === 0 || state.kind === 'text';
-      // Nothing has counted anything yet, so there is no number to show.
-      count.hidden = !state.searched;
+      count.className = counted ? 'n' : 'n unknown';
+      count.textContent = counted ? (total === 0 ? 'not found' : String(total)) : '?';
+      count.disabled = !counted || total === 0 || state.kind === 'text';
+      if (!counted) count.title = 'Not searched for yet \u2014 press Search';
       if (!count.disabled) {
         count.setAttribute('aria-expanded', String(state.openTally === term));
         count.title = 'Where ' + (total === 1 ? 'it is' : 'they are');

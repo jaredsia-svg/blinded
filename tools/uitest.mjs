@@ -226,6 +226,11 @@ try {
       words: [...document.querySelectorAll('#termcounts .t')].map(n => n.textContent.trim()),
       state: window.Blinded.state.terms.slice(),
       tallies: [...document.querySelectorAll('#termcounts .n')].filter(n => !n.hidden).length,
+      unknown: document.querySelectorAll('#termcounts .n.unknown').length,
+      numbers: [...document.querySelectorAll('#termcounts .n')]
+        .filter(n => /^\d+$/.test(n.textContent.trim())).length,
+      notFound: [...document.querySelectorAll('#termcounts .n')]
+        .filter(n => /not found/.test(n.textContent)).length,
       addDisabled: document.getElementById('termgo').disabled,
       box: document.getElementById('termbox').value,
     }));
@@ -242,8 +247,8 @@ try {
     const added = await listed();
     check('pressing enter adds it', added.words.join() === 'Jane', JSON.stringify(added));
     check('and clears the box for the next one', added.box === '', JSON.stringify(added));
-    check('no tally until something has searched',
-      added.tallies === 0, JSON.stringify(added));
+    check('no number until something has searched',
+      added.unknown === 1 && added.numbers === 0, JSON.stringify(added));
 
     // The arrow beside the box does the same thing.
     await page.fill('#termbox', 'Amphitheatre');
@@ -265,7 +270,22 @@ try {
     await redact(page);
     const searched = await listed();
     check('after searching, every word carries its tally',
-      searched.tallies === 2, JSON.stringify(searched));
+      searched.numbers + searched.notFound === 2 && searched.unknown === 0,
+      JSON.stringify(searched));
+
+    // And a word added after that search keeps the others' numbers while
+    // wearing its own question mark: an answer from a minute ago is still an
+    // answer, and blanking the lot threw away work that was still good.
+    await page.fill('#termbox', 'Parkway');
+    await page.press('#termbox', 'Enter');
+    await page.waitForTimeout(250);
+    const mixed = await listed();
+    check('a word added later does not blank the others',
+      mixed.numbers + mixed.notFound === 2, JSON.stringify(mixed));
+    check('and wears its own question mark until the next search',
+      mixed.unknown === 1, JSON.stringify(mixed));
+    await page.evaluate(() => window.Blinded.dropTerm('Parkway'));
+    await page.waitForTimeout(200);
 
     // And a word can be taken off again.
     await page.click('#termcounts li.word .termdrop');
@@ -978,9 +998,14 @@ try {
   await page.waitForFunction(() => window.Blinded.state.templates.length === 1, undefined, { timeout: 60000 });
   check('picking a logo does not search on its own',
     await page.evaluate(() => window.Blinded.state.templates[0].searched) === false);
-  check('and the panel says so',
-    (await page.textContent('#templates')).includes('not searched yet'),
+  // A red question mark, not a dash and not a zero: nothing has looked yet,
+  // and that is a different thing from having looked and found nothing.
+  check('and the panel says so with a question mark',
+    (await page.textContent('#templates')).trim().startsWith('?'),
     await page.textContent('#templates'));
+  check('marked as unanswered rather than as a count',
+    await page.evaluate(() =>
+      !!document.querySelector('#templates .n.unknown')));
   await redact(page);
 
   const matched = await page.evaluate(() => ({
@@ -1398,8 +1423,19 @@ try {
   await page.waitForTimeout(400);
   check('and so a typed word finds nothing in it by text',
     await page.evaluate(() => window.Blinded.state.pages[0].hits.length) === 0);
+  // Only after a search: before one the word wears a question mark, because
+  // "not found" is an answer and nothing has looked.
+  check('the term carries a question mark until something looks',
+    (await page.textContent('#termcounts')).includes('?'),
+    await page.textContent('#termcounts'));
+  await redact(page);
+  // Once something has looked, the tally is an answer either way — a number
+  // or "not found", never blank and never still a question mark. Here the
+  // reading finds the word the text layer could not, which is the whole point
+  // of this fixture.
   check('which the term list reports rather than leaving blank',
-    (await page.textContent('#termcounts')).includes('not found'),
+    /^(not found|\d+)$/.test(
+      (await page.textContent('#termcounts .n')).trim()),
     await page.textContent('#termcounts'));
 
   // Reading the pages is the default, but this fixture exists to test the
@@ -3220,6 +3256,55 @@ try {
 
   await page.goBack();
   await page.waitForSelector('#view-drop:not([hidden])', { timeout: 15000 });
+
+  // ---------- the bar names the text work too ----------
+  //
+  // Reported: adding a word and an image together showed only "Searching
+  // images". On a document already read there is nothing to read, but every
+  // page is still walked to match the word against it, and a bar that names
+  // only half of what was asked for reads as the other half being ignored.
+  {
+    if (await page.isVisible('#view-review')) await newFile();
+    await page.waitForSelector('#view-drop:not([hidden])', { timeout: 15000 });
+    await page.setInputFiles('#file', logoPath);
+    await page.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
+    await setTerms(page, ['Jane']);
+    await redact(page);
+
+    // Now both at once, against pages that have already been read.
+    await page.fill('#termbox', 'Doe');
+    await page.press('#termbox', 'Enter');
+    await page.evaluate(({ x, y, size }) => {
+      const B = window.Blinded;
+      B.addTemplate(B.state.pages[0],
+        { x: x * 2 - 3, y: y * 2 - 3, w: size * 2 + 6, h: size * 2 + 6 });
+    }, LOGO_PLACEMENTS[1] || LOGO_PLACEMENTS[0]);
+    await page.waitForTimeout(200);
+
+    const watched = page.evaluate(() => new Promise(resolve => {
+      const seen = new Set();
+      const look = () => {
+        for (const row of document.querySelectorAll('#busy-legs .leg')) {
+          const label = row.querySelector('.leg-label span');
+          if (label) seen.add(label.textContent.trim());
+        }
+      };
+      const poll = setInterval(look, 25);
+      const done = setInterval(() => {
+        if (!window.Blinded.state.searched) return;
+        clearInterval(poll); clearInterval(done);
+        resolve([...seen]);
+      }, 25);
+    }));
+    await page.click('#apply');
+    await page.waitForFunction(() => window.Blinded.state.searched === true,
+      undefined, { timeout: 240000 });
+    const legs = await watched;
+    check('the bar names the image work', legs.some(l => /image/i.test(l)),
+      JSON.stringify(legs));
+    check('and the text work alongside it',
+      legs.some(l => /reading pages|matching words/i.test(l)), JSON.stringify(legs));
+  }
 
   // ---------- a running check stays on screen ----------
   //

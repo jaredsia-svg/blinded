@@ -515,6 +515,11 @@ li.tally { display: block; padding: 0 0 8px; border: 0; }
 }
 /* A term that matched nothing is the one thing in this panel a reviewer must
    not skim past: it looks identical to a term that worked. */
+/* Not "nothing found" but "nothing has looked yet" — red, because it marks
+   the one thing on the panel that is not an answer. */
+.termcounts .n.unknown, .templates .n.unknown {
+  background: #fdecea; color: #d92d20; font-weight: 650;
+}
 .termcounts li.none .n { background: var(--warn-bg); color: var(--warn); }
 .termcounts li.none .t { color: var(--warn); }
 
