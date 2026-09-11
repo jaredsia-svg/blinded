@@ -455,9 +455,17 @@
     return Array.from(state.enabled).filter(k => k !== 'term');
   }
 
+  // What counts as worth covering, given the settings. Handed to findAll
+  // rather than applied afterwards: filtering after the overlap resolution
+  // let a span that was about to be discarded take a typed word down with it.
+  function acceptable(finding) {
+    return finding.confidence === 'high' || state.includeMedium;
+  }
+
   function scanText(text) {
-    const found = Detect.findAll(text, { kinds: acceptedKinds(), terms: state.terms });
-    return found.filter(f => f.confidence === 'high' || state.includeMedium);
+    return Detect.findAll(text, {
+      kinds: acceptedKinds(), terms: state.terms, accept: acceptable,
+    });
   }
 
   // Recomputes everything downstream of the settings. Cheap enough to run on

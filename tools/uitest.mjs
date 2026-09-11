@@ -60,7 +60,11 @@ writeFileSync(smallLogoPath, buildSmallLogoPdf());
 const wordmarkPath = join(tmpdir(), 'blinded-wordmark.pdf');
 writeFileSync(wordmarkPath, buildWordmarkPdf());
 const textPath = join(tmpdir(), 'blinded-fixture.txt');
-writeFileSync(textPath, 'Jane Doe — jane.doe@example.com — (415) 555-0132\nnothing sensitive here\n');
+// The address line is here so that a typed word can be tested inside a
+// medium-confidence finding, which is the case that used to lose both.
+writeFileSync(textPath, 'Jane Doe — jane.doe@example.com — (415) 555-0132\n'
+  + 'Mailing address: 1600 Amphitheatre Parkway, 94043.\n'
+  + 'nothing sensitive here\n');
 
 const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
 const context = await browser.newContext({ acceptDownloads: true });
@@ -211,6 +215,54 @@ try {
     window.Blinded.state.pages[0].hits.filter(h => h.rects.length).length);
   check('every detection produced at least one box', boxCount === kinds.length,
     boxCount + ' of ' + kinds.length);
+
+  // ---------- a typed word is never lost to a detector ----------
+  //
+  // Overlapping findings collapse to a single winner, longest first. A medium
+  // confidence address containing a word the reviewer typed beat the word —
+  // and then the confidence filter dropped the address for being medium, so
+  // both were gone and a word somebody had explicitly asked for went
+  // uncovered. On a PDF the reading happened to find it anyway; on a text file
+  // there is no such second chance, which is what this checks.
+  {
+    if (await page.isVisible('#view-review')) await newFile();
+    await page.waitForSelector('#view-drop:not([hidden])', { timeout: 15000 });
+    await page.setInputFiles('#file', textPath);
+    await page.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
+    await setTerms(page, ['Amphitheatre']);
+
+    const seen = await page.evaluate(() => {
+      const B = window.Blinded;
+      const D = window.BlindedDetect;
+      return {
+        inTheText: /Amphitheatre/.test(B.state.text),
+        // The address around it is a medium-confidence finding, which is what
+        // used to win and then be discarded.
+        addressExists: D.findAll(B.state.text, { kinds: null })
+          .some(f => f.kind === 'address'),
+        mediumOff: B.state.includeMedium === false,
+        marked: B.state.findings.filter(f => f.kind === 'term').length,
+      };
+    });
+    check('the fixture really does hold the word', seen.inTheText === true,
+      JSON.stringify(seen));
+    check('and an address around it, at the confidence being filtered out',
+      seen.addressExists === true && seen.mediumOff === true, JSON.stringify(seen));
+    check('the typed word is still marked', seen.marked === 1, JSON.stringify(seen));
+
+    await redact(page);
+    const out = await exportFile();
+    const saved = join(tmpdir(), 'blinded-term-overlap.txt');
+    await out.saveAs(saved);
+    const text = readFileSync(saved, 'utf8');
+    // The whole point of the tool: what was asked for is not in the file.
+    // Paired with a check that the rest of the file is still there, so an
+    // empty export cannot pass this by saying nothing at all.
+    check('and it is gone from the exported file',
+      !/Amphitheatre/.test(text), text.slice(0, 200));
+    check('while the rest of the file survives',
+      /nothing sensitive here/.test(text), text.slice(0, 200));
+  }
 
   // ---------- adding a word ----------
   //
