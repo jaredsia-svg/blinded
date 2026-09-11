@@ -427,7 +427,11 @@
     el('doc-name').title = name;
     el('textview').hidden = kind !== 'text';
     el('pages').hidden = kind === 'text';
-    el('lossless').closest('.exportopts').hidden = kind === 'text';
+    // The lossless choice is about how pages are re-encoded as pictures, so it
+    // means nothing for a text file. It lives in the Save as box now, next to
+    // the name, which is where the reviewer is actually deciding about the
+    // file rather than about the document.
+    el('losslessrow').hidden = kind === 'text';
 
     state.applied = false;
     if (kind !== 'text') buildPageElements();
@@ -500,6 +504,9 @@
     state.searched = false;
     state.applied = false;
     state.openTally = null;
+    // And the tallies go with it: they counted an answer to a question that
+    // is no longer the one being asked.
+    renderTermCounts();
     redrawAll();
     refreshApply();
   }
@@ -636,6 +643,15 @@
     state.redacting = true;
     state.paused = false;
 
+    // The overlay goes up here rather than inside the reading pass.
+    //
+    // It used to be raised by readPages, which only runs when there are pages
+    // left to read — so on a document already read, pressing the button did
+    // nothing visible at all while several seconds of searching went by, and
+    // then the marks simply appeared. From the outside that is a dead button.
+    busy(true, 'Working…');
+    refreshApply();
+
     // One bar across both passes.
     //
     // Reading the pages and searching them for a picked image are separate
@@ -652,6 +668,10 @@
       { key: 'read', label: 'Reading pages', total: willRead },
       { key: 'search', label: 'Searching images', total: willSearch },
     ]);
+    // And a frame to actually draw it in. Everything below this line runs in
+    // one go until it hits its own awaits, and the overlay that was just made
+    // visible would not be on screen for any of it.
+    await nextPaint();
     // Reading the pages comes first, because failing at it changes what else
     // has to run: the shape matcher is the fallback, so the list of templates
     // cannot be decided until it is known whether the reader worked.
@@ -694,6 +714,7 @@
       if (entries.length) await runSearches(entries, done => leg('search', done));
     } catch (error) {
       state.redacting = false;
+      busy(false);
       alert('The image search could not finish: ' + (error && error.message ? error.message : error));
       return;
     }
@@ -702,9 +723,24 @@
     // does, which is the whole point of reviewing.
     state.searched = true;
     state.redacting = false;
+    // The word list shows a tally only once something has counted, so it has
+    // to be redrawn when that becomes true.
+    renderTermCounts();
+    // Whatever ran or did not run below, the overlay comes down here: the
+    // passes each lower it on their own way out, and a search where neither
+    // had anything to do would otherwise leave it up for good.
+    busy(false);
     applyLabels();
     redrawAll();
     refreshApply();
+  }
+
+  // One frame, so that something just made visible is actually on screen
+  // before the next stretch of work begins.
+  function nextPaint() {
+    return new Promise(resolve => requestAnimationFrame(() => {
+      requestAnimationFrame(() => resolve());
+    }));
   }
 
   // The second press: what was proposed becomes what is covered. No work,
@@ -1807,6 +1843,8 @@
   function renderTermCounts() {
     const host = el('termcounts');
     host.textContent = '';
+    const empty = el('termempty');
+    if (empty) empty.hidden = state.terms.length > 0;
     if (!state.terms.length) return;
 
     for (const term of state.terms) {
@@ -1814,11 +1852,21 @@
       const total = where.length;
 
       const row = document.createElement('li');
-      row.className = total === 0 ? 'none' : '';
+      // "Not found" is only true once something has looked. Before the search
+      // every word would wear it, which reads as an answer and is not one.
+      row.className = 'word' + (state.searched && total === 0 ? ' none' : '');
 
       const label = document.createElement('span');
       label.className = 't';
       label.textContent = term;
+
+      const drop = document.createElement('button');
+      drop.type = 'button';
+      drop.className = 'termdrop';
+      drop.textContent = '\u00d7';
+      drop.title = 'Remove "' + term + '"';
+      drop.setAttribute('aria-label', 'Remove "' + term + '"');
+      drop.addEventListener('click', () => dropTerm(term));
 
       // One number, not two.
       //
@@ -1835,6 +1883,8 @@
       count.className = 'n';
       count.textContent = total === 0 ? 'not found' : String(total);
       count.disabled = total === 0 || state.kind === 'text';
+      // Nothing has counted anything yet, so there is no number to show.
+      count.hidden = !state.searched;
       if (!count.disabled) {
         count.setAttribute('aria-expanded', String(state.openTally === term));
         count.title = 'Where ' + (total === 1 ? 'it is' : 'they are');
@@ -1844,7 +1894,7 @@
         });
       }
 
-      row.append(label, count);
+      row.append(label, count, drop);
       host.append(row);
 
       if (state.openTally === term && !count.disabled) {
@@ -1974,7 +2024,7 @@
       source: { name: state.name, size: state.sourceSize || 0,
                 digest: state.sourceDigest || null, kind: state.kind,
                 pages: state.pages.length },
-      terms: el('terms').value,
+      terms: state.terms.slice(),
       settings: {
         sensitivity: el('sensitivity') ? el('sensitivity').value : null,
         includeMedium: state.includeMedium,
@@ -2068,8 +2118,10 @@
       if (!ok) return false;
     }
 
-    el('terms').value = data.terms || '';
-    state.terms = (data.terms || '').split('\n').map(t => t.trim()).filter(Boolean);
+    // Older drafts wrote the words as the contents of a textarea.
+    state.terms = Array.isArray(data.terms)
+      ? data.terms.slice()
+      : String(data.terms || '').split('\n').map(t => t.trim()).filter(Boolean);
 
     const settings = data.settings || {};
     if (settings.sensitivity && el('sensitivity')) {
@@ -2508,31 +2560,57 @@
     return '';
   });
 
-  let termsTimer = null;
-  el('terms').addEventListener('input', () => {
-    clearTimeout(termsTimer);
-    termsTimer = setTimeout(() => {
-      const next = el('terms').value.split('\n').map(s => s.trim()).filter(Boolean);
-      // A word that is no longer listed should not keep its picture matches.
-      // A word that is no longer listed should not keep its picture matches,
-      // whichever pass found them — the sweep's included, since an amber mark
-      // for a word the reviewer has just deleted is a mark they never asked
-      // for.
-      const looked = [...new Set(state.searchedTerms.concat(state.sweptTerms))];
-      const gone = looked.filter(term => !next.includes(term));
-      if (gone.length) {
-        state.searchedTerms = state.searchedTerms.filter(term => next.includes(term));
-        state.sweptTerms = state.sweptTerms.filter(term => next.includes(term));
-        for (const page of state.pages) {
-          page.imageHits = page.imageHits.filter(m => !m.term || next.includes(m.term));
-        }
-      }
-      // A list left open for a word that is no longer listed.
-      if (state.openTally && !next.includes(state.openTally)) state.openTally = null;
-      state.terms = next;
-      rescan();
-    }, 200);
+  // Adding a word is a decision, not a keystroke.
+  //
+  // The list used to be a textarea read on every input event, so a name being
+  // typed was searched for at every prefix — "J", "Ja", "Jan" — and the tally
+  // flickered through the matches for each. A word now joins the list when the
+  // reviewer says so, with Enter or the button beside the box.
+  function addTerm(raw) {
+    const word = String(raw || '').trim();
+    if (!word) return false;
+    // Silently, because re-adding a word you already have is not an error and
+    // a message saying so is one more thing to dismiss.
+    if (state.terms.includes(word)) { el('termbox').value = ''; return false; }
+    state.terms = state.terms.concat([word]);
+    el('termbox').value = '';
+    renderTermCounts();
+    rescan();
+    return true;
+  }
+
+  function dropTerm(word) {
+    if (!state.terms.includes(word)) return;
+    // Everything found for a word the reviewer has just taken off the list
+    // goes with it, whichever pass found it.
+    state.terms = state.terms.filter(t => t !== word);
+    state.searchedTerms = state.searchedTerms.filter(t => t !== word);
+    state.sweptTerms = state.sweptTerms.filter(t => t !== word);
+    for (const page of state.pages) {
+      page.imageHits = page.imageHits.filter(m => !m.term || m.term !== word);
+    }
+    if (state.openTally === word) state.openTally = null;
+    renderTermCounts();
+    rescan();
+  }
+
+  function refreshTermBox() {
+    el('termgo').disabled = !el('termbox').value.trim();
+  }
+
+  el('termbox').addEventListener('input', refreshTermBox);
+  el('termbox').addEventListener('keydown', event => {
+    if (event.key !== 'Enter') return;
+    event.preventDefault();
+    addTerm(el('termbox').value);
+    refreshTermBox();
   });
+  el('termgo').addEventListener('click', () => {
+    addTerm(el('termbox').value);
+    refreshTermBox();
+    el('termbox').focus();
+  });
+  refreshTermBox();
 
   el('medium').addEventListener('change', e => { state.includeMedium = e.target.checked; rescan(); });
 
@@ -2823,8 +2901,16 @@
   el('apply').addEventListener('click', applyButton);
   window.addEventListener('keydown', event => {
     if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'z' && !event.shiftKey) {
-      // Not while typing into the terms box — there, undo means the textarea's.
-      if (document.activeElement && document.activeElement.tagName === 'TEXTAREA') return;
+      // Not while typing into a text box — there, undo means the box's own.
+      // This used to name TEXTAREA alone, from when the words were typed into
+      // one; the words box is an input now, and so are the file name and the
+      // placeholder fields, where an undo that quietly reinstated a redaction
+      // instead of undoing a keystroke would be the worst kind of surprise.
+      const focused = document.activeElement;
+      const tag = focused && focused.tagName;
+      if (tag === 'TEXTAREA' || tag === 'INPUT' || (focused && focused.isContentEditable)) {
+        return;
+      }
       event.preventDefault();
       undoLast();
     }
@@ -2870,7 +2956,7 @@
     state.text = '';
     state.findings = [];
     dismissedText.clear();
-    el('terms').value = '';
+    el('termbox').value = '';
     state.terms = [];
     state.templates = [];
     state.labelOverrides = {};
@@ -2890,6 +2976,7 @@
     undoLast, undoStack, applyLabels, labelItems, legendText, downloadKey,
     sensitivity, wordSensitivity, wordBarFor, setZoom, stepZoom, ZOOM_STEPS,
     cleanName, coveredText, askName, redactedName, confirmAction,
+    addTerm, dropTerm,
     saveDraft, draftData, restoreDraft, looksLikeDraft, fingerprint,
     occurrencesFor, renderTermCounts, goToPage,
     scrollerFor, setTool, marking,

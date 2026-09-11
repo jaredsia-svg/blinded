@@ -80,6 +80,22 @@ async function reveal(page, id) {
   }, id);
 }
 
+// Words are added one at a time now, through the box and the Enter key, so
+// the tests put them in the same way a reviewer would rather than writing the
+// list into the state.
+async function setTerms(page, words) {
+  await page.evaluate(() => {
+    const B = window.Blinded;
+    for (const word of B.state.terms.slice()) B.dropTerm(word);
+  });
+  for (const word of words) {
+    if (!word) continue;
+    await page.fill('#termbox', word);
+    await page.press('#termbox', 'Enter');
+  }
+  await page.waitForTimeout(120);
+}
+
 // Two presses now, not one: the first searches and proposes, the second
 // covers. Tests that want a redacted document want both.
 async function redact(page) {
@@ -196,6 +212,71 @@ try {
   check('every detection produced at least one box', boxCount === kinds.length,
     boxCount + ' of ' + kinds.length);
 
+  // ---------- adding a word ----------
+  //
+  // The list used to be a textarea read on every keystroke, so a name being
+  // typed was searched for at every prefix. A word joins the list when the
+  // reviewer says so.
+  {
+    await newFile();
+    await page.setInputFiles('#file', fixturePath);
+    await page.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
+
+    const listed = () => page.evaluate(() => ({
+      words: [...document.querySelectorAll('#termcounts .t')].map(n => n.textContent.trim()),
+      state: window.Blinded.state.terms.slice(),
+      tallies: [...document.querySelectorAll('#termcounts .n')].filter(n => !n.hidden).length,
+      addDisabled: document.getElementById('termgo').disabled,
+      box: document.getElementById('termbox').value,
+    }));
+
+    await page.fill('#termbox', 'Jane');
+    const typing = await listed();
+    check('typing a word does not add it to the list',
+      typing.words.length === 0 && typing.state.length === 0, JSON.stringify(typing));
+    check('and the add button wakes up once there is something to add',
+      typing.addDisabled === false, JSON.stringify(typing));
+
+    await page.press('#termbox', 'Enter');
+    await page.waitForTimeout(200);
+    const added = await listed();
+    check('pressing enter adds it', added.words.join() === 'Jane', JSON.stringify(added));
+    check('and clears the box for the next one', added.box === '', JSON.stringify(added));
+    check('no tally until something has searched',
+      added.tallies === 0, JSON.stringify(added));
+
+    // The arrow beside the box does the same thing.
+    await page.fill('#termbox', 'Amphitheatre');
+    await page.click('#termgo');
+    await page.waitForTimeout(200);
+    const two = await listed();
+    check('the arrow adds a word too',
+      two.words.join() === 'Jane,Amphitheatre', JSON.stringify(two));
+
+    // Adding the same word twice is not an error and not a duplicate.
+    await page.fill('#termbox', 'Jane');
+    await page.press('#termbox', 'Enter');
+    await page.waitForTimeout(200);
+    const again = await listed();
+    check('adding a word already listed changes nothing',
+      again.words.join() === 'Jane,Amphitheatre' && again.box === '',
+      JSON.stringify(again));
+
+    await redact(page);
+    const searched = await listed();
+    check('after searching, every word carries its tally',
+      searched.tallies === 2, JSON.stringify(searched));
+
+    // And a word can be taken off again.
+    await page.click('#termcounts li.word .termdrop');
+    await page.waitForTimeout(300);
+    const dropped = await listed();
+    check('a word can be removed from the list',
+      dropped.words.join() === 'Amphitheatre', JSON.stringify(dropped));
+    check('and removing one puts it back to Search',
+      (await page.evaluate(() => window.Blinded.state.searched)) === false);
+  }
+
   // ---------- search, redact, redacted ----------
   //
   // One button, three states. Marks used to appear the instant a word was
@@ -220,7 +301,7 @@ try {
     check('a document opens asking to be searched, not redacted',
       opened.label === 'Search', JSON.stringify(opened));
 
-    await page.fill('#terms', 'Jane');
+    await setTerms(page, ["Jane"]);
     await page.waitForTimeout(400);
     const typed = await state();
     check('typing a word marks nothing on the page',
@@ -262,7 +343,7 @@ try {
       back.searched === true, JSON.stringify(back));
 
     // Changing what to look for is a different question, so the answer goes.
-    await page.fill('#terms', 'Jane\nAmphitheatre');
+    await setTerms(page, ["Jane", "Amphitheatre"]);
     await page.waitForTimeout(400);
     const changed = await state();
     check('editing the words puts it back to Search',
@@ -314,12 +395,12 @@ try {
 
   // Changing anything puts it back into review, because a black bar that no
   // longer matches the settings is worse than no bar at all.
-  await page.fill('#terms', 'Mulan');
+  await setTerms(page, ["Mulan"]);
   await page.waitForTimeout(400);
   check('changing a term returns the document to review',
     await page.evaluate(() => window.Blinded.state.applied) === false);
   check('and disables the export again', await page.isDisabled('#export'));
-  await page.fill('#terms', '');
+  await setTerms(page, []);
   await page.waitForTimeout(400);
 
   // ---------- the bar lands on the text, not beside it ----------
@@ -381,7 +462,7 @@ try {
     guard.ink ? 'bar ends ' + guard.box.right.toFixed(1) + ', ink ends ' + guard.ink.end : 'no ink');
 
   // ---------- terms ----------
-  await page.fill('#terms', 'Jane Doe');
+  await setTerms(page, ["Jane Doe"]);
   await page.waitForTimeout(400);
   const termHits = await page.evaluate(() =>
     window.Blinded.state.pages[0].findings.filter(f => f.kind === 'term').length);
@@ -802,6 +883,27 @@ try {
     renamedFile.suggestedFilename() === 'board-pack.pdf',
     renamedFile.suggestedFilename());
 
+  // The lossless choice is about how pages are re-encoded, which is a question
+  // about the file being saved rather than about the document.
+  const saveBox = await page.evaluate(async () => {
+    document.getElementById('export').disabled = false;
+    document.getElementById('export').click();
+    await new Promise(r => setTimeout(r, 200));
+    const box = document.getElementById('namebox');
+    const inside = !!box.querySelector('#lossless');
+    const paint = getComputedStyle(box.querySelector('.busy-inner')).backgroundColor;
+    const white = paint === 'rgb(255, 255, 255)';
+    document.getElementById('namecancel').click();
+    return { inside, paint, white,
+             loose: !!document.querySelector('.exportbar #lossless') };
+  });
+  check('the lossless option lives in the save box', saveBox.inside === true,
+    JSON.stringify(saveBox));
+  check('and no longer sits in the bar along the bottom',
+    saveBox.loose === false, JSON.stringify(saveBox));
+  check('the save box is not white, so it reads as sitting on top of the page',
+    saveBox.white === false, JSON.stringify(saveBox));
+
   // ---------- export ----------
   await redact(page);
   const download = await exportFile();
@@ -1082,7 +1184,7 @@ try {
   await page.waitForSelector('#view-drop:not([hidden])');
   await page.setInputFiles('#file', fixturePath);
   await page.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
-  await page.fill('#terms', 'Jane Doe');
+  await setTerms(page, ["Jane Doe"]);
   await page.waitForTimeout(400);
 
   check('the legend is hidden until labelling is on', await page.isHidden('#legendbox'));
@@ -1193,7 +1295,7 @@ try {
   await page.waitForSelector('#view-drop:not([hidden])');
   await page.setInputFiles('#file', doublePath);
   await page.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
-  await page.fill('#terms', DOUBLE_TERM);
+  await setTerms(page, [DOUBLE_TERM]);
   await page.waitForTimeout(400);
   // Reading the pages is the default, but this fixture exists to test the
   // shape matcher — the fallback — so it is asked for explicitly.
@@ -1231,7 +1333,7 @@ try {
 
   // Taking the word away brings the picture matches back rather than leaving a
   // hole: they were marked, not deleted.
-  await page.fill('#terms', '');
+  await setTerms(page, []);
   await page.waitForTimeout(500);
   check('removing the term withdraws its matches entirely',
     await page.evaluate(() => window.Blinded.state.pages[0].imageHits.filter(m => m.term).length) === 0);
@@ -1271,7 +1373,7 @@ try {
     (await page.evaluate(() => window.Blinded.state.pages[0].text.trim())) === '',
     await page.evaluate(() => window.Blinded.state.pages[0].text.slice(0, 60)));
 
-  await page.fill('#terms', 'KAG');
+  await setTerms(page, ["KAG"]);
   await page.waitForTimeout(400);
   check('and so a typed word finds nothing in it by text',
     await page.evaluate(() => window.Blinded.state.pages[0].hits.length) === 0);
@@ -1409,12 +1511,7 @@ try {
     await newFile();
     await page.setInputFiles('#file', fixturePath);
     await page.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
-    await page.evaluate(() => {
-      const box = document.getElementById('terms');
-      box.value = 'Jane';
-      box.dispatchEvent(new Event('input', { bubbles: true }));
-    });
-    await page.waitForTimeout(400);
+    await setTerms(page, ['Jane']);
 
     const planted = await page.evaluate(() => {
       const B = window.Blinded;
@@ -1480,7 +1577,8 @@ try {
       return { terms: B.state.terms.slice(),
                manual: p.manual.length,
                sweep: p.imageHits.filter(m => m.bySweep).length,
-               box: document.getElementById('terms').value.trim() };
+               listed: [...document.querySelectorAll('#termcounts .t')]
+                 .map(n => n.textContent.trim()) };
     });
     check('the words come back', restored.terms.join() === planted.terms.join(),
       JSON.stringify(restored));
@@ -1489,7 +1587,7 @@ try {
     check('and the marks the shape check had found',
       restored.sweep === 1, JSON.stringify(restored));
     check('and the list of words is back in the panel, not just in the state',
-      restored.box.length > 0, JSON.stringify(restored));
+      restored.listed.join() === planted.terms.join(), JSON.stringify(restored));
 
     // Marks are placed by position, so putting a draft on the wrong document
     // would cover the wrong things. The draft knows which file it is for.
@@ -1621,7 +1719,7 @@ try {
   await page.waitForSelector('#view-drop:not([hidden])');
   await page.setInputFiles('#file', colourPath);
   await page.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
-  await page.fill('#terms', 'KAG');
+  await setTerms(page, ["KAG"]);
   await page.waitForTimeout(400);
   // Reading the pages is the default, but this fixture exists to test the
   // shape matcher — the fallback — so it is asked for explicitly.
@@ -1840,7 +1938,7 @@ try {
 
   // ...but not while typing, where undo belongs to the text box.
   await drawBox(25, 130, 900, 430, 980);
-  await page.focus('#terms');
+  await page.focus('#termbox');
   await page.keyboard.press('Control+z');
   check('ctrl+z in the terms box does not undo a redaction',
     await page.evaluate(() => window.Blinded.state.pages[0].manual.length) === 1);
@@ -1854,7 +1952,7 @@ try {
   const marks = await page.locator('#textview mark').count();
   check('the text view marks the email and the phone number', marks === 2, String(marks));
 
-  await page.fill('#terms', 'Jane Doe');
+  await setTerms(page, ["Jane Doe"]);
   await page.waitForTimeout(400);
   check('a listed term adds a mark in the text view',
     await page.locator('#textview mark').count() === 3,
@@ -2058,7 +2156,7 @@ try {
       window.Blinded.state.ocrFailed = false;
       window.Blinded.showWordControls();
     });
-    await page.fill('#terms', 'Jane Doe');
+    await setTerms(page, ["Jane Doe"]);
     await page.waitForTimeout(400);
   
     const started = Date.now();
@@ -2409,16 +2507,9 @@ try {
       const afterRescan = p.imageHits.filter(m => m.bySweep).length;
 
       // Deleting the word it belongs to does not.
-      const box = document.getElementById('terms');
-      const was = box.value;
-      box.value = 'Amphitheatre';
-      box.dispatchEvent(new Event('input', { bubbles: true }));
-      await new Promise(r => setTimeout(r, 400));
+      B.dropTerm('Parkway');
+      await new Promise(r => setTimeout(r, 200));
       const afterDelete = p.imageHits.filter(m => m.bySweep).length;
-
-      box.value = was;
-      box.dispatchEvent(new Event('input', { bubbles: true }));
-      await new Promise(r => setTimeout(r, 400));
       p.imageHits = [];
       B.state.sweptTerms = [];
       B.state.terms = [];
@@ -2563,7 +2654,7 @@ try {
       window.Blinded.state.useOcr = false;
       window.Blinded.showWordControls();
     });
-    await page.fill('#terms', 'Jane');
+    await setTerms(page, ["Jane"]);
     await page.waitForTimeout(300);
     await redact(page);
 
@@ -2593,7 +2684,7 @@ try {
     await page.waitForSelector('#view-drop:not([hidden])');
     await page.setInputFiles('#file', readablePath);
     await page.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
-    await page.fill('#terms', 'Jane');
+    await setTerms(page, ["Jane"]);
     await page.waitForTimeout(300);
     await redact(page);
 
@@ -2610,7 +2701,7 @@ try {
       first.marks > 0, JSON.stringify(first));
 
     // Add a second term, as a reviewer would after looking at the marks.
-    await page.fill('#terms', 'Jane\nAccount');
+    await setTerms(page, ["Jane", "Account"]);
     await page.waitForTimeout(400);
     const stale = await page.evaluate(() => window.Blinded.ocrMatchStale());
     check('a newly typed term leaves the matching out of date', stale === true);
@@ -2654,7 +2745,7 @@ try {
     check('a page of nothing but text is known to hide nothing',
       plain.every(v => v === false), JSON.stringify(plain));
 
-    await page.fill('#terms', 'Jane Doe');
+    await setTerms(page, ["Jane Doe"]);
     await page.waitForTimeout(300);
     const started = Date.now();
     await redact(page);
@@ -2702,7 +2793,7 @@ try {
     // asserting that it does would be asserting the wrong thing.
     await page.setInputFiles('#file', logoPath);
     await page.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
-    await page.fill('#terms', 'Jane Doe');
+    await setTerms(page, ["Jane Doe"]);
     await page.waitForTimeout(300);
 
     const shape = await page.evaluate(() => {
@@ -2859,7 +2950,7 @@ try {
     await page.waitForSelector('#view-drop:not([hidden])');
     await page.setInputFiles('#file', readablePath);
     await page.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
-    await page.fill('#terms', 'Jane Doe');
+    await setTerms(page, ["Jane Doe"]);
     await page.waitForTimeout(300);
     await redact(page);
     const first = await page.evaluate(() =>
@@ -2879,7 +2970,7 @@ try {
     check('and forgets that the last one fell back',
       carried.failed === false, JSON.stringify(carried));
 
-    await page.fill('#terms', 'KAG');
+    await setTerms(page, ["KAG"]);
     await page.waitForTimeout(300);
     await redact(page);
     const second = await page.evaluate(() =>

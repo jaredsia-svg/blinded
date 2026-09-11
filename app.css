@@ -420,6 +420,50 @@ button { font: inherit; cursor: pointer; border-radius: 8px; }
 
 /* ---------- terms feedback and image matching ---------- */
 
+/* ---------- adding a word ---------- */
+/*
+   A one-line box, and the word is added when the reviewer says so rather than
+   as they type. The list below is then a list of decisions, not a running
+   transcript of the keyboard — which is what a textarea made it, and why the
+   tally used to flicker through the matches for every prefix of a name.
+*/
+.termadd { display: flex; gap: 0; }
+.termadd input {
+  flex: 1; min-width: 0; font: inherit; font-size: 14px;
+  padding: 9px 11px; background: #fff; color: var(--ink);
+  border: 1px solid var(--line); border-radius: var(--radius) 0 0 var(--radius);
+}
+.termadd input:focus {
+  outline: 2px solid var(--accent); outline-offset: -1px; border-color: var(--accent);
+  position: relative; z-index: 1;
+}
+.termadd button {
+  flex: none; width: 40px; display: flex; align-items: center; justify-content: center;
+  background: var(--accent); color: #fff; border: 1px solid var(--accent);
+  border-radius: 0 var(--radius) var(--radius) 0; margin-left: -1px; cursor: pointer;
+}
+.termadd button:hover { background: #1a5fd0; }
+.termadd button:disabled { background: #b9c3d2; border-color: #b9c3d2; cursor: default; }
+.termadd button svg {
+  width: 18px; height: 18px; fill: none; stroke: currentColor;
+  stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;
+}
+.termempty { margin: 8px 0 0; font-size: 12.5px; color: var(--ink-soft); }
+
+/* A word in the list is a thing the reviewer put there, so it reads as an
+   object with a way to take it off, not as a line of text. */
+.termcounts li.word {
+  background: #f4f6fa; border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 6px 6px 6px 11px; margin-bottom: 6px; gap: 8px;
+}
+.termcounts li.word .t { font-weight: 550; }
+.termdrop {
+  flex: none; width: 24px; height: 24px; padding: 0; border: 0; background: none;
+  color: var(--ink-soft); cursor: pointer; border-radius: 6px; font-size: 16px;
+  line-height: 1; display: flex; align-items: center; justify-content: center;
+}
+.termdrop:hover { background: #e3e8f0; color: var(--ink); }
+
 .termcounts, .templates { list-style: none; margin: 8px 0 0; padding: 0; }
 .termcounts li, .templates li {
   display: flex; align-items: center; gap: 8px;
@@ -638,7 +682,15 @@ body.reviewing .exportbar { position: static; flex: none; margin: 14px 0 18px; }
    blame. So the name is offered for editing before anything is saved, with
    anything that was covered inside the document taken out of it first.
 */
-.nameinner { max-width: 460px; text-align: left; }
+/* Tinted rather than white: it sits on top of a white document, and a white
+   card on a white page reads as part of it. */
+.nameinner {
+  max-width: 460px; text-align: left;
+  background: #f4f6fa; border: 1px solid #dfe4ec;
+}
+.nameopt { margin-top: 14px; font-size: 13px; align-items: flex-start; }
+.namefaint { color: var(--ink-soft); }
+.nameinput { background: #fff; }
 .namehead { margin: 0 0 14px; font-size: 17px; letter-spacing: -0.01em; }
 .namelabel { display: block; font-size: 12.5px; color: var(--ink-soft); margin-bottom: 6px; }
 .nameinput {

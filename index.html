@@ -6,7 +6,7 @@
 <title>Blinded – Efficient redaction for your most sensitive documents, all done locally</title>
 <meta name="description" content="Redact PDFs, images and text in your browser. The file never leaves your machine.">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="app.css?v=a25e619c">
+<link rel="stylesheet" href="app.css?v=a87dc2a9">
 </head>
 <body>
 
@@ -125,8 +125,18 @@
         <details class="sect" open>
           <summary><span class="s-title">Text</span><span class="s-note" id="term-note"></span></summary>
           <div class="s-body">
-            <textarea id="terms" rows="3" placeholder="One per line&#10;Jane Doe&#10;Account 4471"></textarea>
+            <div class="termadd">
+              <input type="text" id="termbox" autocomplete="off" spellcheck="false"
+                placeholder="A name, a number, a word…">
+              <button type="button" id="termgo" title="Add this word" aria-label="Add this word">
+                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                  <path d="M12 5v14M6 13l6 6 6-6"/>
+                </svg>
+              </button>
+            </div>
             <ul id="termcounts" class="termcounts"></ul>
+            <p class="hint termempty" id="termempty">Words you add are covered
+              wherever they appear — in the text and inside pictures alike.</p>
             <p class="hint warnhint" id="ocrnote" hidden></p>
             <div id="sweepbox" hidden>
               <button type="button" id="sweep" class="ghost wide">Check every page by shape</button>
@@ -197,9 +207,6 @@
     </div>
 
     <div class="exportbar">
-      <div class="exportopts">
-        <label class="check"><input type="checkbox" id="lossless"> Lossless output (larger file, no compression artefacts)</label>
-      </div>
       <div class="exportgo">
         <span id="exportnote" class="hint"></span>
         <button type="button" id="apply" class="primary" disabled>Redact</button>
@@ -225,6 +232,10 @@
     <label class="namelabel" for="savename">File name</label>
     <input id="savename" type="text" class="nameinput" spellcheck="false">
     <p class="hint" id="namenote" hidden></p>
+    <label class="check nameopt" id="losslessrow">
+      <input type="checkbox" id="lossless">
+      Lossless output <span class="namefaint">— larger file, no compression artefacts</span>
+    </label>
     <div class="namego">
       <button type="button" id="namecancel" class="ghost">Cancel</button>
       <button type="button" id="namesave" class="primary">Save</button>
@@ -256,7 +267,7 @@
 <script src="lib/pdfwrite.js?v=4b977425"></script>
 <script src="lib/pdfread.js?v=624c5ef9"></script>
 <script src="lib/render.js?v=7bf6e0a9"></script>
-<script src="app.js?v=81ccc26e"></script>
+<script src="app.js?v=759e0542"></script>
 <script type="module">
   // pdf.js ships as an ES module; everything else here is a classic script, so
   // it is bridged onto the global the other modules already look for. Both the

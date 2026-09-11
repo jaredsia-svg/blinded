@@ -723,3 +723,17 @@ picked logo — puts it back to Search and takes the old marks off the page: the
 answered a question that is no longer the one being asked. Changing what to
 cover — dismissing a mark, drawing a box, undoing — does not; those are review
 actions on marks that have already been found.
+
+## Adding a word
+
+A one-line box, and the word joins the list when the reviewer says so — Enter,
+or the arrow beside it. It was a textarea read on every keystroke, so a name
+being typed was searched for at every prefix of itself and the tally flickered
+through the matches for each. The list below is a list of decisions now, each
+with a cross to take it off again, and no tally until something has actually
+counted: "not found" before a search has run reads as an answer and is not one.
+
+The lossless option moved into the Save as box, beside the name. It is a
+question about the file being written rather than about the document, and that
+is where the reviewer is deciding about the file. The box is tinted rather than
+white, since a white card on a white document reads as part of it.
