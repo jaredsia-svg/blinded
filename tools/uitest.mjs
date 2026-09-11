@@ -1392,6 +1392,27 @@ try {
     check('reading a page is not pathologically slow', took < 60000, took + 'ms');
   }
 
+  // ---------- what a reviewer gets without touching anything ----------
+  //
+  // The markup and the state each used to assert a default of their own, which
+  // is two places to disagree about the same thing.
+  {
+    if (await page.isVisible('#view-review')) await page.click('#restart');
+    await page.waitForSelector('#view-drop:not([hidden])');
+    await page.setInputFiles('#file', fixturePath);
+    await page.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
+    const fresh = await page.evaluate(() => ({
+      box: document.getElementById('termimages').checked,
+      state: window.Blinded.state.termImages,
+      reading: window.Blinded.state.useOcr,
+    }));
+    check('words are looked for inside pictures without being asked',
+      fresh.state === true, JSON.stringify(fresh));
+    check('and the box says so', fresh.box === true, JSON.stringify(fresh));
+    check('the box and the state agree', fresh.box === fresh.state, JSON.stringify(fresh));
+    check('reading is what does it', fresh.reading === true, JSON.stringify(fresh));
+  }
+
   // ---------- a second document is a second document ----------
   //
   // The reader is run once per document and the result kept, because a page's

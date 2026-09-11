@@ -167,8 +167,17 @@ back rather than leaving a hole.
 
 ### How a word inside a picture is found
 
-Ticking **Also look for these words as pictures** reads each page rather than
-matching drawn shapes against it. That is a different thing entirely: matching
+**Also look for these words as pictures** is on, and reads each page rather
+than matching drawn shapes against it.
+
+It used to be off, on the reasoning that the text layer covers the ordinary
+case. It does not, and the way it fails is the one this program exists to
+prevent: a real slide had six visible occurrences of a name, four of them drawn
+as outlines rather than text, so the text layer held two — and the panel
+reported "4", which reads like the whole answer. The document came back with
+the name still on it four times and nothing anywhere saying so. The reader is
+fetched once and only when Redact is pressed, so nobody who does not redact
+pays for it; covering a document by halves, silently, is not bounded at all. That is a different thing entirely: matching
 never
 knows what the letters are, which is why italic needed its own typefaces,
 twelve-pixel captions needed the page resampled, and a four-letter acronym

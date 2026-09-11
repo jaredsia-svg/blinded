@@ -60,10 +60,20 @@
     // a black bar that no longer reflects the current settings is exactly the
     // kind of stale reassurance this program must never give.
     applied: false,
-    // Whether typed words are also hunted for as pictures. Off by default: it
-    // costs a sweep of the document per word, and the text layer already
-    // covers the ordinary case.
-    termImages: false,
+    // Whether typed words are also looked for inside the pictures. On.
+    //
+    // It was off, on the reasoning that the text layer covers the ordinary
+    // case. It does not, and the way it fails is the one this program exists
+    // to prevent. A real slide had six visible occurrences of a name; four of
+    // them were drawn as outlines rather than text, so the text layer held two
+    // — and the panel reported "4", which reads like the whole answer. The
+    // document came back with the name still on it four times and nothing
+    // anywhere saying so.
+    //
+    // The cost is real and bounded: the reader is fetched once, and only when
+    // Redact is actually pressed, so nobody who does not redact pays for it.
+    // Under-covering silently is not bounded at all.
+    termImages: true,
     // Words inside pictures are found by reading the page. Matching drawn
     // shapes is the fallback for when the reader cannot be loaded at all.
     useOcr: true,
@@ -1615,6 +1625,11 @@
   });
 
   el('medium').addEventListener('change', e => { state.includeMedium = e.target.checked; rescan(); });
+
+  // The box and the state start from the same value, rather than each
+  // asserting a default of its own.
+  el('termimages').checked = state.termImages;
+  showWordControls();
 
   el('termimages').addEventListener('change', e => {
     state.termImages = e.target.checked;
