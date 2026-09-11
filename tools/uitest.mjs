@@ -605,21 +605,19 @@ try {
     chrome.panelClear === true, JSON.stringify(chrome));
   check('the panel no longer explains what dragging does',
     chrome.tipShown === false && chrome.tipText === '', JSON.stringify(chrome));
-  // The one case with nothing else to say it: picking a logo is a mode entered
-  // from a button elsewhere in the panel, and the page gives no sign of it.
+  // Nor when picking a logo. The button that enters that mode says what it
+  // does and the cursor changes; a sentence under the toolbar restating it was
+  // one more thing on screen.
   const picking = await page.evaluate(() => {
     const B = window.Blinded;
     B.setMode('pick');
     const shown = { hidden: document.getElementById('tip').hidden,
                     text: document.getElementById('tip').textContent.trim() };
     B.setMode('box');
-    return { ...shown, afterHidden: document.getElementById('tip').hidden };
+    return shown;
   });
-  check('picking a logo still says what to do',
-    picking.hidden === false && /drag a box around the logo/i.test(picking.text),
-    JSON.stringify(picking));
-  check('and the note goes away again afterwards',
-    picking.afterHidden === true, JSON.stringify(picking));
+  check('and says nothing when picking a logo either',
+    picking.hidden === true && picking.text === '', JSON.stringify(picking));
 
   check('the crosshair says what it is for instead',
     /draw a box to redact/i.test(chrome.markTitle), chrome.markTitle);
@@ -951,8 +949,6 @@ try {
   await page.click('#pick');
   check('pick mode is announced on the button',
     (await page.textContent('#pick')).includes('drag a box'));
-  check('pick mode changes the instruction under the panel',
-    (await page.textContent('#tip')).includes('found everywhere else'));
 
   // Drag around the first logo. Its PDF coordinates are known, so convert:
   // pdf y is measured up from the bottom, the canvas is 2x, and a little
@@ -1008,8 +1004,33 @@ try {
   check('the decoy mark is not matched', matched.total === 4);
   check('the panel reports the image matches',
     (await page.textContent('#counts')).includes('image match'));
+  // The number is the answer; "found 4 times" beside a 4 said it twice.
   check('the picked logo is listed with its count',
-    (await page.textContent('#templates')).includes('found 4 times'),
+    (await page.textContent('#templates .n')).trim() === '4',
+    await page.textContent('#templates'));
+  const imageWhere = await page.evaluate(() => {
+    const B = window.Blinded;
+    const before = document.querySelectorAll('#templates .tallyspot').length;
+    document.querySelector('#templates button.n').click();
+    const rows = [...document.querySelectorAll('#templates .tallyspot')];
+    const shown = rows.map(r => r.textContent.trim());
+    document.querySelector('#templates button.n').click();
+    const after = document.querySelectorAll('#templates .tallyspot').length;
+    return { before, open: rows.length, shown, after,
+             listed: B.placesFor(B.state.templates[0].id).length };
+  });
+  check('a picked image lists where it was found, like a word does',
+    imageWhere.before === 0 && imageWhere.open === imageWhere.listed
+      && imageWhere.open > 0, JSON.stringify(imageWhere));
+  check('each one names its page',
+    imageWhere.shown.every(s => /^Page \d+/.test(s)), JSON.stringify(imageWhere.shown));
+  check('and says it was found as a picture',
+    imageWhere.shown.every(s => /as a picture/.test(s)), JSON.stringify(imageWhere.shown));
+  check('pressing it again closes the list', imageWhere.after === 0,
+    JSON.stringify(imageWhere));
+
+  check('and does not repeat it in words',
+    !/found \d+ times/.test(await page.textContent('#templates')),
     await page.textContent('#templates'));
 
   // The listing is not the deliverable — the pixels are. Preview and export
@@ -1171,7 +1192,7 @@ try {
   });
 
   // Removing the template withdraws its matches entirely.
-  await page.click('#templates button');
+  await page.click('#templates .templatedrop');
   check('removing the picked logo removes its matches',
     await page.evaluate(() => window.Blinded.state.pages.reduce((n, p) => n + p.imageHits.length, 0)) === 0);
 
@@ -1804,7 +1825,7 @@ try {
   check('and an identical copy scores essentially perfectly',
     small.worst > 0.97, 'worst ' + small.worst.toFixed(3));
   check('the panel reports the count it found',
-    (await page.textContent('#templates')).includes('found 3 times'),
+    (await page.textContent('#templates .n')).trim() === '3',
     await page.textContent('#templates'));
 
   // ---------- a wide wordmark ----------
@@ -2237,6 +2258,29 @@ try {
     });
     check('the thorough check is not offered before anything has been searched',
       early === true, String(early));
+
+    // Nor once the reviewer has changed the question. The button says Search
+    // again then, and there is nothing for this to be a second opinion about.
+    const backToSearch = await page.evaluate(() => {
+      const B = window.Blinded;
+      B.state.searched = true;
+      B.state.sweptTerms = ['Amphitheatre'];
+      B.renderSweep();
+      const offered = !document.getElementById('sweepbox').hidden;
+      B.state.searched = false;
+      B.renderSweep();
+      const out = { offered, afterChange: !document.getElementById('sweepbox').hidden,
+                    label: document.getElementById('apply').textContent.trim() };
+      // Put back what this borrowed: a sweep left recorded here would make
+      // the next block think one had already run.
+      B.state.sweptTerms = [];
+      B.renderSweep();
+      return out;
+    });
+    check('it is offered while a search stands', backToSearch.offered === true,
+      JSON.stringify(backToSearch));
+    check('and withdrawn once the button says Search again',
+      backToSearch.afterChange === false, JSON.stringify(backToSearch));
 
     const offered = await page.evaluate(() => {
       const B = window.Blinded;
@@ -3176,6 +3220,73 @@ try {
 
   await page.goBack();
   await page.waitForSelector('#view-drop:not([hidden])', { timeout: 15000 });
+
+  // ---------- the overlay covers the whole search ----------
+  //
+  // Reported twice as "the button is dead but it is clearly working". The
+  // overlay used to be raised inside the reading pass, which lowers it on its
+  // way out — so a run that read the pages and then searched them spent the
+  // whole second half with nothing on screen at all.
+  {
+    if (await page.isVisible('#view-review')) await newFile();
+    await page.waitForSelector('#view-drop:not([hidden])', { timeout: 15000 });
+    await page.setInputFiles('#file', logoPath);
+    await page.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
+    await setTerms(page, ['Jane']);
+    await page.evaluate(({ x, y, size }) => {
+      const B = window.Blinded;
+      B.addTemplate(B.state.pages[0],
+        { x: x * 2 - 3, y: y * 2 - 3, w: size * 2 + 6, h: size * 2 + 6 });
+    }, LOGO_PLACEMENTS[0]);
+
+    // Watched with an observer rather than sampled: a gap shorter than the
+    // poll would not be a gap the reviewer misses, but it would be one the
+    // test misses.
+    const watched = page.evaluate(() => new Promise(resolve => {
+      const busy = document.getElementById('busy');
+      // Counted as stretches, not samples. The overlay is legitimately hidden
+      // before the click lands and again once the run is over; what would be
+      // a dead button is it going down and coming back up in between, so that
+      // is what is counted: one stretch is right, two means a hole.
+      let spells = 0;
+      let seen = 0;
+      let up = false;
+      // And whether it was up while the *image search* was running, which is
+      // the half that lost it. Counting stretches alone cannot tell "up for
+      // the reading only" from "up throughout".
+      let searchingSeen = 0;
+      let searchingHidden = 0;
+      const look = () => {
+        const nowUp = !busy.hidden;
+        if (nowUp && !up) spells++;
+        if (nowUp) seen++;
+        up = nowUp;
+        const leg = document.querySelector('[data-leg="search"] [data-count]');
+        const moving = leg && !/^0 of/.test(leg.textContent || '');
+        if (moving) { if (nowUp) searchingSeen++; else searchingHidden++; }
+      };
+      const observer = new MutationObserver(look);
+      observer.observe(document.body, { attributes: true, subtree: true });
+      const poll = setInterval(look, 30);
+      const done = setInterval(() => {
+        if (!window.Blinded.state.searched) return;
+        clearInterval(poll); clearInterval(done); observer.disconnect();
+        resolve({ seen, spells, searchingSeen, searchingHidden });
+      }, 30);
+    }));
+    await page.click('#apply');
+    await page.waitForFunction(() => window.Blinded.state.searched === true,
+      undefined, { timeout: 240000 });
+    const overlay = await watched;
+    check('the overlay is up while the search runs',
+      overlay.seen > 0, JSON.stringify(overlay));
+    // Both passes ran, so a hole between them would show here.
+    check('and does not blink out between reading and searching',
+      overlay.spells === 1, JSON.stringify(overlay));
+    check('it is still up while the image search is running',
+      overlay.searchingSeen > 0 && overlay.searchingHidden === 0,
+      JSON.stringify(overlay));
+  }
 
   // ---------- the front page on a laptop ----------
   //

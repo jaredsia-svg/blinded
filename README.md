@@ -737,3 +737,17 @@ The lossless option moved into the Save as box, beside the name. It is a
 question about the file being written rather than about the document, and that
 is where the reviewer is deciding about the file. The box is tinted rather than
 white, since a white card on a white document reads as part of it.
+
+## One overlay for the whole search
+
+Reported twice as "the button is dead but it is clearly working". The overlay
+was raised inside the reading pass, which lowers it on the way out — so a run
+that read the pages and then searched them spent the whole second half with
+nothing on screen. It now goes up as the button is pressed, waits a frame to be
+painted, and comes down once, at the end of the run.
+
+What the comprehensive check found stays on the page when the settings change.
+It is minutes of work the reviewer asked for explicitly, and having it vanish
+because a slider moved is a worse surprise than the inconsistency with
+"nothing is drawn before a search". Those marks go only when the word they
+belong to is deleted.

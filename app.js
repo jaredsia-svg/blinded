@@ -606,7 +606,8 @@
       return state.findings.filter(f => !dismissedText.has(f.id)).length;
     }
     if (!state.searched) {
-      return state.pages.reduce((sum, page) => sum + page.manual.length, 0);
+      return state.pages.reduce((sum, page) => sum + page.manual.length
+        + liveImageHits(page).filter(m => m.bySweep && !page.dismissed.has(m.id)).length, 0);
     }
     return state.pages.reduce((sum, page) =>
       sum + page.hits.filter(h => !page.dismissed.has(h.finding.id)).length
@@ -692,9 +693,12 @@
         state.useOcr = false;
         showWordControls();
         console.warn('the page reader could not be loaded', error);
-      } finally {
-        busy(false);
       }
+      // Deliberately not lowered here. The overlay belongs to the whole run,
+      // and this pass is the first half of it: taking it down between reading
+      // and searching left the second half with nothing on screen, which is
+      // exactly what a dead button looks like. It comes down once, at the end
+      // of the run, however the run ends.
     }
 
     // A paused run stops here rather than going on to the image search, and
@@ -1019,12 +1023,12 @@
   // sensitivity named here is the one control that still governs this search.
   function reportSearch(found) {
     const hint = el('pickhint');
+    // A match that worked needs no commentary: the marks are on the page and
+    // the count is beside the picked image. What is worth saying is what
+    // happened when nothing matched, which is below.
     if (found.matches.length) {
-      hint.textContent = found.matches.length === 1
-        ? 'Found once. Every copy is proposed, never applied on its own.'
-        : 'Found ' + found.matches.length + ' times. Every copy is proposed, '
-          + 'never applied on its own.';
-      hint.hidden = false;
+      hint.textContent = '';
+      hint.hidden = true;
       hint.classList.remove('warnhint');
       return;
     }
@@ -1314,7 +1318,17 @@
     // drew themselves. Everything else would be an answer to a question they
     // have not asked yet — and while they were still typing a word, an answer
     // to half of it.
-    if (!state.searched) return page.manual.map(box => ({ ...box }));
+    //
+    // The comprehensive check is the exception. It is minutes of work the
+    // reviewer asked for explicitly, and having it vanish because a slider
+    // moved is a worse surprise than the inconsistency: its marks stay until
+    // the word they belong to is deleted.
+    if (!state.searched) {
+      const kept = liveImageHits(page)
+        .filter(m => m.bySweep && !page.dismissed.has(m.id))
+        .map(m => ({ ...m.rect, label: state.labels.byId[m.id], sweep: true }));
+      return page.manual.map(box => ({ ...box })).concat(kept);
+    }
 
     const live = page.hits.filter(h => !page.dismissed.has(h.finding.id));
     const images = liveImageHits(page).filter(m => !page.dismissed.has(m.id));
@@ -1658,13 +1672,13 @@
   // What is left is the one case with nothing else to say it: picking a logo
   // is a mode the reviewer has just entered by pressing a button somewhere
   // else in the panel, and the page gives no sign of it.
+  // Nothing is said in the panel any more. The button that enters this mode
+  // says what it does, the cursor changes, and a sentence appearing under the
+  // toolbar to restate it was one more thing on screen.
   function setTip() {
     const tip = el('tip');
-    const picking = state.mode === 'pick';
-    tip.textContent = picking
-      ? 'Drag a box around the logo you want found everywhere else.'
-      : '';
-    tip.hidden = !picking;
+    tip.textContent = '';
+    tip.hidden = true;
   }
 
   function setMode(mode) {
@@ -1773,26 +1787,62 @@
       const live = state.pages.reduce((sum, page) =>
         sum + liveImageHits(page).filter(m => m.templateId === template.id).length, 0);
 
+      // "found 3 times" beside a 3 said the same thing twice. The number is
+      // the answer; what the row needs to say in words is only the case the
+      // number cannot cover, which is not having looked yet.
       if (!template.searched) {
         name.textContent = 'not searched yet';
         name.classList.add('waiting');
       } else {
-        name.textContent = live === 1 ? 'found once' : 'found ' + live + ' times';
+        name.textContent = 'picked image';
       }
 
-      const count = document.createElement('span');
+      const count = document.createElement('button');
+      count.type = 'button';
       count.className = 'n';
-      count.textContent = template.searched ? String(live) : '—';
+      count.textContent = template.searched ? String(live) : '\u2014';
+      count.disabled = !template.searched || live === 0;
+      if (!count.disabled) {
+        count.title = 'Where ' + (live === 1 ? 'it is' : 'they are');
+        count.setAttribute('aria-expanded', String(state.openTally === template.id));
+        count.addEventListener('click', () => {
+          state.openTally = state.openTally === template.id ? null : template.id;
+          renderTemplates();
+        });
+      }
 
       const remove = document.createElement('button');
       remove.type = 'button';
-      remove.textContent = '×';
+      // Named, because the row now holds two buttons and "the button in the
+      // row" stopped meaning anything.
+      remove.className = 'templatedrop';
+      remove.textContent = '\u00d7';
       remove.title = 'Stop matching this image';
       remove.addEventListener('click', () => removeTemplate(template.id));
 
       row.append(template.thumbnail, name, count, remove);
       host.append(row);
+
+      if (state.openTally === template.id && !count.disabled) {
+        host.append(tallyList(template.id, placesFor(template.id)));
+      }
     }
+  }
+
+  // Where a picked image was found, page by page. The same question the tally
+  // beside a word answers, and the same answer: a page number to go and look
+  // at rather than a count to take on trust.
+  function placesFor(templateId) {
+    const out = [];
+    for (const page of state.pages) {
+      for (const match of liveImageHits(page)) {
+        if (match.templateId !== templateId) continue;
+        out.push({ pageIndex: page.index, kind: 'image',
+                   at: match.rect ? match.rect.y : 0 });
+      }
+    }
+    out.sort((a, b) => a.pageIndex - b.pageIndex || a.at - b.at);
+    return out;
   }
 
   // ---------- what each typed term actually matched ----------
@@ -1920,7 +1970,8 @@
       text.textContent = 'Page ' + (spot.pageIndex + 1);
       const how = document.createElement('span');
       how.className = 'how';
-      how.textContent = spot.kind === 'shape' ? 'by shape' : 'in the text';
+      how.textContent = spot.kind === 'shape' ? 'by shape'
+        : spot.kind === 'image' ? 'as a picture' : 'in the text';
       jump.append(dot, text, how);
       jump.addEventListener('click', () => goToPage(spot.pageIndex));
       item.append(jump);
@@ -2827,8 +2878,11 @@
     //
     // It stays up afterwards too: the marks it finds un-apply the redaction,
     // and at first that hid the very note saying what it had found.
-    box.hidden = !((state.searched || state.sweptTerms.length)
-      && state.terms.length && state.kind !== 'text');
+    // Only while there is a search to check. Once the reviewer changes what to
+    // look for, the button says Search again and this has nothing to be a
+    // second opinion about — the marks it found last time are still on the
+    // page, but the offer belongs to a search that no longer stands.
+    box.hidden = !(state.searched && state.terms.length && state.kind !== 'text');
     if (box.hidden) return;
 
     const running = el('sweeprun');
@@ -2979,7 +3033,7 @@
     cleanName, coveredText, askName, redactedName, confirmAction,
     addTerm, dropTerm,
     saveDraft, draftData, restoreDraft, looksLikeDraft, fingerprint,
-    occurrencesFor, renderTermCounts, goToPage,
+    occurrencesFor, placesFor, renderTermCounts, renderTemplates, goToPage,
     scrollerFor, setTool, marking,
     runSearch, applyRedaction: runSearch, coverMarks, uncoverMarks, applyButton,
     activeBoxes,
