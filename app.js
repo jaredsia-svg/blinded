@@ -195,6 +195,14 @@
   function startReview(kind, name, pages) {
     state.kind = kind;
     state.name = name;
+    // What was read belonged to the last document. Left standing, this one is
+    // never read at all: the work looks done, nothing runs, and the document
+    // comes back with the words still on it. Reset here rather than where the
+    // old document is closed, because every way into a new one passes through
+    // this function and only some of them pass through that.
+    state.ocrRead = false;
+    state.ocrFailed = false;
+    state.useOcr = true;
     state.pages = pages.map(p => ({
       ...p,
       source: p.canvas,          // pristine; never drawn on

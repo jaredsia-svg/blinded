@@ -1392,6 +1392,49 @@ try {
     check('reading a page is not pathologically slow', took < 60000, took + 'ms');
   }
 
+  // ---------- a second document is a second document ----------
+  //
+  // The reader is run once per document and the result kept, because a page's
+  // words do not change when the terms list is edited. That flag was not being
+  // cleared when a new document was opened, so the second document was never
+  // read: the box was ticked, the work looked done, nothing ran, and the file
+  // came back with the words still on it and no sign that anything was wrong.
+  // It took a page refresh to clear, which is not something a reviewer would
+  // think to do.
+  {
+    if (await page.isVisible('#view-review')) await page.click('#restart');
+    await page.waitForSelector('#view-drop:not([hidden])');
+    await page.setInputFiles('#file', fixturePath);
+    await page.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
+    await page.fill('#terms', 'Jane Doe');
+    await page.waitForTimeout(300);
+    await redact(page);
+    const first = await page.evaluate(() =>
+      (window.Blinded.state.pages[0].ocrItems || []).length);
+
+    // Now a different document, without reloading the page.
+    await page.click('#restart');
+    await page.waitForSelector('#view-drop:not([hidden])');
+    await page.setInputFiles('#file', wordmarkPath);
+    await page.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
+    const carried = await page.evaluate(() => ({
+      read: window.Blinded.state.ocrRead,
+      failed: window.Blinded.state.ocrFailed,
+    }));
+    check('opening a document forgets that the last one was read',
+      carried.read === false, JSON.stringify(carried));
+    check('and forgets that the last one fell back',
+      carried.failed === false, JSON.stringify(carried));
+
+    await page.fill('#terms', 'KAG');
+    await page.waitForTimeout(300);
+    await redact(page);
+    const second = await page.evaluate(() =>
+      (window.Blinded.state.pages[0].ocrItems || []).length);
+    check('the first document was read', first > 0, String(first));
+    check('and so is the second, without a refresh', second > 0, String(second));
+  }
+
   // ---------- slanted lettering ----------
   //
   // Bold was always covered by a bold face. Italic was not, and a slanted word
