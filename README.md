@@ -216,12 +216,27 @@ covered when you press Redact"; amber means "something here might need covering
 and the tool cannot tell". Using one colour for both would turn a question into
 a promise.
 
+A box also has to be able to hold the word. Counting letters is a weak test on
+its own: a misreading of a three-letter word has two to four letters, and so
+does a great deal of ordinary text — on a hundred-page deck that came to 853
+spots, most of them whole phrases like "every year with KAG since initial
+engagement", which cannot be a three-letter word whatever confidence it was
+read at. A word has a shape, and the reading's box has to be roughly the shape
+the word would make at that size. On the page this was measured against it took
+twelve spots to seven, and kept the one that mattered.
+
 The panel offers to check them by shape. That search is the old method, and on
 the whole page it costs about 40 seconds a page for one term; confined to the
 doubtful spots it took 4.3 seconds and found the word at 0.81. It uses two
 typefaces rather than eight — measured as enough to find every true occurrence
 across two real decks, where a single upright face misses italic captions
 outright.
+
+There is a wider sweep behind it: every place the reader was unsure at all,
+including the ones that do not look like the word, in all eight typefaces
+rather than two. It states its own cost, because that is the only reason it is
+a separate button — on the page above, 35 places against 7, and 32 seconds
+against 4.
 
 Checking is offered, not done: on a long document it is minutes, and most of
 the spots will be nothing. A spot that the check settles becomes an ordinary

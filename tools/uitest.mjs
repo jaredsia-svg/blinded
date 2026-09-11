@@ -81,8 +81,8 @@ async function reveal(page, id) {
 
 async function redact(page) {
   await page.click('#apply');
-  await page.waitForFunction(() => window.Blinded.state.applied === true, { timeout: 240000 });
-  await page.waitForFunction(() => document.getElementById('busy').hidden, { timeout: 240000 });
+  await page.waitForFunction(() => window.Blinded.state.applied === true, undefined, { timeout: 240000 });
+  await page.waitForFunction(() => document.getElementById('busy').hidden, undefined, { timeout: 240000 });
 }
 
 const consoleErrors = [];
@@ -393,7 +393,7 @@ try {
     send('pointerup', cx + cw, cy + ch);
   }, first);
 
-  await page.waitForFunction(() => window.Blinded.state.templates.length === 1, { timeout: 60000 });
+  await page.waitForFunction(() => window.Blinded.state.templates.length === 1, undefined, { timeout: 60000 });
   check('picking a logo does not search on its own',
     await page.evaluate(() => window.Blinded.state.templates[0].searched) === false);
   check('and the panel says so',
@@ -930,7 +930,7 @@ try {
     send('pointerup', cx + box.w * S + PAD * 2, cy + box.h * S + PAD * 2);
   }, { place: SMALL_LOGO_PLACEMENTS, box: WORDMARK_BOX });
 
-  await page.waitForFunction(() => window.Blinded.state.templates.length === 1, { timeout: 60000 });
+  await page.waitForFunction(() => window.Blinded.state.templates.length === 1, undefined, { timeout: 60000 });
   await redact(page);
 
   const small = await page.evaluate(() => {
@@ -983,7 +983,7 @@ try {
     send('pointerup', cx + cw, cy + ch);
   }, { place: WORDMARK_PLACEMENTS, aspect: WORDMARK_ASPECT });
 
-  await page.waitForFunction(() => window.Blinded.state.templates.length === 1, { timeout: 60000 });
+  await page.waitForFunction(() => window.Blinded.state.templates.length === 1, undefined, { timeout: 60000 });
   await redact(page);
 
   const wordmarks = await page.evaluate(() => ({
@@ -1396,9 +1396,9 @@ try {
       const B = window.Blinded;
       B.state.terms = ['KNW'];
       B.state.doubts = [
-        { id: 'd1', pageIndex: 0, term: 'KNW', read: 'CRW)', confidence: 41,
+        { id: 'd1', pageIndex: 0, terms: ['KNW'], read: 'CRW)', confidence: 41,
           rect: { x: 40, y: 40, w: 30, h: 12 } },
-        { id: 'd2', pageIndex: 0, term: 'KNW', read: 'ae', confidence: 18,
+        { id: 'd2', pageIndex: 0, terms: ['KNW'], read: 'ae', confidence: 18,
           rect: { x: 90, y: 40, w: 20, h: 12 } },
       ];
       B.renderDoubts();
@@ -1417,6 +1417,116 @@ try {
     check('the button says how much work it is asking for',
       /2 spots/.test(spoken.button), JSON.stringify(spoken.button));
 
+    // A doubt is not silenced by marks found elsewhere.
+    //
+    // The question worth being sure about: with one term found and another
+    // missed, the spots that could be the missed one still have to be raised.
+    // Judging the document as a whole — "something was found, so all is well"
+    // — would hide exactly the case this exists for.
+    const alongside = await page.evaluate(() => {
+      const B = window.Blinded;
+      const p = B.state.pages[0];
+      B.state.terms = ['KNW'];
+      p.ocrItems = [
+        { str: 'CRW)', confidence: 41, rect: { x: 200, y: 200, w: 40, h: 14 },
+          x: 200, y: 214, w: 40, h: 17 },
+        { str: 'Engineering', confidence: 95, rect: { x: 300, y: 200, w: 90, h: 14 },
+          x: 300, y: 214, w: 90, h: 17 },
+      ];
+      // A mark somewhere else entirely.
+      p.imageHits = [{ id: 'x', term: 'KNW', rect: { x: 600, y: 600, w: 40, h: 14 }, score: 1 }];
+      const found = B.findDoubts();
+      p.imageHits = [];
+      return { doubts: found.length, terms: found.map(d => d.terms) };
+    });
+    check('a mark elsewhere does not silence a doubt here',
+      alongside.doubts === 1, JSON.stringify(alongside));
+
+    // A doubt sitting under something already covered is not a doubt.
+    const covered = await page.evaluate(() => {
+      const B = window.Blinded;
+      const p = B.state.pages[0];
+      p.imageHits = [{ id: 'x', term: 'KNW', rect: { x: 200, y: 200, w: 40, h: 14 }, score: 1 }];
+      const found = B.findDoubts();
+      p.imageHits = [];
+      p.ocrItems = [];
+      B.state.doubts = [];
+      B.renderDoubts();
+      return found.length;
+    });
+    check('but one already covered is settled', covered === 0, String(covered));
+
+    // Every term a reading could be, not whichever was typed first. With two
+    // terms of the same length this was wrong in both directions: the note
+    // named the wrong word, and the check searched only for that one — so the
+    // thorough sweep found nothing at all for the word it existed to find.
+    const multi = await page.evaluate(() => {
+      const B = window.Blinded;
+      const p = B.state.pages[0];
+      B.state.terms = ['KAP', 'KNW'];
+      p.ocrItems = [{ str: 'CRW)', confidence: 41, rect: { x: 200, y: 200, w: 40, h: 14 },
+        x: 200, y: 214, w: 40, h: 17 }];
+      const found = B.findDoubts();
+      B.state.doubts = found;
+      B.renderDoubts();
+      const note = document.getElementById('doubtnote').textContent;
+      p.ocrItems = [];
+      B.state.doubts = [];
+      B.renderDoubts();
+      return { terms: found[0] ? found[0].terms : [], note };
+    });
+    check('a doubt carries every term it could be',
+      multi.terms.length === 2, JSON.stringify(multi.terms));
+    check('and the note names them all, not just the first typed',
+      /"KAP"/.test(multi.note) && /"KNW"/.test(multi.note), JSON.stringify(multi.note));
+
+    // A box has to be able to hold the word.
+    //
+    // Counting letters is weak: a misreading of a three-letter word has two to
+    // four letters, and so does a great deal of ordinary text. On a hundred
+    // page deck that came to 853 spots, most of them whole phrases — which
+    // cannot be a three-letter word whatever confidence they were read at.
+    const shapes = await page.evaluate(() => {
+      const B = window.Blinded;
+      const tall = { x: 0, y: 0, w: 45, h: 14 };      // about right for "KNW"
+      return {
+        rightShape: B.widthCouldHold(tall, 'KNW'),
+        aPhrase: B.widthCouldHold({ x: 0, y: 0, w: 400, h: 14 }, 'KNW'),
+        aSpeck: B.widthCouldHold({ x: 0, y: 0, w: 4, h: 14 }, 'KNW'),
+        unknowable: B.widthCouldHold({ x: 0, y: 0, w: 40, h: 0 }, 'KNW'),
+      };
+    });
+    check('a box the shape of the word could hold it', shapes.rightShape === true,
+      JSON.stringify(shapes));
+    check('a whole phrase could not be a three-letter word',
+      shapes.aPhrase === false, JSON.stringify(shapes));
+    check('nor could a speck', shapes.aSpeck === false, JSON.stringify(shapes));
+    // When the shape says nothing, it must not be used to exclude.
+    check('a box of no height excludes nothing', shapes.unknowable === true,
+      JSON.stringify(shapes));
+
+    // And the rule has to be applied where the list is built, not merely
+    // available to be applied.
+    const applied = await page.evaluate(() => {
+      const B = window.Blinded;
+      const p = B.state.pages[0];
+      B.state.terms = ['KNW'];
+      const item = (str, x, w, h) => ({ str, confidence: 41,
+        rect: { x, y: 400, w, h }, x, y: 400 + h, w, h });
+      p.ocrItems = [
+        item('CRW)', 100, 45, 14),                      // the shape of the word
+        item('very year with KAG since', 300, 400, 14), // a phrase, same letters-ish
+        item('to', 800, 300, 14),                       // short, but far too wide
+      ];
+      const found = B.findDoubts();
+      p.ocrItems = [];
+      B.state.doubts = [];
+      B.renderDoubts();
+      return found.map(d => d.read);
+    });
+    check('only boxes that could hold the word become doubts',
+      applied.length === 1 && applied[0] === 'CRW)', JSON.stringify(applied));
+
     // Amber, not red: red says "this will be covered", and a doubt is the
     // opposite of a decision. Checked as pixels, because the distinction only
     // exists if it reaches the screen.
@@ -1431,7 +1541,7 @@ try {
       B.redrawAll();
       const plain = [...at()].slice(0, 3);
 
-      B.state.doubts = [{ id: 'd1', pageIndex: 0, term: 'KNW', read: 'CRW)',
+      B.state.doubts = [{ id: 'd1', pageIndex: 0, terms: ['KNW'], read: 'CRW)',
         confidence: 41, rect: { x: 60, y: 60, w: 80, h: 30 } }];
       B.redrawAll();
       const amber = [...at()].slice(0, 3);
@@ -1464,6 +1574,7 @@ try {
     await page.waitForSelector('#view-drop:not([hidden])');
 
     const seen = page.evaluate(() => new Promise(resolve => {
+      const started = Date.now();
       const texts = [];
       const notes = [];
       const withBar = [];
@@ -1476,7 +1587,16 @@ try {
           withBar.push(!document.getElementById('busy-legs').hidden);
         }
       }, 25);
-      setTimeout(() => { clearInterval(watch); resolve({ texts, notes, withBar }); }, 2600);
+      // Watch until the document is open rather than for a fixed stretch: a
+      // window long enough today is a race tomorrow, and a flaky check is
+      // worse than no check.
+      const until = setInterval(() => {
+        const open = !document.getElementById('view-review').hidden;
+        if (open || Date.now() - started > 15000) {
+          clearInterval(watch); clearInterval(until);
+          resolve({ texts, notes, withBar });
+        }
+      }, 20);
     }));
     // Loading happens while that watcher runs.
     await page.setInputFiles('#file', logoPath);

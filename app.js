@@ -653,26 +653,35 @@
   // Searching only where the reading was doubtful is a fraction of that, and
   // it uses two typefaces rather than eight — measured as enough to find every
   // true occurrence across two real decks.
-  async function checkDoubts() {
-    const doubts = state.doubts;
-    if (!doubts.length) return;
+  async function checkDoubts(options) {
+    const opts = options || {};
+    const thorough = Boolean(opts.thorough);
+    const doubts = thorough ? findDoubts(true) : state.doubts;
+    if (!doubts.length) return 0;
 
+    // A spot that could be any of several terms is searched for each of them.
     const byTerm = new Map();
     for (const doubt of doubts) {
-      if (!byTerm.has(doubt.term)) byTerm.set(doubt.term, []);
-      byTerm.get(doubt.term).push(doubt);
+      for (const term of doubt.terms) {
+        if (!byTerm.has(term)) byTerm.set(term, []);
+        byTerm.get(term).push(doubt);
+      }
     }
+    const spotCount = doubts.length;
 
     let done = 0;
     state.paused = false;
     busy(true, 'Working…');
-    legs([{ key: 'check', label: 'Checking spots', total: doubts.length }]);
+    const units = [...byTerm.values()].reduce((n, list) => n + list.length, 0);
+    legs([{ key: 'check', label: thorough ? 'Checking everywhere' : 'Checking spots',
+             total: units }]);
     allowPause();
 
     const found = [];
     try {
       for (const [term, spots] of byTerm) {
-        const ready = TextImage.templatesFor(term, TextImage.FALLBACK_FACES)
+        const faces = thorough ? TextImage.FACES : TextImage.FALLBACK_FACES;
+        const ready = TextImage.templatesFor(term, faces)
           .map(t => ImageSearch.prepareTemplate(t, {}))
           .filter(Boolean);
         if (!ready.length) { done += spots.length; continue; }
@@ -737,6 +746,7 @@
       });
     }
     state.doubts = state.doubts.filter(d => !answered.has(d.id));
+    if (thorough) state.thoroughDone = true;
     state.doubtsChecked = true;
     markDuplicates();
     renderTermCounts();
@@ -758,7 +768,7 @@
     box.hidden = count === 0;
     if (!count) return;
     const pages = new Set(state.doubts.map(d => d.pageIndex)).size;
-    const terms = [...new Set(state.doubts.map(d => d.term))];
+    const terms = [...new Set(state.doubts.flatMap(d => d.terms))];
     // Most of these are nothing, and saying so is the difference between a
     // note a reviewer reads and a warning they learn to dismiss.
     note.textContent = 'The reader was unsure of ' + count
@@ -769,6 +779,33 @@
       + ' misread. A slower check by shape can settle it.';
     el('doubtcheck').textContent = count === 1
       ? 'Check that spot' : 'Check those ' + count + ' spots';
+
+    // The wider sweep: everywhere the reader was unsure at all, in every
+    // typeface rather than two. Its cost is stated because it is the whole
+    // reason it is a separate button — measured at roughly a third of a second
+    // per spot with two faces, and it uses four times as many.
+    const everywhere = findDoubts(true).length;
+    const extra = Math.max(0, everywhere - count);
+    const wider = el('doubtall');
+    const widerNote = el('doubtallnote');
+    wider.hidden = extra === 0;
+    widerNote.hidden = extra === 0;
+    if (extra === 0) return;
+    wider.textContent = 'Check everywhere instead';
+    // Every spot is searched for every term it could be, so the work is spots
+    // times terms — measured at a little under half a second each with all
+    // eight typefaces: 35 spots and two terms took 32 seconds.
+    const seconds = Math.round(everywhere * Math.max(1, state.terms.length) * 0.45);
+    widerNote.textContent = 'Or check all ' + everywhere + ' places the reader was '
+      + 'unsure of, in every typeface — including ' + extra + ' that do not look '
+      + 'like the word. Slower: about ' + describeTime(seconds) + ', and still '
+      + 'no guarantee.';
+  }
+
+  function describeTime(seconds) {
+    if (seconds < 90) return Math.max(1, Math.round(seconds)) + ' seconds';
+    const minutes = Math.round(seconds / 60);
+    return minutes + (minutes === 1 ? ' minute' : ' minutes');
   }
 
   // ---------- where the reading was shaky ----------
@@ -798,8 +835,48 @@
     return Math.abs(seen - want) <= DOUBT_LENGTH_SLACK;
   }
 
+  // How wide the word is for its height, which is a property of the word and
+  // not of the document it is in.
+  const aspectOfTerm = new Map();
+
+  function termAspect(term) {
+    if (aspectOfTerm.has(term)) return aspectOfTerm.get(term);
+    let aspect = 0;
+    try {
+      const drawn = TextImage.templatesFor(term, TextImage.FALLBACK_FACES)[0];
+      if (drawn && drawn.height) aspect = drawn.width / drawn.height;
+    } catch { aspect = 0; }
+    aspectOfTerm.set(term, aspect);
+    return aspect;
+  }
+
+  // Could a box of this shape hold this word at all?
+  //
+  // This is what cuts the list from unusable to useful. Counting letters is a
+  // weak test, because a misreading of a three-letter word has two to four
+  // letters and so does a great deal of ordinary text: on a hundred-page deck
+  // that came to 853 spots, most of them whole phrases — "every year with KAG
+  // since initial engagement" — which cannot be a three-letter word whatever
+  // its confidence. A word has a shape, and a box four times too wide is not
+  // that shape. On the page this was measured against it took twelve spots to
+  // seven, and kept the one that mattered.
+  const WIDTH_LOW = 0.45;
+  const WIDTH_HIGH = 2.2;
+
+  function widthCouldHold(rect, term) {
+    const aspect = termAspect(term);
+    if (!aspect || !rect || !rect.h) return true;   // cannot tell: do not exclude
+    const expected = rect.h * aspect;
+    return rect.w >= expected * WIDTH_LOW && rect.w <= expected * WIDTH_HIGH;
+  }
+
   // Every spot worth a second look, across the document.
-  function findDoubts() {
+  // `loose` drops the two filters that make this a short list: the reading no
+  // longer has to be about the right length for a term, and it no longer has
+  // to be about the size of the words around it. That is the thorough sweep —
+  // everywhere the reader was unsure at all, rather than everywhere it was
+  // unsure in a way that looks like the word being hunted.
+  function findDoubts(loose) {
     const out = [];
     if (!state.terms.length) return out;
     for (const page of state.pages) {
@@ -816,20 +893,29 @@
       for (const item of page.ocrItems || []) {
         if (!(item.confidence < DOUBT_CONFIDENCE)) continue;
         if (!/[A-Za-z]/.test(item.str)) continue;
-        if (item.rect.h < floor) continue;
+        if (!loose && item.rect.h < floor) continue;
         // Already covered? Then there is nothing to be unsure about.
         const covered = liveImageHits(page).some(m =>
           m.rect && Match.overlapFraction(m.rect, item.rect) > 0.4);
         if (covered) continue;
-        for (const term of state.terms) {
-          if (!couldBeTerm(item.str, term)) continue;
-          out.push({
-            id: 'doubt:' + page.index + ':' + Math.round(item.rect.x) + ':' + Math.round(item.rect.y),
-            pageIndex: page.index, term, read: item.str,
-            confidence: item.confidence, rect: { ...item.rect },
-          });
-          break;
-        }
+        // Every term it could be, not the first one in the list.
+        //
+        // Tagging a doubt with one term looked harmless while there was one
+        // term. With two of the same length it was not: every doubt took
+        // whichever was typed first, so the note named that word when the
+        // other was the one missing, and the check only ever searched for the
+        // first — the thorough sweep found nothing at all for the second,
+        // which is the word it existed to find.
+        const could = loose
+          ? state.terms.slice()
+          : state.terms.filter(term =>
+              couldBeTerm(item.str, term) && widthCouldHold(item.rect, term));
+        if (!could.length) continue;
+        out.push({
+          id: 'doubt:' + page.index + ':' + Math.round(item.rect.x) + ':' + Math.round(item.rect.y),
+          pageIndex: page.index, terms: could, read: item.str,
+          confidence: item.confidence, rect: { ...item.rect },
+        });
       }
     }
     return out;
@@ -2056,13 +2142,19 @@
   showWordControls();
 
   el('busy-pause').addEventListener('click', requestPause);
-  el('doubtcheck').addEventListener('click', async () => {
-    const found = await checkDoubts();
+  el('doubtcheck').addEventListener('click', () => runDoubtCheck({ thorough: false }));
+  el('doubtall').addEventListener('click', () => runDoubtCheck({ thorough: true }));
+
+  async function runDoubtCheck(options) {
+    const found = await checkDoubts(options);
     if (found === 0) {
-      el('doubtnote').textContent = 'Nothing matched at those spots. They are '
-        + 'still outlined in amber — look at them before exporting.';
+      el('doubtnote').textContent = options.thorough
+        ? 'Nothing matched anywhere the reader was unsure. Whatever is on those '
+          + 'pages, it is not a shape this can recognise — look at them before exporting.'
+        : 'Nothing matched at those spots. They are still outlined in amber — '
+          + 'look at them before exporting.';
     }
-  });
+  }
 
   el('termimages').addEventListener('change', e => {
     state.termImages = e.target.checked;
@@ -2142,7 +2234,9 @@
     sensitivity, wordSensitivity, wordBarFor,
     applyRedaction, markPending, plannedCount, pendingTemplates, termsNeedingPictures,
     readPages, matchOcr, ocrPending, ocrMatchStale, showWordControls,
-    findDoubts, checkDoubts, renderDoubts, couldBeTerm, redrawAll, legs, leg, busyNote,
+    findDoubts, checkDoubts, renderDoubts, couldBeTerm, widthCouldHold,
+    redrawAll, legs, leg, busyNote,
+    describeTime,
     busy, pageProgress, requestPause,
     renderTermCounts };
 })();
