@@ -95,6 +95,22 @@ body {
   font-size: 12px; background: #eef1f6; padding: 1px 4px; border-radius: 4px; color: var(--ink);
 }
 
+.busy-line { margin: 0; display: flex; align-items: center; gap: 9px; }
+
+/* Progress, where there is progress to report. A run whose length is not
+   known keeps the spinner and shows no bar, rather than showing a bar that
+   does not move. */
+.bar {
+  margin-top: 12px; height: 6px; border-radius: 999px;
+  background: #e6eaf1; overflow: hidden;
+}
+.bar > i {
+  display: block; height: 100%; width: 0;
+  background: var(--accent); border-radius: inherit;
+  transition: width 140ms linear;
+}
+#busy-pause { margin-top: 12px; width: 100%; }
+
 /* ---------- review ---------- */
 
 .review { display: grid; grid-template-columns: 320px minmax(0, 1fr); gap: 22px; align-items: start; }
@@ -254,7 +270,10 @@ button { font: inherit; cursor: pointer; border-radius: 8px; }
 /* ---------- busy ---------- */
 
 .busy { position: fixed; inset: 0; background: rgba(246,247,249,.86); display: grid; place-items: center; z-index: 20; }
-.busy-inner { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px 22px; display: flex; align-items: center; gap: 12px; font-weight: 500; }
+.busy-inner {
+  background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 16px 22px; font-weight: 500; min-width: 260px; max-width: 360px;
+}
 .spinner { width: 16px; height: 16px; border: 2px solid var(--line); border-top-color: var(--accent); border-radius: 50%; animation: spin .7s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 2.4s; } }

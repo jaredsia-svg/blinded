@@ -93,12 +93,6 @@
               <button type="button" class="why" aria-label="What does this mean?" data-tip="Reads the lettering on each page, so a word set as a picture is found whatever type it is in — italic, bold, small, unusual. The reader is about 7 MB, fetched from this site once and then kept by your browser; nothing is sent anywhere. If it cannot load, the word is hunted for by shape instead.">?</button>
             </label>
             <p class="hint warnhint" id="ocrnote" hidden></p>
-            <label class="sens" for="wordsens" id="wordsensrow" hidden>
-              <span>Word match</span>
-              <input type="range" id="wordsens" min="45" max="95" value="66" step="1">
-              <span id="wordsensvalue">0.66</span>
-              <button type="button" class="why" aria-label="What does this mean?" data-tip="Separate from the image sensitivity below, because a word drawn here is only a guess at the document's typeface. Long words are held to a slightly lower bar automatically, since they score lower but are also harder to hit by accident. Lower this if a word is missed, raise it if unrelated text is being covered.">?</button>
-            </label>
           </div>
         </details>
 
@@ -173,7 +167,13 @@
     </div>
   </section>
 
-  <div id="busy" class="busy" hidden><div class="busy-inner"><span class="spinner"></span> <span id="busy-text">Working…</span></div></div>
+  <div id="busy" class="busy" hidden>
+    <div class="busy-inner">
+      <p class="busy-line"><span class="spinner"></span> <span id="busy-text">Working…</span></p>
+      <div class="bar" id="busy-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" hidden><i id="busy-fill"></i></div>
+      <button type="button" id="busy-pause" class="ghost" hidden>Pause</button>
+    </div>
+  </div>
 
 </main>
 

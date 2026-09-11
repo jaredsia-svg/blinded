@@ -1185,95 +1185,30 @@ try {
     String(await control.evaluate(() => window.__rafCalls)));
   await control.close();
 
-  // ---------- two bars, two controls ----------
+  // ---------- one control, not two ----------
   //
-  // These used to be one slider with a fixed offset beneath it. The offset
-  // came from a single document and was wrong on the next one, where a
-  // four-letter acronym matched 333 times while the full company name in the
-  // same panel matched once. No constant satisfies both documents, so the
-  // reviewer gets the control.
+  // There used to be a Word match slider beside the image sensitivity. Reading
+  // the pages has no threshold, so it governed a method the reviewer almost
+  // never meets, and asked them to tune something they had no way to judge.
+  // The shape fallback now runs at the value measured across three documents.
   const bars = await page.evaluate(() => {
     const B = window.Blinded;
-    const defaults = { word: B.wordSensitivity(), image: B.sensitivity() };
-    const set = (id, v) => { const s = document.getElementById(id); s.value = String(v);
-      s.dispatchEvent(new Event('input', { bubbles: true })); };
-    const out = {};
-    set('sens', 75); set('wordsens', 75);
-    out.together = { image: B.sensitivity(), word: B.wordSensitivity() };
-    set('wordsens', 55);
-    out.wordLowered = { image: B.sensitivity(), word: B.wordSensitivity() };
-    set('sens', 90);
-    out.imageRaised = { image: B.sensitivity(), word: B.wordSensitivity() };
-    out.shortBar = B.wordBarFor('KAG');
-    out.longBar = B.wordBarFor('proprietary');
-    out.phraseBar = B.wordBarFor('proprietary innovation');
-    out.wordMin = Number(document.getElementById('wordsens').min) / 100;
-    out.wordMax = Number(document.getElementById('wordsens').max) / 100;
-    set('sens', 75); set('wordsens', 66);
-    out.defaultWord = defaults.word;
-    out.defaultImage = defaults.image;
-    return out;
+    return {
+      wordControl: Boolean(document.getElementById('wordsens')),
+      imageControl: Boolean(document.getElementById('sens')),
+      shortBar: B.wordBarFor('KAG'),
+      longBar: B.wordBarFor('proprietary'),
+      phraseBar: B.wordBarFor('proprietary innovation'),
+    };
   });
-  check('the word bar has its own control',
-    bars.together.word === 0.75 && bars.together.image === 0.75, JSON.stringify(bars));
-  check('and its own default, lower than the image bar',
-    bars.defaultWord === 0.66 && bars.defaultImage === 0.75, JSON.stringify(bars));
-  // The relief is what lets one setting serve a three-letter acronym and an
-  // eleven-letter word, which no single number did.
-  check('a long word is held to a lower bar than a short one at the same setting',
+  check('the word sensitivity control is gone', bars.wordControl === false);
+  check('the image sensitivity control remains', bars.imageControl === true);
+  check('the fallback still holds a short word to the measured bar',
+    Math.abs(bars.shortBar - 0.66) < 1e-9, String(bars.shortBar));
+  check('and still lets a long word down, since it scores lower',
     bars.longBar < bars.shortBar, JSON.stringify(bars));
-  check('and a phrase is held to the short-word bar, not the long-word one',
+  check('while a phrase gets no relief',
     bars.phraseBar === bars.shortBar, JSON.stringify(bars));
-  check('lowering the word bar leaves the image bar alone',
-    bars.wordLowered.word === 0.55 && bars.wordLowered.image === 0.75, JSON.stringify(bars));
-  check('and raising the image bar leaves the word bar alone',
-    bars.imageRaised.image === 0.9 && bars.imageRaised.word === 0.55, JSON.stringify(bars));
-  // The two documents that forced this apart: one needed 0.60 or below, the
-  // other 0.65 or above. The control is useless if it cannot reach both.
-  check('the word control reaches low enough for a word set as vector art',
-    bars.wordMin <= 0.598, String(bars.wordMin));
-  check('and high enough to shake off a short acronym matching everything',
-    bars.wordMax >= 0.65, String(bars.wordMax));
-
-  // The control is meaningless if it is never shown, and pointless clutter
-  // when the feature it belongs to is off.
-  // The shape matcher is the fallback now, so its sensitivity control is
-  // hidden until the fallback is what is actually running. A control for a
-  // method that is not in use is worse than no control.
-  const rowShown = await page.evaluate(() => {
-    const B = window.Blinded;
-    const row = document.getElementById('wordsensrow');
-    const note = document.getElementById('ocrnote');
-    const box = document.getElementById('termimages');
-    if (!box.checked) box.click();
-    // Do not inherit whatever an earlier test left behind: this one is about
-    // the default, so it states the default.
-    B.state.useOcr = true;
-    B.state.ocrFailed = false;
-    B.showWordControls();
-    const reading = { row: row.hidden, note: note.hidden };
-    // What the reviewer sees if the reader cannot be loaded.
-    B.state.ocrFailed = true;
-    B.state.useOcr = false;
-    B.showWordControls();
-    const fallen = { row: row.hidden, note: note.hidden, text: note.textContent };
-    B.state.ocrFailed = false;
-    B.state.useOcr = true;
-    B.showWordControls();
-    box.click();
-    return { reading, fallen, off: row.hidden };
-  });
-  check('reading the pages needs no sensitivity control',
-    rowShown.reading.row === true, JSON.stringify(rowShown));
-  check('and says nothing about a fallback that has not happened',
-    rowShown.reading.note === true, JSON.stringify(rowShown));
-  check('if the reader fails, the shape control appears',
-    rowShown.fallen.row === false, JSON.stringify(rowShown));
-  check('and the reviewer is told why, not left guessing',
-    rowShown.fallen.note === false && /by shape/.test(rowShown.fallen.text),
-    JSON.stringify(rowShown.fallen));
-  check('everything is out of the way when the feature is off',
-    rowShown.off === true, JSON.stringify(rowShown));
 
   // ---------- small lettering ----------
   //
@@ -1413,6 +1348,115 @@ try {
     check('reading is what does it', fresh.reading === true, JSON.stringify(fresh));
   }
 
+  // ---------- progress, and stopping to look ----------
+  //
+  // A hundred pages is long enough that a reviewer will want to see what has
+  // been found before it finishes, and having seen it may want to change the
+  // terms rather than wait out a run looking for the wrong thing. Stopping is
+  // between pages: what has been read is kept, and carrying on resumes rather
+  // than starting again — re-reading would make pausing cost more than
+  // waiting, which is no pause at all.
+  {
+    if (await page.isVisible('#view-review')) await page.click('#restart');
+    await page.waitForSelector('#view-drop:not([hidden])');
+    // Two pages, because stopping happens between them: on a one-page document
+    // a pause can never arrive in time to prevent that page being read, and
+    // asserting that it does would be asserting the wrong thing.
+    await page.setInputFiles('#file', logoPath);
+    await page.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
+    await page.fill('#terms', 'Jane Doe');
+    await page.waitForTimeout(300);
+
+    const shape = await page.evaluate(() => {
+      const bar = document.getElementById('busy-bar');
+      const pause = document.getElementById('busy-pause');
+      return {
+        bar: Boolean(bar), fill: Boolean(document.getElementById('busy-fill')),
+        pause: Boolean(pause), hiddenAtRest: bar.hidden && pause.hidden,
+      };
+    });
+    check('the overlay has a progress bar and a pause button',
+      shape.bar && shape.fill && shape.pause, JSON.stringify(shape));
+    check('and neither shows when nothing is running',
+      shape.hiddenAtRest, JSON.stringify(shape));
+
+    const reported = await page.evaluate(() => {
+      const B = window.Blinded;
+      B.pageProgress(29, 100);
+      const out = {
+        text: document.getElementById('busy-text').textContent,
+        width: document.getElementById('busy-fill').style.width,
+        shown: !document.getElementById('busy-bar').hidden,
+      };
+      B.busy(false);
+      out.afterStop = document.getElementById('busy-bar').hidden;
+      return out;
+    });
+    check('a long run says which page it is on, and nothing else',
+      reported.text === 'Page 30 of 100', JSON.stringify(reported.text));
+    // The browser normalises the string, so compare the number, not the text.
+    check('the bar shows how far along it is',
+      Math.abs(parseFloat(reported.width) - 29) < 0.5, reported.width);
+    check('the bar is shown while the length is known', reported.shown === true);
+    check('and is packed away when the run ends', reported.afterStop === true);
+
+    const unknown = await page.evaluate(() => {
+      const B = window.Blinded;
+      B.busy(true, 'Fetching the page reader…');
+      const shown = !document.getElementById('busy-bar').hidden;
+      B.busy(false);
+      return shown;
+    });
+    check('a run whose length is not known shows no bar, rather than a still one',
+      unknown === false);
+
+    const paused = await page.evaluate(async () => {
+      const B = window.Blinded;
+      B.state.termImages = true;
+      B.state.useOcr = true;
+      // Pressing Redact clears any earlier pause, so the only way to stop a
+      // run is to ask while it is running — which is what the button does.
+      const run = B.applyRedaction();
+      await new Promise(done => setTimeout(done, 50));
+      B.requestPause();
+      await run;
+      return {
+        applied: B.state.applied,
+        ocrRead: B.state.ocrRead,
+        read: B.state.pages.filter(p => p.ocrItems).length,
+        total: B.state.pages.length,
+        overlay: document.getElementById('busy').hidden,
+      };
+    });
+    check('a paused run does not claim the document is redacted',
+      paused.applied === false, JSON.stringify(paused));
+    check('and leaves the overlay down so the marks can be looked at',
+      paused.overlay === true, JSON.stringify(paused));
+    check('and does not record the document as read',
+      paused.ocrRead === false, JSON.stringify(paused));
+    // How far it got depends on where the pause landed — possibly before the
+    // first page, if the engines were still starting. What matters is that it
+    // stopped short and kept whatever it had.
+    check('having stopped short of the whole document',
+      paused.read < paused.total, JSON.stringify(paused));
+
+    const resumed = await page.evaluate(async () => {
+      const B = window.Blinded;
+      B.state.paused = false;
+      await B.applyRedaction();
+      return {
+        applied: B.state.applied,
+        read: B.state.pages.filter(p => p.ocrItems).length,
+        total: B.state.pages.length,
+        ocrRead: B.state.ocrRead,
+      };
+    });
+    check('carrying on reads the rest of the document',
+      resumed.read === resumed.total, JSON.stringify(resumed));
+    check('and finishes the redaction', resumed.applied === true, JSON.stringify(resumed));
+    check('which is then recorded as read', resumed.ocrRead === true, JSON.stringify(resumed));
+  }
+
   // ---------- a second document is a second document ----------
   //
   // The reader is run once per document and the result kept, because a page's
@@ -1512,49 +1556,6 @@ try {
   check('while the upright word is still matched by an upright one',
     slanted.upright && !slanted.upright.face.includes('italic'), JSON.stringify(slanted.upright));
 
-  // ---------- the over-matching warning ----------
-  //
-  // The failure this catches is silent: a short word matching the page rather
-  // than the word, hundreds of times, in a document too long to eyeball. The
-  // reviewer found out by looking at the exported file.
-  const glut = await page.evaluate(() => {
-    const B = window.Blinded;
-    const savedPages = B.state.pages;
-    const savedTerms = B.state.terms;
-    const read = () => document.getElementById('termcounts').textContent;
-
-    // By this point in the suite the document has been closed, so the fixture
-    // brings its own page. renderTermCounts only reads imageHits off a page.
-    B.state.pages = [{ index: 0, imageHits: [] }];
-    B.state.terms = ['TDTC'];
-
-    const seed = n => {
-      B.state.pages[0].imageHits = Array.from({ length: n }, (_, k) => ({
-        id: 'term:TDTC:0:' + k, term: 'TDTC',
-        rect: { x: k * 3, y: k * 3, w: 20, h: 10 }, score: 0.6,
-      }));
-      B.renderTermCounts();
-      return read();
-    };
-
-    const few = seed(2);
-    const many = seed(40);
-    const seeded = B.state.pages[0].imageHits.length;
-    B.state.pages = savedPages;
-    B.state.terms = savedTerms;
-    B.renderTermCounts();
-    return { few, many, seeded };
-  });
-  check('the warning fixture renders a row at all',
-    /TDTC/.test(glut.few) && /TDTC/.test(glut.many),
-    'seeded=' + glut.seeded + ' ' + JSON.stringify(glut.many));
-  check('a handful of picture matches is reported without alarm',
-    !/lot of picture matches/.test(glut.few), glut.few.slice(0, 120));
-  check('but a word matching the page rather than the word is called out',
-    /lot of picture matches/.test(glut.many), glut.many.slice(0, 200));
-  check('and the warning says which control to move',
-    /Word match/.test(glut.many), glut.many.slice(0, 200));
-
   // ---------- the "?" hints ----------
   //
   // These used to be title attributes, which wait a second or two, never
@@ -1563,7 +1564,7 @@ try {
   // actually becomes visible, so that is what is asserted, not that a handler
   // is attached.
   const whyCount = await page.evaluate(() => document.querySelectorAll('.why').length);
-  check('the panel still has its hints', whyCount === 5, String(whyCount));
+  check('the panel still has its hints', whyCount === 4, String(whyCount));
   check('every hint carries text to show',
     await page.evaluate(() => [...document.querySelectorAll('.why')]
       .every(b => (b.getAttribute('data-tip') || '').length > 20)));

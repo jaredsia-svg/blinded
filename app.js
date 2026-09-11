@@ -80,6 +80,8 @@
     ocrFailed: false,
     // Whether the reader has already been fetched this session.
     ocrLoaded: false,
+    // Set while a run is being stopped between pages.
+    paused: false,
     // Per page: the words OCR read, and the text they stitch into.
     ocrRead: false,
     // Terms whose picture search has already run, so pressing Redact twice
@@ -91,9 +93,55 @@
 
   // ---------- chrome ----------
 
-  function busy(on, message) {
+  // ---------- the working overlay ----------
+  //
+  // Three things a reviewer wants while a hundred pages are read: what is
+  // happening, how far along it is, and a way to stop and look. The message
+  // used to carry all of the first and none of the rest — "Searching for 1
+  // word — page 30 of 100" spends most of its width restating a setting the
+  // reviewer chose a moment ago.
+  function busy(on, message, done, total) {
     el('busy').hidden = !on;
-    if (message) el('busy-text').textContent = message;
+    if (message !== undefined && message !== null) el('busy-text').textContent = message;
+
+    const bar = el('busy-bar');
+    const known = Number.isFinite(done) && Number.isFinite(total) && total > 0;
+    bar.hidden = !known;
+    if (known) {
+      const fraction = Math.max(0, Math.min(1, done / total));
+      el('busy-fill').style.width = (fraction * 100).toFixed(1) + '%';
+      bar.setAttribute('aria-valuenow', String(Math.round(fraction * 100)));
+    }
+    if (!on) {
+      el('busy-pause').hidden = true;
+      el('busy-fill').style.width = '0%';
+    }
+  }
+
+  // Pausing.
+  //
+  // A hundred pages is long enough that a reviewer will want to see what has
+  // been found so far before it finishes — and, having seen it, may want to
+  // change the terms rather than wait for a run that is looking for the wrong
+  // thing. Stopping is cooperative and happens between pages: the work already
+  // done is kept, and pressing Redact again carries on from there.
+  function allowPause() {
+    const button = el('busy-pause');
+    button.hidden = false;
+    button.disabled = false;
+    button.textContent = 'Pause';
+  }
+
+  function requestPause() {
+    state.paused = true;
+    const button = el('busy-pause');
+    button.disabled = true;
+    button.textContent = 'Finishing this page…';
+  }
+
+  // How a long run reports itself: the page it is on, and nothing else.
+  function pageProgress(done, total) {
+    busy(true, 'Page ' + Math.min(done + 1, total) + ' of ' + total, done, total);
   }
 
   function show(name) {
@@ -295,14 +343,12 @@
   // The sensitivity slider belongs to the shape matcher, so it is shown only
   // when the shape matcher is what is running.
   function showWordControls() {
-    el('wordsensrow').hidden = !state.termImages || state.useOcr;
     const note = el('ocrnote');
     note.hidden = !(state.termImages && state.ocrFailed);
     if (!note.hidden) {
       note.textContent = 'The page reader could not be loaded, so these words '
         + 'are being hunted for by shape instead. That is less reliable on '
-        + 'italic and on small lettering — check the marks, and the Word match '
-        + 'control below.';
+        + 'italic and on small lettering — check the marks before exporting.';
     }
   }
 
@@ -328,8 +374,14 @@
     el('export').disabled = !state.applied || marks === 0;
 
     const note = el('exportnote');
+    const unread = state.pages.filter(page => !page.ocrItems).length;
     if (state.applied) {
       note.textContent = marks === 0 ? 'Nothing is covered.' : '';
+    } else if (unread && unread < state.pages.length && ocrPending()) {
+      // A paused run. Say how much of the document has actually been looked
+      // at, because the marks on screen are the answer for part of it only.
+      note.textContent = (state.pages.length - unread) + ' of ' + state.pages.length
+        + ' pages read \u2014 press Redact to carry on.';
     } else if (unsearched) {
       note.textContent = unsearched === 1
         ? '1 search still to run.'
@@ -356,6 +408,7 @@
   // Runs every search that has not run yet, then switches the view to what the
   // exported file will contain.
   async function applyRedaction() {
+    state.paused = false;
     // Reading the pages comes first, because failing at it changes what else
     // has to run: the shape matcher is the fallback, so the list of templates
     // cannot be decided until it is known whether the reader worked.
@@ -379,6 +432,17 @@
       } finally {
         busy(false);
       }
+    }
+
+    // A paused run stops here rather than going on to the image search, and
+    // does not claim the document is redacted: the marks found so far are
+    // shown, still red, and Redact picks up where it left off.
+    if (state.paused) {
+      state.paused = false;
+      busy(false);
+      redrawAll();
+      refreshApply();
+      return;
     }
 
     const entries = pendingTemplates();
@@ -421,26 +485,32 @@
   async function readPages() {
     if (state.ocrRead || !state.pages.length) return;
     const total = state.pages.length;
+    // Pages already read in an earlier, paused run are not read again.
+    const outstanding = state.pages.filter(page => !page.ocrItems);
+    if (!outstanding.length) { state.ocrRead = true; return; }
     // The reader is about seven megabytes and is fetched the first time it is
     // wanted. Without saying so, the first page looks like a hang.
+    const alreadyDone = total - outstanding.length;
     busy(true, state.ocrLoaded
-      ? (total === 1 ? 'Reading the page…' : 'Reading page 1 of ' + total + '…')
-      : 'Fetching the page reader — about 7 MB, once…');
+      ? 'Page ' + (alreadyDone + 1) + ' of ' + total
+      : 'Fetching the page reader — about 7 MB, once…',
+      alreadyDone, total);
+    allowPause();
 
     const read = await Ocr.readPages(
-      state.pages.map(page => page.source),
-      (done) => busy(true, done >= total
-        ? 'Reading the last page…'
-        : 'Reading page ' + (done + 1) + ' of ' + total + '…'));
+      outstanding.map(page => page.source),
+      done => pageProgress(alreadyDone + done, total),
+      () => state.paused);
 
-    state.pages.forEach((page, i) => {
-      page.ocrItems = read[i] || [];
+    outstanding.forEach((page, i) => {
+      if (!read[i]) return;                 // not reached before the pause
+      page.ocrItems = read[i];
       const stitched = Ocr.stitch(page.ocrItems);
       page.ocrText = stitched.text;
       page.ocrPlaced = stitched.items;
     });
-    state.ocrRead = true;
     state.ocrLoaded = true;
+    state.ocrRead = state.pages.every(page => page.ocrItems);
   }
 
   // Terms found in what OCR read, as the same kind of proposal the picture
@@ -1115,14 +1185,18 @@
   // higher. So it is a control rather than a number chosen here, it starts
   // where the image search starts, and the reviewer moves it with the
   // reported scores in front of them.
-  // When a word's picture matches start looking like noise. Both have to be
-  // true: a big number on its own is fine in a long document where the word
-  // really is everywhere.
-  const PICTURE_GLUT = 12;
-  const PICTURE_RATIO = 3;
+  // The bar the shape fallback holds a word to.
+  //
+  // This was a slider. Reading the pages is what runs now, and reading has no
+  // threshold at all, so the control governed a method the reviewer almost
+  // never sees — and asked them to tune something they had no way to judge.
+  // The value is the one measured across three documents: every true
+  // occurrence of a three-letter name scored 0.679 or better on one page,
+  // while the best thing that was not the name scored 0.554.
+  const WORD_BAR = 0.66;
 
   function wordSensitivity() {
-    return Number(el('wordsens').value) / 100;
+    return WORD_BAR;
   }
 
   // The bar this particular word has to clear: the slider, less whatever its
@@ -1283,20 +1357,6 @@
       row.append(label, count);
       host.append(row);
 
-      // A word that matches as a picture far more often than it appears as
-      // text is matching the page, not the word, and a reviewer scanning a
-      // long document will not notice until the export is ruined. Short words
-      // are where this happens: "TDTC" matched 333 times in a deck where the
-      // full company name matched once.
-      if (pictures >= PICTURE_GLUT && pictures > Math.max(3, n * PICTURE_RATIO)) {
-        const warn = document.createElement('p');
-        warn.className = 'hint warnhint';
-        warn.textContent = 'That is a lot of picture matches: ' + pictures
-          + (n ? ', against ' + n + ' in the text' : ', with none in the text')
-          + '. Short words resemble a great deal of a page — raise "Word match" '
-          + 'until only the real ones are left.';
-        host.append(warn);
-      }
     }
   }
 
@@ -1631,6 +1691,8 @@
   el('termimages').checked = state.termImages;
   showWordControls();
 
+  el('busy-pause').addEventListener('click', requestPause);
+
   el('termimages').addEventListener('change', e => {
     state.termImages = e.target.checked;
     showWordControls();
@@ -1683,14 +1745,6 @@
     markPending();
     redrawAll();
   });
-  el('wordsens').addEventListener('input', () => {
-    el('wordsensvalue').textContent = wordSensitivity().toFixed(2);
-    clearTermImages();
-    state.searchedTerms = [];
-    renderTermCounts();
-    markPending();
-    redrawAll();
-  });
   el('export').addEventListener('click', exportFile);
   el('restart').addEventListener('click', () => {
     state.pages = [];
@@ -1717,5 +1771,6 @@
     sensitivity, wordSensitivity, wordBarFor,
     applyRedaction, markPending, plannedCount, pendingTemplates, termsNeedingPictures,
     readPages, matchOcr, ocrPending, showWordControls,
+    busy, pageProgress, requestPause,
     renderTermCounts };
 })();
