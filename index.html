@@ -6,7 +6,7 @@
 <title>Blinded – Efficient redaction for your most sensitive documents, all done locally</title>
 <meta name="description" content="Redact PDFs, images and text in your browser. The file never leaves your machine.">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="app.css?v=e2c37c44">
+<link rel="stylesheet" href="app.css?v=692ebef0">
 </head>
 <body>
 
@@ -117,6 +117,11 @@
             <p class="hint warnhint" id="ocrnote" hidden></p>
             <div id="sweepbox" hidden>
               <button type="button" id="sweep" class="ghost wide">Check every page by shape</button>
+              <div id="sweeprun" hidden>
+                <div class="sweepbar"><span id="sweepfill"></span></div>
+                <p class="hint" id="sweepprogress"></p>
+                <button type="button" id="sweepstop" class="ghost wide">Stop the check</button>
+              </div>
               <p class="hint doubthint" id="sweepnote"></p>
             </div>
           </div>
@@ -218,13 +223,13 @@
 <script src="lib/boxes.js?v=e1b41b2b"></script>
 <script src="lib/measure.js?v=3e3dc5dc"></script>
 <script src="lib/match.js?v=751a7759"></script>
-<script src="lib/imagesearch.js?v=5da1e335"></script>
+<script src="lib/imagesearch.js?v=1ea28907"></script>
 <script src="lib/ocr.js?v=d6ec7f84"></script>
-<script src="lib/textimage.js?v=90f2ba51"></script>
+<script src="lib/textimage.js?v=ba90cd37"></script>
 <script src="lib/pdfwrite.js?v=4b977425"></script>
 <script src="lib/pdfread.js?v=624c5ef9"></script>
 <script src="lib/render.js?v=7bf6e0a9"></script>
-<script src="app.js?v=1f0def9a"></script>
+<script src="app.js?v=b305aba9"></script>
 <script type="module">
   // pdf.js ships as an ES module; everything else here is a classic script, so
   // it is bridged onto the global the other modules already look for. Both the

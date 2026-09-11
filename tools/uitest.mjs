@@ -1648,19 +1648,35 @@ try {
       && offered.button === false, JSON.stringify(offered));
     // It is slow enough that springing it on someone would be a trap.
     check('the offer says how long it will take',
-      /about .*(second|minute)/.test(offered.note), JSON.stringify(offered.note));
+      /about \d+ (second|minute)s?\b/i.test(offered.note), JSON.stringify(offered.note));
+    check('and says the document stays usable while it runs',
+      /carry on reviewing/.test(offered.note), JSON.stringify(offered.note));
 
     // The sweep draws every typeface, not the two the old fallback used: the
     // whole reason to run it is that the reading was defeated by unusual type.
     const faces = await page.evaluate(() => {
+      const TI = window.BlindedTextImage;
       const B = window.Blinded;
       B.state.terms = ['KNW'];
       const entries = B.sweepTemplates();
-      return { count: entries.length, all: window.BlindedTextImage.FACES.length,
+      return { count: entries.length, all: TI.FACES.length,
+        used: TI.SWEEP_FACES.map(f => f.name),
         everyOneSmall: entries.every(e => e.smallText === true) };
     });
-    check('the sweep looks in every typeface',
-      faces.count === faces.all && faces.all === 8, JSON.stringify(faces));
+    // Two, not eight: eight was four times the cost for a second opinion on
+    // work the reading has already done well.
+    check('the sweep draws two typefaces per word, not all eight',
+      faces.count === 2 && faces.all === 8, JSON.stringify(faces));
+    // One upright and one slanted, because a single upright face misses
+    // italic captions outright.
+    check('one upright and one slanted',
+      faces.used.length === 2
+        && faces.used.filter(n => /italic/.test(n)).length === 1,
+      JSON.stringify(faces.used));
+    // Bold, which was measured: on rendered PDF text the regular-weight pair
+    // scored 0.56 and 0.33 against a threshold of 0.636 and found nothing.
+    check('and both are the heavier weight, which is what matches rendered ink',
+      faces.used.every(n => /bold/.test(n)), JSON.stringify(faces.used));
     check('and treats them all as small text, which is where reading fails',
       faces.everyOneSmall === true, JSON.stringify(faces));
 
@@ -1739,6 +1755,45 @@ try {
       B.state.terms = [];
       return out;
     });
+    // It runs in the background: no overlay, an inline bar, and the page keeps
+    // painting. A reviewer reported the tab going unresponsive with no bar at
+    // all, which was the greyscale for every page being made on the main
+    // thread before it was handed to a worker.
+    const background = await page.evaluate(async () => {
+      const B = window.Blinded;
+      const p = B.state.pages[0];
+      B.state.terms = ['Parkway'];
+      B.state.applied = true;
+      p.imageHits = [];
+      p.hits = [];
+
+      let frames = 0;
+      let overlay = false;
+      let inlineBar = false;
+      let running = true;
+      const tick = () => {
+        frames++;
+        if (!document.getElementById('busy').hidden) overlay = true;
+        if (!document.getElementById('sweeprun').hidden) inlineBar = true;
+        if (running) requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+      await B.runSweep();
+      running = false;
+      const out = { frames, overlay, inlineBar };
+      p.imageHits = [];
+      B.state.sweptTerms = [];
+      B.state.terms = [];
+      return out;
+    });
+    check('the sweep does not put the blocking overlay up',
+      background.overlay === false, JSON.stringify(background));
+    check('it shows its progress in the panel instead',
+      background.inlineBar === true, JSON.stringify(background));
+    // If the main thread were doing the pixel work, frames would not be drawn.
+    check('and the page keeps painting while it runs',
+      background.frames >= 5, JSON.stringify(background));
+
     check('the sweep finds a word that is really on the page',
       swept.added >= 1 && swept.marks === swept.added, JSON.stringify(swept));
     check('and every mark it adds is flagged as its own',
@@ -1747,6 +1802,46 @@ try {
       JSON.stringify(swept.note));
     check('and stops offering itself for the same words',
       swept.buttonGone === true, JSON.stringify(swept));
+
+    // The sweep costs minutes. Editing one word and pressing Redact used to
+    // throw away everything it found, while the note still said the marks
+    // were on the page — the reading pass rebuilt the term marks from scratch
+    // and took the sweep's with them.
+    const kept = await page.evaluate(async () => {
+      const B = window.Blinded;
+      const p = B.state.pages[0];
+      const planted = { id: 'sweep:Parkway:0:900:900', term: 'Parkway',
+        rect: { x: 900, y: 900, w: 120, h: 30 }, score: 1, bySweep: true };
+      B.state.terms = ['Parkway'];
+      B.state.sweptTerms = ['Parkway'];
+      B.state.sweepAdded = 1;
+      p.imageHits = [planted];
+
+      // Adding a word keeps what the sweep found for the words already there.
+      B.state.terms = ['Parkway', 'Amphitheatre'];
+      B.matchOcr();
+      const afterRescan = p.imageHits.filter(m => m.bySweep).length;
+
+      // Deleting the word it belongs to does not.
+      const box = document.getElementById('terms');
+      const was = box.value;
+      box.value = 'Amphitheatre';
+      box.dispatchEvent(new Event('input', { bubbles: true }));
+      await new Promise(r => setTimeout(r, 400));
+      const afterDelete = p.imageHits.filter(m => m.bySweep).length;
+
+      box.value = was;
+      box.dispatchEvent(new Event('input', { bubbles: true }));
+      await new Promise(r => setTimeout(r, 400));
+      p.imageHits = [];
+      B.state.sweptTerms = [];
+      B.state.terms = [];
+      return { afterRescan, afterDelete };
+    });
+    check('a mark the sweep found survives a rerun of the reading',
+      kept.afterRescan === 1, JSON.stringify(kept));
+    check('but not the deletion of the word it belongs to',
+      kept.afterDelete === 0, JSON.stringify(kept));
   }
 
   // ---------- every long pass reports the same way ----------

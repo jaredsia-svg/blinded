@@ -96,6 +96,9 @@
     // what it added when it did.
     sweptTerms: [],
     sweepAdded: 0,
+    sweepRunning: false,
+    sweepStopped: false,
+    sweepReached: 0,
     // Per page: the words OCR read, and the text they stitch into.
     ocrRead: false,
     // Terms whose picture search has already run, so pressing Redact twice
@@ -356,6 +359,8 @@
     state.useOcr = true;
     state.sweptTerms = [];
     state.sweepAdded = 0;
+    state.sweepStopped = false;
+    state.sweepReached = 0;
     state.pages = pages.map(p => ({
       ...p,
       source: p.canvas,          // pristine; never drawn on
@@ -662,7 +667,10 @@
   }
 
   function describeTime(seconds) {
-    if (seconds < 90) return Math.max(1, Math.round(seconds)) + ' seconds';
+    if (seconds < 90) {
+      const whole = Math.max(1, Math.round(seconds));
+      return whole + (whole === 1 ? ' second' : ' seconds');
+    }
     const minutes = Math.round(seconds / 60);
     return minutes + (minutes === 1 ? ' minute' : ' minutes');
   }
@@ -672,7 +680,12 @@
   // written occurrences and duplicates are folded together.
   function matchOcr() {
     for (const page of state.pages) {
-      page.imageHits = page.imageHits.filter(m => !m.term);
+      // Everything this function owns is rebuilt from the current terms, so
+      // the old set goes first — but the thorough sweep's marks are not this
+      // function's to throw away. They cost minutes to find, and wiping them
+      // here meant a reviewer who edited one word and pressed Redact lost
+      // every amber mark while the note still said they were on the page.
+      page.imageHits = page.imageHits.filter(m => !m.term || m.bySweep);
       if (!page.ocrText) continue;
       const spans = Detect.resolveOverlaps(Detect.findTerms(page.ocrText, state.terms));
       for (const span of spans) {
@@ -1895,9 +1908,15 @@
     termsTimer = setTimeout(() => {
       const next = el('terms').value.split('\n').map(s => s.trim()).filter(Boolean);
       // A word that is no longer listed should not keep its picture matches.
-      const gone = state.searchedTerms.filter(term => !next.includes(term));
+      // A word that is no longer listed should not keep its picture matches,
+      // whichever pass found them — the sweep's included, since an amber mark
+      // for a word the reviewer has just deleted is a mark they never asked
+      // for.
+      const looked = [...new Set(state.searchedTerms.concat(state.sweptTerms))];
+      const gone = looked.filter(term => !next.includes(term));
       if (gone.length) {
         state.searchedTerms = state.searchedTerms.filter(term => next.includes(term));
+        state.sweptTerms = state.sweptTerms.filter(term => next.includes(term));
         for (const page of state.pages) {
           page.imageHits = page.imageHits.filter(m => !m.term || next.includes(m.term));
         }
@@ -1916,6 +1935,17 @@
 
   el('busy-pause').addEventListener('click', requestPause);
   el('sweep').addEventListener('click', runSweep);
+  el('sweepstop').addEventListener('click', () => {
+    state.sweepStopped = true;
+    el('sweepprogress').textContent = 'Stopping\u2026';
+  });
+
+  // How long a sweep takes, per megapixel of page, per word.
+  //
+  // Measured, not guessed: 96 pages of 1.94 megapixels for one word took 66.8
+  // seconds on four cores, which is 0.36. It was four times that when the
+  // sweep drew eight typefaces instead of two.
+  const SWEEP_SECONDS_PER_MP = 0.36;
 
   // ---------- the thorough sweep ----------
   //
@@ -1939,12 +1969,16 @@
   //
   // It is slow, which is why it is a button and not the default.
 
-  // Every typed word, in all eight typefaces, whether or not it has been
-  // looked for already: the point is to look again, harder.
+  // Every typed word, in two typefaces, whether or not it has been looked for
+  // already: the point is to look again, differently.
+  //
+  // Eight at first, one for every face the tool can draw. That was four times
+  // the cost for a second opinion on work the reader has already done well.
+  // Which two, and why bold, is measured in lib/textimage.js.
   function sweepTemplates() {
     const entries = [];
     for (const term of state.terms) {
-      TextImage.templatesFor(term, TextImage.FACES).forEach((template, i) => {
+      TextImage.templatesFor(term, TextImage.SWEEP_FACES).forEach((template, i) => {
         entries.push({
           key: 'sweep:' + term + ':' + i, template, term,
           threshold: wordBarFor(term),
@@ -1972,32 +2006,45 @@
   }
 
   async function runSweep() {
+    if (state.sweepRunning) return 0;
     const entries = sweepTemplates();
     if (!entries.length) return 0;
+    // Which words this run is answering. The reviewer can edit the list while
+    // it runs, and a mark for a word they have since deleted is a mark they
+    // never asked for, so the answer is filtered against the list as it stands
+    // when the run finishes rather than as it stood when it started.
+    const asked = state.terms.slice();
 
-    state.paused = false;
-    busy(true, 'Working…');
-    legs([{ key: 'sweep', label: 'Checking every page by shape', total: state.pages.length }]);
-    allowPause();
+    // No overlay. Every other long pass in this tool blocks the document
+    // because nothing useful can be done while it runs; this one is a second
+    // opinion on a redaction that already exists, so the reviewer keeps the
+    // document and a bar in the panel says how far it has got.
+    state.sweepRunning = true;
+    state.sweepStopped = false;
+    sweepProgress(0, state.pages.length);
+    renderSweep();
 
     let results;
     try {
       results = await ImageSearch.searchAllParallel(state.pages, entries,
-        { threshold: sensitivity() },
-        done => leg('sweep', done));
+        { threshold: sensitivity(), stop: () => state.sweepStopped },
+        done => sweepProgress(done, state.pages.length));
     } catch (error) {
-      busy(false);
+      state.sweepRunning = false;
+      renderSweep();
       alert('The thorough check could not finish: '
         + (error && error.message ? error.message : error));
       return 0;
-    } finally {
-      busy(false);
     }
+
+    const reached = typeof results.stoppedAfter === 'number'
+      ? results.stoppedAfter : state.pages.length;
 
     // Several typefaces finding the same word in the same place is one find,
     // so they are pooled per page and suppressed before anything is proposed.
     let added = 0;
     for (const term of new Set(entries.map(e => e.term))) {
+      if (!state.terms.includes(term)) continue;
       const perPage = new Map();
       for (const entry of entries.filter(e => e.term === term)) {
         const found = results.get(entry.key);
@@ -2026,8 +2073,13 @@
       }
     }
 
-    state.sweptTerms = state.terms.slice();
+    state.sweepRunning = false;
+    // A run that was stopped part way has not answered the document, so it
+    // does not get to claim it has: the offer stands, and the note says how
+    // far it reached.
+    state.sweptTerms = state.sweepStopped ? [] : asked.filter(t => state.terms.includes(t));
     state.sweepAdded = added;
+    state.sweepReached = reached;
     // New marks are not yet covered, so the document is no longer redacted.
     if (added) markPending();
     markDuplicates();
@@ -2037,6 +2089,18 @@
     redrawAll();
     refreshApply();
     return added;
+  }
+
+  function sweepProgress(done, total) {
+    state.sweepDone = done;
+    state.sweepTotal = total;
+    const fill = el('sweepfill');
+    if (fill) fill.style.width = (total ? (done / total) * 100 : 0).toFixed(1) + '%';
+    const line = el('sweepprogress');
+    if (line) {
+      line.textContent = 'Checking page ' + Math.min(done + 1, total) + ' of ' + total
+        + ' \u2014 you can carry on reviewing.';
+    }
   }
 
   // The button, and what it says afterwards.
@@ -2061,28 +2125,42 @@
       && state.terms.length && state.kind !== 'text');
     if (box.hidden) return;
 
+    const running = el('sweeprun');
+    running.hidden = !state.sweepRunning;
+    if (state.sweepRunning) {
+      button.hidden = true;
+      note.textContent = '';
+      return;
+    }
+
     if (!swept) {
       button.hidden = false;
       button.textContent = 'Check every page by shape';
       // Honest about the cost, because it is the whole reason this is a
       // button rather than the default.
       //
-      // Measured, on pages the size of a real slide (1224x1584, about two
-      // megapixels): one word in eight typefaces took 7.9 seconds on a single
-      // dense page of text and 3.3 seconds a page across two lighter ones,
-      // the difference being parallelism and how much of the page survives
-      // the coarse pass. A second word roughly doubles it. So the estimate is
-      // scaled by the document's own page size rather than assuming one, and
-      // 2.5 seconds per megapixel per word sits between the two measurements.
+      // Scaled by the document's own page size rather than assuming one.
       const first = state.pages[0];
       const megapixels = first ? (first.source.width * first.source.height) / 1e6 : 2;
       const seconds = Math.round(
-        state.pages.length * state.terms.length * megapixels * 2.5);
+        state.pages.length * state.terms.length * megapixels * SWEEP_SECONDS_PER_MP);
+      if (state.sweepStopped && state.sweepReached) {
+        note.textContent = 'Stopped after ' + state.sweepReached
+          + ' of ' + state.pages.length + ' pages'
+          + (state.sweepAdded
+            ? ', having added ' + state.sweepAdded
+              + (state.sweepAdded === 1 ? ' mark' : ' marks') + ' in amber. '
+            : ', having found nothing new. ')
+          + 'Start it again to check the whole document \u2014 about '
+          + describeTime(seconds) + '.';
+        return;
+      }
       note.textContent = 'The reader finds words by recognising letters, which '
         + 'means unusual type can defeat it. This searches every page for the '
         + 'shape of ' + (state.terms.length === 1 ? 'your word' : 'each word')
-        + ' instead, in eight typefaces, and adds anything it finds in amber. '
-        + 'Slow: about ' + describeTime(seconds) + ' for this document.';
+        + ' instead, upright and slanted, and adds anything it finds in amber. '
+        + 'About ' + describeTime(seconds) + ' for this document, and you can '
+        + 'carry on reviewing while it runs.';
       return;
     }
 
@@ -2176,7 +2254,7 @@
     sensitivity, wordSensitivity, wordBarFor, setTool, marking,
     applyRedaction, markPending, plannedCount, pendingTemplates, termsNeedingPictures,
     readPages, matchOcr, ocrPending, ocrMatchStale, showWordControls,
-    sweepTemplates, runSweep, renderSweep, alreadyCovered,
+    sweepTemplates, runSweep, renderSweep, alreadyCovered, sweepProgress,
     redrawAll, legs, leg, busyNote,
     describeTime,
     busy, pageProgress, requestPause,

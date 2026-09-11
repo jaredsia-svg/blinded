@@ -518,3 +518,19 @@ code {
   background: rgba(217, 45, 32, .13); color: var(--ink);
   box-shadow: inset 0 0 0 1.5px #d92d20; border-radius: 2px;
 }
+
+/* ---------- the thorough check, running in the background ---------- */
+/*
+   Deliberately not the overlay every other long pass uses. Those block the
+   document because nothing sensible can be done while they run; this one is a
+   second opinion on a redaction that already exists, so the reviewer can carry
+   on reading while it works. A bar in the panel says how far it has got.
+*/
+.sweepbar {
+  height: 5px; border-radius: 3px; background: var(--line);
+  overflow: hidden; margin: 10px 0 6px;
+}
+.sweepbar span {
+  display: block; height: 100%; width: 0;
+  background: var(--accent); transition: width .2s linear;
+}

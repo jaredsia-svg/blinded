@@ -223,12 +223,27 @@ Spots already marked are not proposed again, or the handful of genuine
 additions would be buried in hundreds of duplicates — which is exactly how the
 old list failed.
 
-It is slow, which is why it is a button. Measured on pages the size of a real
-slide, about two megapixels: one word in eight typefaces took 7.9 seconds on a
-single dense page of text, and 3.3 seconds a page across two lighter ones, the
-difference being parallelism and how much of each page survives the coarse
-pass. A second word roughly doubles it. The panel states the estimate for the
-document actually open, scaled by its own page size.
+It runs in the background. Every other long pass in this tool blocks the
+document, because nothing useful can be done while it runs; this one is a
+second opinion on a redaction that already exists, so the panel shows a bar and
+the reviewer keeps the document. It can be stopped, and what it found by then
+is kept.
+
+Two typefaces, not eight, and bold ones. Eight was four times the cost for a
+second opinion on work the reader has already done well: 96 pages of one word
+went from 271 seconds to 67. Which two was measured rather than assumed —
+searching a rendered PDF of ordinary Helvetica text for "Parkway", face by
+face, sans bold scored 0.83 and sans bold italic 0.74, both over the bar, while
+sans regular managed 0.56 and sans italic 0.33 against a threshold of 0.636.
+The regular-weight pair would have found nothing. Ink thickens when a page is
+rasterised and then resampled for the coarse pass, so a heavier template is
+closer to what the matcher actually sees; one upright and one slanted, because
+a single upright face misses italic captions outright.
+
+The pixels are converted to greyscale inside the worker, from an ImageBitmap,
+rather than on the main thread before the hand-off. That was reported as the
+tab going unresponsive with no progress bar at all: on 96 pages it was stalling
+the main thread for half a second at a time.
 
 If the reader cannot be loaded at all, the words are hunted for by shape
 instead and the panel says so. That is the older method, kept as the fallback:
