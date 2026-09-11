@@ -593,3 +593,15 @@ tools/            the two test suites, a fixture builder, a static server
 ## Licence
 
 pdf.js in `vendor/` is Apache-2.0; its licence is alongside it.
+
+## Asset stamps
+
+`index.html` links its stylesheet and scripts with a `?v=` hash of the file
+they point at. Without it a browser that loaded the tool earlier keeps its
+cached copy, and the two halves of a change arrive separately — new markup
+against old styling, or new styling against old behaviour. That was reported
+from the field: a toolbar that showed its screen-reader labels and a hand tool
+that looked selected and did nothing.
+
+Run `node tools/stamp.mjs` after editing any asset. The test suite fails if the
+stamps are stale, so it cannot be forgotten.

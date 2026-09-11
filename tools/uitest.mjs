@@ -11,6 +11,7 @@ import { dirname, extname, join, normalize, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { chromium } from 'playwright';
+import { isStale } from './stamp.mjs';
 import { buildTextPdf, buildReadablePdf, buildLogoPdf, LOGO_PLACEMENTS,
   buildWordmarkPdf, WORDMARK_PLACEMENTS, WORDMARK_ASPECT,
   buildSmallLogoPdf, SMALL_LOGO_PLACEMENTS, WORDMARK_BOX,
@@ -267,6 +268,15 @@ try {
     window.Blinded.state.pages[0].findings.filter(f => f.kind === 'term').length);
   check('a listed name is found in the page text', termHits >= 1, String(termHits));
 
+  // Stale assets are a real failure mode, not a theoretical one: a reviewer
+  // whose browser had yesterday's app.css got today's markup styled by
+  // yesterday's rules, which drew the screen-reader labels the styling exists
+  // to hide and left the selected tool looking unselected. The links carry a
+  // hash of what they point at so the URL changes when the file does. This
+  // fails if an asset was edited without re-running tools/stamp.mjs.
+  check('every asset link is stamped with what it points at',
+    isStale() === false, 'run: node tools/stamp.mjs');
+
   // ---------- what dragging does ----------
   //
   // Asserted here, before any test has chosen a tool, because what is being
@@ -282,6 +292,131 @@ try {
   check('and the toolbar says which tool is holding',
     startsPanning.pan === 'true' && startsPanning.mark === 'false',
     JSON.stringify(startsPanning));
+
+  // Four icons in a 320px panel. Words did not fit: the row overflowed and the
+  // last controls could only be reached by scrolling sideways, which is how
+  // this was reported. Sizes are asserted rather than eyeballed.
+  const bar = await page.evaluate(() => {
+    const tools = document.querySelector('.tools').getBoundingClientRect();
+    const panel = document.querySelector('.panel').getBoundingClientRect();
+    const ids = ['tool-pan', 'tool-mark', 'undo', 'restart'];
+    const buttons = ids.map(id => document.getElementById(id));
+    return {
+      count: document.querySelectorAll('.tools .tool').length,
+      fits: tools.right <= panel.right + 0.5 && tools.left >= panel.left - 0.5,
+      pageOverflow: document.documentElement.scrollWidth
+        - document.documentElement.clientWidth,
+      panelOverflow: document.querySelector('.panel').scrollWidth
+        - document.querySelector('.panel').clientWidth,
+      // Every one explains itself to a pointer, since nothing is written on it.
+      titles: buttons.map(b => (b.getAttribute('title') || '').length),
+      // And to a screen reader, without that text being drawn.
+      labels: buttons.map(b => (b.querySelector('.sr-only')?.textContent || '').trim()),
+      // Both halves matter. A 1px box still paints its text all over the
+      // button unless the overflow is actually clipped — removing the clip
+      // and leaving the size was the exact shape of the reported bug, and it
+      // passed a test that only measured the box.
+      labelWidths: buttons.map(b => {
+        const span = b.querySelector('.sr-only');
+        return span ? Math.round(span.getBoundingClientRect().width) : -1;
+      }),
+      labelClipped: buttons.map(b => {
+        const span = b.querySelector('.sr-only');
+        if (!span) return false;
+        const style = getComputedStyle(span);
+        return style.overflow === 'hidden'
+          && span.scrollWidth > span.clientWidth;
+      }),
+      widths: buttons.map(b => Math.round(b.getBoundingClientRect().width)),
+      heights: buttons.map(b => Math.round(b.getBoundingClientRect().height)),
+    };
+  });
+  check('the toolbar is four buttons', bar.count === 4, JSON.stringify(bar.count));
+
+  // The header is pinned, and the sentence explaining what dragging does sits
+  // with the buttons that change it rather than at the foot of the panel.
+  const chrome = await page.evaluate(async () => {
+    const top = document.querySelector('.top');
+    const resting = top.getBoundingClientRect();
+    window.scrollTo(0, 500);
+    await new Promise(r => requestAnimationFrame(r));
+    const scrolledTo = window.scrollY;
+    const moved = top.getBoundingClientRect();
+    const panel = document.querySelector('.panel').getBoundingClientRect();
+    // Read from the computed style, not from a rect measured mid-scroll: the
+    // body's own box has moved by then, which says nothing about the room
+    // reserved at the top of it.
+    const pad = parseFloat(getComputedStyle(document.body).paddingTop);
+    // The offset it sticks at, not where it happens to be: on a document
+    // short enough that the column runs out, sticky legitimately lets the
+    // panel ride up with its parent, and where it lands then says nothing
+    // about whether it would sit under the header.
+    const panelStick = parseFloat(getComputedStyle(
+      document.querySelector('.panel')).top);
+    const panelTop = panel.top;
+    const headerBottom = moved.bottom;
+    window.scrollTo(0, 0);
+    return {
+      height: Math.round(resting.height),
+      atTopBefore: Math.round(resting.top),
+      atTopAfter: Math.round(moved.top),
+      // Proof the page really scrolled, so "it did not move" means something.
+      scrolledTo,
+      pad, panelTop: Math.round(panelTop), panelStick,
+      headerBottom: Math.round(headerBottom),
+      // Nothing starts underneath it.
+      roomReserved: pad >= Math.round(moved.height) - 1,
+      panelClear: panelStick >= Math.round(moved.height),
+      tipUnderTheIcons: !!document.querySelector('.panel-head .tools + #tip'),
+      tipText: (document.getElementById('tip').textContent || '').trim().slice(0, 30),
+    };
+  });
+  check('the header stays at the top when the document is scrolled',
+    chrome.atTopBefore === 0 && chrome.atTopAfter === 0 && chrome.scrolledTo >= 400,
+    JSON.stringify(chrome));
+  check('and it is thin, because pinned space is space the document loses',
+    chrome.height <= 52, JSON.stringify(chrome));
+  check('the page reserves exactly the room the header takes',
+    chrome.roomReserved === true, JSON.stringify(chrome));
+  check('and the panel beside it sticks below it, not under it',
+    chrome.panelClear === true, JSON.stringify(chrome));
+  check('the note about dragging sits directly under the four icons',
+    chrome.tipUnderTheIcons === true, JSON.stringify(chrome));
+
+  check('and they fit inside the panel without scrolling sideways',
+    bar.fits && bar.pageOverflow === 0 && bar.panelOverflow === 0, JSON.stringify(bar));
+  check('every one is the same size, so the row cannot be stretched by its text',
+    new Set(bar.widths).size === 1 && new Set(bar.heights).size === 1,
+    JSON.stringify(bar));
+  check('none of them draws its words on screen',
+    bar.labelWidths.every(w => w >= 0 && w <= 2)
+      && bar.labelClipped.every(Boolean), JSON.stringify(bar));
+  check('but every one still carries those words for a screen reader',
+    bar.labels.every(l => l.length > 3), JSON.stringify(bar.labels));
+  check('and a tooltip that says what it does',
+    bar.titles.every(n => n > 10), JSON.stringify(bar.titles));
+
+  // Selected has to be darker, not merely different: on a pale panel a pale
+  // highlight does not answer "which one is holding" at a glance.
+  const shade = await page.evaluate(() => {
+    const B = window.Blinded;
+    const lum = id => {
+      const c = getComputedStyle(document.getElementById(id)).backgroundColor;
+      const [r, g, b] = c.match(/[\d.]+/g).map(Number);
+      return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    };
+    B.setTool('pan');
+    const held = lum('tool-pan');
+    const idle = lum('tool-mark');
+    B.setTool('mark');
+    const swapped = { held: lum('tool-mark'), idle: lum('tool-pan') };
+    B.setTool('pan');
+    return { held, idle, swapped };
+  });
+  check('the selected tool is darkened',
+    shade.held < shade.idle - 60, JSON.stringify(shade));
+  check('and the darkening follows the selection',
+    shade.swapped.held < shade.swapped.idle - 60, JSON.stringify(shade));
 
   // ---------- clicking a box turns it off, and back on ----------
   const before = await page.evaluate(() => window.Blinded.state.pages[0].dismissed.size);
@@ -535,26 +670,32 @@ try {
 
   // And that it does the thing it exists to do. Drawing no box is only half of
   // it; a hand tool that marks nothing and moves nothing is just a dead page.
-  const moved = await page.evaluate(() => {
-    const B = window.Blinded;
-    B.setTool('pan');
-    const p = B.state.pages[0];
-    const rect = p.canvas.getBoundingClientRect();
-    const send = (type, clientX, clientY) => p.canvas.dispatchEvent(
-      new PointerEvent(type, { clientX, clientY, bubbles: true, pointerId: 72 }));
-    window.scrollTo(0, 200);
-    const from = window.scrollY;
-    // Upwards on the screen, which walks the document downwards.
-    send('pointerdown', rect.left + 50, rect.top + 150);
-    send('pointermove', rect.left + 50, rect.top + 100);
-    send('pointerup', rect.left + 50, rect.top + 100);
-    const to = window.scrollY;
-    window.scrollTo(0, 0);
-    B.setTool('mark');
-    return { from, to };
-  });
+  //
+  // Driven with a real mouse rather than dispatched events. The synthetic kind
+  // does not exercise pointer capture, which is what holds a drag together
+  // when the pointer leaves the canvas, and a hand tool that fails only under
+  // a real hand would pass a synthetic test every time.
+  await page.evaluate(() => { window.Blinded.setTool('pan'); window.scrollTo(0, 0); });
+  const canvasBox = await page.locator('.page canvas').first().boundingBox();
+  const beforeDrag = await page.evaluate(() => window.scrollY);
+  const boxesBeforeDrag = await page.evaluate(() =>
+    window.Blinded.state.pages.reduce((n, p) => n + p.manual.length, 0));
+  await page.mouse.move(canvasBox.x + canvasBox.width / 2, canvasBox.y + 260);
+  await page.mouse.down();
+  // Upwards on the screen, which walks the document downwards.
+  for (let i = 1; i <= 10; i++) {
+    await page.mouse.move(canvasBox.x + canvasBox.width / 2, canvasBox.y + 260 - i * 20);
+  }
+  await page.mouse.up();
+  const moved = await page.evaluate(() => ({
+    to: window.scrollY,
+    boxes: window.Blinded.state.pages.reduce((n, p) => n + p.manual.length, 0),
+  }));
+  await page.evaluate(() => { window.scrollTo(0, 0); window.Blinded.setTool('mark'); });
   check('and dragging with it moves the pages',
-    moved.to > moved.from, JSON.stringify(moved));
+    moved.to > beforeDrag, JSON.stringify({ from: beforeDrag, ...moved }));
+  check('and a real drag across a page leaves no mark behind',
+    moved.boxes === boxesBeforeDrag, JSON.stringify({ boxesBeforeDrag, ...moved }));
 
 
   // A search that finds nothing must say what it nearly found. "0 found" on

@@ -6,7 +6,7 @@
 <title>Blinded – Efficient redaction for your most sensitive documents, all done locally</title>
 <meta name="description" content="Redact PDFs, images and text in your browser. The file never leaves your machine.">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="app.css">
+<link rel="stylesheet" href="app.css?v=e2c37c44">
 </head>
 <body>
 
@@ -77,20 +77,32 @@
       <aside class="panel">
         <div class="panel-head">
           <h2 id="doc-name">document</h2>
-          <div class="head-actions">
-            <div class="tools" role="group" aria-label="What dragging does">
-              <button type="button" id="tool-pan" class="tool" aria-pressed="true"
-                title="Move the pages: drag to scroll, and clicking changes nothing">
-                <span aria-hidden="true">&#9995;</span><span class="sr-only">Move the pages</span>
-              </button>
-              <button type="button" id="tool-mark" class="tool" aria-pressed="false"
-                title="Mark the pages: drag to draw a box, click a mark to change your mind">
-                <span aria-hidden="true">&#10011;</span><span class="sr-only">Mark the pages</span>
-              </button>
-            </div>
-            <button type="button" id="undo" class="ghost" disabled title="Nothing to undo">Undo</button>
-            <button type="button" id="restart" class="ghost">New file</button>
+          <div class="tools" role="group" aria-label="Tools">
+            <button type="button" id="tool-pan" class="tool" aria-pressed="true"
+              title="Move the pages — drag to scroll. Nothing on a page changes.">
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="M7 12V7.5a1.5 1.5 0 0 1 3 0V12M10 11.5v-6a1.5 1.5 0 0 1 3 0V12M13 11.5v-5a1.5 1.5 0 0 1 3 0V12M16 12V9.5a1.5 1.5 0 0 1 3 0V15a6 6 0 0 1-6 6h-1a6 6 0 0 1-5.196-3L5 15.5a1.5 1.5 0 0 1 2.598-1.5L9 16"/>
+              </svg><span class="sr-only">Move the pages</span>
+            </button>
+            <button type="button" id="tool-mark" class="tool" aria-pressed="false"
+              title="Mark the pages — drag to draw a box, click a mark to change your mind.">
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="M12 3v18M3 12h18"/>
+              </svg><span class="sr-only">Mark the pages</span>
+            </button>
+            <button type="button" id="undo" class="tool" disabled title="Nothing to undo">
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="M4 9h11a5 5 0 0 1 0 10h-6M4 9l4-4M4 9l4 4"/>
+              </svg><span class="sr-only">Undo</span>
+            </button>
+            <button type="button" id="restart" class="tool" title="Open a different file">
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8zm0 0v5h5M12 11v6m-3-3h6"/>
+              </svg><span class="sr-only">Open a different file</span>
+            </button>
           </div>
+          <p class="tip" id="tip">Drag on a page to add a box. Click a mark to drop it.
+            Marks stay red until you press <strong>Redact</strong>.</p>
         </div>
 
         <details class="sect" open>
@@ -157,9 +169,6 @@
           </div>
         </details>
 
-        <p class="tip" id="tip">Drag on a page to add a box. Click a mark to drop it.
-          Marks stay red until you press <strong>Redact</strong>.</p>
-
         <div class="counts" id="counts"></div>
       </aside>
 
@@ -203,19 +212,19 @@
   </p>
 </footer>
 
-<script src="lib/schedule.js"></script>
-<script src="lib/detect.js"></script>
-<script src="lib/labels.js"></script>
-<script src="lib/boxes.js"></script>
-<script src="lib/measure.js"></script>
-<script src="lib/match.js"></script>
-<script src="lib/imagesearch.js"></script>
-<script src="lib/ocr.js"></script>
-<script src="lib/textimage.js"></script>
-<script src="lib/pdfwrite.js"></script>
-<script src="lib/pdfread.js"></script>
-<script src="lib/render.js"></script>
-<script src="app.js"></script>
+<script src="lib/schedule.js?v=50cdd235"></script>
+<script src="lib/detect.js?v=544483b9"></script>
+<script src="lib/labels.js?v=7da5cad6"></script>
+<script src="lib/boxes.js?v=e1b41b2b"></script>
+<script src="lib/measure.js?v=3e3dc5dc"></script>
+<script src="lib/match.js?v=751a7759"></script>
+<script src="lib/imagesearch.js?v=5da1e335"></script>
+<script src="lib/ocr.js?v=d6ec7f84"></script>
+<script src="lib/textimage.js?v=90f2ba51"></script>
+<script src="lib/pdfwrite.js?v=4b977425"></script>
+<script src="lib/pdfread.js?v=624c5ef9"></script>
+<script src="lib/render.js?v=7bf6e0a9"></script>
+<script src="app.js?v=1f0def9a"></script>
 <script type="module">
   // pdf.js ships as an ES module; everything else here is a classic script, so
   // it is bridged onto the global the other modules already look for. Both the
