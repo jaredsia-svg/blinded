@@ -1350,6 +1350,40 @@ try {
     check('reading is what does it', fresh.reading === true, JSON.stringify(fresh));
   }
 
+  // ---------- every long pass reports the same way ----------
+  //
+  // Rendering the pages, reading them, searching them and flattening them for
+  // export are four passes over the same document. Each used to announce
+  // itself differently, and only one of them had a bar.
+  {
+    if (await page.isVisible('#view-review')) await page.click('#restart');
+    await page.waitForSelector('#view-drop:not([hidden])');
+
+    const seen = page.evaluate(() => new Promise(resolve => {
+      const texts = [];
+      const withBar = [];
+      const watch = setInterval(() => {
+        const busy = document.getElementById('busy');
+        if (!busy.hidden) {
+          const t = document.getElementById('busy-text').textContent;
+          texts.push(t);
+          withBar.push(!document.getElementById('busy-bar').hidden);
+        }
+      }, 25);
+      setTimeout(() => { clearInterval(watch); resolve({ texts, withBar }); }, 2600);
+    }));
+    // Loading happens while that watcher runs.
+    await page.setInputFiles('#file', logoPath);
+    await page.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
+    const sample = await seen;
+    const pageLines = sample.texts.filter(t => /^Page \d+ of \d+$/.test(t));
+    check('rendering a document reports its pages like everything else',
+      pageLines.length > 0, JSON.stringify([...new Set(sample.texts)].slice(0, 4)));
+    check('and no pass announces itself in the old wording',
+      !sample.texts.some(t => /Rendering page|Flattening page|Searching for/.test(t)),
+      JSON.stringify([...new Set(sample.texts)].slice(0, 4)));
+  }
+
   // ---------- one bar for both passes ----------
   //
   // Reading the pages and searching them for a picked image are separate jobs,

@@ -204,8 +204,10 @@
       if (file.type === 'application/pdf' || /\.pdf$/i.test(file.name)) {
         busy(true, 'Reading the PDF…');
         const bytes = new Uint8Array(await file.arrayBuffer());
-        const pages = await PdfRead.load(bytes, (n, total) =>
-          busy(true, 'Rendering page ' + n + ' of ' + total + '…'));
+        // Every pass over the pages reports the same way: which page, and a
+        // bar. Three different sentences for three loops that all mean "this
+        // is taking a while" is three things to read instead of one.
+        const pages = await PdfRead.load(bytes, (n, total) => pageProgress(n - 1, total));
         startReview('pdf', file.name, pages);
       } else if (/^image\//.test(file.type) || /\.(png|jpe?g)$/i.test(file.name)) {
         busy(true, 'Reading the image…');
@@ -1508,7 +1510,7 @@
         const built = [];
 
         for (const page of state.pages) {
-          busy(true, 'Flattening page ' + (page.index + 1) + ' of ' + state.pages.length + '…');
+          pageProgress(page.index, state.pages.length);
           const boxes = activeBoxes(page);
           const flat = Render.flatten(page.source, boxes);
           built.push({
