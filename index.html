@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Blinded – Efficient redaction for your most sensitive documents</title>
+<title>Blinded – Efficient redaction for your most sensitive documents, all done locally</title>
 <meta name="description" content="Redact PDFs, images and text in your browser. The file never leaves your machine.">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="app.css">
@@ -13,7 +13,7 @@
 <header class="top">
   <div class="wrap top-inner">
     <div class="mark"><span class="bar"></span> Blinded</div>
-    <p class="claim" id="claim">Efficient redaction for your most sensitive documents.</p>
+    <p class="claim" id="claim">Efficient redaction for your most sensitive documents, all done locally.</p>
   </div>
 </header>
 
@@ -78,6 +78,16 @@
         <div class="panel-head">
           <h2 id="doc-name">document</h2>
           <div class="head-actions">
+            <div class="tools" role="group" aria-label="What dragging does">
+              <button type="button" id="tool-pan" class="tool" aria-pressed="true"
+                title="Move the pages: drag to scroll, and clicking changes nothing">
+                <span aria-hidden="true">&#9995;</span><span class="sr-only">Move the pages</span>
+              </button>
+              <button type="button" id="tool-mark" class="tool" aria-pressed="false"
+                title="Mark the pages: drag to draw a box, click a mark to change your mind">
+                <span aria-hidden="true">&#10011;</span><span class="sr-only">Mark the pages</span>
+              </button>
+            </div>
             <button type="button" id="undo" class="ghost" disabled title="Nothing to undo">Undo</button>
             <button type="button" id="restart" class="ghost">New file</button>
           </div>

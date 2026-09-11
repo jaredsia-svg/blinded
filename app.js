@@ -39,6 +39,15 @@
     // 'box' draws a redaction; 'pick' cuts a logo to search for. One drag
     // gesture, two meanings, so the mode is always visible on the page itself.
     mode: 'box',
+    // What a drag on a page does when no logo is being picked: 'pan' moves the
+    // document, 'mark' draws a box.
+    //
+    // Panning is the default because reading comes before marking. With
+    // dragging always meaning "draw", the only way to scroll a long document
+    // was to keep the pointer off the pages entirely, and a drag that strayed
+    // onto one left a box behind — on a confidential document, a stray mark
+    // that covers something is a worse accident than a stray scroll.
+    tool: 'pan',
     // Placeholder labelling. Off by default: the plain black bar is still the
     // right output for most documents, and labels are a deliberate choice to
     // publish a little structure about what was removed.
@@ -1546,8 +1555,18 @@
 
   // ---------- drawing and clicking on a page ----------
 
+  // Is this drag drawing a box, or moving the page?
+  //
+  // Picking a logo is always a drag-a-box gesture whatever the tool says: the
+  // reviewer has just pressed a button that asks them to draw one, and
+  // refusing to because the hand tool is selected would be obtuse.
+  function marking() {
+    return state.mode === 'pick' || state.tool === 'mark';
+  }
+
   function attachDrawing(page, canvas) {
     let start = null;
+    let panning = null;
 
     // Screen pixels and canvas pixels differ whenever the page is scaled to
     // fit, so every pointer position is converted before it is used.
@@ -1560,6 +1579,13 @@
     };
 
     canvas.addEventListener('pointerdown', event => {
+      if (!marking()) {
+        // Screen coordinates, not canvas ones: this moves the window, and the
+        // relationship between the two changes as it moves.
+        panning = { x: event.clientX, y: event.clientY };
+        try { canvas.setPointerCapture(event.pointerId); } catch { /* not fatal */ }
+        return;
+      }
       start = at(event);
       // Capture keeps a drag alive if the pointer leaves the canvas, but it
       // throws for a pointer the browser is not currently tracking. That must
@@ -1569,12 +1595,21 @@
     });
 
     canvas.addEventListener('pointermove', event => {
+      if (panning) {
+        window.scrollBy(panning.x - event.clientX, panning.y - event.clientY);
+        panning = { x: event.clientX, y: event.clientY };
+        return;
+      }
       if (!start) return;
       const now = at(event);
       drawPage(page, Boxes.rectFromDrag(start.x, start.y, now.x, now.y));
     });
 
     canvas.addEventListener('pointerup', event => {
+      // A drag that moved the page leaves nothing behind, and neither does a
+      // click while the hand is held: nothing on the page changes unless the
+      // reviewer has asked for the tool that changes it.
+      if (panning) { panning = null; return; }
       if (!start) return;
       const end = at(event);
       const rect = Boxes.rectFromDrag(start.x, start.y, end.x, end.y);
@@ -1606,7 +1641,7 @@
       renderCounts();
     });
 
-    canvas.addEventListener('pointercancel', () => { start = null; drawPage(page); });
+    canvas.addEventListener('pointercancel', () => { start = null; panning = null; drawPage(page); });
   }
 
   // Click order matters: a hand-drawn box sits on top, so it is removed first;
@@ -1696,6 +1731,23 @@
     return Math.max(0.3, Math.round((wordSensitivity() - TextImage.shapeRelief(term)) * 1000) / 1000);
   }
 
+  function setTool(tool) {
+    state.tool = tool === 'mark' ? 'mark' : 'pan';
+    el('tool-pan').setAttribute('aria-pressed', String(state.tool === 'pan'));
+    el('tool-mark').setAttribute('aria-pressed', String(state.tool === 'mark'));
+    document.body.classList.toggle('tool-pan', state.tool === 'pan');
+    // Picking a logo has its own instruction and must not be written over.
+    if (state.mode !== 'pick') setTip();
+  }
+
+  function setTip() {
+    el('tip').textContent = state.mode === 'pick'
+      ? 'Drag a box around the logo you want found everywhere else.'
+      : state.tool === 'pan'
+        ? 'Drag to move the pages. To draw a box or drop a mark, choose the ✛ tool above.'
+        : 'Drag on a page to add a box. Click a mark to drop it. Marks stay red until you press Redact.';
+  }
+
   function setMode(mode) {
     state.mode = mode;
     const button = el('pick');
@@ -1704,9 +1756,7 @@
     for (const page of state.pages) {
       if (page.canvas) page.canvas.parentElement.classList.toggle('picking', mode === 'pick');
     }
-    el('tip').textContent = mode === 'pick'
-      ? 'Drag a box around the logo you want found everywhere else.'
-      : 'Drag on a page to add a box. Click a mark to drop it. Marks stay red until you press Redact.';
+    setTip();
   }
 
   // Cuts the picked region out of the page and searches every page for it.
@@ -2220,6 +2270,9 @@
   });
 
   el('pick').addEventListener('click', () => setMode(state.mode === 'pick' ? 'box' : 'pick'));
+  el('tool-pan').addEventListener('click', () => setTool('pan'));
+  el('tool-mark').addEventListener('click', () => setTool('mark'));
+  setTool(state.tool);
 
   el('labelling').addEventListener('change', e => {
     state.labelling = e.target.checked;
@@ -2285,7 +2338,7 @@
 
   window.Blinded = { state, rescan, loadFile, exportFile, setMode, addTemplate,
     undoLast, undoStack, applyLabels, labelItems, legendText, downloadKey,
-    sensitivity, wordSensitivity, wordBarFor,
+    sensitivity, wordSensitivity, wordBarFor, setTool, marking,
     applyRedaction, markPending, plannedCount, pendingTemplates, termsNeedingPictures,
     readPages, matchOcr, ocrPending, ocrMatchStale, showWordControls,
     findDoubts, checkDoubts, renderDoubts, couldBeTerm, widthCouldHold, bandsFor,

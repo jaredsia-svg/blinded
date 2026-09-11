@@ -267,9 +267,28 @@ try {
     window.Blinded.state.pages[0].findings.filter(f => f.kind === 'term').length);
   check('a listed name is found in the page text', termHits >= 1, String(termHits));
 
+  // ---------- what dragging does ----------
+  //
+  // Asserted here, before any test has chosen a tool, because what is being
+  // tested is the state a reviewer arrives in: one who never touches the
+  // toolbar cannot leave a mark on a confidential document by accident.
+  const startsPanning = await page.evaluate(() => ({
+    tool: window.Blinded.state.tool,
+    pan: document.getElementById('tool-pan').getAttribute('aria-pressed'),
+    mark: document.getElementById('tool-mark').getAttribute('aria-pressed'),
+  }));
+  check('dragging moves the pages until the reviewer chooses otherwise',
+    startsPanning.tool === 'pan', JSON.stringify(startsPanning));
+  check('and the toolbar says which tool is holding',
+    startsPanning.pan === 'true' && startsPanning.mark === 'false',
+    JSON.stringify(startsPanning));
+
   // ---------- clicking a box turns it off, and back on ----------
   const before = await page.evaluate(() => window.Blinded.state.pages[0].dismissed.size);
   const clicked = await page.evaluate(() => {
+    // Driving the pointer at a page is about marking, so it asks for the
+    // tool that marks: dragging moves the pages until told otherwise.
+    window.Blinded.setTool('mark');
     // Click the middle of a detection through the same coordinate path a real
     // pointer would take, so the scaling maths is under test too.
     const p = window.Blinded.state.pages[0];
@@ -289,6 +308,9 @@ try {
     (await page.textContent('#counts')).includes('turned off'));
 
   const restored = await page.evaluate(() => {
+    // Driving the pointer at a page is about marking, so it asks for the
+    // tool that marks: dragging moves the pages until told otherwise.
+    window.Blinded.setTool('mark');
     const p = window.Blinded.state.pages[0];
     const hit = p.hits.find(h => p.dismissed.has(h.finding.id));
     const r = hit.rects[0];
@@ -305,6 +327,9 @@ try {
 
   // ---------- dragging adds a box by hand ----------
   const manual = await page.evaluate(() => {
+    // Driving the pointer at a page is about marking, so it asks for the
+    // tool that marks: dragging moves the pages until told otherwise.
+    window.Blinded.setTool('mark');
     const p = window.Blinded.state.pages[0];
     const rect = p.canvas.getBoundingClientRect();
     const sx = rect.width / p.canvas.width;
@@ -376,6 +401,9 @@ try {
   // margin makes this a realistic hand-drawn pick rather than a perfect one.
   const first = LOGO_PLACEMENTS[0];
   await page.evaluate(({ x, y, size }) => {
+    // Driving the pointer at a page is about marking, so it asks for the
+    // tool that marks: dragging moves the pages until told otherwise.
+    window.Blinded.setTool('mark');
     const p = window.Blinded.state.pages[0];
     const S = 2, PAD = 3;
     const cx = x * S - PAD;
@@ -440,6 +468,9 @@ try {
 
   // A matched logo is a proposal like any other: clickable off and on.
   const afterClick = await page.evaluate(() => {
+    // Driving the pointer at a page is about marking, so it asks for the
+    // tool that marks: dragging moves the pages until told otherwise.
+    window.Blinded.setTool('mark');
     const p = window.Blinded.state.pages[0];
     const m = p.imageHits[0];
     const rect = p.canvas.getBoundingClientRect();
@@ -452,6 +483,80 @@ try {
   });
   check('an image match can be dismissed by clicking it', afterClick === 1, String(afterClick));
 
+  // What dragging does by default.
+  //
+  // A stray drag used to leave a box on a confidential document, because the
+  // only way to scroll was to keep the pointer off the pages. The hand tool is
+  // the default, and while it is held nothing on the page changes at all.
+  const handed = await page.evaluate(() => {
+    const B = window.Blinded;
+    B.setTool('pan');
+    const p = B.state.pages[0];
+    const rect = p.canvas.getBoundingClientRect();
+    const at = (px, py) => ({
+      clientX: rect.left + px * (rect.width / p.canvas.width),
+      clientY: rect.top + py * (rect.height / p.canvas.height),
+    });
+    const send = (type, px, py, extra) => p.canvas.dispatchEvent(
+      new PointerEvent(type, { ...at(px, py), ...extra, bubbles: true, pointerId: 71 }));
+
+    const boxes = p.manual.length;
+    const dropped = p.dismissed.size;
+
+    // A long drag across the page: with the marking tool this is a box.
+    send('pointerdown', 60, 60);
+    send('pointermove', 400, 400);
+    send('pointerup', 400, 400);
+
+    // And a click straight onto a live mark, which is how one is dismissed.
+    const m = p.imageHits.find(h => !p.dismissed.has(h.id));
+    let clicked = null;
+    if (m) {
+      const cx = m.rect.x + m.rect.w / 2;
+      const cy = m.rect.y + m.rect.h / 2;
+      send('pointerdown', cx, cy);
+      send('pointerup', cx, cy);
+      clicked = p.dismissed.has(m.id);
+    }
+    const out = { boxesBefore: boxes, boxesAfter: p.manual.length,
+      droppedBefore: dropped, droppedAfter: p.dismissed.size, clicked,
+      pressed: document.getElementById('tool-pan').getAttribute('aria-pressed'),
+      cursor: getComputedStyle(p.canvas).cursor };
+    B.setTool('mark');
+    return out;
+  });
+  check('dragging with the hand tool draws no box',
+    handed.boxesAfter === handed.boxesBefore, JSON.stringify(handed));
+  check('and clicking a mark with it does not drop the mark',
+    handed.clicked === false && handed.droppedAfter === handed.droppedBefore,
+    JSON.stringify(handed));
+  check('the hand tool shows a hand',
+    handed.cursor === 'grab', JSON.stringify(handed));
+
+  // And that it does the thing it exists to do. Drawing no box is only half of
+  // it; a hand tool that marks nothing and moves nothing is just a dead page.
+  const moved = await page.evaluate(() => {
+    const B = window.Blinded;
+    B.setTool('pan');
+    const p = B.state.pages[0];
+    const rect = p.canvas.getBoundingClientRect();
+    const send = (type, clientX, clientY) => p.canvas.dispatchEvent(
+      new PointerEvent(type, { clientX, clientY, bubbles: true, pointerId: 72 }));
+    window.scrollTo(0, 200);
+    const from = window.scrollY;
+    // Upwards on the screen, which walks the document downwards.
+    send('pointerdown', rect.left + 50, rect.top + 150);
+    send('pointermove', rect.left + 50, rect.top + 100);
+    send('pointerup', rect.left + 50, rect.top + 100);
+    const to = window.scrollY;
+    window.scrollTo(0, 0);
+    B.setTool('mark');
+    return { from, to };
+  });
+  check('and dragging with it moves the pages',
+    moved.to > moved.from, JSON.stringify(moved));
+
+
   // A search that finds nothing must say what it nearly found. "0 found" on
   // its own is indistinguishable from a broken feature, which is how this
   // behaved before.
@@ -463,6 +568,9 @@ try {
   // real reviewer makes — dragging across blank page.
   await page.click('#pick');
   await page.evaluate(() => {
+    // Driving the pointer at a page is about marking, so it asks for the
+    // tool that marks: dragging moves the pages until told otherwise.
+    window.Blinded.setTool('mark');
     const p = window.Blinded.state.pages[0];
     const rect = p.canvas.getBoundingClientRect();
     const sx = rect.width / p.canvas.width;
@@ -913,6 +1021,9 @@ try {
   await page.click('#pick');
 
   await page.evaluate(({ place, box }) => {
+    // Driving the pointer at a page is about marking, so it asks for the
+    // tool that marks: dragging moves the pages until told otherwise.
+    window.Blinded.setTool('mark');
     const p = window.Blinded.state.pages[0];
     const S = 2, PAD = 4;
     const { x, y } = place[0];
@@ -964,6 +1075,9 @@ try {
   await page.click('#pick');
 
   await page.evaluate(({ place, aspect }) => {
+    // Driving the pointer at a page is about marking, so it asks for the
+    // tool that marks: dragging moves the pages until told otherwise.
+    window.Blinded.setTool('mark');
     const p = window.Blinded.state.pages[0];
     const S = 2, PAD = 10;
     const { x, y, size } = place[0];
@@ -1018,6 +1132,9 @@ try {
     await page.isDisabled('#undo'));
 
   const drawBox = (id, x0, y0, x1, y1) => page.evaluate(({ id, x0, y0, x1, y1 }) => {
+    // Driving the pointer at a page is about marking, so it asks for the
+    // tool that marks: dragging moves the pages until told otherwise.
+    window.Blinded.setTool('mark');
     const p = window.Blinded.state.pages[0];
     const rect = p.canvas.getBoundingClientRect();
     const sx = rect.width / p.canvas.width;
@@ -1050,6 +1167,9 @@ try {
 
   // Dismissing a detection is a reviewer decision too, so it must be undoable.
   await page.evaluate(() => {
+    // Driving the pointer at a page is about marking, so it asks for the
+    // tool that marks: dragging moves the pages until told otherwise.
+    window.Blinded.setTool('mark');
     const p = window.Blinded.state.pages[0];
     const hit = p.hits.find(h => h.finding.kind === 'email');
     const r = hit.rects[0];

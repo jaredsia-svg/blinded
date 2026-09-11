@@ -152,13 +152,42 @@ body {
   overflow-y: auto;
 }
 .panel-head {
-  display: flex; justify-content: space-between; align-items: center; gap: 10px;
+  /* The file name sits on its own line above the buttons. Side by side, a
+     long name and five controls fought over one row and the name lost, being
+     the half that was ellipsised away. */
+  display: flex; flex-direction: column; align-items: stretch; gap: 8px;
   padding: 12px 14px; border-bottom: 1px solid var(--line);
   position: sticky; top: 0; background: var(--card); z-index: 2;
 }
 .panel-head h2 {
   font-size: 13.5px; margin: 0; font-weight: 650;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* ---------- what dragging does ---------- */
+/*
+   Dragging used to mean one thing: draw a box. That made the pages awkward to
+   read, because the only way to move down a long document without leaving a
+   mark somewhere was to keep the pointer off the page entirely. So dragging
+   now moves the pages by default, and marking is the mode you choose.
+*/
+.tools { display: flex; gap: 0; flex: none; margin-right: auto; }
+.tool {
+  font: inherit; font-size: 14px; line-height: 1;
+  padding: 6px 10px; background: var(--card); color: var(--ink);
+  border: 1px solid var(--line); cursor: pointer;
+}
+.tool:first-child { border-radius: var(--radius) 0 0 var(--radius); }
+.tool:last-child { border-radius: 0 var(--radius) var(--radius) 0; margin-left: -1px; }
+.tool[aria-pressed="true"] {
+  background: var(--accent); border-color: var(--accent); color: #fff;
+  position: relative; z-index: 1;
+}
+.tool:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
 }
 
 /* ---------- collapsible sections ---------- */
@@ -254,6 +283,9 @@ textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; border-
   border-radius: var(--radius); overflow: hidden; box-shadow: 0 1px 3px rgba(16, 22, 32, .06);
 }
 .page canvas { display: block; width: 100%; height: auto; cursor: crosshair; touch-action: none; }
+/* Moving, not marking: the pointer says so before anything is dragged. */
+.tool-pan .page canvas { cursor: grab; }
+.tool-pan .page canvas:active { cursor: grabbing; }
 .page .num {
   position: absolute; top: 8px; left: 8px; background: rgba(13,17,23,.75); color: #fff;
   font-size: 11px; padding: 2px 7px; border-radius: 20px; pointer-events: none;
@@ -371,7 +403,7 @@ button.wide.on { background: var(--accent); color: #fff; border-color: var(--acc
 /* Undo lives in the panel head, which is sticky, because an undo button you
    have to scroll to find is one you reach for after you have already scrolled
    past the mistake. */
-.head-actions { display: flex; gap: 6px; flex: none; }
+.head-actions { display: flex; gap: 6px; flex: none; align-items: center; }
 .head-actions button { white-space: nowrap; }
 
 /* ---------- placeholder labels and the legend ---------- */
