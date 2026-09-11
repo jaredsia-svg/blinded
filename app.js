@@ -1328,6 +1328,25 @@
   window.addEventListener('dragover', e => e.preventDefault());
   window.addEventListener('drop', e => e.preventDefault());
 
+  // Refreshing loses the document, and there is no recovering it.
+  //
+  // Everything lives in this tab by design: the file was never uploaded, so
+  // there is no copy on a server to reload from, and the work of picking
+  // terms, cropping logos and drawing boxes exists nowhere else. A reflexive
+  // Cmd-R throws all of it away silently. The browser's own confirmation is
+  // the only thing that can interrupt a reload, so ask for it whenever there
+  // is something to lose.
+  //
+  // Browsers ignore custom text here and show their own wording, so none is
+  // supplied. Chrome also requires preventDefault, while older browsers need
+  // returnValue set; both are done because neither is enough alone.
+  window.addEventListener('beforeunload', event => {
+    if (!state.pages.length) return undefined;
+    event.preventDefault();
+    event.returnValue = '';
+    return '';
+  });
+
   let termsTimer = null;
   el('terms').addEventListener('input', () => {
     clearTimeout(termsTimer);

@@ -91,13 +91,49 @@ try {
   // ---------- load ----------
   await page.goto(base);
   check('the drop view is the first thing shown', await page.isVisible('#view-drop'));
-  check('the privacy claim is on screen',
-    (await page.textContent('#claim')).includes('never uploaded'));
+  check('the header tagline is on screen',
+    (await page.textContent('#claim')).trim().length > 0,
+    await page.textContent('#claim'));
+  // The tagline no longer carries the privacy claim, so check it still exists
+  // somewhere a new reader will meet it rather than letting it quietly vanish.
+  check('the privacy claim survives on the front page',
+    /never uploaded|no server|nothing is uploaded|no llm/i.test(
+      await page.textContent('#view-drop')));
+
+  // Nothing that happens in this tab can be recovered once it is gone: there
+  // is no uploaded copy to reload, and the terms, crops and boxes exist only
+  // here. A reflexive refresh must not throw that away without asking.
+  const guardBefore = await page.evaluate(() => {
+    const e = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(e);
+    return e.defaultPrevented;
+  });
+  check('an empty page does not nag about leaving', guardBefore === false);
 
   await page.setInputFiles('#file', fixturePath);
   await page.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
   check('the review view opens after a PDF is chosen', await page.isVisible('#view-review'));
   check('the document name is shown', (await page.textContent('#doc-name')).endsWith('.pdf'));
+
+  // The other half of the unload guard, asserted here because it only means
+  // anything once a document is actually open.
+  const guardAfter = await page.evaluate(() => {
+    const e = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(e);
+    return { prevented: e.defaultPrevented, value: e.returnValue,
+             pages: window.Blinded.state.pages.length };
+  });
+  check('the guard is looking at a document that is really open',
+    guardAfter.pages > 0, JSON.stringify(guardAfter));
+  check('with a document loaded, refreshing is interrupted',
+    guardAfter.prevented === true, JSON.stringify(guardAfter));
+  // The handler also sets returnValue, which is what older browsers read
+  // instead of preventDefault. A synthetic Event exposes that property as the
+  // legacy boolean rather than the string a real BeforeUnloadEvent carries,
+  // so what is checked is that the handler drove it falsy — true under either
+  // shape, and false if the handler never ran.
+  check('and the older returnValue route is driven too',
+    guardAfter.value === false, JSON.stringify(guardAfter));
 
   const rendered = await page.evaluate(() => {
     const p = window.Blinded.state.pages;
