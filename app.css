@@ -242,8 +242,7 @@ button { font: inherit; cursor: pointer; border-radius: 8px; }
 .foot { padding: 26px 20px 40px; color: var(--ink-soft); font-size: 13px; }
 .foot p { margin: 0; max-width: 720px; }
 .foot-links {
-  margin-top: 10px !important; display: flex; align-items: center;
-  gap: 8px; flex-wrap: wrap;
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
 }
 .foot-links a {
   display: inline-flex; align-items: center; gap: 6px;
