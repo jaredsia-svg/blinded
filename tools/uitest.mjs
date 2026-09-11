@@ -499,17 +499,12 @@ try {
       // Nothing starts underneath it.
       roomReserved: pad >= Math.round(moved.height) - 1,
       panelClear: panelStick >= Math.round(moved.height),
-      // In the panel head and below the tools, rather than the foot of the
-      // panel where it started. Not an adjacent-sibling test: what has to hold
-      // is the order, and something else may legitimately sit between them.
-      tipUnderTheIcons: (() => {
-        const tools = document.querySelector('.panel-head .tools');
-        const tip = document.querySelector('.panel-head #tip');
-        if (!tools || !tip) return false;
-        return tools.compareDocumentPosition(tip)
-          & Node.DOCUMENT_POSITION_FOLLOWING ? true : false;
-      })(),
-      tipText: (document.getElementById('tip').textContent || '').trim().slice(0, 30),
+      // The panel used to explain what dragging does, in a sentence that
+      // changed with the tool. The tools say that themselves now, on hover
+      // and to a screen reader.
+      tipShown: !document.getElementById('tip').hidden,
+      tipText: (document.getElementById('tip').textContent || '').trim(),
+      markTitle: document.getElementById('tool-mark').getAttribute('title') || '',
     };
   });
   check('the header stays at the top when the document is scrolled',
@@ -527,8 +522,28 @@ try {
     chrome.roomReserved === true, JSON.stringify(chrome));
   check('and the panel beside it sticks below it, not under it',
     chrome.panelClear === true, JSON.stringify(chrome));
-  check('the note about dragging sits under the icons, in the panel head',
-    chrome.tipUnderTheIcons === true, JSON.stringify(chrome));
+  check('the panel no longer explains what dragging does',
+    chrome.tipShown === false && chrome.tipText === '', JSON.stringify(chrome));
+  // The one case with nothing else to say it: picking a logo is a mode entered
+  // from a button elsewhere in the panel, and the page gives no sign of it.
+  const picking = await page.evaluate(() => {
+    const B = window.Blinded;
+    B.setMode('pick');
+    const shown = { hidden: document.getElementById('tip').hidden,
+                    text: document.getElementById('tip').textContent.trim() };
+    B.setMode('box');
+    return { ...shown, afterHidden: document.getElementById('tip').hidden };
+  });
+  check('picking a logo still says what to do',
+    picking.hidden === false && /drag a box around the logo/i.test(picking.text),
+    JSON.stringify(picking));
+  check('and the note goes away again afterwards',
+    picking.afterHidden === true, JSON.stringify(picking));
+
+  check('the crosshair says what it is for instead',
+    /draw a box to redact/i.test(chrome.markTitle), chrome.markTitle);
+  check('and how to take a box off again',
+    /click box to undo/i.test(chrome.markTitle), chrome.markTitle);
 
   check('and they fit inside the panel without scrolling sideways',
     bar.fits && bar.pageOverflow === 0 && bar.panelOverflow === 0, JSON.stringify(bar));

@@ -1614,12 +1614,21 @@
     if (state.mode !== 'pick') setTip();
   }
 
+  // The panel used to explain what dragging does, in a sentence that changed
+  // with the tool. The tools say that themselves now, on hover and to a screen
+  // reader, and a paragraph restating the button you are looking at is a
+  // paragraph people stop reading.
+  //
+  // What is left is the one case with nothing else to say it: picking a logo
+  // is a mode the reviewer has just entered by pressing a button somewhere
+  // else in the panel, and the page gives no sign of it.
   function setTip() {
-    el('tip').textContent = state.mode === 'pick'
+    const tip = el('tip');
+    const picking = state.mode === 'pick';
+    tip.textContent = picking
       ? 'Drag a box around the logo you want found everywhere else.'
-      : state.tool === 'pan'
-        ? 'Drag to move the pages. To draw a box or drop a mark, choose the ✛ tool above.'
-        : 'Drag on a page to add a box. Click a mark to drop it. Marks stay outlined until you press Redact.';
+      : '';
+    tip.hidden = !picking;
   }
 
   function setMode(mode) {
