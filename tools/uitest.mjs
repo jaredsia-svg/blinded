@@ -1158,6 +1158,27 @@ try {
   check('the slider reaches below the score the missed heading got',
     bars.min / 100 < 0.598, String(bars.min));
 
+  // ---------- the footer link ----------
+  //
+  // The claim on the front page is that nothing is uploaded. That claim is
+  // only checkable if a reader can reach the source, so the link is part of
+  // the argument rather than decoration.
+  const foot = await page.evaluate(() => {
+    const a = document.querySelector('.foot a[href*="github.com"]');
+    if (!a) return null;
+    const r = a.getBoundingClientRect();
+    return { href: a.getAttribute('href'), text: a.textContent.trim(),
+             visible: r.width > 0 && r.height > 0,
+             icon: !!a.querySelector('svg') };
+  });
+  check('the footer carries a link to the source', foot !== null);
+  check('and it points at the public repository',
+    foot && foot.href === 'https://github.com/jaredsia-svg/blinded', foot && foot.href);
+  check('the link is actually rendered, not just present',
+    foot && foot.visible, JSON.stringify(foot));
+  check('and it says where it goes', foot && /github/i.test(foot.text), foot && foot.text);
+  check('the link carries its mark', foot && foot.icon);
+
   // ---------- the front page on a laptop ----------
   //
   // The landing page is the whole first impression, and its failure mode is

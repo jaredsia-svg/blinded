@@ -241,6 +241,18 @@ button { font: inherit; cursor: pointer; border-radius: 8px; }
 
 .foot { padding: 26px 20px 40px; color: var(--ink-soft); font-size: 13px; }
 .foot p { margin: 0; max-width: 720px; }
+.foot-links {
+  margin-top: 10px !important; display: flex; align-items: center;
+  gap: 8px; flex-wrap: wrap;
+}
+.foot-links a {
+  display: inline-flex; align-items: center; gap: 6px;
+  color: var(--ink); font-weight: 600; text-decoration: none;
+}
+.foot-links a:hover { color: var(--accent); text-decoration: underline; }
+.ghico { width: 16px; height: 16px; flex: none; }
+/* The separator is decoration between two items that wrap independently. */
+.foot-sep { color: var(--line); }
 
 /* ---------- terms feedback and image matching ---------- */
 
