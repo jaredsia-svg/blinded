@@ -696,7 +696,7 @@ cover the wrong things — is questioned rather than done.
 ## Where a word is
 
 The tally beside each word is a button. The number answers "how many"; pressing
-it answers "where", listing every occurrence by page. Red for what the reading
+it answers "where", listing every occurrence by page. Green for what the reading
 found, amber for what the thorough check turned up by shape — the same two
 colours they are drawn in on the page, because a mark the reading found and one
 a matcher guessed at do not deserve equal trust. Each row jumps to its page.
@@ -712,7 +712,7 @@ drawn now until the reviewer asks for it — only boxes they drew themselves,
 which are their own marks and appear at once.
 
 **Search** reads the pages, runs the image searches, and proposes what it
-found: red for the reading, amber for the thorough check. Nothing is covered.
+found: green for the reading, amber for the thorough check. Nothing is covered.
 **Redact** covers what was proposed — no work, just the decision. The button
 then reads **Redacted** in green, and pressing it uncovers them again without
 redoing the search, because a reviewer who wants one more look at what a bar is
@@ -752,3 +752,21 @@ set aside. What it does not do is go for good. The next search keeps those
 marks and puts them back, because re-running a check that takes minutes to say
 the same thing is not a reasonable price for moving a slider. They are removed
 only when the word they belong to is deleted.
+
+## Green, not red
+
+A proposed redaction is the tool doing what it was asked. Red is the colour of
+a mistake, and a page of red boxes over someone's document reads as a page of
+errors, so proposals are outlined in green. Amber still marks what the
+comprehensive check turned up, and red is kept for the two things that are
+genuinely warnings: a word or image nothing has searched for yet, and the
+button that discards an open document.
+
+## The answers are a view, not a page
+
+They used to be their own document, and following the link to it unloaded this
+one — which threw away the open file and its marks, and put the browser's
+"leave site?" warning in front of a reviewer who only wanted to read what the
+tool does. Nothing navigates now: the header button opens the answers over the
+tool and turns into "Back to the tool", and the document is exactly where it
+was left.

@@ -398,10 +398,14 @@ try {
   check('a document opens in review, with nothing applied', unapplied.applied === false);
   check('a marked box is not blacked out before Redact',
     !(unapplied.mid[0] === 0 && unapplied.mid[1] === 0 && unapplied.mid[2] === 0), JSON.stringify(unapplied.mid));
-  check('it is tinted red instead',
-    unapplied.mid[0] > unapplied.mid[2] + 15, JSON.stringify(unapplied.mid));
-  check('and outlined in red',
-    unapplied.edge[0] > 150 && unapplied.edge[0] > unapplied.edge[1] + 40, JSON.stringify(unapplied.edge));
+  // Green, not red. A proposed redaction is the tool doing what it was asked,
+  // and a page of red boxes over someone's document reads as a page of errors.
+  check('it is tinted green instead',
+    unapplied.mid[1] > unapplied.mid[0] + 8 && unapplied.mid[1] > unapplied.mid[2] + 4,
+    JSON.stringify(unapplied.mid));
+  check('and outlined in green',
+    unapplied.edge[1] > unapplied.edge[0] + 30 && unapplied.edge[1] > unapplied.edge[2] + 20,
+    JSON.stringify(unapplied.edge));
   check('the export is unavailable until it has been applied',
     await page.isDisabled('#export'));
 
@@ -2427,8 +2431,12 @@ try {
     // Amber and red are both warm, so the green channel is what separates
     // them. Comparing against the ordinary red mark rather than a constant
     // means this fails if the two are ever painted the same.
-    check('and it is amber, not the red an ordinary mark gets',
-      drawn.amber[1] > drawn.red[1] && drawn.amber.join() !== drawn.red.join(),
+    // Amber against green: the ordinary mark leans green, the check's leans
+    // red. Comparing the two against each other rather than against constants
+    // means this fails if they are ever painted the same.
+    check('and it is amber, not the green an ordinary mark gets',
+      drawn.amber[0] > drawn.red[0] && drawn.red[1] > drawn.amber[1]
+        && drawn.amber.join() !== drawn.red.join(),
       JSON.stringify(drawn));
 
     // Running it end to end on a real page: the word is in the fixture, so a
@@ -3213,19 +3221,24 @@ try {
     const a = document.querySelector('.top .top-link');
     if (!a) return null;
     const r = a.getBoundingClientRect();
-    return { href: a.getAttribute('href'), text: a.textContent.trim(),
+    return { tag: a.tagName, text: a.textContent.trim(),
              visible: r.width > 0 && r.height > 0,
              onTheRight: r.left > window.innerWidth / 2 };
   });
-  check('the header carries a link to the questions',
-    headerLink !== null && /faq/.test(headerLink.href), JSON.stringify(headerLink));
+  check('the header carries a way to the questions', headerLink !== null,
+    JSON.stringify(headerLink));
   check('and it is labelled Q&A', headerLink && headerLink.text === 'Q&A',
     headerLink && headerLink.text);
   check('and it is on the right of the strip, where it was asked for',
     headerLink && headerLink.visible && headerLink.onTheRight, JSON.stringify(headerLink));
+  // Not a link. Following one unloads the page, which throws away the open
+  // document and puts the browser's "leave site?" warning in front of a
+  // reviewer who only wanted to read what the tool does.
+  check('it is a button, not a link that would unload the document',
+    headerLink && headerLink.tag === 'BUTTON', JSON.stringify(headerLink));
 
   await page.click('.top .top-link');
-  await page.waitForSelector('.faq', { timeout: 15000 });
+  await page.waitForSelector('#view-faq:not([hidden])', { timeout: 15000 });
   const faq = await page.evaluate(() => {
     const link = document.querySelector('.faq a[href*="github.com"]');
     const r = link && link.getBoundingClientRect();
@@ -3239,7 +3252,8 @@ try {
       // The claim the whole tool rests on should be the first thing answered.
       firstQuestion: (document.querySelector('.faq h2') || {}).textContent,
       openSource: /free and open source/i.test(document.body.textContent),
-      back: !!document.querySelector('a[href="index.html"]'),
+      back: !!document.getElementById('faq-back-bottom'),
+      header: document.querySelector('.top .top-link').textContent.trim(),
     };
   });
   check('the questions page asks between five and ten things',
@@ -3253,9 +3267,55 @@ try {
   check('the link carries its mark', faq.icon === true);
   check('and it still says the tool is free and open source', faq.openSource === true);
   check('there is a way back to the tool', faq.back === true);
+  check('and the header button offers the way back too',
+    /back to the tool/i.test(faq.header), faq.header);
 
-  await page.goBack();
-  await page.waitForSelector('#view-drop:not([hidden])', { timeout: 15000 });
+  // Closing them returns to whatever was open before, which here is whatever
+  // the previous block left behind.
+  await page.click('.top .top-link');
+  await page.waitForFunction(
+    () => document.getElementById('view-faq').hidden, undefined, { timeout: 15000 });
+  check('closing the answers puts the previous view back',
+    (await page.isVisible('#view-drop')) || (await page.isVisible('#view-review')));
+
+  // Reading the answers with a document open must not cost the document.
+  {
+    if (await page.isVisible('#view-review')) await newFile();
+    await page.waitForSelector('#view-drop:not([hidden])', { timeout: 15000 });
+    await page.setInputFiles('#file', fixturePath);
+    await page.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
+    await setTerms(page, ['Jane']);
+    await redact(page);
+    const before = await page.evaluate(() => ({
+      pages: window.Blinded.state.pages.length,
+      terms: window.Blinded.state.terms.slice(),
+      applied: window.Blinded.state.applied,
+      marks: window.Blinded.state.pages.reduce(
+        (n, p) => n + window.Blinded.activeBoxes(p).length, 0),
+    }));
+
+    await page.click('.top .top-link');
+    await page.waitForSelector('#view-faq:not([hidden])', { timeout: 15000 });
+    check('the review goes out of sight while the answers are open',
+      (await page.isVisible('#view-review')) === false);
+
+    await page.click('#faq-back-bottom');
+    await page.waitForSelector('#view-review:not([hidden])', { timeout: 15000 });
+    const after = await page.evaluate(() => ({
+      pages: window.Blinded.state.pages.length,
+      terms: window.Blinded.state.terms.slice(),
+      applied: window.Blinded.state.applied,
+      marks: window.Blinded.state.pages.reduce(
+        (n, p) => n + window.Blinded.activeBoxes(p).length, 0),
+    }));
+    check('and coming back finds the document where it was',
+      after.pages === before.pages && after.terms.join() === before.terms.join(),
+      JSON.stringify({ before, after }));
+    check('with its marks and its state intact',
+      after.marks === before.marks && after.applied === before.applied,
+      JSON.stringify({ before, after }));
+    await newFile();
+  }
 
   // ---------- the bar names the text work too ----------
   //

@@ -20,7 +20,7 @@
   const Ocr = window.BlindedOcr;
 
   const el = id => document.getElementById(id);
-  const views = { drop: el('view-drop'), review: el('view-review') };
+  const views = { drop: el('view-drop'), review: el('view-review'), faq: el('view-faq') };
 
   // A dismissed detection still has to be visible, or the reviewer cannot
   // change their mind — it becomes a dashed outline they can click again.
@@ -257,8 +257,15 @@
     leg(key, done);
   }
 
+  // Which view the reviewer was on before opening the answers, so closing them
+  // puts them back.
+  let viewBefore = 'drop';
+
   function show(name) {
+    if (name !== 'faq') viewBefore = name;
     for (const key of Object.keys(views)) views[key].hidden = key !== name;
+    // The one button both opens and closes them, so it says which.
+    el('faq-open').textContent = name === 'faq' ? 'Back to the tool' : 'Q\u0026A';
     // Reviewing is a fixed-height layout: the header and the export bar stay
     // put and the panel and the document each scroll on their own. The front
     // page is an ordinary scrolling page, so the class comes and goes with the
@@ -1395,13 +1402,18 @@
       ctx.save();
       ctx.lineWidth = Math.max(2, page.canvas.width / 600);
       for (const box of boxes) {
-        // Amber for what the thorough sweep added, red for everything else.
+        // Amber for what the thorough check added, green for everything else.
         // Both will be covered when Redact is pressed — the colour says where
         // the mark came from, not whether it counts. A reviewer who has just
         // asked "did you miss anything" needs the answer to be visible on the
         // page without hunting for it.
-        ctx.strokeStyle = box.sweep ? '#d98b1f' : '#d92d20';
-        ctx.fillStyle = box.sweep ? 'rgba(217, 139, 31, 0.18)' : 'rgba(217, 45, 32, 0.13)';
+        //
+        // Green rather than red, which is what these were. Red is the colour
+        // of a mistake, and a proposed redaction is the opposite: it is the
+        // tool doing what it was asked. A page of red boxes over someone's
+        // document reads as a page of errors.
+        ctx.strokeStyle = box.sweep ? '#d98b1f' : MARK_GREEN;
+        ctx.fillStyle = box.sweep ? 'rgba(217, 139, 31, 0.18)' : MARK_GREEN_FILL;
         ctx.fillRect(box.x, box.y, box.w, box.h);
         ctx.strokeRect(box.x, box.y, box.w, box.h);
       }
@@ -1424,8 +1436,8 @@
 
     if (preview) {
       ctx.save();
-      ctx.strokeStyle = '#d92d20';
-      ctx.fillStyle = 'rgba(217, 45, 32, 0.2)';
+      ctx.strokeStyle = MARK_GREEN;
+      ctx.fillStyle = 'rgba(17, 138, 78, 0.2)';
       ctx.lineWidth = Math.max(2, page.canvas.width / 600);
       ctx.fillRect(preview.x, preview.y, preview.w, preview.h);
       ctx.strokeRect(preview.x, preview.y, preview.w, preview.h);
@@ -1638,6 +1650,11 @@
   // measured in the page's own pixels, and a reviewer who leans in to check a
   // bar is looking at the same bar that will be burned in.
   const ZOOM_STEPS = [0.5, 0.75, 1, 1.25, 1.5, 2, 3];
+
+  // The colour of a proposed redaction. Red once, which read as a page full of
+  // mistakes; a proposal is the tool doing what it was asked.
+  const MARK_GREEN = '#118a4e';
+  const MARK_GREEN_FILL = 'rgba(17, 138, 78, 0.13)';
 
   function setZoom(zoom) {
     const wanted = ZOOM_STEPS.reduce((best, step) =>
@@ -3014,6 +3031,19 @@
   el('export').addEventListener('click', exportFile);
   el('savedraft').addEventListener('click', saveDraft);
 
+  // The answers are a view, not a page.
+  //
+  // They used to be their own document, and following a link to it unloaded
+  // this one — which threw away the open file and its marks, and put the
+  // browser's "leave site?" warning in the way of a reviewer who only wanted
+  // to read what the tool does. Nothing navigates now, so nothing is lost and
+  // there is nothing to warn about.
+  const closeFaq = () => show(viewBefore);
+  el('faq-open').addEventListener('click', () => {
+    if (views.faq.hidden) show('faq'); else closeFaq();
+  });
+  el('faq-back-bottom').addEventListener('click', closeFaq);
+
   el('restart').addEventListener('click', async () => {
     // Nothing open means nothing to lose, and a confirmation for that would be
     // the kind of prompt people learn to click through.
@@ -3052,6 +3082,7 @@
   window.Blinded = { state, rescan, loadFile, exportFile, setMode, addTemplate,
     undoLast, undoStack, applyLabels, labelItems, legendText, downloadKey,
     sensitivity, wordSensitivity, wordBarFor, setZoom, stepZoom, ZOOM_STEPS,
+    MARK_GREEN,
     cleanName, coveredText, askName, redactedName, confirmAction,
     addTerm, dropTerm,
     saveDraft, draftData, restoreDraft, looksLikeDraft, fingerprint,

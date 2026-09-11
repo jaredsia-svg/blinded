@@ -16,10 +16,10 @@ import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = resolve(join(dirname(fileURLToPath(import.meta.url)), '..'));
-// Every page that links an asset, not just the front one: the FAQ loads the
-// same stylesheet, and a page left unstamped is a page that can be served from
-// a stale cache — which is the whole thing this exists to prevent.
-const PAGES = ['index.html', 'faq.html'];
+// Every page that links an asset. There is one: the answers became a view
+// inside it rather than a page of their own, so that reading them does not
+// unload the document.
+const PAGES = ['index.html'];
 
 // Only local assets: a versioned URL for a file we do not control is a lie.
 const LINK = /(\s(?:href|src)=")([A-Za-z0-9_./-]+\.(?:css|js))(?:\?v=[0-9a-f]+)?(")/g;

@@ -6,7 +6,7 @@
 <title>Blinded – Efficient redaction for your most sensitive documents, all done locally</title>
 <meta name="description" content="Redact PDFs, images and text in your browser. The file never leaves your machine.">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="app.css?v=68deda48">
+<link rel="stylesheet" href="app.css?v=90c60192">
 </head>
 <body>
 
@@ -14,7 +14,7 @@
   <div class="wrap top-inner">
     <div class="mark"><span class="bar"></span> Blinded</div>
     <p class="claim" id="claim">Efficient redaction for your most sensitive documents, all done locally.</p>
-    <a class="top-link" href="faq.html">Q&amp;A</a>
+    <button type="button" class="top-link" id="faq-open">Q&amp;A</button>
   </div>
 </header>
 
@@ -215,6 +215,109 @@
     </div>
   </section>
 
+<section id="view-faq" class="view faqmain" hidden>
+
+  <h1 class="faqtitle">Questions</h1>
+
+  <section class="faq">
+    <h2>Does my document get uploaded anywhere?</h2>
+    <p>No. There is no server to upload it to. Everything — opening the file,
+      reading it, covering things up and writing the new file — happens inside
+      this browser tab, on your own machine. You can watch this for yourself:
+      open your browser's network panel, redact a document, and you will see
+      nothing leave.</p>
+    <p>You can also just pull out the network cable. The tool carries on
+      working.</p>
+  </section>
+
+  <section class="faq">
+    <h2>Is a black rectangle really enough?</h2>
+    <p>On its own, no — and that is the reason this tool exists. Drawing a black
+      box over a word in most editors leaves the word underneath it. Anyone can
+      select it, copy it, or pull it back out of the file.</p>
+    <p>Blinded does not draw boxes over your document. It turns every page into
+      a picture, paints the boxes onto the picture, and builds a new file from
+      those pixels. The original text is not hidden in the result — it is not
+      in the result at all. There is no text layer, no fonts and no annotations
+      left to dig through.</p>
+  </section>
+
+  <section class="faq">
+    <h2>What can it find?</h2>
+    <p>Three things. Words you type, wherever they appear in the text. The same
+      words where they appear <em>as part of a picture</em> — a logo, a screenshot,
+      a scanned page — which an ordinary search cannot reach. And anything you
+      pick out with a box: a signature, a stamp, a face, a letterhead. Pick one
+      and every other copy of it in the document is found too, at any size.</p>
+    <p>There are also built-in detectors for the usual things that leak: email
+      addresses, phone numbers, card numbers and so on.</p>
+  </section>
+
+  <section class="faq">
+    <h2>How does it read words inside pictures?</h2>
+    <p>It reads the lettering on each page the way a scanner does. That happens
+      in your browser too — the reader is about seven megabytes, fetched once
+      from this site and then kept by your browser, and it is not sent your
+      document.</p>
+    <p>No large language model is involved, here or anywhere else in the tool.</p>
+  </section>
+
+  <section class="faq">
+    <h2>Nothing is perfect. What if it misses something?</h2>
+    <p>Then you catch it, which is why nothing is covered until you press
+      Redact and why every mark stays visible until then. You can draw your own
+      boxes anywhere, and click any proposed mark to take it off.</p>
+    <p>There is also a second opinion: once a redaction is done, you can ask it
+      to check every page again by shape rather than by reading. That catches
+      words in unusual type that the reading stumbled over. Anything it finds is
+      added in amber so you can see what is new, and it runs in the background
+      while you carry on.</p>
+  </section>
+
+  <section class="faq">
+    <h2>Why is my file bigger afterwards?</h2>
+    <p>Because the new file is made of pictures rather than text, and pictures
+      take more room than letters. That is the cost of the guarantee: the text
+      cannot be recovered because there is no longer any text there.</p>
+    <p>There is a "lossless output" option if you would rather have a larger
+      file with no compression softening.</p>
+  </section>
+
+  <section class="faq">
+    <h2>What are the placeholders for?</h2>
+    <p>Optional labels printed on the bars — <span class="ph">[NAME_1]</span>,
+      <span class="ph">[EMAIL_2]</span> — so a later reader can still follow a
+      sentence that has had something taken out of it. They are off by default,
+      because a plain black bar is the right output for most documents and a
+      label tells the reader a little about what was removed.</p>
+    <p>If you turn them on you can download a key listing what each label stood
+      for. Keep that separate from the redacted file: it undoes the redaction.</p>
+  </section>
+
+  <section class="faq">
+    <h2>What happens if I close the tab?</h2>
+    <p>Everything is gone. Nothing is stored, no account exists, and there is
+      nothing to delete afterwards. The flip side is that a document you have
+      not exported yet is lost too — so the tool warns you before you leave with
+      one open.</p>
+  </section>
+
+  <section class="faq">
+    <h2>Can I see the code?</h2>
+    <p>Yes. It is free and open source: read it, run it yourself, or check what
+      it actually does with your file.</p>
+    <p class="faqlink">
+      <a href="https://github.com/jaredsia-svg/blinded" rel="noopener">
+        <svg class="ghico" viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.4 7.4 0 0 1 2-.27c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
+        Source on GitHub
+      </a>
+    </p>
+  </section>
+
+  <p class="faqback"><button type="button" class="faqbackbtn" id="faq-back-bottom">Back to the tool</button></p>
+
+</section>
+
   <div id="confirmbox" class="busy" hidden>
   <div class="busy-inner nameinner">
     <h2 class="namehead" id="confirmhead">Are you sure?</h2>
@@ -267,7 +370,7 @@
 <script src="lib/pdfwrite.js?v=4b977425"></script>
 <script src="lib/pdfread.js?v=624c5ef9"></script>
 <script src="lib/render.js?v=7bf6e0a9"></script>
-<script src="app.js?v=bf180f76"></script>
+<script src="app.js?v=94dcda03"></script>
 <script type="module">
   // pdf.js ships as an ES module; everything else here is a classic script, so
   // it is bridged onto the global the other modules already look for. Both the

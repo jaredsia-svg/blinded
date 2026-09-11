@@ -70,6 +70,12 @@ body { padding-top: var(--top-h); }
 @media (max-width: 640px) { .claim { display: none; } }
 
 a.mark { color: inherit; text-decoration: none; }
+button.top-link { font: inherit; cursor: pointer; }
+.faqbackbtn {
+  font: inherit; font-weight: 600; color: var(--accent);
+  background: none; border: 0; padding: 0; cursor: pointer;
+}
+.faqbackbtn:hover { text-decoration: underline; }
 .top-link {
   margin-left: auto; flex: none; color: #c7ced8; text-decoration: none;
   font-size: 13px; border: 1px solid #2a313c; border-radius: var(--radius);
@@ -504,7 +510,7 @@ li.tally { display: block; padding: 0 0 8px; border: 0; }
 .tallyspot:hover { background: #eef1f6; color: var(--ink); }
 .tallyspot .dot {
   width: 8px; height: 8px; border-radius: 2px; flex: none;
-  background: #d92d20;
+  background: #118a4e;
 }
 .tallyspot.shape .dot { background: #d98b1f; }
 .tallyspot .how { margin-left: auto; font-size: 11.5px; color: var(--ink-soft); }
@@ -620,10 +626,10 @@ code {
 .templates .waiting { color: var(--warn); font-style: italic; }
 
 /* A pending mark in a text document mirrors a pending box on a page: outlined
-   in red and still readable. */
+   in green and still readable. */
 .textview mark.pending {
-  background: rgba(217, 45, 32, .13); color: var(--ink);
-  box-shadow: inset 0 0 0 1.5px #d92d20; border-radius: 2px;
+  background: rgba(17, 138, 78, .13); color: var(--ink);
+  box-shadow: inset 0 0 0 1.5px #118a4e; border-radius: 2px;
 }
 
 /* ---------- the thorough check, running in the background ---------- */
