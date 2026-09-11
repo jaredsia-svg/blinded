@@ -365,6 +365,7 @@
       if (pendingDraft) {
         const draft = pendingDraft;
         pendingDraft = null;
+        dropDraftPrompt();
         busy(false);
         await restoreDraft(draft);
       }
@@ -462,7 +463,10 @@
   // Recomputes everything downstream of the settings. Cheap enough to run on
   // every keystroke for documents of a sane size, and being always-consistent
   // is worth more than being clever about it.
-  function rescan() {
+  // `settled` means the question has not changed in a way that needs looking
+  // again — taking a word off the list, for instance. What it found goes, and
+  // what every other word found still stands.
+  function rescan(options) {
     if (state.kind === 'text') {
       state.findings = scanText(state.text);
       drawTextView();
@@ -482,11 +486,14 @@
     renderTermCounts();
     renderSectionNotes();
     applyLabels();
-    // A rescan only ever happens because the reviewer changed what should be
+    // A rescan usually happens because the reviewer changed what should be
     // looked for — a term, a detector, the confidence setting — so what was
     // found no longer answers the question and the document goes back to
-    // before the search.
-    needsSearch();
+    // before the search. Removing a word is the exception: nothing new needs
+    // finding, and sending the reviewer back to Search to be told the same
+    // thing about the words they kept is a search they did not ask for.
+    if (options && options.settled) markPending();
+    else needsSearch();
   }
 
   // ---------- marking up, then redacting ----------
@@ -2222,9 +2229,17 @@
     }
     pendingDraft = data;
     show('drop');
-    fail('This is a draft for "' + (data.source && data.source.name || 'a document')
-      + '". Choose that file to carry on where you left off.');
-    el('drop-error').hidden = false;
+    // Asked properly rather than shouted in red. Nothing has gone wrong: the
+    // reviewer has handed over the half of the pair that is not the document,
+    // and the tool needs the other half.
+    const name = (data.source && data.source.name) || 'the original document';
+    el('draftbody').textContent = 'This draft was saved against "' + name
+      + '". Choose that file, or drop it here, and your marks go back onto it.';
+    el('draftbox').hidden = false;
+  }
+
+  function dropDraftPrompt() {
+    el('draftbox').hidden = true;
   }
 
   // Puts a draft back onto a freshly opened document.
@@ -2580,6 +2595,17 @@
   // Without this the browser navigates away to the dropped file and the tab,
   // along with everything in it, is gone.
   window.addEventListener('dragover', e => e.preventDefault());
+
+  // The prompt asking for a draft's document covers the drop box, so dropping
+  // the file onto it has to work too — the prompt says "or drop it here", and
+  // a message that names a gesture the page then swallows is worse than no
+  // message.
+  el('draftbox').addEventListener('dragover', e => e.preventDefault());
+  el('draftbox').addEventListener('drop', e => {
+    e.preventDefault();
+    const file = e.dataTransfer && e.dataTransfer.files[0];
+    if (file) loadFile(file);
+  });
   window.addEventListener('drop', e => e.preventDefault());
 
   // ---------- the "?" hints ----------
@@ -2709,9 +2735,13 @@
     for (const page of state.pages) {
       page.imageHits = page.imageHits.filter(m => !m.term || m.term !== word);
     }
-    if (state.openTally === word) state.openTally = null;
+    // The open list is keyed by word and by which circle it belongs to.
+    if (state.openTally && state.openTally.split('::')[0] === word) {
+      state.openTally = null;
+    }
+    state.countedTerms = state.countedTerms.filter(t => t !== word);
     renderTermCounts();
-    rescan();
+    rescan({ settled: true });
   }
 
   function refreshTermBox() {
@@ -3081,6 +3111,11 @@
   el('export').addEventListener('click', exportFile);
   el('savedraft').addEventListener('click', saveDraft);
   el('imageclose').addEventListener('click', () => { el('imagebox').hidden = true; });
+  el('draftpick').addEventListener('click', () => el('file').click());
+  el('draftcancel').addEventListener('click', () => {
+    pendingDraft = null;
+    dropDraftPrompt();
+  });
   el('imagebox').addEventListener('click', event => {
     // Clicking the backdrop closes it, the way every other overlay of this
     // shape behaves.
@@ -3115,6 +3150,7 @@
       if (!ok) return;
     }
     pendingDraft = null;
+    dropDraftPrompt();
     state.pages = [];
     state.text = '';
     state.findings = [];
@@ -3141,7 +3177,7 @@
     MARK_GREEN,
     cleanName, coveredText, askName, redactedName, confirmAction, showTemplate,
     addTerm, dropTerm,
-    saveDraft, draftData, restoreDraft, looksLikeDraft, fingerprint,
+    saveDraft, draftData, restoreDraft, looksLikeDraft, fingerprint, takeDraft,
     occurrencesFor, placesFor, renderTermCounts, renderTemplates, goToPage,
     scrollerFor, setTool, marking,
     runSearch, applyRedaction: runSearch, coverMarks, uncoverMarks, applyButton,

@@ -6,7 +6,7 @@
 <title>Blinded – Efficient redaction for your most sensitive documents, all done locally</title>
 <meta name="description" content="Redact PDFs, images and text in your browser. The file never leaves your machine.">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="app.css?v=73657755">
+<link rel="stylesheet" href="app.css?v=0a6efd80">
 </head>
 <body>
 
@@ -39,6 +39,7 @@
       </svg>
       <p class="drop-lead">Drop a document here</p>
       <p class="drop-sub">PDF, PNG, JPEG or plain text — or <span class="link">browse</span></p>
+      <p class="drop-faint">or a saved draft, to carry on where you left off</p>
       <input type="file" id="file" accept=".pdf,.png,.jpg,.jpeg,.txt,.md,.markdown,.csv,.log,.json,application/pdf,image/png,image/jpeg,text/plain,application/json" hidden>
     </div>
     <p id="drop-error" class="error" hidden></p>
@@ -317,7 +318,20 @@
 
 </section>
 
-  <div id="imagebox" class="busy" hidden>
+  <div id="draftbox" class="busy" hidden>
+  <div class="busy-inner nameinner">
+    <h2 class="namehead">Carry on from your draft</h2>
+    <p class="confirmbody" id="draftbody"></p>
+    <p class="hint" id="drafthint">A draft holds your marks, not the document —
+      which is why it is a few kilobytes and carries nothing confidential.</p>
+    <div class="namego">
+      <button type="button" id="draftcancel" class="ghost">Cancel</button>
+      <button type="button" id="draftpick" class="primary">Choose the file</button>
+    </div>
+  </div>
+</div>
+
+<div id="imagebox" class="busy" hidden>
   <div class="busy-inner imageinner">
     <h2 class="namehead">The image you picked</h2>
     <div class="imageframe"><canvas id="imagefull"></canvas></div>
@@ -380,7 +394,7 @@
 <script src="lib/pdfwrite.js?v=4b977425"></script>
 <script src="lib/pdfread.js?v=624c5ef9"></script>
 <script src="lib/render.js?v=7bf6e0a9"></script>
-<script src="app.js?v=4fa9c318"></script>
+<script src="app.js?v=87ac6433"></script>
 <script type="module">
   // pdf.js ships as an ES module; everything else here is a classic script, so
   // it is bridged onto the global the other modules already look for. Both the

@@ -287,14 +287,33 @@ try {
     await page.evaluate(() => window.Blinded.dropTerm('Parkway'));
     await page.waitForTimeout(200);
 
-    // And a word can be taken off again.
+    // And a word can be taken off again. Searched first, so that what is
+    // being tested is what removal does rather than what the last add did.
+    await redact(page);
     await page.click('#termcounts li.word .termdrop');
     await page.waitForTimeout(300);
     const dropped = await listed();
     check('a word can be removed from the list',
       dropped.words.join() === 'Amphitheatre', JSON.stringify(dropped));
-    check('and removing one puts it back to Search',
-      (await page.evaluate(() => window.Blinded.state.searched)) === false);
+    // Nothing new needs finding when a word comes off, so the reviewer is not
+    // sent back to Search to be told the same thing about the words they kept.
+    const afterDrop = await page.evaluate(() => ({
+      searched: window.Blinded.state.searched,
+      label: document.getElementById('apply').textContent.trim(),
+      numbers: [...document.querySelectorAll('#termcounts .dot-green')]
+        .filter(n => /^\d+$/.test(n.textContent.trim())).length,
+      marks: window.Blinded.state.pages.reduce(
+        (n, p) => n + window.Blinded.activeBoxes(p).length, 0),
+      forDropped: window.Blinded.state.pages.reduce(
+        (n, p) => n + p.imageHits.filter(m => m.term === 'Jane').length, 0),
+    }));
+    check('removing one does not put it back to Search',
+      afterDrop.searched === true && afterDrop.label !== 'Search',
+      JSON.stringify(afterDrop));
+    check('the words that stayed keep their tallies',
+      afterDrop.numbers === 1, JSON.stringify(afterDrop));
+    check('and only the removed word loses its marks',
+      afterDrop.forDropped === 0 && afterDrop.marks > 0, JSON.stringify(afterDrop));
   }
 
   // ---------- search, redact, redacted ----------
@@ -1705,9 +1724,18 @@ try {
     await page.waitForTimeout(400);
     check('choosing a draft does not open a document on its own',
       (await page.isVisible('#view-drop')) === true);
-    const asks = await page.textContent('#drop-error');
+    // Asked properly rather than shouted in red: nothing has gone wrong, the
+    // tool just has half of a pair.
     check('it asks for the file the draft belongs to',
-      /choose that file/i.test(asks || ''), asks);
+      (await page.isVisible('#draftbox')) === true);
+    const asks = await page.textContent('#draftbody');
+    check('and names the file it wants',
+      /choose that file/i.test(asks || '') && /\.pdf/.test(asks || ''), asks);
+    check('and says what a draft does and does not hold',
+      /not the document/i.test(await page.textContent('#drafthint')));
+    check('the front page mentions drafts, quietly',
+      /saved draft/i.test(await page.textContent('.drop-faint')),
+      await page.textContent('.drop-faint'));
 
     await page.setInputFiles('#file', fixturePath);
     await page.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
@@ -1727,8 +1755,57 @@ try {
       JSON.stringify(restored));
     check('and the marks the shape check had found',
       restored.sweep === 1, JSON.stringify(restored));
+    check('and the prompt is gone once the document is open',
+      (await page.isVisible('#draftbox')) === false);
     check('and the list of words is back in the panel, not just in the state',
       restored.listed.join() === planted.terms.join(), JSON.stringify(restored));
+
+    // A picked image has to come back too. It never did: a template did not
+    // record which page it was cut from, so restoring one skipped every
+    // picked image and the Images section came back empty.
+    {
+      await newFile();
+      await page.setInputFiles('#file', logoPath);
+      await page.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
+      await page.evaluate(({ x, y, size }) => {
+        const B = window.Blinded;
+        B.addTemplate(B.state.pages[0],
+          { x: x * 2 - 3, y: y * 2 - 3, w: size * 2 + 6, h: size * 2 + 6 });
+      }, LOGO_PLACEMENTS[0]);
+      await page.waitForFunction(() => window.Blinded.state.templates.length === 1,
+        undefined, { timeout: 30000 });
+
+      const [withLogo] = await Promise.all([
+        page.waitForEvent('download', { timeout: 30000 }),
+        page.click('#savedraft'),
+      ]);
+      const logoDraft = join(tmpdir(), 'blinded-logo.blinded.json');
+      await withLogo.saveAs(logoDraft);
+      const saved = JSON.parse(readFileSync(logoDraft, 'utf8'));
+      check('a draft records which page each picked image came from',
+        saved.templates.length === 1
+          && typeof saved.templates[0].pageIndex === 'number',
+        JSON.stringify(saved.templates));
+
+      await newFile();
+      await page.setInputFiles('#file', logoDraft);
+      await page.waitForTimeout(300);
+      await page.setInputFiles('#file', logoPath);
+      await page.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
+      await page.waitForTimeout(600);
+      const back = await page.evaluate(() => ({
+        templates: window.Blinded.state.templates.length,
+        rows: document.querySelectorAll('#templates li').length,
+        hasCut: window.Blinded.state.templates.every(t => !!t.cut),
+        hasThumb: !!document.querySelector('#templates canvas'),
+      }));
+      check('and the picked image comes back with the draft',
+        back.templates === 1 && back.rows >= 1, JSON.stringify(back));
+      check('with its thumbnail, so the Images section is not empty',
+        back.hasThumb === true, JSON.stringify(back));
+      check('and re-cut from the page, so it can be searched for again',
+        back.hasCut === true, JSON.stringify(back));
+    }
 
     // Marks are placed by position, so putting a draft on the wrong document
     // would cover the wrong things. The draft knows which file it is for.

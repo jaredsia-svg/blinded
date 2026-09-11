@@ -104,6 +104,10 @@ button.top-link { font: inherit; cursor: pointer; }
 .drop:hover, .drop:focus-visible, .drop.over { border-color: var(--accent); background: #f2f7ff; outline: none; }
 .drop-lead { margin: 0 0 6px; font-size: 20px; font-weight: 600; }
 .drop-sub { margin: 0; color: var(--ink-soft); font-size: 14px; }
+/* Deliberately quiet. Carrying on from a draft is a thing you do on your
+   second visit, and it should not compete with the thing you do on your
+   first. */
+.drop-faint { margin: 5px 0 0; color: #9aa4b2; font-size: 12.5px; }
 .link { color: var(--accent); text-decoration: underline; }
 
 .error {
