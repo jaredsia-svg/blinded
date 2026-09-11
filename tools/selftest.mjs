@@ -584,6 +584,29 @@ check('a degenerate size does not throw',
     flush.text === 'with KAG', JSON.stringify(flush.text));
 })();
 
+// The SIMD probe has to fail only when SIMD is missing, never because it is
+// malformed. The first one was written from memory, did not validate anywhere,
+// and every browser quietly got the slower build: measured afterwards, the
+// SIMD core reads a page in about two seconds against about eight. The control
+// is the same module with the SIMD instruction removed, so it must validate on
+// any engine at all; if it does not, the probe is broken rather than reporting
+// a browser without SIMD.
+check('the probe control is a valid module anywhere',
+  WebAssembly.validate(Ocr.PROBE_CONTROL));
+check('and the probe itself is well formed on an engine that has SIMD',
+  WebAssembly.validate(Ocr.SIMD_PROBE));
+check('the two differ only by the SIMD instruction',
+  Ocr.SIMD_PROBE.length === Ocr.PROBE_CONTROL.length + 2,
+  Ocr.SIMD_PROBE.length + ' vs ' + Ocr.PROBE_CONTROL.length);
+
+// Engines hold a copy of the model each, so this is bounded by memory rather
+// than by cores, and never exceeds the work available.
+check('one page needs one engine', Ocr.engineCount(1) === 1);
+check('no more engines than pages', Ocr.engineCount(2) <= 2);
+check('and never more than the ceiling',
+  Ocr.engineCount(500) <= Ocr.MAX_ENGINES, String(Ocr.engineCount(500)));
+check('there is always at least one', Ocr.engineCount(0) >= 1);
+
 // The build of the engine is pinned rather than left to the engine to choose:
 // it picks between six, each about four megabytes, and only the pinned ones
 // are shipped.

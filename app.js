@@ -376,17 +376,21 @@
   // Matching those words against the terms is cheap and rerun freely.
   async function readPages() {
     if (state.ocrRead || !state.pages.length) return;
-    for (const page of state.pages) {
-      busy(true, 'Reading page ' + (page.index + 1) + ' of ' + state.pages.length + '…');
-      page.ocrItems = await Ocr.readPage(page.source);
+    const total = state.pages.length;
+    busy(true, total === 1 ? 'Reading the page…' : 'Reading page 1 of ' + total + '…');
+
+    const read = await Ocr.readPages(
+      state.pages.map(page => page.source),
+      (done) => busy(true, done >= total
+        ? 'Reading the last page…'
+        : 'Reading page ' + (done + 1) + ' of ' + total + '…'));
+
+    state.pages.forEach((page, i) => {
+      page.ocrItems = read[i] || [];
       const stitched = Ocr.stitch(page.ocrItems);
       page.ocrText = stitched.text;
       page.ocrPlaced = stitched.items;
-      // Let the page paint between sheets, or the progress line never appears.
-      await (window.BlindedSchedule
-        ? window.BlindedSchedule.nextTask()
-        : new Promise(r => setTimeout(r, 0)));
-    }
+    });
     state.ocrRead = true;
   }
 
