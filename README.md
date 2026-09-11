@@ -641,3 +641,23 @@ Nothing inside the file is wrong; the leak is the name. So on export the name is
 offered for editing, with anything covered inside the document — typed words and
 detector matches alike — taken out of it first, and the reviewer told that it
 happened.
+
+## Two passes, never at once
+
+The thorough check and a redaction are two passes over the same pages, and they
+cannot both own the document. Left to race, the check would spawn its own
+workers alongside the redaction's and — worse — would finish afterwards and put
+the document back into review seconds after the reviewer had just redacted it.
+
+So pressing Redact while the check is running asks whether to stop it, says how
+far it had got, and waits for it to put down what it found before the redaction
+decides what to cover. Editing the word list or picking another image while it
+runs needs no such handling: picked images are not searched until Redact, and
+the check filters its own results against the word list as it stands when it
+finishes, so a word deleted mid-run never produces a mark.
+
+Opening another file asks too. A reload or a closed tab passes through
+beforeunload and the browser offers to stop it; opening another file discards
+the document without navigating anywhere, so nothing fires and the browser has
+nothing to offer. The cancel button holds the focus, so a stray Enter is not
+what loses the document.

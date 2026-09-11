@@ -97,6 +97,8 @@
     sweptTerms: [],
     sweepAdded: 0,
     zoom: 1,
+    exported: false,
+    redacting: false,
     sweepRunning: false,
     sweepStopped: false,
     sweepReached: 0,
@@ -367,6 +369,7 @@
     state.sweepAdded = 0;
     state.sweepStopped = false;
     state.sweepReached = 0;
+    state.exported = false;
     state.pages = pages.map(p => ({
       ...p,
       source: p.canvas,          // pristine; never drawn on
@@ -536,6 +539,30 @@
   // Runs every search that has not run yet, then switches the view to what the
   // exported file will contain.
   async function applyRedaction() {
+    // The thorough check and a redaction are two passes over the same pages,
+    // and they cannot both own the document.
+    //
+    // Left to race, the check would spawn its own workers alongside the
+    // redaction's, and — worse — would finish afterwards and call markPending,
+    // putting the document back into review seconds after the reviewer had
+    // just redacted it. So the check stands down, and it is asked rather than
+    // assumed, because stopping it throws away however many pages it had left.
+    if (state.sweepRunning) {
+      const ok = await confirmAction({
+        title: 'Stop the thorough check?',
+        body: 'The thorough check is still running. Redacting now stops it at '
+          + 'page ' + (state.sweepDone + 1) + ' of ' + state.sweepTotal
+          + '. Anything it has already found is kept, and you can start it '
+          + 'again afterwards.',
+        confirmLabel: 'Stop it and redact',
+      });
+      if (!ok) return;
+      // Waited for, not just signalled: its marks have to be on the page
+      // before the redaction decides what to cover.
+      await settleSweep();
+    }
+
+    state.redacting = true;
     state.paused = false;
 
     // One bar across both passes.
@@ -584,6 +611,7 @@
     // shown, still red, and Redact picks up where it left off.
     if (state.paused) {
       state.paused = false;
+      state.redacting = false;
       busy(false);
       redrawAll();
       refreshApply();
@@ -594,10 +622,12 @@
     try {
       if (entries.length) await runSearches(entries, done => leg('search', done));
     } catch (error) {
+      state.redacting = false;
       alert('The image search could not finish: ' + (error && error.message ? error.message : error));
       return;
     }
     state.applied = true;
+    state.redacting = false;
     applyLabels();
     redrawAll();
     refreshApply();
@@ -1685,6 +1715,11 @@
   // ---------- export ----------
 
   function download(blob, filename) {
+    // Recorded here rather than where the export was asked for: a build that
+    // throws half way through has saved nothing, and telling the reviewer
+    // their work is safe when it is not is the one thing this flag must never
+    // do.
+    state.exported = true;
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
@@ -1741,6 +1776,46 @@
       .replace(/[\s\-_\u2013\u2014]+$/, '')
       .trim();
     return out;
+  }
+
+  // Asking before something is thrown away.
+  //
+  // A reload, a closed tab or a followed link all pass through beforeunload,
+  // and the browser offers to stop them. Opening another file does not: it
+  // discards the document on screen without navigating anywhere, so nothing
+  // fires and the browser has nothing to offer. The tool has to ask itself,
+  // and the thing being lost is a document the reviewer may have spent minutes
+  // marking up.
+  function confirmAction(options) {
+    const opts = options || {};
+    return new Promise(resolve => {
+      const box = el('confirmbox');
+      const yes = el('confirmyes');
+      const no = el('confirmno');
+      el('confirmhead').textContent = opts.title || 'Are you sure?';
+      el('confirmbody').textContent = opts.body || '';
+      yes.textContent = opts.confirmLabel || 'Discard';
+      box.hidden = false;
+      // The cancel button takes focus, not the destructive one: a stray Enter
+      // should not be the thing that loses the document.
+      no.focus();
+
+      const done = answer => {
+        box.hidden = true;
+        yes.removeEventListener('click', accept);
+        no.removeEventListener('click', reject);
+        document.removeEventListener('keydown', key, true);
+        resolve(answer);
+      };
+      const accept = () => done(true);
+      const reject = () => done(false);
+      const key = event => {
+        if (event.key === 'Escape') { event.preventDefault(); reject(); }
+      };
+      yes.addEventListener('click', accept);
+      no.addEventListener('click', reject);
+      document.addEventListener('keydown', key, true);
+    });
   }
 
   // Offers the name, and resolves to the one to save under, or null if the
@@ -2151,8 +2226,26 @@
     return false;
   }
 
+  // The running sweep, so that anything which has to come after it can wait
+  // for it rather than race it.
+  let sweepTask = null;
+
   async function runSweep() {
     if (state.sweepRunning) return 0;
+    if (state.redacting) return 0;
+    sweepTask = sweepNow();
+    try { return await sweepTask; } finally { sweepTask = null; }
+  }
+
+  // Stops a running sweep and waits for it to put down what it found. Safe to
+  // call when nothing is running.
+  async function settleSweep() {
+    if (!sweepTask) return;
+    state.sweepStopped = true;
+    try { await sweepTask; } catch { /* it reports its own failure */ }
+  }
+
+  async function sweepNow() {
     const entries = sweepTemplates();
     if (!entries.length) return 0;
     // Which words this run is answering. The reviewer can edit the list while
@@ -2378,7 +2471,20 @@
     redrawAll();
   });
   el('export').addEventListener('click', exportFile);
-  el('restart').addEventListener('click', () => {
+  el('restart').addEventListener('click', async () => {
+    // Nothing open means nothing to lose, and a confirmation for that would be
+    // the kind of prompt people learn to click through.
+    if (state.pages.length || state.text) {
+      const exported = state.applied && state.exported;
+      const ok = await confirmAction({
+        title: 'Open a different file?',
+        body: 'The document on screen will be closed, along with every mark on '
+          + 'it. Nothing is saved anywhere, so this cannot be undone'
+          + (exported ? '.' : ' — and you have not exported it yet.'),
+        confirmLabel: 'Close it and choose a file',
+      });
+      if (!ok) return;
+    }
     state.pages = [];
     state.text = '';
     state.findings = [];
@@ -2389,6 +2495,7 @@
     state.labelOverrides = {};
     state.labels = { byId: {}, entries: [] };
     state.applied = false;
+    state.exported = false;
     state.searchedTerms = [];
     undoStack.length = 0;
     refreshUndo();
@@ -2401,11 +2508,12 @@
   window.Blinded = { state, rescan, loadFile, exportFile, setMode, addTemplate,
     undoLast, undoStack, applyLabels, labelItems, legendText, downloadKey,
     sensitivity, wordSensitivity, wordBarFor, setZoom, stepZoom, ZOOM_STEPS,
-    cleanName, coveredText, askName, redactedName,
+    cleanName, coveredText, askName, redactedName, confirmAction,
     scrollerFor, setTool, marking,
     applyRedaction, markPending, plannedCount, pendingTemplates, termsNeedingPictures,
     readPages, matchOcr, ocrPending, ocrMatchStale, showWordControls,
     sweepTemplates, runSweep, renderSweep, alreadyCovered, sweepProgress,
+    settleSweep,
     redrawAll, legs, leg, busyNote,
     describeTime,
     busy, pageProgress, requestPause,

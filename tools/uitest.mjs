@@ -91,6 +91,28 @@ page.on('pageerror', e => consoleErrors.push(String(e)));
 page.on('console', m => { if (m.type() === 'error') consoleErrors.push(m.text()); });
 
 try {
+  // Opening another file now asks before it throws the current one away, so
+  // every reset in these tests goes through that step rather than around it.
+  const newFile = async () => {
+    await page.click('#restart');
+    if (await page.isVisible('#confirmbox')) await page.click('#confirmyes');
+    await page.waitForSelector('#view-drop:not([hidden])', { timeout: 15000 });
+  };
+
+  // Exporting now asks what to call the file first, so every export in these
+  // tests goes through that step rather than around it.
+  const exportFile = async () => {
+    const [download] = await Promise.all([
+      page.waitForEvent('download', { timeout: 60000 }),
+      (async () => {
+        await page.click('#export');
+        await page.waitForSelector('#namebox:not([hidden])', { timeout: 15000 });
+        await page.click('#namesave');
+      })(),
+    ]);
+    return download;
+  };
+
   // ---------- load ----------
   await page.goto(base);
   check('the drop view is the first thing shown', await page.isVisible('#view-drop'));
@@ -541,19 +563,62 @@ try {
   });
   check('dragging on the page adds a box', manual === 1, String(manual));
 
-  // Exporting now asks what to call the file first, so every export in these
-  // tests goes through that step rather than around it.
-  const exportFile = async () => {
-    const [download] = await Promise.all([
-      page.waitForEvent('download', { timeout: 60000 }),
-      (async () => {
-        await page.click('#export');
-        await page.waitForSelector('#namebox:not([hidden])', { timeout: 15000 });
-        await page.click('#namesave');
-      })(),
-    ]);
-    return download;
-  };
+  // ---------- asking before the document is thrown away ----------
+  //
+  // A reload or a closed tab passes through beforeunload and the browser
+  // offers to stop it. Opening another file does not: it discards the
+  // document without navigating anywhere, so nothing fires and the browser
+  // has nothing to offer. The tool has to ask for itself.
+  {
+    const pagesOpen = () => page.evaluate(() => window.Blinded.state.pages.length);
+    const opened = await pagesOpen();
+    check('a document is open to be lost', opened > 0, String(opened));
+
+    await page.click('#restart');
+    const asked = await page.isVisible('#confirmbox');
+    check('opening another file asks first', asked === true);
+    const wording = await page.textContent('#confirmbody');
+    check('and says what is at stake', /cannot be undone/i.test(wording || ''), wording);
+    check('including that nothing has been exported yet',
+      /not exported/i.test(wording || ''), wording);
+    // The destructive button must not be the one a stray Enter presses.
+    const focused = await page.evaluate(() => document.activeElement
+      && document.activeElement.id);
+    check('and the cancel button holds the focus, not the destructive one',
+      focused === 'confirmno', String(focused));
+
+    await page.click('#confirmno');
+    const afterCancel = await pagesOpen();
+    check('cancelling keeps the document', afterCancel === opened,
+      JSON.stringify({ opened, afterCancel }));
+    check('and the review is still on screen',
+      (await page.isVisible('#view-review')) === true);
+
+    // Escape is the same answer as Cancel.
+    await page.click('#restart');
+    await page.waitForSelector('#confirmbox:not([hidden])', { timeout: 15000 });
+    await page.keyboard.press('Escape');
+    check('escape cancels too', (await pagesOpen()) === opened);
+
+    // And confirming actually does it.
+    await page.click('#restart');
+    await page.waitForSelector('#confirmbox:not([hidden])', { timeout: 15000 });
+    await page.click('#confirmyes');
+    await page.waitForSelector('#view-drop:not([hidden])', { timeout: 15000 });
+    check('confirming closes the document', (await pagesOpen()) === 0);
+    check('and the question goes away with it',
+      (await page.isVisible('#confirmbox')) === false);
+
+    // With nothing open there is nothing to ask about, and a prompt that
+    // always fires is one people learn to click through.
+    await page.evaluate(() => document.getElementById('restart').click());
+    check('with no document open it does not ask',
+      (await page.isVisible('#confirmbox')) === false);
+
+    // Put a document back for the tests that follow.
+    await page.setInputFiles('#file', fixturePath);
+    await page.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
+  }
 
   // ---------- naming the file on the way out ----------
   //
@@ -651,7 +716,7 @@ try {
   // two different sizes, using path operators rather than a shared image
   // object — so this exercises the pixel matcher, not a shortcut through the
   // PDF's structure. A fifth, different mark sits on page 2 as a decoy.
-  await page.click('#restart');
+  await newFile();
   await page.waitForSelector('#view-drop:not([hidden])');
   await page.setInputFiles('#file', logoPath);
   await page.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
@@ -891,7 +956,7 @@ try {
   // The point of labelling is that a later reader meets [PERSON_1] instead of
   // a blank and can still follow the sentence. The point of testing it is the
   // opposite: proving that nothing the labels stand for travels with them.
-  await page.click('#restart');
+  await newFile();
   await page.waitForSelector('#view-drop:not([hidden])');
   await page.setInputFiles('#file', fixturePath);
   await page.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
@@ -1002,7 +1067,7 @@ try {
   // once from the text layer, once by the picture search. Two boxes over one
   // word, slightly different sizes and slightly offset — which looks like a
   // bug because it is one, and it double-counts in the panel besides.
-  await page.click('#restart');
+  await newFile();
   await page.waitForSelector('#view-drop:not([hidden])');
   await page.setInputFiles('#file', doublePath);
   await page.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
@@ -1076,7 +1141,7 @@ try {
   const scanPath = join(tmpdir(), 'blinded-scan.pdf');
   writeFileSync(scanPath, Buffer.from(scanBytes));
 
-  await page.click('#restart');
+  await newFile();
   await page.waitForSelector('#view-drop:not([hidden])');
   await page.setInputFiles('#file', scanPath);
   await page.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
@@ -1171,7 +1236,7 @@ try {
   const deckPath = join(tmpdir(), 'blinded-deck.pdf');
   writeFileSync(deckPath, Buffer.from(deckBytes));
 
-  await page.click('#restart');
+  await newFile();
   await page.waitForSelector('#view-drop:not([hidden])');
   await page.setInputFiles('#file', deckPath);
   await page.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
@@ -1248,7 +1313,7 @@ try {
   const colourPath = join(tmpdir(), 'blinded-colours.pdf');
   writeFileSync(colourPath, Buffer.from(colourBytes));
 
-  await page.click('#restart');
+  await newFile();
   await page.waitForSelector('#view-drop:not([hidden])');
   await page.setInputFiles('#file', colourPath);
   await page.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
@@ -1292,7 +1357,7 @@ try {
   // copies of a small wordmark, so all three sit at scale 1.0 relative to
   // whichever is picked. A search that cannot find a logo identical to the one
   // it was handed cannot find anything, and this reported "found 0 times".
-  await page.click('#restart');
+  await newFile();
   await page.waitForSelector('#view-drop:not([hidden])');
   await page.setInputFiles('#file', smallLogoPath);
   await page.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
@@ -1346,7 +1411,7 @@ try {
   // The shape that used to break the matcher outright: sized by its long side
   // alone it became a one-pixel-tall strip, and a page covered in copies of it
   // returned nothing found. Picked sloppily here, as anyone would.
-  await page.click('#restart');
+  await newFile();
   await page.waitForSelector('#view-drop:not([hidden])');
   await page.setInputFiles('#file', wordmarkPath);
   await page.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
@@ -1401,7 +1466,7 @@ try {
     wordmarks.worst > 0.8, 'worst ' + wordmarks.worst.toFixed(3));
 
   // ---------- undo ----------
-  await page.click('#restart');
+  await newFile();
   await page.waitForSelector('#view-drop:not([hidden])');
   await page.setInputFiles('#file', fixturePath);
   await page.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
@@ -1478,7 +1543,7 @@ try {
     await page.evaluate(() => window.Blinded.state.pages[0].manual.length) === 1);
 
   // ---------- a plain text document ----------
-  await page.click('#restart');
+  await newFile();
   await page.waitForSelector('#view-drop:not([hidden])');
   await page.setInputFiles('#file', textPath);
   await page.waitForSelector('#view-review:not([hidden])');
@@ -1513,7 +1578,7 @@ try {
   check('the redaction is visible as blocks', redacted.includes('█'), redacted);
 
   // ---------- an unsupported file is refused ----------
-  await page.click('#restart');
+  await newFile();
   const junk = join(tmpdir(), 'blinded.bin');
   writeFileSync(junk, Buffer.from([0, 1, 2, 3]));
   await page.setInputFiles('#file', junk);
@@ -1681,7 +1746,7 @@ try {
   {
     // Earlier sections may have left the document closed, so ask for the drop
     // view rather than assuming which one is showing.
-    if (await page.isVisible('#view-review')) await page.click('#restart');
+    if (await page.isVisible('#view-review')) await newFile();
     await page.waitForSelector('#view-drop:not([hidden])');
     await page.setInputFiles('#file', readablePath);
     await page.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
@@ -1729,7 +1794,7 @@ try {
   // The markup and the state each used to assert a default of their own, which
   // is two places to disagree about the same thing.
   {
-    if (await page.isVisible('#view-review')) await page.click('#restart');
+    if (await page.isVisible('#view-review')) await newFile();
     await page.waitForSelector('#view-drop:not([hidden])');
     await page.setInputFiles('#file', fixturePath);
     await page.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
@@ -1752,7 +1817,7 @@ try {
   // word, and whatever that turns up beyond what the reading found is added as
   // a mark and drawn amber.
   {
-    if (await page.isVisible('#view-review')) await page.click('#restart');
+    if (await page.isVisible('#view-review')) await newFile();
     await page.waitForSelector('#view-drop:not([hidden])');
     await page.setInputFiles('#file', readablePath);
     await page.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
@@ -1928,6 +1993,85 @@ try {
     check('and the page keeps painting while it runs',
       background.frames >= 5, JSON.stringify(background));
 
+    // Redacting while the check is running.
+    //
+    // Left to race, the two would spawn competing workers and — worse — the
+    // check would finish afterwards and call markPending, putting the document
+    // back into review seconds after the reviewer had just redacted it. So the
+    // check stands down first, and is asked about rather than killed silently.
+    const raced = await page.evaluate(async () => {
+      const B = window.Blinded;
+      const p = B.state.pages[0];
+      B.state.terms = ['Parkway'];
+      B.state.applied = true;
+      p.imageHits = [];
+
+      const sweeping = B.runSweep();
+      // Press Redact while it is still going.
+      const redaction = B.applyRedaction();
+      const asked = !document.getElementById('confirmbox').hidden;
+      const wording = document.getElementById('confirmbody').textContent;
+      document.getElementById('confirmyes').click();
+      await redaction;
+      await sweeping;
+      const out = {
+        asked, wording,
+        running: B.state.sweepRunning,
+        // The document must be redacted when the dust settles, not flipped
+        // back into review by the check landing late.
+        applied: B.state.applied,
+      };
+      p.imageHits = [];
+      B.state.sweptTerms = [];
+      B.state.terms = [];
+      return out;
+    });
+    check('redacting during the check asks before stopping it',
+      raced.asked === true, JSON.stringify(raced));
+    check('and says what will be lost', /stops it at page/i.test(raced.wording || ''),
+      raced.wording);
+    check('the check is not left running afterwards',
+      raced.running === false, JSON.stringify(raced));
+    check('and the document stays redacted rather than being flipped back',
+      raced.applied === true, JSON.stringify(raced));
+
+    // Declining leaves both alone.
+    const declined = await page.evaluate(async () => {
+      const B = window.Blinded;
+      B.state.terms = ['Parkway'];
+      B.state.applied = true;
+      const sweeping = B.runSweep();
+      // Not awaited before answering: the redaction is sitting on the
+      // question, so awaiting it here would wait for a click that has not
+      // happened yet and never return.
+      const redaction = B.applyRedaction();
+      const asked = !document.getElementById('confirmbox').hidden;
+      document.getElementById('confirmno').click();
+      await redaction;
+      const stillSweeping = B.state.sweepRunning;
+      await B.settleSweep();
+      await sweeping;
+      B.state.sweptTerms = [];
+      B.state.terms = [];
+      for (const p of B.state.pages) p.imageHits = [];
+      return { asked, stillSweeping };
+    });
+    check('declining leaves the check running', declined.stillSweeping === true,
+      JSON.stringify(declined));
+
+    // And the check cannot be started on top of a redaction either.
+    const blocked = await page.evaluate(async () => {
+      const B = window.Blinded;
+      B.state.terms = ['Parkway'];
+      B.state.redacting = true;
+      const added = await B.runSweep();
+      B.state.redacting = false;
+      B.state.terms = [];
+      return { added, running: B.state.sweepRunning };
+    });
+    check('and the check will not start on top of a redaction',
+      blocked.added === 0 && blocked.running === false, JSON.stringify(blocked));
+
     check('the sweep finds a word that is really on the page',
       swept.added >= 1 && swept.marks === swept.added, JSON.stringify(swept));
     check('and every mark it adds is flagged as its own',
@@ -1984,7 +2128,7 @@ try {
   // export are four passes over the same document. Each used to announce
   // itself differently, and only one of them had a bar.
   {
-    if (await page.isVisible('#view-review')) await page.click('#restart');
+    if (await page.isVisible('#view-review')) await newFile();
     await page.waitForSelector('#view-drop:not([hidden])');
 
     const seen = page.evaluate(() => new Promise(resolve => {
@@ -2045,7 +2189,7 @@ try {
   // bars filling in sequence reads as the first one having lied, so the work
   // is counted once and both legs report into it.
   {
-    if (await page.isVisible('#view-review')) await page.click('#restart');
+    if (await page.isVisible('#view-review')) await newFile();
     await page.waitForSelector('#view-drop:not([hidden])');
     await page.setInputFiles('#file', logoPath);
     await page.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
@@ -2094,7 +2238,7 @@ try {
   // else entirely, in the one place it could only be read as being about an
   // image.
   {
-    if (await page.isVisible('#view-review')) await page.click('#restart');
+    if (await page.isVisible('#view-review')) await newFile();
     await page.waitForSelector('#view-drop:not([hidden])');
     await page.setInputFiles('#file', readablePath);
     await page.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
@@ -2137,7 +2281,7 @@ try {
   // already read, but those pages must not be read again: on a hundred-page
   // document that would turn a change of mind into another minute of waiting.
   {
-    if (await page.isVisible('#view-review')) await page.click('#restart');
+    if (await page.isVisible('#view-review')) await newFile();
     await page.waitForSelector('#view-drop:not([hidden])');
     await page.setInputFiles('#file', readablePath);
     await page.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
@@ -2194,7 +2338,7 @@ try {
   // about half a second. That is why the asking stops at the first page that
   // has to be read.
   {
-    if (await page.isVisible('#view-review')) await page.click('#restart');
+    if (await page.isVisible('#view-review')) await newFile();
     await page.waitForSelector('#view-drop:not([hidden])');
     await page.setInputFiles('#file', fixturePath);
     await page.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
@@ -2225,7 +2369,7 @@ try {
       Date.now() - started < 1500, (Date.now() - started) + 'ms');
 
     // A page with pictures on it is never skipped, whatever else is true.
-    await page.click('#restart');
+    await newFile();
     await page.waitForSelector('#view-drop:not([hidden])');
     await page.setInputFiles('#file', logoPath);
     await page.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
@@ -2243,7 +2387,7 @@ try {
   // than starting again — re-reading would make pausing cost more than
   // waiting, which is no pause at all.
   {
-    if (await page.isVisible('#view-review')) await page.click('#restart');
+    if (await page.isVisible('#view-review')) await newFile();
     await page.waitForSelector('#view-drop:not([hidden])');
     // Two pages, because stopping happens between them: on a one-page document
     // a pause can never arrive in time to prevent that page being read, and
@@ -2402,7 +2546,7 @@ try {
   // It took a page refresh to clear, which is not something a reviewer would
   // think to do.
   {
-    if (await page.isVisible('#view-review')) await page.click('#restart');
+    if (await page.isVisible('#view-review')) await newFile();
     await page.waitForSelector('#view-drop:not([hidden])');
     await page.setInputFiles('#file', readablePath);
     await page.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
@@ -2413,7 +2557,7 @@ try {
       (window.Blinded.state.pages[0].ocrItems || []).length);
 
     // Now a different document, without reloading the page.
-    await page.click('#restart');
+    await newFile();
     await page.waitForSelector('#view-drop:not([hidden])');
     await page.setInputFiles('#file', wordmarkPath);
     await page.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });

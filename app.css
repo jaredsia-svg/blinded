@@ -617,3 +617,13 @@ body.reviewing .exportbar { position: static; flex: none; margin: 14px 0 18px; }
 }
 .nameinput:focus { outline: 2px solid var(--accent); outline-offset: -1px; border-color: var(--accent); }
 .namego { display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; }
+
+/* ---------- asking before something is thrown away ---------- */
+/*
+   Opening another file discards the one on screen, and unlike a reload the
+   browser cannot offer to stop it: nothing is navigating, so beforeunload
+   never fires. The tool has to ask for itself.
+*/
+.confirmbody { margin: 0; color: var(--ink-soft); font-size: 13.5px; line-height: 1.55; }
+.primary.danger { background: #d92d20; border-color: #d92d20; }
+.primary.danger:hover { background: #b42318; }
