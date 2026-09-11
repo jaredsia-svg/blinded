@@ -3221,6 +3221,68 @@ try {
   await page.goBack();
   await page.waitForSelector('#view-drop:not([hidden])', { timeout: 15000 });
 
+  // ---------- a running check stays on screen ----------
+  //
+  // Changing a setting puts the document back to un-searched, and that was
+  // taking the progress bar of a still-running check off the screen with it.
+  // The work carried on in the background with nothing to show for it, and no
+  // way left to stop it.
+  {
+    if (await page.isVisible('#view-review')) await newFile();
+    await page.waitForSelector('#view-drop:not([hidden])', { timeout: 15000 });
+    await page.setInputFiles('#file', fixturePath);
+    await page.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
+    await setTerms(page, ['Jane']);
+    await redact(page);
+
+    const during = await page.evaluate(async () => {
+      const B = window.Blinded;
+      const sweeping = B.runSweep();
+      const box = document.getElementById('sweepbox');
+      const bar = document.getElementById('sweeprun');
+      const started = { box: !box.hidden, bar: !bar.hidden,
+                        running: B.state.sweepRunning };
+
+      // Change a setting while it runs, exactly as a reviewer would.
+      const slider = document.getElementById('sens');
+      slider.value = String(Math.max(45, Number(slider.value) - 5));
+      slider.dispatchEvent(new Event('input', { bubbles: true }));
+      await new Promise(r => setTimeout(r, 80));
+      const after = { box: !box.hidden, bar: !bar.hidden,
+                      searched: B.state.searched, running: B.state.sweepRunning,
+                      canStop: !document.getElementById('sweepstop').hidden };
+
+      // Pressing Search now asks, and cancelling leaves it running.
+      const search = B.runSearch();
+      await new Promise(r => setTimeout(r, 60));
+      const asked = !document.getElementById('confirmbox').hidden;
+      document.getElementById('confirmno').click();
+      await search;
+      const declined = { running: B.state.sweepRunning, box: !box.hidden,
+                         bar: !bar.hidden };
+
+      await B.settleSweep();
+      await sweeping;
+      return { started, after, asked, declined };
+    });
+
+    check('the check shows its progress when it starts',
+      during.started.box === true && during.started.bar === true,
+      JSON.stringify(during));
+    check('changing a setting mid-check does not hide it',
+      during.after.box === true && during.after.bar === true
+        && during.after.running === true, JSON.stringify(during));
+    check('even though the document went back to un-searched',
+      during.after.searched === false, JSON.stringify(during));
+    check('and it can still be stopped', during.after.canStop === true,
+      JSON.stringify(during));
+    check('pressing Search asks before stopping it', during.asked === true,
+      JSON.stringify(during));
+    check('and declining leaves it running and on screen',
+      during.declined.running === true && during.declined.bar === true,
+      JSON.stringify(during));
+  }
+
   // ---------- what the comprehensive check found outlives a re-search ----------
   //
   // Its marks come off the page when a setting changes, like every other

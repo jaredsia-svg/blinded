@@ -2870,7 +2870,15 @@
     // look for, the button says Search again and this has nothing to be a
     // second opinion about — the marks it found last time are still on the
     // page, but the offer belongs to a search that no longer stands.
-    box.hidden = !(state.searched && state.terms.length && state.kind !== 'text');
+    //
+    // A check that is actually running is the exception, and it has to be:
+    // changing a setting sets the document back to un-searched, and that was
+    // taking the progress bar of a running check off the screen with it. The
+    // work carried on in the background with nothing to show for it, which is
+    // the same dead-button problem in a different place — and worse here,
+    // because the only way to stop it had gone too.
+    box.hidden = !((state.searched || state.sweepRunning)
+      && state.terms.length && state.kind !== 'text');
     if (box.hidden) return;
 
     const running = el('sweeprun');
