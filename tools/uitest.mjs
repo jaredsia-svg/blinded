@@ -2230,15 +2230,19 @@ try {
       const B = window.Blinded;
       B.state.terms = ['Amphitheatre'];
       B.state.applied = false;
+      B.state.searched = false;
+      B.state.sweptTerms = [];
       B.renderSweep();
       return document.getElementById('sweepbox').hidden;
     });
-    check('the thorough check is not offered before anything has been redacted',
+    check('the thorough check is not offered before anything has been searched',
       early === true, String(early));
 
     const offered = await page.evaluate(() => {
       const B = window.Blinded;
-      B.state.applied = true;
+      // Offered on the back of a search, not of a finished redaction: it is a
+      // second opinion on what the first pass found.
+      B.state.searched = true;
       B.renderSweep();
       return {
         hidden: document.getElementById('sweepbox').hidden,
@@ -2246,13 +2250,21 @@ try {
         note: document.getElementById('sweepnote').textContent,
       };
     });
-    check('and is offered once one has been', offered.hidden === false
+    check('and is offered as soon as a search has run', offered.hidden === false
       && offered.button === false, JSON.stringify(offered));
+    check('without waiting for the redaction to be applied',
+      (await page.evaluate(() => window.Blinded.state.applied)) === false);
     // It is slow enough that springing it on someone would be a trap.
-    check('the offer says how long it will take',
-      /about \d+ (second|minute)s?\b/i.test(offered.note), JSON.stringify(offered.note));
+    // It is slow enough that springing it on someone would be a trap.
+    check('the offer warns that it is slow',
+      /couple of minutes/i.test(offered.note), JSON.stringify(offered.note));
     check('and says the document stays usable while it runs',
-      /carry on reviewing/.test(offered.note), JSON.stringify(offered.note));
+      /in the background/i.test(offered.note), JSON.stringify(offered.note));
+    check('and that what it finds is a suggestion, in amber',
+      /amber/i.test(offered.note), JSON.stringify(offered.note));
+    check('the button says what it is',
+      /comprehensive check/i.test(
+        await page.textContent('#sweep')), await page.textContent('#sweep'));
 
     // The sweep draws every typeface, not the two the old fallback used: the
     // whole reason to run it is that the reading was defeated by unusual type.
@@ -3183,7 +3195,23 @@ try {
         [...document.querySelectorAll('.features li')].pop().getBoundingClientRect().bottom),
       icons: [...document.querySelectorAll('.features .ico')]
         .map(i => Math.round(i.getBoundingClientRect().width)),
+      // The drop box and the cards below it are one column. The box used to
+      // run the full width of the wrapper while the cards were capped, so its
+      // edges sat outside theirs at any window wide enough to show it.
+      edges: (() => {
+        const drop = document.getElementById('drop').getBoundingClientRect();
+        const cards = [...document.querySelectorAll('.features li')]
+          .map(n => n.getBoundingClientRect());
+        return {
+          left: Math.round(drop.left - Math.min(...cards.map(c => c.left))),
+          right: Math.round(Math.max(...cards.map(c => c.right)) - drop.right),
+        };
+      })(),
     }));
+    check('the drop box lines up with the cards below it, at ' + w + 'px',
+      Math.abs(front.edges.left) <= 1 && Math.abs(front.edges.right) <= 1,
+      JSON.stringify(front.edges));
+
     // Guard the measurement itself: setViewportSize silently doing nothing
     // would make every assertion below a measurement of the default window.
     check('the front page is measured at ' + w + 'px', front.inner === w, String(front.inner));

@@ -2819,12 +2819,15 @@
       && state.sweptTerms.length === state.terms.length
       && state.sweptTerms.every((t, i) => t === state.terms[i]);
 
-    // Visible once a redaction has been done — and it stays visible after the
-    // sweep has run, even though adding marks un-applies that redaction. It
-    // was hidden by its own success at first: the marks it found set the
-    // document back to unredacted, which took away the note saying what it
-    // had found.
-    box.hidden = !((state.applied || state.sweptTerms.length)
+    // Offered from the moment there is a search to check, rather than waiting
+    // for the redaction to be applied. It is a second opinion on what the
+    // first pass found, and that exists as soon as the first pass has run —
+    // asking the reviewer to cover everything before they can ask whether
+    // anything was missed had the order backwards.
+    //
+    // It stays up afterwards too: the marks it finds un-apply the redaction,
+    // and at first that hid the very note saying what it had found.
+    box.hidden = !((state.searched || state.sweptTerms.length)
       && state.terms.length && state.kind !== 'text');
     if (box.hidden) return;
 
@@ -2838,7 +2841,7 @@
 
     if (!swept) {
       button.hidden = false;
-      button.textContent = 'Check every page by shape';
+      button.textContent = 'Comprehensive Check';
       // Honest about the cost, because it is the whole reason this is a
       // button rather than the default.
       //
@@ -2858,12 +2861,10 @@
           + describeTime(seconds) + '.';
         return;
       }
-      note.textContent = 'The reader finds words by recognising letters, which '
-        + 'means unusual type can defeat it. This searches every page for the '
-        + 'shape of ' + (state.terms.length === 1 ? 'your word' : 'each word')
-        + ' instead, upright and slanted, and adds anything it finds in amber. '
-        + 'About ' + describeTime(seconds) + ' for this document, and you can '
-        + 'carry on reviewing while it runs.';
+      note.textContent = 'The initial redaction may make mistakes. This check '
+        + 'inspects every page again by shape and works in the background. It '
+        + 'may take a couple of minutes and suggested redactions will appear '
+        + 'in amber.';
       return;
     }
 

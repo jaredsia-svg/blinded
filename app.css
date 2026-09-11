@@ -44,7 +44,7 @@ body {
    Its height is a variable because three other things are measured from it:
    the padding that stops the page starting underneath it, and the offset and
    height of the sticky panel beside it. */
-:root { --top-h: 46px; }
+:root { --top-h: 46px; --front-width: 760px; }
 
 .top {
   position: fixed; top: 0; left: 0; right: 0; z-index: 20;
@@ -81,7 +81,12 @@ a.mark { color: inherit; text-decoration: none; }
 
 .view { padding: 28px 0 40px; }
 
+/* The drop box and the cards under it are one column: the box used to run the
+   full width of the wrapper while the cards were capped, so its edges sat
+   outside theirs. One variable holds the width so they cannot drift apart
+   again. */
 .drop {
+  max-width: var(--front-width); margin-left: auto; margin-right: auto;
   border: 2px dashed var(--line);
   background: var(--card);
   border-radius: 14px;
@@ -95,7 +100,10 @@ a.mark { color: inherit; text-decoration: none; }
 .drop-sub { margin: 0; color: var(--ink-soft); font-size: 14px; }
 .link { color: var(--accent); text-decoration: underline; }
 
-.error { color: var(--danger); margin: 14px 0 0; font-weight: 500; }
+.error {
+  color: var(--danger); margin: 14px auto 0; font-weight: 500;
+  max-width: var(--front-width);
+}
 
 /* ---------- front page ---------- */
 
@@ -111,7 +119,7 @@ a.mark { color: inherit; text-decoration: none; }
 .drop:hover .drop-icon, .drop.over .drop-icon { color: var(--accent); }
 
 .features {
-  list-style: none; padding: 0; margin: 30px auto 0; max-width: 760px;
+  list-style: none; padding: 0; margin: 30px auto 0; max-width: var(--front-width);
   display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
 }
 .features li {
