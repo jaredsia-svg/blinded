@@ -1176,6 +1176,48 @@ check('no author is carried into the output', !meta.info.Author);
 check('no title is carried into the output', !meta.info.Title);
 check('no creation date is carried into the output', !meta.info.CreationDate);
 
+// ---------- where a typed word begins and ends ----------
+//
+// \b treats letters and digits as one class, so a word with a stray number
+// stuck to its front is not at a word boundary at all. Measured on a deck
+// whose whole text layer read "54Tokenomics Digital Tech Co." — the 54 a slide
+// number the exporter ran into the next run — where typing the company's name
+// found nothing on a page that plainly says it.
+{
+  const spans = (text, term) => Detect.findTerms(text, [term]);
+  const hits = (text, term) => spans(text, term).length;
+
+  check('a word glued to a number in front of it is still that word',
+    hits('54Tokenomics Digital Tech Co.', 'Tokenomics') === 1,
+    JSON.stringify(spans('54Tokenomics Digital Tech Co.', 'Tokenomics')));
+  check('and the span starts at the word, not at the number',
+    (spans('54Tokenomics Digital', 'Tokenomics')[0] || {}).start === 2,
+    JSON.stringify(spans('54Tokenomics Digital', 'Tokenomics')));
+  check('and ends at the end of it',
+    (spans('54Tokenomics Digital', 'Tokenomics')[0] || {}).end === 12,
+    JSON.stringify(spans('54Tokenomics Digital', 'Tokenomics')));
+  check('a number glued to a word is still that number',
+    hits('page7 4242424242424242', '4242424242424242') === 1);
+
+  // What the boundary is still for. Relaxing it altogether would mean every
+  // short word matching inside every longer one, which is how a redaction
+  // list becomes too long to read.
+  check('but a word inside a longer word is still not it',
+    hits('a fresh start today', 'art') === 0,
+    JSON.stringify(spans('a fresh start today', 'art')));
+  check('nor at the end of one', hits('this is a cart', 'art') === 0);
+  check('nor a number inside a longer number', hits('120245', '2024') === 0);
+
+  // The ordinary cases, unchanged.
+  check('a word on its own is found', hits('the Tokenomics deck', 'Tokenomics') === 1);
+  check('punctuation is a boundary', hits('(Tokenomics)', 'Tokenomics') === 1);
+  check('the start of the text is a boundary', hits('Tokenomics leads', 'Tokenomics') === 1);
+  check('and two occurrences are two', hits('Tokenomics and Tokenomics', 'Tokenomics') === 2);
+  check('including two split only by punctuation',
+    hits('Tokenomics,Tokenomics', 'Tokenomics') === 2,
+    JSON.stringify(spans('Tokenomics,Tokenomics', 'Tokenomics')));
+}
+
 // ---------- the sample slide ----------
 //
 // It sits on the front page to show what a finished redaction looks like,
