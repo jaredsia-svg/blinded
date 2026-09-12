@@ -2141,10 +2141,12 @@
   const PINCH_IN = 1.28;        // how far apart before it counts as a step
   const PINCH_OUT = 1 / PINCH_IN;
 
-  // The pointers currently down on the document, and the span between the
-  // first two of them when the current step began.
+  // The pointers currently down on the document, the span between the first
+  // two of them when the current zoom step began, and where their midpoint
+  // was on the last move.
   const pinchPointers = new Map();
   let pinchSpan = 0;
+  let pinchMid = null;
 
   function pinching() {
     return pinchPointers.size >= 2;
@@ -2155,15 +2157,20 @@
     return Math.hypot(a.x - b.x, a.y - b.y);
   }
 
+  function midOf() {
+    const [a, b] = [...pinchPointers.values()];
+    return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+  }
+
   function watchPinch(stage) {
     const track = event => {
       if (event.pointerType === 'mouse') return;
       pinchPointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
-      if (pinching() && !pinchSpan) pinchSpan = spanOf();
+      if (pinching() && !pinchSpan) { pinchSpan = spanOf(); pinchMid = midOf(); }
     };
     const drop = event => {
       pinchPointers.delete(event.pointerId);
-      if (!pinching()) pinchSpan = 0;
+      if (!pinching()) { pinchSpan = 0; pinchMid = null; }
     };
 
     // Capture, so the gesture is recognised before a canvas underneath starts
@@ -2175,9 +2182,33 @@
       pinchPointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
       if (!pinching() || !pinchSpan) return;
       event.preventDefault();
+
+      // Two fingers do two things, told apart by which of them changed.
+      //
+      // Moving together is a scroll. That is the only way to move the document
+      // while a box is being drawn, because the one finger that would
+      // ordinarily drag it is busy drawing — which left a reviewer on a phone
+      // able to mark the part of the page they could already see and nothing
+      // else.
+      const mid = midOf();
+      if (pinchMid) {
+        const dx = pinchMid.x - mid.x;
+        const dy = pinchMid.y - mid.y;
+        if (Math.hypot(dx, dy) > 0) {
+          // From what the fingers are on, not from the stage: scrollerFor
+          // starts at its argument's parent, so asking it about the stage
+          // looks straight past the stage — which is the thing that scrolls.
+          const scroller = scrollerFor(event.target || stage);
+          if (scroller === window) window.scrollBy(dx, dy);
+          else { scroller.scrollLeft += dx; scroller.scrollTop += dy; }
+        }
+      }
+      pinchMid = mid;
+
+      // Moving apart or together is a zoom. One step per gesture-worth of
+      // movement, then the span is re-baselined so a long pinch keeps stepping
+      // rather than stopping at one.
       const ratio = spanOf() / pinchSpan;
-      // One step per gesture-worth of movement, then the span is re-baselined
-      // so a long pinch keeps stepping rather than stopping at one.
       if (ratio > PINCH_IN) { stepZoom(1); pinchSpan = spanOf(); }
       else if (ratio < PINCH_OUT) { stepZoom(-1); pinchSpan = spanOf(); }
     }, true);
@@ -2217,8 +2248,13 @@
   // toolbar to restate it was one more thing on screen.
   function setTip() {
     const tip = el('tip');
-    tip.textContent = '';
-    tip.hidden = true;
+    // One sentence, and only where the gestures are not obvious. On a phone
+    // the finger that would ordinarily drag the document is busy drawing the
+    // box, so how to move the page is a genuine question; with a mouse it is
+    // not, and a line about fingers there is noise.
+    const say = state.mode === 'pick' && onPhone();
+    tip.textContent = say ? 'One finger to draw the box, two to scroll.' : '';
+    tip.hidden = !say;
   }
 
   function setMode(mode) {
@@ -2264,10 +2300,26 @@
     if (onPhone()) setPane(picking ? 'doc' : 'edit');
 
     // And a way out that is over the document rather than in the panel, which
-    // on a phone is a strip down the side while the box is being drawn.
-    el('pickstop').hidden = !picking;
+    // on a phone is a strip down the side while the box is being drawn. Under
+    // the toolbar on the left, where the hand is — measured rather than
+    // guessed, because the toolbar floats to the top of the review on a phone
+    // and sits inside the panel on a laptop.
+    const stop = el('pickstop');
+    stop.hidden = !picking;
+    stop.dataset.show = picking ? 'yes' : 'no';
 
+    // The tip line goes in first: it lives inside the toolbar's own block and
+    // makes it taller, so measuring before it is written puts the cross where
+    // the toolbar used to end.
     setTip();
+    if (picking) {
+      const head = document.querySelector('.panel-head');
+      const at = head && head.getBoundingClientRect();
+      if (at && at.height) {
+        stop.style.top = Math.round(at.bottom + 10) + 'px';
+        stop.style.left = Math.round(at.left + 2) + 'px';
+      }
+    }
   }
 
   // ---------- confirming a pick ----------

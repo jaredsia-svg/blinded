@@ -3055,7 +3055,9 @@ try {
           zoomIn: of('zoom-in'), zoomOut: of('zoom-out'),
           pan: of('tool-pan'), mark: of('tool-mark'),
           undo: of('undo'), restart: of('restart'), save: of('savedraft'),
-          escape: !document.getElementById('pickstop').hidden,
+          // Shown, not merely un-hidden: on a wide screen the stylesheet keeps
+          // it away, because the Cancel in the panel is right there.
+          escape: getComputedStyle(document.getElementById('pickstop')).display !== 'none',
         };
       };
       const before = read();
@@ -3082,8 +3084,12 @@ try {
     // anything to undo, not about picking.
     check('undo goes back to answering its own question',
       live.after.undo.off === live.before.undo.off, JSON.stringify(live));
-    check('there is a way out of picking over the document',
-      live.before.escape === false && live.during.escape === true
+    // Not on a laptop. The Cancel in the panel is right there and never
+    // covered, so a second cross floating over the document was one more thing
+    // on screen to explain. The phone, where the panel is a strip down the
+    // side while the box is drawn, gets one — checked in its own section.
+    check('a laptop is not given a second way out on top of the document',
+      live.before.escape === false && live.during.escape === false
         && live.after.escape === false, JSON.stringify(live));
   }
 
@@ -3336,6 +3342,55 @@ try {
     });
     check('a pinch anywhere else does nothing at all',
       elsewhere.after === elsewhere.before, JSON.stringify(elsewhere));
+
+    // Two fingers moving together is a scroll, which is the only way to move
+    // the document while a box is being drawn: the one finger that would
+    // ordinarily drag it is busy drawing, so a reviewer on a phone could mark
+    // the part of the page they could already see and nothing else.
+    const twoFinger = await page.evaluate(async () => {
+      const B = window.Blinded;
+      B.setZoom(2);
+      B.setMode('pick');
+      await new Promise(r => setTimeout(r, 150));
+      const c = document.querySelector('.page canvas');
+      const r = c.getBoundingClientRect();
+      const cx = r.left + r.width / 2, cy = r.top + Math.min(260, r.height / 2);
+      const scroller = B.scrollerFor(c);
+      const room = scroller === window
+        ? document.body.scrollHeight - window.innerHeight
+        : scroller.scrollHeight - scroller.clientHeight;
+      const top = () => (scroller === window ? window.scrollY : scroller.scrollTop);
+      const send = (type, id, x, y) => c.dispatchEvent(new PointerEvent(type, {
+        pointerId: id, pointerType: 'touch', clientX: x, clientY: y,
+        bubbles: true, cancelable: true,
+      }));
+      const before = top();
+      send('pointerdown', 21, cx - 25, cy);
+      send('pointerdown', 22, cx + 25, cy);
+      for (let d = 10; d <= 150; d += 10) {
+        send('pointermove', 21, cx - 25, cy - d);
+        send('pointermove', 22, cx + 25, cy - d);
+      }
+      const after = top();
+      const zoomed = B.state.zoom;
+      send('pointerup', 21, cx - 25, cy - 150);
+      send('pointerup', 22, cx + 25, cy - 150);
+      B.setMode('box');
+      B.setZoom(1);
+      return { room, before, after, zoomed,
+               marks: B.state.pages.reduce((n, p) => n + p.manual.length, 0) };
+    });
+    // Without somewhere to scroll to, the rest would pass vacuously.
+    check('there is somewhere for the document to scroll to',
+      twoFinger.room > 0, JSON.stringify(twoFinger));
+    check('two fingers moving together scroll the document while picking',
+      twoFinger.after > twoFinger.before, JSON.stringify(twoFinger));
+    // Moving together is not moving apart, so the size must not change under
+    // a reviewer who only meant to look further down.
+    check('and do not zoom it on the way',
+      twoFinger.zoomed === 2, JSON.stringify(twoFinger));
+    check('and leave no box behind',
+      twoFinger.marks === 0, JSON.stringify(twoFinger));
 
     // And the browser is told not to zoom the app itself, which is what a
     // pinch used to do.
@@ -4858,7 +4913,50 @@ try {
         return zoomed;
       }));
 
-    // Following a page number from the tally has to bring the document over.
+      // The way out of picking, and where it sits. On a laptop the Cancel in the
+    // panel is right there and never covered, so a second cross floating over
+    // the document was one more thing to explain; on a phone the panel is a
+    // strip down the side while the box is drawn, so the cross is the only way
+    // out — under the toolbar on the left, where the hand is.
+    const exits = await phone.evaluate(async () => {
+      const B = window.Blinded;
+      B.setMode('pick');
+      await new Promise(r => setTimeout(r, 150));
+      const stop = document.getElementById('pickstop');
+      const r = stop.getBoundingClientRect();
+      const head = document.querySelector('.panel-head').getBoundingClientRect();
+      const tip = document.getElementById('tip');
+      const out = {
+        shown: getComputedStyle(stop).display !== 'none' && r.width > 0,
+        onTheLeft: r.left < window.innerWidth / 2,
+        belowTheToolbar: r.top >= head.bottom,
+        tip: tip.hidden ? null : tip.textContent.trim(),
+      };
+      B.setMode('box');
+      out.goneAfter = getComputedStyle(stop).display === 'none' || stop.hidden;
+      out.tipAfter = document.getElementById('tip').hidden;
+      return out;
+    });
+    check('a phone gets a way out of picking', exits.shown === true,
+      JSON.stringify(exits));
+    check('on the left, under the toolbar',
+      exits.onTheLeft === true && exits.belowTheToolbar === true,
+      JSON.stringify(exits));
+    check('and it goes away when picking ends', exits.goneAfter === true,
+      JSON.stringify(exits));
+    // The finger that would ordinarily drag the document is busy drawing, so
+    // how to move the page is a real question on a phone.
+    check('and a line says which finger does what',
+      /one finger/i.test(exits.tip || '') && /two/i.test(exits.tip || ''),
+      String(exits.tip));
+    check('which is not left on screen afterwards', exits.tipAfter === true,
+      JSON.stringify(exits));
+    // Picking moved the document forward and leaving it moved the panel back;
+    // the checks below expect to be looking at the document.
+    await phone.evaluate(() => window.Blinded.setPane('doc'));
+    await phone.waitForTimeout(200);
+
+  // Following a page number from the tally has to bring the document over.
     await phone.click('#peek-edit');
     await phone.waitForTimeout(300);
     await phone.evaluate(() => window.Blinded.goToPage(0));
