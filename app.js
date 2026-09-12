@@ -489,10 +489,10 @@
       for (const page of state.pages) {
         page.findings = scanText(page.text);
         page.dismissed = new Set(Array.from(page.dismissed));
-        page.hits = page.findings.map(f => ({
+        page.hits = onePerPlace(page.findings.map(f => ({
           finding: f,
           rects: Boxes.boxesForSpans(page.items, [f], { advance: measure }),
-        }));
+        })));
         drawPage(page);
       }
     }
@@ -1272,6 +1272,45 @@
     set('label-note', state.labelling
       ? (state.labels.entries.length || 0) + ' labels'
       : 'off', state.labelling);
+  }
+
+  // One mark per place on the page.
+  //
+  // A slide deck exported to PDF can carry the same text run many times over,
+  // stacked at identical coordinates — a shape duplicated, a shadow drawn as a
+  // second copy of the words, a layer left behind by whatever made the file.
+  // Measured on one page of a real deck: the word appeared six times to a
+  // reader and thirty-two times in the text layer, one spot carrying eleven
+  // copies of itself.
+  //
+  // Every copy is a true find, so none of them is wrong — but they are all the
+  // same occurrence, and the reviewer gets one box drawn eleven times (which
+  // is why the outline looked doubled) and a list of eleven identical page
+  // numbers to check.
+  //
+  // The first one at each place stands and the rest are dropped, before
+  // anything downstream counts them, labels them or lets them be dismissed
+  // one at a time.
+  const SAME_PLACE = 0.92;
+
+  function onePerPlace(hits) {
+    const kept = [];
+    for (const hit of hits) {
+      const here = hit.rects && hit.rects[0];
+      // A finding with no box on the page cannot be a duplicate of one, and
+      // must not be dropped: it still counts, and the tally says where it is.
+      if (!here) { kept.push(hit); continue; }
+      const already = kept.some(other => {
+        const there = other.rects && other.rects[0];
+        if (!there) return false;
+        // Both ways round: the same word at the same size in the same spot,
+        // not merely one sitting inside another.
+        return Match.coveredFraction(here, there) > SAME_PLACE
+          && Match.coveredFraction(there, here) > SAME_PLACE;
+      });
+      if (!already) kept.push(hit);
+    }
+    return kept;
   }
 
   // ---------- one occurrence, one mark ----------
@@ -4350,7 +4389,8 @@
     scrollerFor, setTool, marking,
     runSearch, applyRedaction: runSearch, coverMarks, uncoverMarks, applyButton,
     activeBoxes,
-    markPending, needsSearch, markDuplicates, plannedCount, pendingTemplates,
+    markPending, needsSearch, markDuplicates, onePerPlace, plannedCount,
+    pendingTemplates,
     termsNeedingPictures,
     readPages, matchOcr, ocrPending, ocrMatchStale, showWordControls,
     sweepTemplates, runSweep, renderSweep, alreadyCovered, readerContradicts,

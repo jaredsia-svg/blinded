@@ -1973,6 +1973,56 @@ try {
   check('and the suppression is what did it, not an empty search',
     doubled.superseded === doubled.pictures,
     doubled.superseded + ' of ' + doubled.pictures);
+  // ---------- one mark per place, however often the page says it ----------
+  //
+  // A deck exported to PDF can carry the same text run many times over,
+  // stacked at identical coordinates. Measured on one page of a real one: the
+  // word was there six times to a reader and thirty-two times in the text
+  // layer, one spot carrying eleven copies of itself. Every copy is a true
+  // find, so none is wrong — but they are one occurrence, and the reviewer got
+  // one box drawn eleven times and eleven identical page numbers to check.
+  {
+    const place = await page.evaluate(() => {
+      const B = window.Blinded;
+      const box = (x, y, w, h) => ({ x, y, w, h });
+      const hit = (id, rect) => ({ finding: { id, kind: 'term' }, rects: rect ? [rect] : [] });
+      const same = box(100, 100, 50, 20);
+
+      return {
+        // The measured case: one spot, many copies.
+        stacked: B.onePerPlace([
+          hit('a', same), hit('b', { ...same }), hit('c', { ...same }),
+        ]).length,
+        // A pixel or two apart is still the same word in the same place.
+        nudged: B.onePerPlace([
+          hit('a', same), hit('b', box(101, 100, 50, 20)),
+        ]).length,
+        // Two real occurrences on the same line are two marks.
+        apart: B.onePerPlace([
+          hit('a', same), hit('b', box(200, 100, 50, 20)),
+        ]).length,
+        // A word inside a bigger box at the same corner is not the same word:
+        // this is why it asks both ways round rather than once.
+        nested: B.onePerPlace([
+          hit('a', same), hit('b', box(100, 100, 160, 40)),
+        ]).length,
+        // A finding with no box on the page still counts, and the tally says
+        // where it is — dropping it would lose a redaction.
+        boxless: B.onePerPlace([hit('a', null), hit('b', null)]).length,
+      };
+    });
+    check('the same word stacked on itself is marked once',
+      place.stacked === 1, JSON.stringify(place));
+    check('and a pixel of drift does not make it two',
+      place.nudged === 1, JSON.stringify(place));
+    check('while two real occurrences stay two',
+      place.apart === 2, JSON.stringify(place));
+    check('and a word inside a larger box is not swallowed by it',
+      place.nested === 2, JSON.stringify(place));
+    check('and a finding with no box on the page is never dropped',
+      place.boxless === 2, JSON.stringify(place));
+  }
+
   // ---------- but a bigger mark is not a duplicate of a smaller one ----------
   //
   // Reported on a deck carrying a company lockup: the word "VinaCapital" and
