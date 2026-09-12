@@ -86,6 +86,7 @@ hundreds of false positives trains you to approve everything, which loses both.
 | Web addresses | scheme and host |
 | Street addresses | house number + street type; `#12-34` units and `Blk` numbers (SG/MY); `12/F`, `G/F` floors and room numbers (HK); `Jalan`/`Lorong`; `Đường`, `Phường`, `Quận` (VN) |
 | Postal codes | US ZIP behind a state or the word ZIP, UK postcode, six digits behind `Singapore` or in `S(......)`, five or six beside `Vietnam` |
+| Names of people | position: under a sign-off, over a job title or contact line, or beside a title on one line |
 | Dates of birth | requires a birth-date keyword |
 
 Hong Kong has no postal codes; its addresses are found by the floor and unit
@@ -96,7 +97,25 @@ not any more. They are consumer and engineering data in a tool pointed at deal
 documents, where they do not appear and their patterns only lengthened a list
 that has to stay short enough to read. Anyone who needs one can type it.
 
-**Names are not on that list, and cannot be.** No rule finds a name reliably.
+**Names are found by where they sit, never by the name itself.** No rule
+identifies a name by looking at it — a name is capitalised words, and so is
+half a deal document. A dictionary of common first names does no better and
+fails both ways at once: measured against a real contact slide it misses
+`KIM-LAN-DANG` (capitals, hyphenated, not a Western given name) while flagging
+`Sun Wah Tower` two lines below it, because Sun is a common given name. It also
+only ever catches the given name, and half a redacted name is not redacted.
+
+What identifies a name is the company it keeps, and names keep company in three
+layouts — a signature block, a contact block, a team page — each with a hard
+anchor beside it. So the detector reads the anchor and takes the name off its
+position relative to it, which works in Vietnamese, Chinese and English equally
+because it never reads the name. A short list of words rules out the things
+that sit in the same place and are not people: organisations, places, and slide
+headings.
+
+Anything it misses, type into the terms box — a name typed once is then found
+in the text, in the lettering of a screenshot, and inside a logo, which no
+detector can do.
 
 ## Typing what to redact
 

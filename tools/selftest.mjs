@@ -242,6 +242,82 @@ check('nothing is proposed as a Hong Kong postal code',
   check('a high-confidence span keeps its own identity',
     found.length === 1 && found[0].kind === 'email', JSON.stringify(found.map(f => f.kind)));
 }
+// ---------- names, found by where they sit ----------
+//
+// The detector never looks at the name itself, which is the whole point: it
+// reads the anchor beside it. So these check the three layouts a name appears
+// in, and then check the things that look like names and are not.
+const who = text => textsOf(text, 'person');
+
+check('a name over a job title is found',
+  who('Jane Doe\nChief Executive Officer').includes('Jane Doe'),
+  JSON.stringify(who('Jane Doe\nChief Executive Officer')));
+check('including one in capitals with hyphens, which no name list would hold',
+  who('KIM-LAN-DANG\nVice President, Principal Investments').includes('KIM-LAN-DANG'),
+  JSON.stringify(who('KIM-LAN-DANG\nVice President, Principal Investments')));
+check('and a Vietnamese name, because the name is never read',
+  who('Tran Van Minh\nManaging Director').includes('Tran Van Minh'),
+  JSON.stringify(who('Tran Van Minh\nManaging Director')));
+check('a name over a contact line is found',
+  who('Jane Doe\nT: +84 28 3821 9930').includes('Jane Doe'),
+  JSON.stringify(who('Jane Doe\nT: +84 28 3821 9930')));
+check('and over a bare email address',
+  who('Jane Doe\njane.doe@example.com').includes('Jane Doe'),
+  JSON.stringify(who('Jane Doe\njane.doe@example.com')));
+check('a name under a sign-off is found',
+  who('Yours sincerely,\nJane Doe').includes('Jane Doe'),
+  JSON.stringify(who('Yours sincerely,\nJane Doe')));
+check('a name after a Name: label is found',
+  who('Name: Tran Van Minh').includes('Tran Van Minh'),
+  JSON.stringify(who('Name: Tran Van Minh')));
+check('and after the conformed signature a contract uses',
+  who('By: /s/ Li Wei').includes('Li Wei'), JSON.stringify(who('By: /s/ Li Wei')));
+check('a name beside a title on one line is found',
+  who('Jane Doe, Managing Director').includes('Jane Doe'),
+  JSON.stringify(who('Jane Doe, Managing Director')));
+check('and the other way round',
+  who('Managing Partner – Tran Van Minh').includes('Tran Van Minh'),
+  JSON.stringify(who('Managing Partner – Tran Van Minh')));
+
+// What it must not call a person. Each of these is a capitalised run of the
+// right length sitting next to a real anchor, which is exactly the shape the
+// detector looks for — they are separated by what the words mean, not by
+// where they sit.
+check('a company over its own email is not a person',
+  who('VinaCapital Group\ninfo@vinacapital.com').length === 0,
+  JSON.stringify(who('VinaCapital Group\ninfo@vinacapital.com')));
+check('a city over a phone number is not a person',
+  who('Ho Chi Minh City\nT: +84 28 3821 9930').length === 0,
+  JSON.stringify(who('Ho Chi Minh City\nT: +84 28 3821 9930')));
+check('a building is not a person',
+  who('Sun Wah Tower\nT: +84 28 3821 9930').length === 0,
+  JSON.stringify(who('Sun Wah Tower\nT: +84 28 3821 9930')));
+check('a slide heading is not a person',
+  who('Executive Summary\nManaging Director commentary follows').length === 0,
+  JSON.stringify(who('Executive Summary\nManaging Director commentary follows')));
+check('a single capitalised word is never a person',
+  who('Victory\nManaging Director').length === 0,
+  JSON.stringify(who('Victory\nManaging Director')));
+check('and a job title on its own is not the person holding it',
+  who('Chief Executive Officer\nT: +84 28 3821 9930').length === 0,
+  JSON.stringify(who('Chief Executive Officer\nT: +84 28 3821 9930')));
+check('a name with no anchor anywhere near it is not proposed',
+  who('Jane Doe\nNothing else on this line at all').length === 0,
+  JSON.stringify(who('Jane Doe\nNothing else on this line at all')));
+
+// The whole contact slide, which is what this was built for.
+{
+  const slide = 'KIM-LAN-DANG\nVice President, Principal Investments – Private Equity\n'
+    + 'T: +84 28 3821 9930 (Ext. 288)\nM: +84 902 307 325\n'
+    + '17th Floor, Sun Wah Tower,\n115 Nguyen Hue, Sai Gon Ward, HCMC, Vietnam';
+  const kinds = kindsIn(slide);
+  for (const want of ['person', 'phone', 'address']) {
+    check('the contact slide gives up its ' + want, kinds.includes(want), kinds.join(','));
+  }
+  check('and the building beside the name is not a second person',
+    who(slide).length === 1, JSON.stringify(who(slide)));
+}
+
 check('finds a labelled date of birth', kindsIn('DOB: 04/11/1979').includes('dob'));
 check('ignores an unlabelled date', !kindsIn('shipped 04/11/1979').includes('dob'));
 
