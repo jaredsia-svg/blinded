@@ -344,6 +344,7 @@
         // is taking a while" is three things to read instead of one.
         const pages = await PdfRead.load(bytes, (n, total) =>
           pageProgress(n - 1, total, 'Rendering pages'));
+        await warnIfHuge(pages.length);
         startReview('pdf', file.name, pages);
       } else if (/^image\//.test(file.type) || /\.(png|jpe?g)$/i.test(file.name)) {
         state.sourceSize = file.size;
@@ -1221,7 +1222,7 @@
   }
 
   function redrawAll() {
-    for (const page of state.pages) if (page.canvas) drawPage(page);
+    for (const page of state.pages) if (isLive(page)) drawPage(page);
     if (state.kind === 'text') drawTextView();
   }
 
@@ -1294,6 +1295,121 @@
 
   // ---------- page rendering ----------
 
+  // How many pages is more than this was built for.
+  //
+  // Each page keeps its rendered pixels for as long as the document is open —
+  // that is what a redaction is measured against — and at about seven and a
+  // half megabytes a page it adds up. The on-screen copies are given back when
+  // they scroll away, but the pages themselves cannot be: measured, a sixty
+  // page document sits at 456 MB. Past a few hundred pages a tab will die, and
+  // dying halfway through a review is worse than being told first.
+  const MANY_PAGES = 250;
+
+  async function warnIfHuge(pages) {
+    if (pages <= MANY_PAGES) return;
+    busy(false);
+    await confirmAction({
+      title: 'That is a long document',
+      body: pages + ' pages. Every page is kept as an image for as long as the '
+        + 'document is open, which is roughly '
+        + Math.round(pages * 7.5 / 100) / 10 + ' GB of memory, and the tab may '
+        + 'run out and close. Redacting it in parts is safer.',
+      confirmLabel: 'Carry on anyway',
+    });
+  }
+
+  // ---------- what is actually held in memory ----------
+  //
+  // Every page used to keep two canvases at the full rendered resolution: the
+  // pristine source and an on-screen copy the same size. Measured on a sixty
+  // page document that is 888 MB of bitmap, 14.8 MB a page, from a PDF of
+  // nineteen kilobytes — and it grows with the document until the tab dies.
+  //
+  // Two things fix it, and neither may touch `source`. That canvas is what a
+  // redaction is measured against and what the export flattens; it stays
+  // exactly as it was. What changes is the copy on screen:
+  //
+  //   it is sized to how big it is actually displayed, not to the source —
+  //   1224 pixels of bitmap were being shown in a box 796 wide — and
+  //
+  //   pages far from the viewport give theirs up altogether, and get it back
+  //   when they come near.
+  //
+  // Everything drawn into it is still in source coordinates; drawPage scales
+  // once at the top and the rest of the drawing code is untouched.
+  const NEAR_PAGES = 2;
+
+  // How wide the on-screen copy should be. Capped at the source, because
+  // drawing a page larger than it was rendered buys nothing but memory.
+  function displayWidthFor(page) {
+    const wrap = page.canvas && page.canvas.parentElement;
+    const css = wrap ? wrap.getBoundingClientRect().width : 0;
+    const dpr = window.devicePixelRatio || 1;
+    const wanted = Math.round((css || 800) * dpr);
+    return Math.max(1, Math.min(page.source.width, wanted));
+  }
+
+  // Gives a page its bitmap, at the size it is being shown. Returns whether
+  // anything changed, so a caller can avoid a needless redraw.
+  function fitCanvas(page) {
+    if (!page.canvas) return false;
+    const width = displayWidthFor(page);
+    const height = Math.max(1, Math.round(width * (page.source.height / page.source.width)));
+    if (page.canvas.width === width && page.canvas.height === height) return false;
+    page.canvas.width = width;
+    page.canvas.height = height;
+    return true;
+  }
+
+  // Takes it away again. The wrapper keeps its shape because its aspect ratio
+  // is set from the source, so the document does not shudder as pages come and
+  // go and a scroll position stays where the reviewer put it.
+  function releaseCanvas(page) {
+    if (!page.canvas || !page.canvas.width) return;
+    page.canvas.width = 0;
+    page.canvas.height = 0;
+  }
+
+  function isLive(page) {
+    return Boolean(page.canvas && page.canvas.width > 0);
+  }
+
+  // Which pages are worth holding. Near the viewport, plus a margin either
+  // side so that scrolling meets a drawn page rather than a blank one.
+  function updateLivePages() {
+    if (!state.pages.length) return;
+    // The window the reviewer is actually looking through, which is the
+    // scrolling column — not the list of pages inside it, whose box is the
+    // whole document and would call every page near.
+    const stage = el('pages').closest('.stage');
+    const view = stage
+      ? stage.getBoundingClientRect()
+      : { top: 0, bottom: window.innerHeight, height: window.innerHeight };
+    let first = Infinity;
+    let last = -Infinity;
+    for (const page of state.pages) {
+      const wrap = page.canvas && page.canvas.parentElement;
+      if (!wrap) continue;
+      const box = wrap.getBoundingClientRect();
+      // A screen either side of what is on screen, so that a flick of the
+      // wheel meets a drawn page rather than a blank one.
+      if (box.bottom >= view.top - view.height && box.top <= view.bottom + view.height) {
+        first = Math.min(first, page.index);
+        last = Math.max(last, page.index);
+      }
+    }
+    if (first === Infinity) { first = 0; last = 0; }
+    first = Math.max(0, first - NEAR_PAGES);
+    last = Math.min(state.pages.length - 1, last + NEAR_PAGES);
+
+    for (const page of state.pages) {
+      const near = page.index >= first && page.index <= last;
+      if (!near) { releaseCanvas(page); continue; }
+      const wasBlank = !isLive(page);
+      if (fitCanvas(page) || wasBlank) drawPage(page);
+    }
+  }
+
   function buildPageElements() {
     const host = el('pages');
     host.textContent = '';
@@ -1301,10 +1417,11 @@
     for (const page of state.pages) {
       const wrap = document.createElement('div');
       wrap.className = 'page';
+      // The wrapper holds the shape, so releasing a canvas does not collapse
+      // the document under the reviewer's scroll position.
+      wrap.style.aspectRatio = page.source.width + ' / ' + page.source.height;
 
       const canvas = document.createElement('canvas');
-      canvas.width = page.source.width;
-      canvas.height = page.source.height;
       page.canvas = canvas;
 
       const num = document.createElement('span');
@@ -1315,6 +1432,12 @@
       host.append(wrap);
       attachDrawing(page, canvas);
     }
+    // Once, now, so the first pages are drawn — and again after a frame, when
+    // the wrappers have been laid out and it is possible to tell which pages
+    // are actually on screen. Before layout every box is at zero and every
+    // page looks near.
+    updateLivePages();
+    requestAnimationFrame(() => updateLivePages());
   }
 
   function activeBoxes(page) {
@@ -1367,9 +1490,23 @@
   }
 
   function drawPage(page, preview) {
+    // A page that has given up its bitmap has nothing to draw on. Its marks
+    // live in the state, not in the canvas, so it loses nothing by waiting:
+    // updateLivePages draws it when it comes back.
+    if (!page.canvas || !page.canvas.width) return;
+
     const ctx = page.canvas.getContext('2d', { alpha: false });
+    // One transform, and then every coordinate below is the page's own. The
+    // canvas may be smaller than the page it shows.
+    const scale = page.canvas.width / page.source.width;
+    ctx.setTransform(scale, 0, 0, scale, 0, 0);
+    // Stroke widths are given in the page's units, so the transform would thin
+    // them along with everything else and an outline drawn two pixels wide
+    // would land at one. This converts a width in screen pixels back into
+    // page units, so a mark looks the same as it always did.
+    const stroke = device => Math.max(0.5, device) / scale;
     ctx.fillStyle = '#fff';
-    ctx.fillRect(0, 0, page.canvas.width, page.canvas.height);
+    ctx.fillRect(0, 0, page.source.width, page.source.height);
     ctx.drawImage(page.source, 0, 0);
 
     const boxes = activeBoxes(page);
@@ -1392,7 +1529,7 @@
       // Being able to read what is about to disappear is the whole point of
       // reviewing, and a filled bar removes that before the decision is made.
       ctx.save();
-      ctx.lineWidth = Math.max(2, page.canvas.width / 600);
+      ctx.lineWidth = stroke(Math.max(2, page.source.width / 600));
       for (const box of boxes) {
         // Amber for what the thorough check added, green for everything else.
         // Both will be covered when Redact is pressed — the colour says where
@@ -1419,7 +1556,7 @@
     if (off.length || offImages.length) {
       ctx.save();
       ctx.strokeStyle = '#d98b1f';
-      ctx.lineWidth = Math.max(1.5, page.canvas.width / 700);
+      ctx.lineWidth = stroke(Math.max(1.5, page.source.width / 700));
       ctx.setLineDash([6, 5]);
       for (const hit of off) for (const r of hit.rects) ctx.strokeRect(r.x, r.y, r.w, r.h);
       for (const m of offImages) ctx.strokeRect(m.rect.x, m.rect.y, m.rect.w, m.rect.h);
@@ -1430,7 +1567,7 @@
       ctx.save();
       ctx.strokeStyle = MARK_GREEN;
       ctx.fillStyle = 'rgba(17, 138, 78, 0.2)';
-      ctx.lineWidth = Math.max(2, page.canvas.width / 600);
+      ctx.lineWidth = stroke(Math.max(2, page.source.width / 600));
       ctx.fillRect(preview.x, preview.y, preview.w, preview.h);
       ctx.strokeRect(preview.x, preview.y, preview.w, preview.h);
       ctx.restore();
@@ -1468,13 +1605,16 @@
     let start = null;
     let panning = null;
 
-    // Screen pixels and canvas pixels differ whenever the page is scaled to
-    // fit, so every pointer position is converted before it is used.
+    // Every pointer position is converted to the page's own pixels — the
+    // source, not the canvas showing it. Those were the same size once, and
+    // taking the canvas as the reference worked by coincidence; now that the
+    // view is scaled to how big it is actually displayed, a mark measured
+    // against it would be placed wrong by exactly that scale.
     const at = event => {
       const rect = canvas.getBoundingClientRect();
       return {
-        x: (event.clientX - rect.left) * (canvas.width / rect.width),
-        y: (event.clientY - rect.top) * (canvas.height / rect.height),
+        x: (event.clientX - rect.left) * (page.source.width / rect.width),
+        y: (event.clientY - rect.top) * (page.source.height / rect.height),
       };
     };
 
@@ -1652,6 +1792,10 @@
       Math.abs(step - zoom) < Math.abs(best - zoom) ? step : best, ZOOM_STEPS[0]);
     state.zoom = wanted;
     el('pages').style.setProperty('--zoom', String(wanted));
+    // Zooming changes how big a page is shown, so it changes how much bitmap
+    // is worth holding. Without this, leaning in would enlarge a canvas that
+    // had been sized for the smaller view and show it soft.
+    updateLivePages();
     el('zoom-out').disabled = wanted === ZOOM_STEPS[0];
     el('zoom-in').disabled = wanted === ZOOM_STEPS[ZOOM_STEPS.length - 1];
     const percent = Math.round(wanted * 100) + '%';
@@ -2602,6 +2746,25 @@
   drop.addEventListener('drop', e => loadFile(e.dataTransfer.files[0]));
   // Without this the browser navigates away to the dropped file and the tab,
   // along with everything in it, is gone.
+  // Pages come and go with the scroll, and change size with the window.
+  //
+  // Both are throttled to a frame: the work is cheap but it is not free, and
+  // doing it once per scroll event on a hundred-page document is how a smooth
+  // scroll becomes a stuttering one.
+  let liveTimer = null;
+  const refreshLive = () => {
+    if (liveTimer) return;
+    liveTimer = requestAnimationFrame(() => {
+      liveTimer = null;
+      updateLivePages();
+    });
+  };
+  el('pages').addEventListener('scroll', refreshLive);
+  const stageOf = () => document.querySelector('.stage');
+  if (stageOf()) stageOf().addEventListener('scroll', refreshLive, { passive: true });
+  window.addEventListener('scroll', refreshLive, { passive: true });
+  window.addEventListener('resize', refreshLive);
+
   window.addEventListener('dragover', e => e.preventDefault());
 
   // The prompt asking for a draft's document covers the drop box, so dropping
@@ -3187,6 +3350,7 @@
     addTerm, dropTerm,
     saveDraft, draftData, restoreDraft, looksLikeDraft, fingerprint, takeDraft,
     occurrencesFor, placesFor, renderTermCounts, renderTemplates, goToPage,
+    updateLivePages, fitCanvas, releaseCanvas, isLive, displayWidthFor, NEAR_PAGES,
     scrollerFor, setTool, marking,
     runSearch, applyRedaction: runSearch, coverMarks, uncoverMarks, applyButton,
     activeBoxes,

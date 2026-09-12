@@ -773,3 +773,31 @@ one — which threw away the open file and its marks, and put the browser's
 tool does. Nothing navigates now: the header button opens the answers over the
 tool and turns into "Back to the tool", and the document is exactly where it
 was left.
+
+## What is held in memory
+
+Every page used to keep two canvases at the full rendered resolution: the
+pristine source and an on-screen copy the same size. Measured on a sixty-page
+document that is 888 MB of bitmap, 14.8 MB a page, from a PDF of nineteen
+kilobytes — and it grows with the document until the tab dies.
+
+Neither fix may touch `source`. That canvas is what a redaction is measured
+against and what the export flattens, and it stays exactly as it was. What
+changed is the copy on screen: it is sized to how big it is actually displayed
+rather than to the source — 1224 pixels of bitmap were being shown in a box 796
+wide — and pages far from the viewport give theirs up altogether, getting them
+back when they come near. The same sixty pages now sit at 456 MB with four live
+canvases instead of a hundred and twenty.
+
+Everything drawn is still in the page's own coordinates: drawPage scales once
+at the top, so the rest of the drawing code is untouched, and stroke widths are
+converted back so a mark looks exactly as thick as it did. Pointer positions
+map to the source rather than to the canvas — they were the same size once, and
+taking the canvas as the reference worked by coincidence. Zooming in promotes
+the canvas back towards full resolution, so leaning in to check a bar still
+shows the bar and not a soft copy of it.
+
+The floor is the sources themselves, about 7.5 MB a page, which cannot be given
+up while the document is open. Past 250 pages the tool now says so before
+starting, because dying halfway through a review is worse than being told
+first.

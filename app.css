@@ -368,7 +368,13 @@ textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; border-
   position: relative; background: var(--card); border: 1px solid var(--line);
   border-radius: var(--radius); overflow: hidden; box-shadow: 0 1px 3px rgba(16, 22, 32, .06);
 }
-.page canvas { display: block; width: 100%; height: auto; cursor: crosshair; touch-action: none; }
+/* The wrapper owns the shape — its aspect-ratio comes from the page — so a
+   canvas that has given up its bitmap does not collapse the document under
+   the reviewer's scroll position. */
+.page canvas {
+  display: block; width: 100%; height: 100%;
+  cursor: crosshair; touch-action: none;
+}
 /* Moving, not marking: the pointer says so before anything is dragged. */
 .tool-pan .page canvas { cursor: grab; }
 .tool-pan .page canvas:active { cursor: grabbing; }

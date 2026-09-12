@@ -460,9 +460,25 @@ try {
     const hit = p.hits.find(h => h.finding.kind === 'email');
     const r = hit.rects[0];
     const ctx = p.canvas.getContext('2d');
-    const mid = ctx.getImageData(Math.round(r.x + r.w / 2), Math.round(r.y + r.h / 2), 1, 1).data;
-    const edge = ctx.getImageData(Math.round(r.x), Math.round(r.y + r.h / 2), 1, 1).data;
-    return { mid: [mid[0], mid[1], mid[2]], edge: [edge[0], edge[1], edge[2]], applied: window.Blinded.state.applied };
+    // The canvas shows the page at whatever size it is displayed, which is
+    // smaller than the page. A rect in the page's own pixels has to be scaled
+    // to find the pixel that draws it.
+    const k = p.canvas.width / p.source.width;
+    const mid = ctx.getImageData(Math.round((r.x + r.w / 2) * k),
+      Math.round((r.y + r.h / 2) * k), 1, 1).data;
+    // The outline is about a pixel wide on screen, and which pixel it lands on
+    // depends on rounding. Scanned across the left edge rather than guessed
+    // at: the strongest colour in that run is the stroke.
+    const y = Math.round((r.y + r.h / 2) * k);
+    const from = Math.max(0, Math.round(r.x * k) - 2);
+    const run = ctx.getImageData(from, y, 6, 1).data;
+    let edge = [run[0], run[1], run[2]];
+    for (let i = 0; i < run.length; i += 4) {
+      if (run[i + 1] - run[i] > edge[1] - edge[0]) {
+        edge = [run[i], run[i + 1], run[i + 2]];
+      }
+    }
+    return { mid: [mid[0], mid[1], mid[2]], edge, applied: window.Blinded.state.applied };
   });
 
   const unapplied = await sample();
@@ -811,9 +827,9 @@ try {
     const hit = p.hits.find(h => h.finding.kind === 'card');
     const r = hit.rects[0];
     const rect = p.canvas.getBoundingClientRect();
-    const sx = rect.width / p.canvas.width;
+    const sx = rect.width / p.source.width;
     const x = rect.left + (r.x + r.w / 2) * sx;
-    const y = rect.top + (r.y + r.h / 2) * (rect.height / p.canvas.height);
+    const y = rect.top + (r.y + r.h / 2) * (rect.height / p.source.height);
     for (const type of ['pointerdown', 'pointerup']) {
       p.canvas.dispatchEvent(new PointerEvent(type, { clientX: x, clientY: y, bubbles: true, pointerId: 1 }));
     }
@@ -839,8 +855,8 @@ try {
     const hit = p.hits.find(h => p.dismissed.has(h.finding.id));
     const r = hit.rects[0];
     const rect = p.canvas.getBoundingClientRect();
-    const x = rect.left + (r.x + r.w / 2) * (rect.width / p.canvas.width);
-    const y = rect.top + (r.y + r.h / 2) * (rect.height / p.canvas.height);
+    const x = rect.left + (r.x + r.w / 2) * (rect.width / p.source.width);
+    const y = rect.top + (r.y + r.h / 2) * (rect.height / p.source.height);
     for (const type of ['pointerdown', 'pointerup']) {
       p.canvas.dispatchEvent(new PointerEvent(type, { clientX: x, clientY: y, bubbles: true, pointerId: 1 }));
     }
@@ -856,8 +872,8 @@ try {
     window.Blinded.setTool('mark');
     const p = window.Blinded.state.pages[0];
     const rect = p.canvas.getBoundingClientRect();
-    const sx = rect.width / p.canvas.width;
-    const sy = rect.height / p.canvas.height;
+    const sx = rect.width / p.source.width;
+    const sy = rect.height / p.source.height;
     const send = (type, cx, cy) => p.canvas.dispatchEvent(
       new PointerEvent(type, { clientX: rect.left + cx * sx, clientY: rect.top + cy * sy, bubbles: true, pointerId: 2 }));
     send('pointerdown', 100, 900);
@@ -1069,8 +1085,8 @@ try {
     const cw = size * S + PAD * 2;
     const ch = size * S + PAD * 2;
     const rect = p.canvas.getBoundingClientRect();
-    const sx = rect.width / p.canvas.width;
-    const sy = rect.height / p.canvas.height;
+    const sx = rect.width / p.source.width;
+    const sy = rect.height / p.source.height;
     const send = (type, px, py) => p.canvas.dispatchEvent(new PointerEvent(type, {
       clientX: rect.left + px * sx, clientY: rect.top + py * sy, bubbles: true, pointerId: 9,
     }));
@@ -1189,8 +1205,10 @@ try {
   const logoPainted = await page.evaluate(() => {
     const p = window.Blinded.state.pages[1];
     const m = p.imageHits[0];
+    const k = p.canvas.width / p.source.width;
     const d = p.canvas.getContext('2d').getImageData(
-      Math.round(m.rect.x + m.rect.w / 2), Math.round(m.rect.y + m.rect.h / 2), 1, 1).data;
+      Math.round((m.rect.x + m.rect.w / 2) * k),
+      Math.round((m.rect.y + m.rect.h / 2) * k), 1, 1).data;
     return [d[0], d[1], d[2]];
   });
   check('a matched logo is painted solid black on the page',
@@ -1204,8 +1222,8 @@ try {
     const p = window.Blinded.state.pages[0];
     const m = p.imageHits[0];
     const rect = p.canvas.getBoundingClientRect();
-    const x = rect.left + (m.rect.x + m.rect.w / 2) * (rect.width / p.canvas.width);
-    const y = rect.top + (m.rect.y + m.rect.h / 2) * (rect.height / p.canvas.height);
+    const x = rect.left + (m.rect.x + m.rect.w / 2) * (rect.width / p.source.width);
+    const y = rect.top + (m.rect.y + m.rect.h / 2) * (rect.height / p.source.height);
     for (const t of ['pointerdown', 'pointerup']) {
       p.canvas.dispatchEvent(new PointerEvent(t, { clientX: x, clientY: y, bubbles: true, pointerId: 3 }));
     }
@@ -1224,8 +1242,8 @@ try {
     const p = B.state.pages[0];
     const rect = p.canvas.getBoundingClientRect();
     const at = (px, py) => ({
-      clientX: rect.left + px * (rect.width / p.canvas.width),
-      clientY: rect.top + py * (rect.height / p.canvas.height),
+      clientX: rect.left + px * (rect.width / p.source.width),
+      clientY: rect.top + py * (rect.height / p.source.height),
     });
     const send = (type, px, py, extra) => p.canvas.dispatchEvent(
       new PointerEvent(type, { ...at(px, py), ...extra, bubbles: true, pointerId: 71 }));
@@ -1315,8 +1333,8 @@ try {
     window.Blinded.setTool('mark');
     const p = window.Blinded.state.pages[0];
     const rect = p.canvas.getBoundingClientRect();
-    const sx = rect.width / p.canvas.width;
-    const sy = rect.height / p.canvas.height;
+    const sx = rect.width / p.source.width;
+    const sy = rect.height / p.source.height;
     const send = (type, px, py) => p.canvas.dispatchEvent(new PointerEvent(type, {
       clientX: rect.left + px * sx, clientY: rect.top + py * sy, bubbles: true, pointerId: 41,
     }));
@@ -1383,8 +1401,9 @@ try {
     const hit = p.hits.find(h => h.finding.kind === 'email');
     const r = hit.rects[0];
     const ctx = p.canvas.getContext('2d');
-    const strip = ctx.getImageData(Math.round(r.x), Math.round(r.y + r.h / 2),
-      Math.round(r.w), 1).data;
+    const k = p.canvas.width / p.source.width;
+    const strip = ctx.getImageData(Math.round(r.x * k), Math.round((r.y + r.h / 2) * k),
+      Math.max(1, Math.round(r.w * k)), 1).data;
     let light = 0;
     for (let i = 0; i < strip.length; i += 4) if (strip[i] > 200) light++;
     return light;
@@ -2045,8 +2064,8 @@ try {
     const cx = (x - 5) * S - PAD;
     const cy = (792 - y - 24) * S - PAD;
     const rect = p.canvas.getBoundingClientRect();
-    const sx = rect.width / p.canvas.width;
-    const sy = rect.height / p.canvas.height;
+    const sx = rect.width / p.source.width;
+    const sy = rect.height / p.source.height;
     const send = (type, px, py) => p.canvas.dispatchEvent(new PointerEvent(type, {
       clientX: rect.left + px * sx, clientY: rect.top + py * sy, bubbles: true, pointerId: 51,
     }));
@@ -2101,8 +2120,8 @@ try {
     const cw = size * S + PAD * 2;
     const ch = height * S + PAD * 2;
     const rect = p.canvas.getBoundingClientRect();
-    const sx = rect.width / p.canvas.width;
-    const sy = rect.height / p.canvas.height;
+    const sx = rect.width / p.source.width;
+    const sy = rect.height / p.source.height;
     const send = (type, px, py) => p.canvas.dispatchEvent(new PointerEvent(type, {
       clientX: rect.left + px * sx, clientY: rect.top + py * sy, bubbles: true, pointerId: 31,
     }));
@@ -2151,8 +2170,8 @@ try {
     window.Blinded.setTool('mark');
     const p = window.Blinded.state.pages[0];
     const rect = p.canvas.getBoundingClientRect();
-    const sx = rect.width / p.canvas.width;
-    const sy = rect.height / p.canvas.height;
+    const sx = rect.width / p.source.width;
+    const sy = rect.height / p.source.height;
     const send = (type, cx, cy) => p.canvas.dispatchEvent(new PointerEvent(type, {
       clientX: rect.left + cx * sx, clientY: rect.top + cy * sy, bubbles: true, pointerId: id,
     }));
@@ -2188,8 +2207,8 @@ try {
     const hit = p.hits.find(h => h.finding.kind === 'email');
     const r = hit.rects[0];
     const rect = p.canvas.getBoundingClientRect();
-    const x = rect.left + (r.x + r.w / 2) * (rect.width / p.canvas.width);
-    const y = rect.top + (r.y + r.h / 2) * (rect.height / p.canvas.height);
+    const x = rect.left + (r.x + r.w / 2) * (rect.width / p.source.width);
+    const y = rect.top + (r.y + r.h / 2) * (rect.height / p.source.height);
     for (const t of ['pointerdown', 'pointerup']) {
       p.canvas.dispatchEvent(new PointerEvent(t, { clientX: x, clientY: y, bubbles: true, pointerId: 23 }));
     }
@@ -2612,7 +2631,9 @@ try {
       const B = window.Blinded;
       const p = B.state.pages[0];
       const ctx = p.canvas.getContext('2d');
-      const at = () => [...ctx.getImageData(100, 75, 1, 1).data].slice(0, 3);
+      const k = p.canvas.width / p.source.width;
+      const at = () => [...ctx.getImageData(
+        Math.round(100 * k), Math.round(75 * k), 1, 1).data].slice(0, 3);
       const rect = { x: 60, y: 60, w: 80, h: 30 };
 
       B.state.applied = false;
@@ -3404,6 +3425,102 @@ try {
     const bubble = document.querySelector('.tipbubble');
     if (bubble) bubble.hidden = true;
   });
+
+  // ---------- what is held in memory ----------
+  //
+  // Every page used to keep two canvases at the full rendered resolution.
+  // Measured on a sixty page document that was 888 MB of bitmap from a PDF of
+  // nineteen kilobytes. Neither fix may touch `source`: that canvas is what a
+  // redaction is measured against and what the export flattens.
+  {
+    if (await page.isVisible('#view-review')) await newFile();
+    await page.waitForSelector('#view-drop:not([hidden])', { timeout: 15000 });
+    await page.setInputFiles('#file', doublePath);
+    await page.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
+    await page.waitForTimeout(200);
+
+    const held = await page.evaluate(() => {
+      const B = window.Blinded;
+      const p = B.state.pages[0];
+      return {
+        sourceWidth: p.source.width,
+        canvasWidth: p.canvas.width,
+        shownWidth: Math.round(p.canvas.getBoundingClientRect().width),
+        dpr: window.devicePixelRatio || 1,
+      };
+    });
+    check('the page is still rendered at full resolution',
+      held.sourceWidth > 1000, JSON.stringify(held));
+    check('but the copy on screen is no bigger than it is shown',
+      held.canvasWidth <= held.sourceWidth
+        && held.canvasWidth <= Math.ceil(held.shownWidth * held.dpr) + 2,
+      JSON.stringify(held));
+
+    // The thing that must not regress: a mark drawn by hand lands where the
+    // pointer was, in the page's own pixels, not the view's.
+    const placed = await page.evaluate(() => {
+      const B = window.Blinded;
+      B.setTool('mark');
+      const p = B.state.pages[0];
+      p.manual = [];
+      const box = p.canvas.getBoundingClientRect();
+      // A quarter of the way in, and a third of the way down.
+      const send = (type, fx, fy) => p.canvas.dispatchEvent(new PointerEvent(type, {
+        clientX: box.left + box.width * fx,
+        clientY: box.top + box.height * fy,
+        bubbles: true, pointerId: 91,
+      }));
+      send('pointerdown', 0.25, 0.33);
+      send('pointermove', 0.55, 0.5);
+      send('pointerup', 0.55, 0.5);
+      const drawn = p.manual[0];
+      const out = drawn
+        ? { x: drawn.x / p.source.width, y: drawn.y / p.source.height,
+            w: drawn.w / p.source.width }
+        : null;
+      p.manual = [];
+      B.redrawAll();
+      return out;
+    });
+    check('a hand-drawn box lands where the pointer was',
+      placed !== null && Math.abs(placed.x - 0.25) < 0.02
+        && Math.abs(placed.y - 0.33) < 0.02 && Math.abs(placed.w - 0.30) < 0.02,
+      JSON.stringify(placed));
+
+    // Pages far from the view give up their bitmap and get it back.
+    const virtual = await page.evaluate(async () => {
+      const B = window.Blinded;
+      const live = () => B.state.pages.filter(p => B.isLive(p)).length;
+      const before = live();
+      // Pretend the document is long by releasing one directly, then asking
+      // for a refresh: what matters is that it comes back drawn.
+      const last = B.state.pages[B.state.pages.length - 1];
+      B.releaseCanvas(last);
+      const released = B.isLive(last);
+      B.updateLivePages();
+      await new Promise(r => setTimeout(r, 50));
+      return { before, released, backAgain: B.isLive(last),
+               width: last.canvas.width };
+    });
+    check('a page can give up its bitmap', virtual.released === false,
+      JSON.stringify(virtual));
+    check('and gets it back when it is wanted again',
+      virtual.backAgain === true && virtual.width > 0, JSON.stringify(virtual));
+
+    // Releasing must not move the document under the reviewer.
+    const shape = await page.evaluate(() => {
+      const B = window.Blinded;
+      const p = B.state.pages[B.state.pages.length - 1];
+      const wrap = p.canvas.parentElement;
+      const tall = wrap.getBoundingClientRect().height;
+      B.releaseCanvas(p);
+      const stillTall = wrap.getBoundingClientRect().height;
+      B.updateLivePages();
+      return { tall: Math.round(tall), stillTall: Math.round(stillTall) };
+    });
+    check('and giving it up does not collapse the page under the scroll',
+      shape.tall === shape.stillTall && shape.tall > 0, JSON.stringify(shape));
+  }
 
   // ---------- the promise, enforced ----------
   //
