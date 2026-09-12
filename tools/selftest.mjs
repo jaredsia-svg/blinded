@@ -100,32 +100,80 @@ check('but not a year beside a capitalised noun',
 // of a postcode, the street type in front of the street name.
 const addr = text => textsOf(text, 'address');
 check('finds a Singapore unit number',
-  addr('1 Raffles Place #44-02, Singapore 048616').includes('#44-02'),
+  addr('1 Raffles Place #44-02, Singapore 048616').some(t => t.includes('#44-02')),
   JSON.stringify(addr('1 Raffles Place #44-02, Singapore 048616')));
 check('finds a Singapore block number',
-  addr('Blk 123A Toa Payoh').includes('Blk 123A'), JSON.stringify(addr('Blk 123A Toa Payoh')));
+  addr('Blk 123A Toa Payoh').some(t => t.includes('Blk 123A')),
+  JSON.stringify(addr('Blk 123A Toa Payoh')));
 check('finds a Lorong that leads with its street type',
-  addr('Toa Payoh Lorong 1').includes('Lorong 1'), JSON.stringify(addr('Toa Payoh Lorong 1')));
+  addr('Toa Payoh Lorong 1').some(t => t.includes('Lorong 1')),
+  JSON.stringify(addr('Toa Payoh Lorong 1')));
 check('finds a Jalan the same way',
-  addr('15 Jalan Besar, Singapore').includes('Jalan Besar'),
+  addr('15 Jalan Besar, Singapore').some(t => t.includes('Jalan Besar')),
   JSON.stringify(addr('15 Jalan Besar, Singapore')));
 check('finds a Singapore street type the anglophone list would have missed',
-  addr('8 Marina Quay').includes('8 Marina Quay'), JSON.stringify(addr('8 Marina Quay')));
+  addr('8 Marina Quay').some(t => t.includes('8 Marina Quay')),
+  JSON.stringify(addr('8 Marina Quay')));
 check('finds a Hong Kong floor',
   addr('Suite 2701, 27/F, Two IFC').some(t => t.includes('27/F')),
   JSON.stringify(addr('Suite 2701, 27/F, Two IFC')));
 check('and a ground floor written G/F',
-  addr("G/F, 88 Queen's Road Central").includes('G/F'),
+  addr("G/F, 88 Queen's Road Central").some(t => t.includes('G/F')),
   JSON.stringify(addr("G/F, 88 Queen's Road Central")));
 check('finds a Vietnamese street, accents and all',
-  addr('12 Đường Lê Lợi, Quận 1').includes('Đường Lê Lợi'),
+  addr('12 Đường Lê Lợi, Quận 1').some(t => t.includes('Đường Lê Lợi')),
   JSON.stringify(addr('12 Đường Lê Lợi, Quận 1')));
 check('finds a Vietnamese ward and district',
-  addr('Phường Bến Nghé, Quận 1').includes('Quận 1'),
+  addr('Phường Bến Nghé, Quận 1').some(t => t.includes('Quận 1')),
   JSON.stringify(addr('Phường Bến Nghé, Quận 1')));
 check('finds the unaccented spelling too',
-  addr('So 8 Duong Nguyen Hue, Quan 1').includes('Duong Nguyen Hue'),
+  addr('So 8 Duong Nguyen Hue, Quan 1').some(t => t.includes('Duong Nguyen Hue')),
   JSON.stringify(addr('So 8 Duong Nguyen Hue, Quan 1')));
+// ---------- an address is a line, not a word ----------
+//
+// Measured on a real contact slide, where every pattern above found nothing:
+// there is no street type after "Nguyen Hue", and "HCMC" and "Vietnam" are not
+// addresses by themselves. One recognisable piece has to bring the rest of the
+// line with it, or the bar covers the ward and leaves the street in plain
+// sight — which is worse than missing it, because it looks handled.
+{
+  const slide = 'KIM-LAN-DANG\nVice President, Principal Investments\n'
+    + 'T: +84 28 3821 9930 (Ext. 288)\n17th Floor, Sun Wah Tower,\n'
+    + '115 Nguyen Hue, Sai Gon Ward, HCMC, Vietnam\nvinacapital.com';
+  const lines = addr(slide);
+  check('the whole street line is covered, not just the ward',
+    lines.includes('115 Nguyen Hue, Sai Gon Ward, HCMC, Vietnam'), JSON.stringify(lines));
+  check('and the floor line brings the building with it',
+    lines.includes('17th Floor, Sun Wah Tower'), JSON.stringify(lines));
+  check('the phone numbers on it are still found separately',
+    textsOf(slide, 'phone').length === 1, JSON.stringify(textsOf(slide, 'phone')));
+}
+check('a Singapore address line is taken whole',
+  addr('Level 12, Marina Bay Financial Centre, 10 Marina Boulevard, Singapore 018983')
+    .includes('Level 12, Marina Bay Financial Centre, 10 Marina Boulevard, Singapore 018983'),
+  JSON.stringify(addr('Level 12, Marina Bay Financial Centre, 10 Marina Boulevard, Singapore 018983')));
+check('and a Hong Kong one',
+  addr('Unit 1201, 12/F, Tower 2, Lippo Centre, 89 Queensway, Admiralty, Hong Kong')
+    .includes('Unit 1201, 12/F, Tower 2, Lippo Centre, 89 Queensway, Admiralty, Hong Kong'),
+  JSON.stringify(addr('Unit 1201, 12/F, Tower 2, Lippo Centre, 89 Queensway, Admiralty, Hong Kong')));
+
+// What stops a line of prose going the same way. A sentence is longer than an
+// address line, its fragments are longer than an address fragment, and a
+// building or a floor in it has other words pressed against it.
+check('a sentence with a floor in it is not an address',
+  addr('Revenue, EBITDA and Margin all rose in the 3rd Floor refurbishment programme')
+    .length === 0,
+  JSON.stringify(addr('Revenue, EBITDA and Margin all rose in the 3rd Floor refurbishment programme')));
+check('nor is a list of buildings that were bought',
+  addr('Acquired Sun Wah Tower, Bitexco, Landmark 81, and other assets in 2023').length === 0,
+  JSON.stringify(addr('Acquired Sun Wah Tower, Bitexco, Landmark 81, and other assets in 2023')));
+check('nor a district named in a sentence',
+  addr('The Company, the Purchaser, and the Vendor each agreed District 1 terms').length === 0,
+  JSON.stringify(addr('The Company, the Purchaser, and the Vendor each agreed District 1 terms')));
+check('and a street mid-sentence stays the street, not the sentence',
+  addr('at 1600 Amphitheatre Parkway today').includes('1600 Amphitheatre Parkway'),
+  JSON.stringify(addr('at 1600 Amphitheatre Parkway today')));
+
 check('but not the soup',
   addr('a pho restaurant on the corner').length === 0,
   JSON.stringify(addr('a pho restaurant on the corner')));
