@@ -496,7 +496,10 @@ button { font: inherit; cursor: pointer; border-radius: 8px; }
 .pickrow:focus-visible .pickfield { outline: 2px solid var(--accent); outline-offset: -1px; }
 /* While picking, the row is the way out of it. */
 body.picking .pickfield { color: var(--ink); font-weight: 600; }
-body.picking .pickgo { background: var(--ink); border-color: var(--ink); }
+/* The plus turns into a cross, and a cross that undoes something is red. In
+   black it read as another button in the row rather than the way out. */
+body.picking .pickgo { background: var(--danger); border-color: var(--danger); }
+body.picking .pickrow:hover .pickgo { background: #8f1d17; border-color: #8f1d17; }
 body.picking .pickgo svg { transform: rotate(45deg); }
 
 /* ---------- picking a logo: everything else gets out of the way ---------- */
@@ -616,8 +619,10 @@ button.wide.on { background: var(--accent); color: #fff; border-color: var(--acc
 .sens input { flex: 1; min-width: 0; }
 .sens span { font-variant-numeric: tabular-nums; flex: none; }
 
-/* While picking, the page invites a different kind of drag. */
-.page.picking canvas { cursor: cell; }
+/* While picking, the page invites a different kind of drag. A crosshair, not
+   the thick cell cross: the thing being aimed at is a box corner, and the fine
+   lines say where it will land. */
+.page.picking canvas { cursor: crosshair; }
 .page.picking { outline: 2px solid var(--accent); outline-offset: -1px; }
 
 /* A hint that has turned into a warning — a search that found nothing. */
