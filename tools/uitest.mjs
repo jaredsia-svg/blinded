@@ -3274,6 +3274,67 @@ try {
     check('and the check will not start on top of a redaction',
       blocked.added === 0 && blocked.running === false, JSON.stringify(blocked));
 
+    // ---------- the reader gets to refuse the check's guesses ----------
+    //
+    // Measured on a fifteen-page report, looking for "jared": the search found
+    // all fifteen occurrences, and the check then proposed fifty-four more —
+    // every one wrong. "offered", "scared", "faced", "shared", "considered",
+    // "separate", "hundred", "validated". A five-letter shape lives inside a
+    // great many longer words, and correlation at 0.65 cannot tell them apart.
+    // The reader had read every one of those words at confidence 91 to 96.
+    {
+      const veto = await page.evaluate(() => {
+        const B = window.Blinded;
+        const p = B.state.pages[0];
+        const kept = { text: p.ocrText, placed: p.ocrPlaced };
+        const at = { x: 100, y: 100, w: 60, h: 20 };
+        const word = (str, confidence) => {
+          p.ocrText = str;
+          p.ocrPlaced = [{ rect: { x: 100, y: 100, w: 60, h: 20 },
+                           start: 0, end: str.length, confidence }];
+          return B.readerContradicts(p, at, 'jared');
+        };
+        const out = {
+          // What the report did, fifty-four times over.
+          differentWord: word('offered', 96),
+          // The same spot, read as the word being looked for: not a
+          // contradiction, and the reading has already marked it anyway.
+          theWordItself: word('Jared', 96),
+          insideALongerWord: word("Jared's", 96),
+          // A reading the reader is unsure of is exactly what the shape
+          // matcher is for, so it does not get to veto.
+          unsureReading: word('offered', 40),
+          noConfidence: word('offered', undefined),
+        };
+        // Lettering inside a picture: the reader places no word there at all,
+        // which is the case this whole feature exists for.
+        p.ocrText = 'nothing near here';
+        p.ocrPlaced = [{ rect: { x: 900, y: 900, w: 40, h: 12 },
+                         start: 0, end: 7, confidence: 96 }];
+        out.readerSawNothing = B.readerContradicts(p, at, 'jared');
+        // And a page it never read.
+        p.ocrText = '';
+        p.ocrPlaced = [];
+        out.pageNotRead = B.readerContradicts(p, at, 'jared');
+        p.ocrText = kept.text;
+        p.ocrPlaced = kept.placed;
+        return out;
+      });
+      check('a guess over a word the reader read as something else is refused',
+        veto.differentWord === true, JSON.stringify(veto));
+      check('but not one over the word actually being looked for',
+        veto.theWordItself === false && veto.insideALongerWord === false,
+        JSON.stringify(veto));
+      check('and not on a reading the reader was unsure of',
+        veto.unsureReading === false && veto.noConfidence === false,
+        JSON.stringify(veto));
+      // The two that would gut the feature if the veto were too eager.
+      check('lettering the reader never saw is still proposed',
+        veto.readerSawNothing === false, JSON.stringify(veto));
+      check('and so is everything on a page it never read',
+        veto.pageNotRead === false, JSON.stringify(veto));
+    }
+
     check('the sweep finds a word that is really on the page',
       swept.added >= 1 && swept.marks === swept.added, JSON.stringify(swept));
     check('and every mark it adds is flagged as its own',

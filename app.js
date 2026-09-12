@@ -3217,6 +3217,47 @@
     return false;
   }
 
+  // Does the reader already know this is a different word?
+  //
+  // Measured on a fifteen-page report, looking for "jared": the search found
+  // all fifteen occurrences from the text, and the comprehensive check then
+  // proposed fifty-four more — every single one of them wrong. They were
+  // "offered", "scared", "faced", "shared", "paired", "considered",
+  // "separate", "hundred", "rigorous", "validated". A five-letter word's
+  // shape lives inside a great many longer words, and at 0.65 correlation
+  // does not tell them apart.
+  //
+  // The reader is the better source wherever it worked, and it had read every
+  // one of those words at confidence 91 to 96. So where it placed words over
+  // the spot and none of them is the term, the proposal is refused: it is not
+  // a second opinion, it is contradicting a first-hand reading.
+  //
+  // What this must not do is silence the case the check exists for —
+  // lettering baked into a picture, which the reader does not see at all.
+  // That case has no words over the spot, so nothing vetoes it.
+  const READER_SURE = 75;
+  const READER_OVER = 0.25;
+
+  function readerContradicts(page, rect, term) {
+    const placed = page.ocrPlaced;
+    if (!placed || !placed.length || !page.ocrText) return false;
+
+    const over = placed.filter(item => item.rect
+      && Match.overlapFraction(item.rect, rect) > READER_OVER);
+    // The reader saw nothing here, so it has no opinion to contradict with.
+    if (!over.length) return false;
+
+    // Only a confident reading gets a veto. A word the reader was unsure of
+    // is exactly the kind of word the shape matcher is there to second-guess.
+    if (!over.every(item => typeof item.confidence === 'number'
+      && item.confidence >= READER_SURE)) return false;
+
+    // Asked the same way the reading itself asks, so the two cannot disagree
+    // about what counts as the term appearing in a word.
+    const said = over.map(item => page.ocrText.slice(item.start, item.end)).join(' ');
+    return Detect.findTerms(said, [term]).length === 0;
+  }
+
   // The running sweep, so that anything which has to come after it can wait
   // for it rather than race it.
   let sweepTask = null;
@@ -3276,6 +3317,7 @@
     // Several typefaces finding the same word in the same place is one find,
     // so they are pooled per page and suppressed before anything is proposed.
     let added = 0;
+    let refused = 0;
     for (const term of new Set(entries.map(e => e.term))) {
       if (!state.terms.includes(term)) continue;
       const perPage = new Map();
@@ -3293,6 +3335,7 @@
         for (const hit of Match.suppress(hits, 0.3)) {
           const rect = { x: hit.x, y: hit.y, w: hit.w, h: hit.h };
           if (alreadyCovered(page, rect)) continue;
+          if (readerContradicts(page, rect, term)) { refused++; continue; }
           page.imageHits.push({
             id: 'sweep:' + term + ':' + pageIndex + ':'
               + Math.round(hit.x) + ':' + Math.round(hit.y),
@@ -3312,6 +3355,9 @@
     // far it reached.
     state.sweptTerms = state.sweepStopped ? [] : asked.filter(t => state.terms.includes(t));
     state.sweepAdded = added;
+    // How many proposals the reader threw out. Not shown anywhere; kept so a
+    // measurement of this check does not have to be a guess.
+    state.sweepRefused = refused;
     state.sweepReached = reached;
     // New marks are not yet covered, so the document is no longer redacted.
     if (added) markPending();
@@ -3547,7 +3593,8 @@
     activeBoxes,
     markPending, needsSearch, plannedCount, pendingTemplates, termsNeedingPictures,
     readPages, matchOcr, ocrPending, ocrMatchStale, showWordControls,
-    sweepTemplates, runSweep, renderSweep, alreadyCovered, sweepProgress,
+    sweepTemplates, runSweep, renderSweep, alreadyCovered, readerContradicts,
+    READER_SURE, sweepProgress,
     settleSweep,
     redrawAll, legs, leg, busyNote,
     describeTime,
