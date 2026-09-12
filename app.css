@@ -792,36 +792,59 @@ body.reviewing .exportbar { position: static; flex: none; margin: 14px 0 18px; }
 /*
    Side by side, the panel and the document each got about 300 pixels of a
    844-pixel phone: too little to read a page in and too little to work the
-   controls in. So on a narrow screen only one is shown, and a toggle at the
-   top says which. The export bar stays put underneath both, because deciding
-   to redact is the one thing you do from either.
+   controls in. So on a narrow screen one of them is open and the other is a
+   strip down the side — tapped or swiped to trade places.
+
+   A strip rather than nothing at all, because a pane that vanishes is a pane
+   you have to remember is there. The toolbar sits above both, since which
+   half is open has no bearing on wanting to undo something or zoom in.
 */
-.panes { display: none; }
+.peek { display: none; }
 
 @media (max-width: 900px) {
-  .panes {
-    display: flex; flex: none; gap: 0; margin: 0 0 12px;
-  }
-  .pane {
-    flex: 1; font: inherit; font-size: 13.5px; font-weight: 600;
-    padding: 9px 10px; cursor: pointer;
-    background: var(--card); color: var(--ink-soft);
-    border: 1px solid var(--line);
-  }
-  .pane:first-child { border-radius: var(--radius) 0 0 var(--radius); }
-  .pane:last-child { border-radius: 0 var(--radius) var(--radius) 0; margin-left: -1px; }
-  .pane[aria-pressed="true"] {
-    background: var(--accent); border-color: var(--accent); color: #fff;
-  }
-
   body.reviewing #view-review { padding-top: 12px; }
-  body.reviewing[data-pane="doc"] .panel { display: none; }
-  body.reviewing[data-pane="edit"] .stage { display: none; }
-  body.reviewing .review { grid-template-columns: minmax(0, 1fr); }
+  body.reviewing .review {
+    position: relative; display: flex; gap: 8px;
+    grid-template-columns: none;
+  }
+  body.reviewing .panel, body.reviewing .stage {
+    min-width: 0; transition: flex-basis .18s ease;
+  }
 
-  /* The bar is the same two buttons, without the sentence beside them: on a
-     phone that sentence took a column of its own and pushed the buttons into
-     three lines of text. */
+  /* The open half takes what is left; the shut one is a strip, and its
+     contents are clipped rather than reflowed — a panel squeezed to 46 pixels
+     would spend the animation rearranging itself. */
+  body.reviewing[data-pane="edit"] .panel { flex: 1 1 auto; }
+  body.reviewing[data-pane="edit"] .stage { flex: 0 0 46px; overflow: hidden; }
+  body.reviewing[data-pane="doc"] .stage { flex: 1 1 auto; }
+  body.reviewing[data-pane="doc"] .panel { flex: 0 0 46px; overflow: hidden; }
+
+  /* Nothing inside a shut pane is touchable: the tap belongs to the strip. */
+  body.reviewing[data-pane="edit"] .stage > *,
+  body.reviewing[data-pane="doc"] .panel > * { pointer-events: none; }
+
+  .peek {
+    /* Above the shut pane, not beside it: a page number badge is positioned
+       inside that pane and would otherwise show through the strip. */
+    display: block; position: absolute; top: 0; bottom: 0; width: 46px; z-index: 3;
+    background: var(--card); border: 1px solid var(--line);
+    border-radius: var(--radius); cursor: pointer; padding: 0;
+    font: inherit; font-size: 12.5px; font-weight: 600; color: var(--ink-soft);
+    writing-mode: vertical-rl; text-orientation: mixed;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .peek[hidden] { display: none; }
+  .peek:hover { color: var(--ink); background: #eef1f6; }
+  #peek-edit { left: 0; }
+  #peek-doc { right: 0; }
+
+  /* The toolbar is lifted out of the panel and sits above both halves, so it
+     is there whichever one is open. */
+  body.reviewing .panel-head.afloat {
+    position: static; border: 1px solid var(--line); border-radius: var(--radius);
+    background: var(--card); margin-bottom: 10px; flex: none;
+  }
+
   .exportbar { padding: 10px 12px; gap: 10px; flex-wrap: nowrap; }
   .exportbar .exportgo { flex: 1; gap: 10px; }
   #exportnote { display: none; }

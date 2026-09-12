@@ -806,10 +806,22 @@ first.
 
 Side by side, the panel and the document each got about 300 pixels of an
 844-pixel phone: too little to read a page in and too little to work the
-controls in. On a narrow screen only one is shown and a toggle at the top says
-which, so the pane on show gets the height both used to share — measured, 305
-pixels became 634. The export bar stays under both, because deciding to redact
-is the one thing you do from either.
+controls in. On a narrow screen one of them is open and the other is a strip
+down the side — tapped, or swiped, to trade places. A strip rather than nothing
+at all, because a pane that vanishes is a pane you have to remember is there.
+
+The toolbar sits above both halves, since which one is open has no bearing on
+wanting to undo something or zoom in — and because it would otherwise live in
+the panel, which is sometimes 46 pixels wide. It is moved there rather than
+duplicated: two copies would be two sets of the same ids and two sets of
+listeners to keep in step.
+
+A swipe is not any horizontal drag. With the hand tool a drag across a page is
+a pan, and stealing that would make a zoomed-in document impossible to move
+around, so a swipe counts when it starts anywhere but on a page — or when it
+starts at the very edge of the screen, which is the gesture everybody already
+knows. The export bar stays under both halves, because deciding to redact is
+the one thing you do from either.
 
 The bar was also being cut off, and that was 100vh. On a phone the visible
 viewport is shorter than 100vh for as long as the browser's own bar is showing,
