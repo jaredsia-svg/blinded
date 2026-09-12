@@ -797,6 +797,10 @@
     // The word list shows a tally only once something has counted, so it has
     // to be redrawn when that becomes true.
     renderTermCounts();
+    // And the image rows, whose sliders may have moved themselves: a bar that
+    // came down without the control following it would be a reading that
+    // disagrees with the thing it reads.
+    renderTemplates();
     // Whatever ran or did not run below, the overlay comes down here: the
     // passes each lower it on their own way out, and a search where neither
     // had anything to do would otherwise leave it up for good.
@@ -1009,6 +1013,25 @@
     // Logos: one entry each, so the results land directly.
     for (const entry of entries.filter(e => e.logo)) {
       const found = results.get(entry.key);
+
+      // Nothing at the bar it was set to, but something just under it.
+      //
+      // The reviewer has no way to know where to put a slider before the
+      // first search — 0.75 is a starting point, not an answer — and being
+      // told "no match" about a mark that is plainly on the page is the
+      // wrong end of the exchange. Every candidate here has already been
+      // verified at full resolution, so lowering the bar costs nothing: the
+      // answer is already in hand, on the wrong side of a number.
+      //
+      // Only when the search found nothing. A bar that found something is a
+      // bar the reviewer is entitled to keep, and moving it under them would
+      // overrule a decision they made.
+      const autoBar = lowerBarIfEmpty(found, sensFor(entry.logo));
+      if (autoBar !== null) {
+        entry.logo.sens = autoBar;
+        entry.logo.autoBar = autoBar;
+      }
+
       distribute(found.matches, hit => ({
         id: entry.logo.id + ':' + hit.pageIndex + ':' + Math.round(hit.x) + ':' + Math.round(hit.y),
         templateId: entry.logo.id,
@@ -1020,7 +1043,7 @@
       entry.logo.rawMatches = found.matches.length;
       entry.logo.best = found.best;
       entry.logo.searched = true;
-      reportSearch(found, sensFor(entry.logo));
+      reportSearch(found, sensFor(entry.logo), autoBar);
     }
 
     // Words: several typefaces per word, pooled and then de-duplicated. One
@@ -1085,7 +1108,7 @@
   // "0 found" on its own reads as a broken feature. Saying what the best score
   // actually was turns it into a decision the reviewer can act on — and the
   // sensitivity named here is the one control that still governs this search.
-  function reportSearch(found, bar) {
+  function reportSearch(found, bar, autoBar) {
     const hint = el('pickhint');
     // A match that worked needs no commentary: the marks are on the page and
     // the count is beside the picked image. What is worth saying is what
@@ -1122,6 +1145,7 @@
       // a hundredth was reported as nothing at all.
       const NEARLY = 0.08;
       const near = (found.near || [])
+        .map(hit => hit.score)
         .filter(s => s >= clampSens(bar) - NEARLY)
         .sort((a, b) => b - a);
       if (near.length) {
@@ -1133,6 +1157,11 @@
           + ' and ' + (near.length === 1 ? 'was' : 'were')
           + ' left out — lower the bar past ' + top.toFixed(2) + ' to include '
           + (near.length === 1 ? 'it.' : 'them.');
+      }
+      if (autoBar !== null && autoBar !== undefined) {
+        text = 'Nothing matched at the setting it was on, so the bar came down '
+          + 'to ' + autoBar.toFixed(2) + '. ' + text
+          + ' Move the slider if that is not what you wanted.';
       }
       hint.textContent = text;
       hint.hidden = false;
@@ -1146,6 +1175,62 @@
       : 'Nothing resembling that was found anywhere in the document.';
     hint.hidden = false;
     hint.classList.add('warnhint');
+  }
+
+  // Where the bar wants to be, read off what the search actually saw.
+  //
+  // A picked mark scores near 1.00 against its own copies and drops away
+  // sharply against everything else, so the scores arrive in clumps with a
+  // gap between them. The bar belongs in the widest gap: above it are the
+  // copies, below it is the rest of the document.
+  //
+  // Never below this floor, however tempting the gap. Correlation at 0.6 will
+  // find something resembling almost anything, and a redaction tool that
+  // quietly covers whatever it likes is worse than one that finds nothing and
+  // says so.
+  const AUTO_FLOOR = 0.62;
+
+  // How wide a gap has to be before it is a gap rather than the ordinary
+  // scatter between copies of one mark.
+  const REAL_GAP = 0.03;
+
+  function barFromScores(scores) {
+    const sorted = scores.filter(s => s >= AUTO_FLOOR).sort((a, b) => b - a);
+    if (!sorted.length) return null;
+    // One candidate, or several with no gap worth speaking of: take them all,
+    // just under the weakest. A clump of copies of the same mark scores within
+    // a hundredth or two of itself, and splitting that on the widest of
+    // several tiny gaps would keep one copy and drop the rest for no reason
+    // anyone could see.
+    let cut = sorted[sorted.length - 1];
+    let widest = REAL_GAP;
+    for (let i = 0; i < sorted.length - 1; i++) {
+      const gap = sorted[i] - sorted[i + 1];
+      if (gap > widest) { widest = gap; cut = sorted[i]; }
+    }
+    // A hundredth of clearance, and rounded to where the slider can actually
+    // stand — a bar the reviewer cannot reproduce by moving the control is a
+    // bar they cannot undo.
+    const bar = Math.max(AUTO_FLOOR, Math.floor((cut - 0.005) * 100) / 100);
+    return Math.min(0.99, bar);
+  }
+
+  // Moves the bar down to whatever the search actually saw, and promotes the
+  // candidates it had turned away. Returns the new bar, or null for "leave it
+  // alone" — which is the answer whenever the search found something, because
+  // a bar that found something is a bar the reviewer is entitled to keep.
+  //
+  // `found` is edited in place: the promoted hits move from near to matches.
+  // They must move rather than be copied, or the note below ends up saying
+  // "4 matches, and 4 more were left out" about one set of four.
+  function lowerBarIfEmpty(found, bar) {
+    if (found.matches.length) return null;
+    if (!found.near || !found.near.length) return null;
+    const suggested = barFromScores(found.near.map(hit => hit.score));
+    if (suggested === null || suggested >= bar) return null;
+    found.matches = found.near.filter(hit => hit.score >= suggested);
+    found.near = found.near.filter(hit => hit.score < suggested);
+    return suggested;
   }
 
   // ---------- what a collapsed section is holding ----------
@@ -1790,7 +1875,13 @@
         // Too small to hold a logo. Leave pick mode armed rather than
         // silently treating the stray click as a redaction.
         if (rect.w < 8 || rect.h < 8) { drawPage(page); return; }
-        addTemplate(page, rect);
+        // Shown back before it is used. What was drawn at reviewing size is a
+        // few dozen pixels, and the difference between a box that fits and one
+        // that clips the mark is not visible there.
+        confirmCrop(page, rect).then(chosen => {
+          if (chosen) addTemplate(page, chosen);
+          else drawPage(page);
+        });
         return;
       }
       if (rect.w < minimum && rect.h < minimum) {
@@ -2107,6 +2198,194 @@
     el('pickstop').hidden = !picking;
 
     setTip();
+  }
+
+  // ---------- confirming a pick ----------
+  //
+  // A box drawn on the page at reviewing size is drawn at a few dozen pixels,
+  // where a box a little too wide looks exactly like one that fits. That
+  // matters more than it sounds: a pick that clips the mark, or carries a
+  // strip of the thing beside it, is the difference between finding every
+  // copy and finding two — measured on a deck of letter badges, where a pick
+  // offset by four pixels turned a clean separation into an impossible one.
+  //
+  // So the pick is shown large enough to judge, with its corners in hand.
+  const CROP_MARGIN = 0.6;      // how much of the surroundings to show
+  const CROP_VIEW = 520;        // the stage's widest, in CSS pixels
+  const CROP_GRAB = 14;         // how near a corner counts as grabbing it
+
+  function confirmCrop(page, picked) {
+    return new Promise(resolve => {
+      const box = el('cropbox');
+      const view = el('cropview');
+      const ctx = view.getContext('2d');
+      const size = el('cropsize');
+
+      // What is on show: the pick plus a margin of its surroundings, so the
+      // corners have somewhere to go and the mark has context.
+      const pad = { x: picked.w * CROP_MARGIN, y: picked.h * CROP_MARGIN };
+      const area = {
+        x: Math.max(0, picked.x - pad.x),
+        y: Math.max(0, picked.y - pad.y),
+      };
+      area.w = Math.min(page.source.width - area.x, picked.w + pad.x * 2);
+      area.h = Math.min(page.source.height - area.y, picked.h + pad.y * 2);
+
+      // Big enough to judge, never so big it leaves the screen.
+      const room = Math.min(CROP_VIEW, Math.max(240, window.innerWidth - 90));
+      const zoom = Math.min(6, Math.max(1, room / area.w));
+      const dpr = window.devicePixelRatio || 1;
+      view.style.width = Math.round(area.w * zoom) + 'px';
+      view.style.height = Math.round(area.h * zoom) + 'px';
+      view.width = Math.round(area.w * zoom * dpr);
+      view.height = Math.round(area.h * zoom * dpr);
+
+      const rect = { ...picked };
+      const toView = p => ({ x: (p.x - area.x) * zoom, y: (p.y - area.y) * zoom });
+
+      const draw = () => {
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        ctx.imageSmoothingEnabled = false;
+        ctx.clearRect(0, 0, view.width, view.height);
+        ctx.drawImage(page.source, area.x, area.y, area.w, area.h,
+          0, 0, area.w * zoom, area.h * zoom);
+
+        const at = toView(rect);
+        const w = rect.w * zoom, h = rect.h * zoom;
+
+        // Everything outside the box goes quiet, so what is inside is the
+        // thing being judged.
+        ctx.fillStyle = 'rgba(13, 17, 23, 0.45)';
+        ctx.fillRect(0, 0, area.w * zoom, at.y);
+        ctx.fillRect(0, at.y + h, area.w * zoom, area.h * zoom - at.y - h);
+        ctx.fillRect(0, at.y, at.x, h);
+        ctx.fillRect(at.x + w, at.y, area.w * zoom - at.x - w, h);
+
+        ctx.strokeStyle = MARK_GREEN;
+        ctx.lineWidth = 2;
+        ctx.strokeRect(at.x, at.y, w, h);
+
+        ctx.fillStyle = '#fff';
+        ctx.strokeStyle = MARK_GREEN;
+        ctx.lineWidth = 2;
+        for (const corner of corners(at, w, h)) {
+          ctx.beginPath();
+          ctx.arc(corner.x, corner.y, 6, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+        }
+
+        size.textContent = Math.round(rect.w) + ' by ' + Math.round(rect.h)
+          + ' pixels' + (zoom > 1.05 ? ', shown ' + zoom.toFixed(1)
+            + ' times larger' : '') + '.';
+      };
+
+      let holding = null;
+      const where = event => {
+        const r = view.getBoundingClientRect();
+        return { x: event.clientX - r.left, y: event.clientY - r.top };
+      };
+
+      // Capture keeps a drag alive when the pointer leaves the canvas, which
+      // is exactly what happens when a corner is dragged outwards. It is not
+      // essential — a drag without it simply stops at the edge — so a browser
+      // that refuses must not take the dialog down with it.
+      const hold = event => {
+        try { view.setPointerCapture(event.pointerId); } catch { /* not vital */ }
+      };
+
+      const down = event => {
+        const p = where(event);
+        const at = toView(rect);
+        const list = corners(at, rect.w * zoom, rect.h * zoom);
+        for (let i = 0; i < list.length; i++) {
+          if (Math.hypot(p.x - list[i].x, p.y - list[i].y) <= CROP_GRAB) {
+            holding = { corner: i };
+            hold(event);
+            event.preventDefault();
+            return;
+          }
+        }
+        // Not a corner: drawing a new box from scratch, which is quicker than
+        // dragging four corners when the first attempt was badly off.
+        holding = { fresh: { x: area.x + p.x / zoom, y: area.y + p.y / zoom } };
+        hold(event);
+        event.preventDefault();
+      };
+
+      const move = event => {
+        if (!holding) return;
+        const p = where(event);
+        const onPage = {
+          x: Math.max(area.x, Math.min(area.x + area.w, area.x + p.x / zoom)),
+          y: Math.max(area.y, Math.min(area.y + area.h, area.y + p.y / zoom)),
+        };
+        if (holding.fresh) {
+          Object.assign(rect, Boxes.rectFromDrag(
+            holding.fresh.x, holding.fresh.y, onPage.x, onPage.y));
+        } else {
+          // The corner opposite the one being dragged stays put, which is what
+          // makes dragging a corner feel like resizing rather than moving.
+          const fixed = corners({ x: rect.x, y: rect.y }, rect.w, rect.h)[3 - holding.corner];
+          Object.assign(rect, Boxes.rectFromDrag(fixed.x, fixed.y, onPage.x, onPage.y));
+        }
+        draw();
+      };
+
+      const up = () => { holding = null; };
+
+      const done = value => {
+        box.hidden = true;
+        view.removeEventListener('pointerdown', down);
+        view.removeEventListener('pointermove', move);
+        view.removeEventListener('pointerup', up);
+        view.removeEventListener('pointercancel', up);
+        el('cropuse').removeEventListener('click', use);
+        el('cropcancel').removeEventListener('click', cancel);
+        document.removeEventListener('keydown', key);
+        resolve(value);
+      };
+      const use = () => {
+        // Too small to match on, which the old path only discovered after the
+        // dialog had closed and the pick was gone.
+        if (rect.w < 8 || rect.h < 8) {
+          el('cropnote').textContent = 'That box is too small to match on. '
+            + 'Draw one around the whole mark.';
+          el('cropnote').classList.add('warnhint');
+          return;
+        }
+        done({ ...rect });
+      };
+      const cancel = () => done(null);
+      const key = event => {
+        if (event.key === 'Enter') { event.preventDefault(); use(); }
+        if (event.key === 'Escape') { event.preventDefault(); cancel(); }
+      };
+
+      el('cropnote').textContent = 'Drag a corner to fit the box to it, or draw '
+        + 'a new one. A box drawn tightly around the mark finds it far more '
+        + 'reliably than a loose one.';
+      el('cropnote').classList.remove('warnhint');
+      view.addEventListener('pointerdown', down);
+      view.addEventListener('pointermove', move);
+      view.addEventListener('pointerup', up);
+      view.addEventListener('pointercancel', up);
+      el('cropuse').addEventListener('click', use);
+      el('cropcancel').addEventListener('click', cancel);
+      document.addEventListener('keydown', key);
+
+      box.hidden = false;
+      draw();
+    });
+  }
+
+  // The four corners of a box, in the order top-left, top-right, bottom-left,
+  // bottom-right — so index 3 - i is always the one diagonally opposite.
+  function corners(at, w, h) {
+    return [
+      { x: at.x, y: at.y }, { x: at.x + w, y: at.y },
+      { x: at.x, y: at.y + h }, { x: at.x + w, y: at.y + h },
+    ];
   }
 
   // Cuts the picked region out of the page and searches every page for it.
@@ -3844,10 +4123,12 @@
 
   window.Blinded = { state, rescan, loadFile, exportFile, setMode, addTemplate,
     undoLast, undoStack, applyLabels, labelItems, downloadKey,
-    sensFor, wordSensitivity, wordBarFor, setZoom, stepZoom, ZOOM_STEPS,
+    sensFor, barFromScores, lowerBarIfEmpty, AUTO_FLOOR, REAL_GAP,
+    wordSensitivity, wordBarFor,
+    setZoom, stepZoom, ZOOM_STEPS,
     MARK_GREEN,
     cleanName, coveredText, askName, askPassword, renderPdf, wordLayerFor,
-    redactedName,
+    confirmCrop, redactedName,
     confirmAction, showTemplate,
     addTerm, dropTerm,
     saveDraft, draftData, restoreDraft, looksLikeDraft, fingerprint, takeDraft,

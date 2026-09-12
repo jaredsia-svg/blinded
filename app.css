@@ -535,6 +535,19 @@ body.picking .tools {
   position: relative;
   background: var(--card); border-radius: var(--radius);
 }
+/* Confirming a pick. The crop is shown big, because the whole point is to see
+   what was actually caught — at the size it sits on the page a logo is a few
+   dozen pixels and a box a little too wide looks exactly like a box that
+   fits. */
+.cropinner { min-width: 0; max-width: min(560px, 94vw); }
+.cropstage {
+  margin: 10px 0 6px; display: flex; justify-content: center;
+  background: #eef1f6; border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 8px; overflow: hidden;
+}
+#cropview { max-width: 100%; touch-action: none; cursor: crosshair; display: block; }
+#cropsize { margin: 0 0 2px; font-variant-numeric: tabular-nums; }
+
 /* The way out of picking, sitting over the document. Red, because it undoes
    the thing that is happening; above the dimming, because everything dimmed
    is unreachable and this must not be. */
@@ -554,7 +567,10 @@ body.picking .tools {
 /* Above the dimming, not under it. A full-size look at a picked image is
    opened from the one section picking leaves lit, and it was being drawn
    behind the very overlay that section is sitting on top of. */
-#imagebox { z-index: 60; }
+/* Dialogs go above the dimming, not under it. The crop box always opens while
+   picking, so without this the button to accept a pick sits behind the sheet
+   that picking puts over the page and cannot be pressed at all. */
+#imagebox, #cropbox, #passbox { z-index: 60; }
 
 /* A word in the list is a thing the reviewer put there, so it reads as an
    object with a way to take it off, not as a line of text. */

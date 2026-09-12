@@ -1333,7 +1333,90 @@ try {
     send('pointerup', cx + cw, cy + ch);
   }, first);
 
+  // A drag on the page no longer becomes a template on its own: what was drawn
+  // at reviewing size is a few dozen pixels, where a box that clips the mark
+  // looks exactly like one that fits, and a pick four pixels out is the
+  // difference between finding every copy and finding two.
+  await page.waitForSelector('#cropbox:not([hidden])', { timeout: 30000 });
+  const crop = await page.evaluate(() => {
+    const view = document.getElementById('cropview');
+    return {
+      shown: !document.getElementById('cropbox').hidden,
+      drawn: view.width > 0 && view.height > 0,
+      // Bigger than the pick, because the surroundings are shown too and the
+      // whole thing is scaled up.
+      wide: view.getBoundingClientRect().width,
+      size: document.getElementById('cropsize').textContent,
+      // Not blank: the page really is painted into it.
+      inked: (() => {
+        const d = view.getContext('2d').getImageData(0, 0, view.width, view.height).data;
+        for (let i = 0; i < d.length; i += 4) {
+          if (d[i] < 240 || d[i + 1] < 240 || d[i + 2] < 240) return true;
+        }
+        return false;
+      })(),
+    };
+  });
+  check('a pick is shown back before it is used', crop.shown === true, JSON.stringify(crop));
+  check('with the page actually painted into it, not an empty box',
+    crop.inked === true, JSON.stringify(crop));
+  check('and it says how big the pick is',
+    /\d+ by \d+ pixels/.test(crop.size), crop.size);
+  check('no template is made until it is confirmed',
+    await page.evaluate(() => window.Blinded.state.templates.length) === 0);
+
+  // The corners are the point of showing it: a pick four pixels out is the
+  // difference between finding every copy and finding two.
+  const dragged = await page.evaluate(async () => {
+    const view = document.getElementById('cropview');
+    const r = view.getBoundingClientRect();
+    const read = () => document.getElementById('cropsize').textContent;
+    const before = read();
+    const send = (type, cx, cy) => view.dispatchEvent(new PointerEvent(type, {
+      clientX: cx, clientY: cy, bubbles: true, pointerId: 77,
+    }));
+    // Take hold of the top-left handle and pull it outwards.
+    send('pointerdown', r.left + 1, r.top + 1);
+    await new Promise(done => setTimeout(done, 10));
+    send('pointermove', r.left + 1, r.top + 1);
+    send('pointerup', r.left + 1, r.top + 1);
+    return { before, after: read() };
+  });
+  check('dragging a corner changes the box', dragged.before !== dragged.after,
+    JSON.stringify(dragged));
+  check('and it still reports a size', /\d+ by \d+ pixels/.test(dragged.after),
+    dragged.after);
+
+  // Cancelling leaves nothing behind, which is what makes the dialog safe to
+  // open: a look at the pick costs nothing.
+  await page.click('#cropcancel');
+  await page.waitForTimeout(200);
+  check('cancelling a pick makes no template',
+    await page.evaluate(() => window.Blinded.state.templates.length) === 0);
+  check('and puts the dialog away',
+    await page.evaluate(() => document.getElementById('cropbox').hidden) === true);
+
+  // Draw it again, and take it this time.
+  await page.evaluate(({ x, y, size }) => {
+    window.Blinded.setTool('mark');
+    const p = window.Blinded.state.pages[0];
+    const S = 2, PAD = 3;
+    const cx = x * S - PAD;
+    const cy = (792 - y - size) * S - PAD;
+    const rect = p.canvas.getBoundingClientRect();
+    const sx = rect.width / p.source.width;
+    const sy = rect.height / p.source.height;
+    const send = (type, px, py) => p.canvas.dispatchEvent(new PointerEvent(type, {
+      clientX: rect.left + px * sx, clientY: rect.top + py * sy, bubbles: true, pointerId: 10,
+    }));
+    send('pointerdown', cx, cy);
+    send('pointermove', cx + size * S + PAD * 2, cy + size * S + PAD * 2);
+    send('pointerup', cx + size * S + PAD * 2, cy + size * S + PAD * 2);
+  }, first);
+  await page.waitForSelector('#cropbox:not([hidden])', { timeout: 30000 });
+  await page.click('#cropuse');
   await page.waitForFunction(() => window.Blinded.state.templates.length === 1, undefined, { timeout: 60000 });
+  check('confirming makes the template', true);
   check('picking a logo does not search on its own',
     await page.evaluate(() => window.Blinded.state.templates[0].searched) === false);
   // A red question mark, not a dash and not a zero: nothing has looked yet,
@@ -1638,6 +1721,10 @@ try {
     send('pointermove', 400, 1500);
     send('pointerup', 400, 1500);
   });
+  await page.waitForSelector('#cropbox:not([hidden])', { timeout: 30000 });
+  await page.click('#cropuse');
+  await page.waitForFunction(() => window.Blinded.state.templates.length > 0,
+    undefined, { timeout: 30000 });
   await redact(page);
   await page.waitForFunction(
     () => document.getElementById('pickhint').classList.contains('warnhint'),
@@ -2419,6 +2506,8 @@ try {
     send('pointerup', cx + box.w * S + PAD * 2, cy + box.h * S + PAD * 2);
   }, { place: SMALL_LOGO_PLACEMENTS, box: WORDMARK_BOX });
 
+  await page.waitForSelector('#cropbox:not([hidden])', { timeout: 30000 });
+  await page.click('#cropuse');
   await page.waitForFunction(() => window.Blinded.state.templates.length === 1, undefined, { timeout: 60000 });
   await redact(page);
 
@@ -2475,6 +2564,8 @@ try {
     send('pointerup', cx + cw, cy + ch);
   }, { place: WORDMARK_PLACEMENTS, aspect: WORDMARK_ASPECT });
 
+  await page.waitForSelector('#cropbox:not([hidden])', { timeout: 30000 });
+  await page.click('#cropuse');
   await page.waitForFunction(() => window.Blinded.state.templates.length === 1, undefined, { timeout: 60000 });
   await redact(page);
 
@@ -3024,6 +3115,79 @@ try {
       Math.abs(reach.clamped - reach.max) < 1e-9, JSON.stringify(reach));
     check('while anything past the end is still held to it',
       Math.abs(reach.overshoot - reach.max) < 1e-9, JSON.stringify(reach));
+  }
+
+  // ---------- the bar comes down when it finds nothing ----------
+  //
+  // A reviewer has no way to know where to put the slider before the first
+  // search — 0.75 is a starting point, not an answer — and being told "no
+  // match" about a mark that is plainly on the page is the wrong end of the
+  // exchange. Every candidate has already been verified at full resolution,
+  // so lowering the bar costs nothing: the answer is in hand, on the wrong
+  // side of a number.
+  {
+    // Where the bar wants to be, given a set of scores. Two clumps with a gap
+    // between them is what a picked mark actually produces.
+    const chosen = await page.evaluate(() => {
+      const B = window.Blinded;
+      return {
+        gap: B.barFromScores([0.99, 0.98, 0.97, 0.71, 0.70]),
+        single: B.barFromScores([0.88]),
+        flat: B.barFromScores([0.91, 0.90, 0.895]),
+        floor: B.barFromScores([0.40, 0.38]),
+        empty: B.barFromScores([]),
+        atFloor: B.AUTO_FLOOR,
+      };
+    });
+    check('the bar lands in the widest gap, above the also-rans',
+      chosen.gap > 0.71 && chosen.gap < 0.97, JSON.stringify(chosen));
+    check('one candidate puts it just under that one',
+      chosen.single < 0.88 && chosen.single > 0.85, JSON.stringify(chosen));
+    check('a clump with no real gap keeps the whole clump',
+      chosen.flat < 0.895 && chosen.flat > 0.86, JSON.stringify(chosen));
+    // Correlation at 0.6 finds something resembling almost anything, and a
+    // redaction tool that quietly covers whatever it likes is worse than one
+    // that finds nothing and says so.
+    check('and nothing drags it below the floor',
+      chosen.floor === null && chosen.empty === null, JSON.stringify(chosen));
+
+    // The promotion itself, on the shape a real search hands it. A template
+    // cut from a page always matches itself at 1.00, so a document fixture
+    // cannot produce the empty result this is about.
+    const moved = await page.evaluate(() => {
+      const B = window.Blinded;
+      const hits = s => s.map((score, i) => ({ score, x: i * 10, y: 0, w: 8, h: 8 }));
+      const empty = { matches: [], near: hits([0.94, 0.94, 0.93, 0.71]) };
+      const bar = B.lowerBarIfEmpty(empty, 0.99);
+      const already = { matches: hits([0.96]), near: hits([0.80]) };
+      const leftAlone = B.lowerBarIfEmpty(already, 0.95);
+      const noise = { matches: [], near: hits([0.40, 0.38]) };
+      const refused = B.lowerBarIfEmpty(noise, 0.75);
+      return {
+        bar,
+        promoted: empty.matches.length,
+        stillTurnedAway: empty.near.length,
+        overlap: empty.matches.filter(m => empty.near.includes(m)).length,
+        leftAlone,
+        leftAloneMatches: already.matches.length,
+        refused,
+      };
+    });
+    check('a search that found nothing brings the bar down to what it saw',
+      moved.bar !== null && moved.bar < 0.94 && moved.bar > 0.62,
+      JSON.stringify(moved));
+    check('and the candidates it had turned away become the matches',
+      moved.promoted === 3, JSON.stringify(moved));
+    // Counting them in both halves had the note saying "4 matches, and 4 more
+    // were left out" about one set of four.
+    check('they move rather than being copied',
+      moved.stillTurnedAway === 1 && moved.overlap === 0, JSON.stringify(moved));
+    // A bar that found something is a bar the reviewer is entitled to keep.
+    check('a search that found something is left alone',
+      moved.leftAlone === null && moved.leftAloneMatches === 1,
+      JSON.stringify(moved));
+    check('and nothing but noise is still nothing',
+      moved.refused === null, JSON.stringify(moved));
   }
 
   // ---------- what the bar turned away ----------
