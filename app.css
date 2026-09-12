@@ -468,6 +468,52 @@ button { font: inherit; cursor: pointer; border-radius: 8px; }
 }
 .termempty { margin: 8px 0 0; font-size: 12.5px; color: var(--ink-soft); }
 
+/* The same shape as the box you type a word into, because it asks the same
+   kind of question — name a thing to redact. A full-width slab of blue said
+   "this is the important one", and it is not: most documents are redacted by
+   typing. */
+.pickrow {
+  display: flex; width: 100%; padding: 0; margin-top: 2px;
+  background: none; border: 0; cursor: pointer; text-align: left;
+}
+.pickfield {
+  flex: 1; min-width: 0; font-size: 14px; color: var(--ink-soft);
+  padding: 9px 11px; background: #fff;
+  border: 1px solid var(--line); border-right: 0;
+  border-radius: var(--radius) 0 0 var(--radius);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.pickgo {
+  flex: none; width: 40px; display: flex; align-items: center; justify-content: center;
+  background: var(--accent); color: #fff; border: 1px solid var(--accent);
+  border-radius: 0 var(--radius) var(--radius) 0;
+}
+.pickgo svg {
+  width: 18px; height: 18px; fill: none; stroke: currentColor;
+  stroke-width: 2; stroke-linecap: round;
+}
+.pickrow:hover .pickgo { background: #1a5fd0; }
+.pickrow:focus-visible .pickfield { outline: 2px solid var(--accent); outline-offset: -1px; }
+/* While picking, the row is the way out of it. */
+body.picking .pickfield { color: var(--ink); font-weight: 600; }
+body.picking .pickgo { background: var(--ink); border-color: var(--ink); }
+body.picking .pickgo svg { transform: rotate(45deg); }
+
+/* ---------- picking a logo: everything else gets out of the way ---------- */
+/*
+   Drawing a box around a logo is the one thing in this tool that happens on
+   the document rather than in the panel, and the instruction for it used to be
+   a sentence nobody read. Dimming says it instead: what is lit is what you can
+   use — the page, and the section you started from.
+*/
+body.picking::before {
+  content: ''; position: fixed; inset: 0; z-index: 40;
+  background: rgba(13, 17, 23, 0.55);
+}
+body.picking .stage,
+body.picking #imagesect { position: relative; z-index: 41; }
+body.picking #imagesect { background: var(--card); border-radius: var(--radius); }
+
 /* A word in the list is a thing the reviewer put there, so it reads as an
    object with a way to take it off, not as a line of text. */
 .termcounts li.word {

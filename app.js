@@ -1924,10 +1924,21 @@
   function setMode(mode) {
     state.mode = mode;
     const button = el('pick');
-    button.classList.toggle('on', mode === 'pick');
-    button.textContent = mode === 'pick' ? 'Cancel' : 'Select an image to redact';
+    const picking = mode === 'pick';
+    button.classList.toggle('on', picking);
+    // Only the words inside the row, or the plus beside them would be written
+    // over along with the label.
+    el('picklabel').textContent = picking ? 'Cancel' : 'Select an image to redact';
+    button.title = picking
+      ? 'Stop picking'
+      : 'Draw a box around a logo, stamp, signature or face';
+    // Everything but the document and this section gets out of the way. Drawing
+    // a box around a logo is the one thing in this tool that happens on the
+    // page rather than in the panel, and dimming says so better than a sentence
+    // nobody reads.
+    document.body.classList.toggle('picking', picking);
     for (const page of state.pages) {
-      if (page.canvas) page.canvas.parentElement.classList.toggle('picking', mode === 'pick');
+      if (page.canvas) page.canvas.parentElement.classList.toggle('picking', picking);
     }
     setTip();
   }

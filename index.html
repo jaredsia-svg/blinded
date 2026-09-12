@@ -31,7 +31,7 @@
 <title>Blinded – Efficient redaction for your most sensitive documents, all done locally</title>
 <meta name="description" content="Redact PDFs, images and text in your browser. The file never leaves your machine.">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="app.css?v=1ee123a6">
+<link rel="stylesheet" href="app.css?v=596b32ac">
 </head>
 <body>
 
@@ -178,10 +178,17 @@
           </div>
         </details>
 
-        <details class="sect" open>
+        <details class="sect" id="imagesect" open>
           <summary><span class="s-title">Images</span><span class="s-note" id="image-note"></span></summary>
           <div class="s-body">
-            <button type="button" id="pick" class="accent wide">Select an image to redact</button>
+            <button type="button" id="pick" class="pickrow">
+              <span class="pickfield" id="picklabel">Select an image to redact</span>
+              <span class="pickgo" aria-hidden="true">
+                <svg viewBox="0 0 24 24" focusable="false">
+                  <path d="M12 5v14M5 12h14"/>
+                </svg>
+              </span>
+            </button>
             <p class="hint" id="pickhint" hidden></p>
             <ul id="templates" class="templates"></ul>
             <label class="sens" for="sens">
@@ -421,7 +428,7 @@
 <script src="lib/pdfwrite.js?v=4b977425"></script>
 <script src="lib/pdfread.js?v=624c5ef9"></script>
 <script src="lib/render.js?v=7bf6e0a9"></script>
-<script src="app.js?v=e4e98e6c"></script>
+<script src="app.js?v=d1d4370a"></script>
 <script type="module" src="lib/boot.mjs?v=8b98ed8f"></script>
 </body>
 </html>

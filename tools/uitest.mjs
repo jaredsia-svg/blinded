@@ -1067,8 +1067,57 @@ try {
   // Entering pick mode changes what a drag means, and says so.
   await page.click('#pick');
   check('pick mode is announced on the button',
-    (await page.textContent('#pick')).trim() === 'Cancel',
-    await page.textContent('#pick'));
+    (await page.textContent('#picklabel')).trim() === 'Cancel',
+    await page.textContent('#picklabel'));
+
+  // Picking happens on the document, not in the panel, and the dimming says
+  // so — what is lit is what you can use. A sentence used to say it and
+  // nobody read it.
+  const dimmed = await page.evaluate(() => {
+    const lit = sel => {
+      const n = document.querySelector(sel);
+      return n ? Number(getComputedStyle(n).zIndex) : null;
+    };
+    const veil = getComputedStyle(document.body, '::before');
+    return {
+      on: document.body.classList.contains('picking'),
+      veilShown: veil.content !== 'none',
+      stage: lit('.stage'),
+      images: lit('#imagesect'),
+      // The bar along the bottom is dimmed with everything else.
+      bar: lit('.exportbar'),
+    };
+  });
+  check('picking dims the page', dimmed.on === true && dimmed.veilShown === true,
+    JSON.stringify(dimmed));
+  check('the document stays lit', dimmed.stage > 0, JSON.stringify(dimmed));
+  check('and so does the section it was started from',
+    dimmed.images > 0, JSON.stringify(dimmed));
+  check('the bar along the bottom is dimmed too',
+    !(dimmed.bar > dimmed.stage), JSON.stringify(dimmed));
+
+  // The row itself reads like the box a word is typed into, because it asks
+  // the same kind of question.
+  const shaped = await page.evaluate(() => {
+    const row = document.getElementById('pick');
+    const field = row.querySelector('.pickfield');
+    const go = row.querySelector('.pickgo');
+    const termInput = document.getElementById('termbox');
+    const termGo = document.getElementById('termgo');
+    const near = (a, b) => Math.abs(a - b) <= 3;
+    const box = n => n.getBoundingClientRect();
+    return {
+      sameWidth: near(box(row).width, box(termInput).width + box(termGo).width),
+      sameHeight: near(box(field).height, box(termInput).height),
+      buttonSameWidth: near(box(go).width, box(termGo).width),
+      hasPlus: !!go.querySelector('svg'),
+    };
+  });
+  check('the image row is shaped like the word row',
+    shaped.sameWidth && shaped.sameHeight && shaped.buttonSameWidth,
+    JSON.stringify(shaped));
+  check('and carries a plus of its own', shaped.hasPlus === true,
+    JSON.stringify(shaped));
 
   // Drag around the first logo. Its PDF coordinates are known, so convert:
   // pdf y is measured up from the bottom, the canvas is 2x, and a little
