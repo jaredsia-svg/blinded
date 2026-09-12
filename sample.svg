@@ -1,11 +1,14 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 540" role="img"
-     aria-label="A sample corporate slide after redaction: the logo, the company name, a person's name, an email address and several figures are covered by black bars carrying placeholder labels.">
+     aria-label="A sample corporate slide after redaction: the logo, the company name, a person's name and an email address are covered by black bars carrying placeholder labels.">
   <title>A redacted slide</title>
   <!--
     Everything on this slide is invented. It exists to show what a finished
     redaction looks like — the bars, and the placeholders that let a later
     reader still follow the sentence — so the visible copy is deliberately
-    ordinary and the covered parts are the ones a real deck would guard.
+    ordinary and the covered parts are the ones a real deck would guard: who
+    it is about and who wrote it. The figures are left showing, because a
+    reader who cannot see any of the numbers cannot see what the labels are
+    for.
   -->
   <defs>
     <style>
@@ -58,10 +61,7 @@
 
   <circle cx="53" cy="361" r="3" fill="#2f6fe4"/>
   <text class="b" x="66" y="366">Renewal pricing agreed with the top ten accounts;</text>
-  <text class="b" x="66" y="388">contract value up</text>
-  <rect class="bar" x="188" y="372" width="60" height="22" rx="4"/>
-  <text class="ph" x="196" y="388">[FIG1]</text>
-  <text class="b" x="256" y="388">year on year</text>
+  <text class="b" x="66" y="388">contract value up 9% year on year</text>
 
   <circle cx="53" cy="419" r="3" fill="#2f6fe4"/>
   <text class="b" x="66" y="424">Questions to</text>
@@ -74,22 +74,18 @@
   <text class="h2" x="560" y="226">Revenue by segment</text>
 
   <line class="rule" x1="560" y1="396" x2="888" y2="396"/>
-  <rect class="col"  x="572" y="318" width="38" height="78" rx="3"/>
-  <rect class="col"  x="632" y="286" width="38" height="110" rx="3"/>
-  <rect class="col"  x="692" y="252" width="38" height="144" rx="3"/>
-  <rect class="colq" x="752" y="300" width="38" height="96" rx="3"/>
-  <rect class="col"  x="812" y="238" width="38" height="158" rx="3"/>
+  <rect class="col" x="572" y="238" width="38" height="158" rx="3"/>
+  <rect class="col" x="632" y="252" width="38" height="144" rx="3"/>
+  <rect class="col" x="692" y="286" width="38" height="110" rx="3"/>
+  <rect class="col" x="752" y="300" width="38" height="96" rx="3"/>
+  <rect class="col" x="812" y="318" width="38" height="78" rx="3"/>
 
-  <text class="s" x="591" y="414" text-anchor="middle">Q1</text>
-  <text class="s" x="651" y="414" text-anchor="middle">Q2</text>
-  <text class="s" x="711" y="414" text-anchor="middle">Q3</text>
-  <rect class="bar" x="744" y="402" width="54" height="18" rx="4"/>
-  <text class="ph" x="750" y="415">[SEG1]</text>
-  <text class="s" x="831" y="414" text-anchor="middle">Q5</text>
+  <text class="s" x="591" y="414" text-anchor="middle">Core</text>
+  <text class="s" x="651" y="414" text-anchor="middle">Pro</text>
+  <text class="s" x="711" y="414" text-anchor="middle">Service</text>
+  <text class="s" x="771" y="414" text-anchor="middle">Devices</text>
+  <text class="s" x="831" y="414" text-anchor="middle">Other</text>
 
-  <!-- the tall bar's own figure, covered -->
-  <rect class="bar" x="806" y="208" width="50" height="20" rx="4"/>
-  <text class="ph" x="813" y="222">[FIG2]</text>
 
   <!-- footer tiles: one number withheld -->
   <line class="rule" x1="48" y1="458" x2="912" y2="458"/>
@@ -100,8 +96,7 @@
   <text class="k" x="230" y="512">118%</text>
 
   <text class="s" x="412" y="482">Headcount</text>
-  <rect class="bar" x="412" y="492" width="76" height="24" rx="4"/>
-  <text class="php" x="420" y="510">[FIG3]</text>
+  <text class="k" x="412" y="512">1,240</text>
 
   <text class="s" x="594" y="482">Largest customer</text>
   <rect class="bar" x="594" y="492" width="118" height="24" rx="4"/>
