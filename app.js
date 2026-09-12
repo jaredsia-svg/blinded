@@ -626,11 +626,28 @@
       // Named by what the reviewer can see. Every word and every picked image
       // that nothing has looked for yet wears a red question mark in the
       // panel, and this is the button that answers them.
-      note.textContent = unanswered === 0
-        ? 'Press Search to find what is in this document.'
-        : unanswered === 1
-          ? 'One red ? above. Press Search to find it.'
-          : unanswered + ' red ? marks above. Press Search to find them.';
+      // The mark itself, not a description of it. "2 red ? marks above" asks
+      // the reviewer to translate a sentence into a thing on screen; showing
+      // the thing skips the translation.
+      note.textContent = '';
+      if (unanswered === 0) {
+        note.textContent = 'Press Search to find what is in this document.';
+      } else {
+        const mark = document.createElement('span');
+        mark.className = 'qmark';
+        mark.textContent = '?';
+        // Read aloud as the sentence it stands in for, since a screen reader
+        // announcing "question mark" says nothing about what is on the panel.
+        mark.setAttribute('role', 'img');
+        mark.setAttribute('aria-label', unanswered === 1
+          ? 'one unanswered mark' : unanswered + ' unanswered marks');
+        note.append(
+          document.createTextNode(unanswered === 1 ? 'One ' : unanswered + ' '),
+          mark,
+          document.createTextNode(unanswered === 1
+            ? ' above. Press Search to find it.'
+            : ' above. Press Search to find them.'));
+      }
     } else if (state.applied) {
       note.textContent = marks === 0 ? 'Nothing is covered.' : '';
     } else if (unread && unread < state.pages.length && ocrPending()) {
@@ -707,7 +724,9 @@
     const willRead = ocrPending() ? (unread || pages) : 0;
     const willSearch = pendingTemplates().length ? pages : 0;
     legs([
-      { key: 'read', label: unread ? 'Reading pages' : 'Matching words',
+      // Named by what it is doing for the reviewer rather than by how. It
+      // reads the pages, but what the reviewer asked for is the text found.
+      { key: 'read', label: unread ? 'Searching text' : 'Matching words',
         total: willRead },
       { key: 'search', label: 'Searching images', total: willSearch },
     ]);
@@ -836,7 +855,7 @@
   // when the reviewer edits the terms list, so re-reading would be pure cost.
   // Matching those words against the terms is cheap and rerun freely.
   async function readPages(report) {
-    const progress = report || ((done, of) => pageProgress(done, of, 'Reading pages'));
+    const progress = report || ((done, of) => pageProgress(done, of, 'Searching text'));
     if (state.ocrRead || !state.pages.length) return;
     const total = state.pages.length;
     // Pages already read in an earlier, paused run are not read again.
@@ -2145,7 +2164,10 @@
 
       const count = document.createElement('button');
       count.type = 'button';
-      count.className = template.searched ? 'n' : 'n unknown';
+      // Green, the same as a word's tally: both answer "how many were found",
+      // and a picked image's answer is no less of an answer for being a
+      // picture. Grey read as a disabled control.
+      count.className = template.searched ? 'n dot-green' : 'n unknown';
       count.textContent = template.searched ? String(live) : '?';
       count.disabled = !template.searched || live === 0;
       if (!template.searched) count.title = 'Not searched for yet \u2014 press Search';

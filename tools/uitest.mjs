@@ -407,6 +407,34 @@ try {
       typed.drawn === 0, JSON.stringify(typed));
     check('and the button still says Search',
       typed.label === 'Search' && typed.searched === false, JSON.stringify(typed));
+    // The note counts them by showing the mark, not by describing it: "2 red ?
+    // marks above" asks the reviewer to translate a sentence back into a thing
+    // on the panel.
+    {
+      const note = await page.evaluate(() => {
+        const el = document.getElementById('exportnote');
+        const mark = el.querySelector('.qmark');
+        const s = mark && getComputedStyle(mark);
+        const circle = s && document.querySelector('.termcounts .n.unknown');
+        return {
+          text: el.textContent.trim(),
+          mark: mark && mark.textContent,
+          round: s && parseFloat(s.borderRadius) >= 9,
+          ink: s && s.color,
+          fill: s && s.backgroundColor,
+          panelInk: circle && getComputedStyle(circle).color,
+          panelFill: circle && getComputedStyle(circle).backgroundColor,
+        };
+      });
+      check('the note beside the button shows the mark itself',
+        note.mark === '?' && note.round === true, JSON.stringify(note));
+      check('painted like the ones on the panel it is counting',
+        note.ink === note.panelInk && note.fill === note.panelFill,
+        JSON.stringify(note));
+      check('and no longer spells out "? marks" in words',
+        !/\?\s*marks?/i.test(note.text), note.text);
+    }
+
     // Now there is a red ? beside the word, and the button that answers it
     // wears the same red.
     check('a word nothing has looked for puts a red ? on the panel',
@@ -2503,7 +2531,125 @@ try {
         return live && Number(live.value) === 55;
       }));
 
+    // Put back what the later sections expect to find.
     await page.evaluate(() => { window.Blinded.state.termImages = true; });
+  }
+
+  // ---------- the two lists of page numbers are one list ----------
+  //
+  // A picked image's tally and a word's tally open the same thing: where it
+  // is, page by page. They were not coming out the same. .templates li sets a
+  // padding and a border and lands later in the stylesheet than li.tally, so
+  // the image's list was taller with a rule between every line; and
+  // `.templates button` was restyling every button under it to 15px, the
+  // page numbers included.
+  {
+    if (await page.isVisible('#view-review')) await newFile();
+    await page.waitForSelector('#view-drop:not([hidden])', { timeout: 15000 });
+    await page.setInputFiles('#file', logoPath);
+    await page.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
+
+    // The state a finished search leaves behind, planted rather than searched
+    // for. What is measured below is the markup two renderers produce, and
+    // running the reader here would warm it for the pause test further down,
+    // which needs it cold enough to be interrupted.
+    await page.evaluate(() => {
+      const B = window.Blinded;
+      const page0 = B.state.pages[0];
+      B.state.terms = ['Jane'];
+      B.state.countedTerms = ['Jane'];
+      B.state.searched = true;
+      page0.imageHits.push(
+        { id: 'word:1', term: 'Jane', rect: { x: 60, y: 90, w: 80, h: 20 }, score: 1 },
+        { id: 'logo:1', templateId: 'planted',
+          rect: { x: 200, y: 300, w: 60, h: 60 }, score: 1 });
+      B.state.templates.push({
+        id: 'planted', cut: null, rect: { x: 40, y: 40, w: 120, h: 120 },
+        pageIndex: 0, thumbnail: document.createElement('canvas'),
+        sens: 0.75, matches: 1, rawMatches: 1, best: 1, searched: true,
+      });
+      B.renderTermCounts();
+      B.renderTemplates();
+    });
+
+  // ---------- the two dropdowns are one dropdown ----------
+  //
+  // A picked image's list of page numbers came out taller than a word's,
+  // with a rule between every line: .templates li sets a padding and a
+  // border, lands later in the stylesheet than li.tally, and won. Same
+  // markup, same job, two different looks.
+  const lists = await page.evaluate(() => {
+    const B = window.Blinded;
+    const measure = () => {
+      const spot = document.querySelector('.tally .tallyspot');
+      if (!spot) return null;
+      const row = spot.closest('li');
+      const s = getComputedStyle(spot);
+      const rs = getComputedStyle(row);
+      return { size: s.fontSize, pad: s.padding, line: s.lineHeight,
+               rowPad: rs.padding, rule: rs.borderBottomWidth,
+               height: Math.round(spot.getBoundingClientRect().height) };
+    };
+    // A word's list...
+    B.state.openTally = null;
+    B.renderTermCounts();
+    const word = (() => {
+      const n = document.querySelector('.termcounts button.n:not(:disabled)');
+      if (!n) return null;
+      n.click();
+      return measure();
+    })();
+    // ...and a picked image's.
+    B.state.openTally = null;
+    B.renderTermCounts();
+    B.renderTemplates();
+    const image = (() => {
+      const n = document.querySelector('.templates button.n:not(:disabled)');
+      if (!n) return null;
+      n.click();
+      return measure();
+    })();
+    B.state.openTally = null;
+    B.renderTemplates();
+    return { word, image };
+  });
+  check('both sections open a list of page numbers',
+    lists.word !== null && lists.image !== null, JSON.stringify(lists));
+  check('and the two are the same size, line for line',
+    lists.word && lists.image
+      && lists.word.size === lists.image.size
+      && lists.word.pad === lists.image.pad
+      && lists.word.rowPad === lists.image.rowPad
+      && lists.word.height === lists.image.height,
+    JSON.stringify(lists));
+  check('neither puts a rule between the page numbers',
+    lists.word && lists.image
+      && parseFloat(lists.word.rule) === 0 && parseFloat(lists.image.rule) === 0,
+    JSON.stringify(lists));
+  // A reference to scan, not a paragraph to read.
+  check('and a row is compact enough to run an eye down',
+    lists.word && parseFloat(lists.word.size) <= 12
+      && lists.word.height <= 22, JSON.stringify(lists));
+
+  // A found count is a found count, whether it counts a word or a logo.
+  const badges = await page.evaluate(() => {
+    const pick = sel => {
+      const n = document.querySelector(sel);
+      if (!n) return null;
+      const s = getComputedStyle(n);
+      return { ink: s.color, fill: s.backgroundColor,
+               round: parseFloat(s.borderRadius) >= 12 };
+    };
+    return { word: pick('.termcounts .n.dot-green'),
+             image: pick('.templates .n.dot-green') };
+  });
+  check('a picked image\'s tally is a green circle too',
+    badges.word && badges.image
+      && badges.image.ink === badges.word.ink
+      && badges.image.fill === badges.word.fill
+      && badges.image.round === true,
+    JSON.stringify(badges));
+
   }
 
   // ---------- one control, not two ----------
@@ -4075,7 +4221,11 @@ try {
     check('the bar names the image work', legs.some(l => /image/i.test(l)),
       JSON.stringify(legs));
     check('and the text work alongside it',
-      legs.some(l => /reading pages|matching words/i.test(l)), JSON.stringify(legs));
+      legs.some(l => /searching text|matching words/i.test(l)), JSON.stringify(legs));
+    // Named by what it is looking for. "Reading pages" described the method,
+    // which is the tool's business and not the reviewer's.
+    check('and never by the old name for the method',
+      !legs.some(l => /reading pages/i.test(l)), JSON.stringify(legs));
   }
 
   // ---------- a running check stays on screen ----------

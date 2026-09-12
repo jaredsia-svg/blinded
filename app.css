@@ -548,25 +548,31 @@ body.picking #imagesect { background: var(--card); border-radius: var(--radius);
 .termcounts .n:disabled { cursor: default; }
 .termcounts button.n, .templates button.n { font: inherit; border: 0; cursor: pointer; }
 .templates button.n:disabled, .termcounts .n:disabled { cursor: default; }
-.templates button.n[aria-expanded="true"] { background: var(--accent); color: #fff; }
 .termcounts button.n[aria-expanded="true"] { background: var(--accent); color: #fff; }
 
-li.tally { display: block; padding: 0 0 8px; border: 0; }
+/* A list of page numbers is a reference, not reading: it is scanned for the
+   one that is wanted and then left. Small and tight, so twenty of them are a
+   list to run an eye down rather than a scroll.
+
+   Named for both sections, because .templates li below sets a padding and a
+   border and lands later in the file — so the same dropdown under a picked
+   image came out taller, with a rule between every page. */
+.termcounts li.tally, .templates li.tally { display: block; padding: 0 0 6px; border: 0; }
 .tallywhere { list-style: none; margin: 0; padding: 0 0 0 2px; }
-.tallywhere li { display: block; padding: 0; border: 0; }
+.termcounts .tallywhere li, .templates .tallywhere li { display: block; padding: 0; border: 0; }
 .tallyspot {
-  display: flex; align-items: center; gap: 8px; width: 100%;
-  font: inherit; font-size: 12.5px; text-align: left;
-  background: none; border: 0; border-radius: var(--radius);
-  padding: 4px 8px; color: var(--ink-soft); cursor: pointer;
+  display: flex; align-items: center; gap: 7px; width: 100%;
+  font: inherit; font-size: 11.5px; line-height: 1.25; text-align: left;
+  background: none; border: 0; border-radius: 5px;
+  padding: 2px 6px; color: var(--ink-soft); cursor: pointer;
 }
 .tallyspot:hover { background: #eef1f6; color: var(--ink); }
 .tallyspot .dot {
-  width: 8px; height: 8px; border-radius: 2px; flex: none;
+  width: 7px; height: 7px; border-radius: 2px; flex: none;
   background: #118a4e;
 }
 .tallyspot.shape .dot { background: #d98b1f; }
-.tallyspot .how { margin-left: auto; font-size: 11.5px; color: var(--ink-soft); }
+.tallyspot .how { margin-left: auto; font-size: 10.5px; color: var(--ink-soft); }
 
 .termcounts .n, .templates .n {
   font-variant-numeric: tabular-nums; background: #eef1f6;
@@ -578,17 +584,26 @@ li.tally { display: block; padding: 0 0 8px; border: 0; }
    the same two colours they are drawn in on the page, so the panel and the
    document agree about which is which. A round badge rather than a pill
    because it holds a count, not a label. */
-.termcounts .n {
+.termcounts .n, .templates .n {
   min-width: 24px; height: 24px; border-radius: 999px;
   padding: 0 6px; display: inline-flex; align-items: center; justify-content: center;
   font-size: 12px; font-weight: 650; box-sizing: border-box;
 }
-.termcounts .n.dot-green { background: #e3f3ea; color: #0f6b3d; }
+.termcounts .n.dot-green, .templates .n.dot-green { background: #e3f3ea; color: #0f6b3d; }
 .termcounts .n.dot-shape { background: #fdf0dc; color: #9a5b06; }
-.termcounts .n.dot-green:not(:disabled):hover { background: #cfe9db; }
+.termcounts .n.dot-green:not(:disabled):hover, .templates .n.dot-green:not(:disabled):hover { background: #cfe9db; }
 .termcounts .n.dot-shape:not(:disabled):hover { background: #f7e3c2; }
-.termcounts .n.dot-green[aria-expanded="true"] { background: #118a4e; color: #fff; }
+.termcounts .n.dot-green[aria-expanded="true"], .templates .n.dot-green[aria-expanded="true"] { background: #118a4e; color: #fff; }
 .termcounts .n.dot-shape[aria-expanded="true"] { background: #d98b1f; color: #fff; }
+/* The same mark the panel draws, shown inline in the sentence that counts
+   them. Not a description of a red circle but the red circle. */
+.qmark {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 18px; height: 18px; border-radius: 999px;
+  background: #fdecea; color: #d92d20; font-weight: 650; font-size: 12px;
+  vertical-align: -4px; margin: 0 1px;
+}
+
 /* A term that matched nothing is the one thing in this panel a reviewer must
    not skim past: it looks identical to a term that worked. */
 /* Not "nothing found" but "nothing has looked yet" — red, because it marks
@@ -606,11 +621,15 @@ li.tally { display: block; padding: 0 0 8px; border: 0; }
   width: 42px; height: 28px; object-fit: contain; flex: none;
   border: 1px solid var(--line); border-radius: 4px; background: #fff;
 }
-.templates button {
+/* The × that drops a picked image. Named, because "the button in the row"
+   used to mean this one and now also means the tally beside it and every
+   page number in the list it opens — all of which this was quietly
+   restyling to 15px. */
+.templatedrop {
   border: 0; background: transparent; color: var(--ink-soft);
   font-size: 15px; line-height: 1; padding: 2px 5px; flex: none;
 }
-.templates button:hover { color: var(--danger); }
+.templatedrop:hover { color: var(--danger); }
 
 button.wide { width: 100%; padding: 8px; }
 button.wide.on { background: var(--accent); color: #fff; border-color: var(--accent); }
