@@ -3037,6 +3037,85 @@ try {
       !span || Number(span[1]) - Number(span[2]) <= 0.08 + 1e-9, told.hint);
   }
 
+  // ---------- a searchable redacted file ----------
+  //
+  // The export is a picture of every page, which is what makes the redaction
+  // real and also what makes the finished file impossible to search. Reading
+  // the pages back gives it a text layer.
+  //
+  // The reader is pointed at the flattened canvas, never at the original: a
+  // word under a bar is not in those pixels, so it cannot come back as text.
+  // That is the whole safety argument for the feature, and it is what these
+  // checks are about.
+  {
+    if (await page.isVisible('#view-review')) await newFile();
+    await page.waitForSelector('#view-drop:not([hidden])', { timeout: 15000 });
+    await page.setInputFiles('#file', fixturePath);
+    await page.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
+    await setTerms(page, ['Amphitheatre']);
+    await redact(page);
+
+    const pdfjs3 = await import('pdfjs-dist/legacy/build/pdf.mjs');
+    const textOf = async download => {
+      const out = join(tmpdir(), 'blinded-searchable-' + Math.random().toString(36).slice(2) + '.pdf');
+      await download.saveAs(out);
+      const doc = await pdfjs3.getDocument({ data: new Uint8Array(readFileSync(out)) }).promise;
+      let all = '';
+      for (let n = 1; n <= doc.numPages; n++) {
+        const pg = await doc.getPage(n);
+        all += (await pg.getTextContent()).items.map(i => i.str).join(' ') + ' ';
+      }
+      return all;
+    };
+
+    // Off by default: it costs a second reading of every page, and a reviewer
+    // who has not asked for it should not pay for it.
+    check('the option is offered on the way out, and is off to begin with',
+      await page.evaluate(() => {
+        const box = document.getElementById('searchable');
+        return box && box.checked === false;
+      }));
+
+    const withText = await (async () => {
+      const [download] = await Promise.all([
+        page.waitForEvent('download', { timeout: 300000 }),
+        (async () => {
+          await page.click('#export');
+          await page.waitForSelector('#namebox:not([hidden])', { timeout: 15000 });
+          await page.check('#searchable');
+          await page.click('#namesave');
+        })(),
+      ]);
+      return textOf(download);
+    })();
+
+    check('a searchable export carries the words of the page as real text',
+      /Parkway|Mailing|address/i.test(withText), withText.slice(0, 200));
+    // The one that matters. "Amphitheatre" was covered, so it is not in the
+    // pixels the reader was given, so it cannot be in the layer it produced.
+    check('and not the word that was covered',
+      !/Amphitheatre/i.test(withText), withText.slice(0, 300));
+    check('nor anything else behind a bar',
+      !/jane\.doe@example\.com/i.test(withText), withText.slice(0, 300));
+
+    // And the checkbox is what decides it, not something always on.
+    await page.uncheck('#searchable').catch(() => {});
+    const plain = await (async () => {
+      const [download] = await Promise.all([
+        page.waitForEvent('download', { timeout: 120000 }),
+        (async () => {
+          await page.click('#export');
+          await page.waitForSelector('#namebox:not([hidden])', { timeout: 15000 });
+          await page.uncheck('#searchable');
+          await page.click('#namesave');
+        })(),
+      ]);
+      return textOf(download);
+    })();
+    check('and without the option the file has no text layer of its own',
+      !/Parkway/i.test(plain), plain.slice(0, 200));
+  }
+
   // ---------- a locked file ----------
   //
   // Really encrypted, not a mocked exception: RC4 with a standard security

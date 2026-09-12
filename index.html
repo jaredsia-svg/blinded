@@ -287,8 +287,14 @@
     <p>Blinded does not draw boxes over your document. It turns every page into
       a picture, paints the boxes onto the picture, and builds a new file from
       those pixels. The original text is not hidden in the result — it is not
-      in the result at all. There is no text layer, no fonts and no annotations
-      left to dig through.</p>
+      in the result at all. Nothing carried over from the original file is left
+      to dig through — no original text layer, no fonts, no annotations.</p>
+    <p>Two things can put text into the finished file, and neither can bring
+      back what a bar covers. Placeholder labels are written from the list of
+      labels you can see. And if you tick <strong>Searchable text</strong> when
+      saving, the pages are read <em>after</em> the bars are painted on, so the
+      reader is looking at the same picture you are — a covered word is not in
+      those pixels, and cannot come out of them.</p>
   </section>
 
   <section class="faq">
@@ -427,6 +433,10 @@
       <input type="checkbox" id="lossless">
       Lossless output <span class="namefaint">— larger file, no compression artefacts</span>
     </label>
+    <label class="check nameopt" id="searchablerow">
+      <input type="checkbox" id="searchable">
+      Searchable text <span class="namefaint">— reads the redacted pages so the text can be found and copied. Slower.</span>
+    </label>
     <div class="namego">
       <button type="button" id="namecancel" class="ghost">Cancel</button>
       <button type="button" id="namesave" class="primary">Save</button>
@@ -458,7 +468,7 @@
 <script src="lib/pdfwrite.js?v=4b977425"></script>
 <script src="lib/pdfread.js?v=ca229552"></script>
 <script src="lib/render.js?v=7bf6e0a9"></script>
-<script src="app.js?v=20174c48"></script>
+<script src="app.js?v=0ddccce5"></script>
 <script type="module" src="lib/boot.mjs?v=8b98ed8f"></script>
 </body>
 </html>

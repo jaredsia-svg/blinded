@@ -3018,6 +3018,7 @@
         download(await Render.canvasToBlob(flat, 'image/png'), state.saveAs);
       } else {
         const lossless = el('lossless').checked;
+        const searchable = el('searchable').checked;
         // Placeholders are written as invisible text over the bars whenever
         // labelling is on. It was a checkbox, ticked, and turning it off made
         // the labels a picture of themselves — which is not a trade anyone was
@@ -3025,15 +3026,48 @@
         const machineReadable = state.labelling;
         const built = [];
 
+        // The flattened pages are kept while the text layer is read off them,
+        // rather than encoded and dropped one at a time, because the reader
+        // works several pages at once and wants them together.
+        const flats = [];
         for (const page of state.pages) {
           pageProgress(page.index, state.pages.length, 'Flattening pages');
           const boxes = activeBoxes(page);
-          const flat = Render.flatten(page.source, boxes);
+          flats.push({ page, boxes, flat: Render.flatten(page.source, boxes) });
+        }
+
+        // Read back what the redacted pages actually say.
+        //
+        // The reader is pointed at the flattened canvas, never at the
+        // original: a word under a bar is not in those pixels, so it cannot
+        // come back as text. That is the whole safety argument, and it is the
+        // same one the placeholder layer rests on — what goes into the file is
+        // what a reader of the finished page can see.
+        //
+        // It is a second reading, not the one done during review: that one
+        // read the document as it arrived, bars and all still to come.
+        let readBack = null;
+        if (searchable) {
+          const canvases = flats.map(f => f.flat);
+          busy(true, 'Working…');
+          legs([{ key: 'ocr', label: 'Reading the redacted pages',
+                  total: canvases.length }]);
+          await nextPaint();
+          readBack = await Ocr.readPages(canvases, done => leg('ocr', done));
+          legs([]);
+        }
+
+        for (let i = 0; i < flats.length; i++) {
+          const { page, boxes, flat } = flats[i];
+          pageProgress(i, flats.length, 'Writing pages');
+          const placeholders = machineReadable ? textLayerFor(page, boxes) : [];
+          const words = readBack ? wordLayerFor(page, readBack[i]) : [];
+          const labels = placeholders.concat(words);
           built.push({
             widthPt: page.widthPt,
             heightPt: page.heightPt,
             image: await Render.encodeForPdf(flat, lossless),
-            labels: machineReadable ? textLayerFor(page, boxes) : undefined,
+            labels: labels.length ? labels : undefined,
           });
         }
 
@@ -3068,6 +3102,37 @@
         size,
       };
     });
+  }
+
+  // The words the reader found on a redacted page, in the writer's coordinates.
+  //
+  // Same conversion as the placeholders — canvas pixels run from the top left
+  // and PDF user space from the bottom left — but sized and placed per word
+  // rather than per bar, so selecting a line in a viewer selects roughly where
+  // the line is.
+  //
+  // Very short scraps of ink are dropped. A single character the reader was
+  // unsure of is more often a speck than a word, and a text layer full of
+  // stray letters makes a search for a real word harder rather than easier.
+  function wordLayerFor(page, items) {
+    if (!items || !items.length) return [];
+    const scaleX = page.widthPt / page.source.width;
+    const scaleY = page.heightPt / page.source.height;
+
+    return items
+      .filter(item => item.rect && String(item.str || '').trim().length
+        && (item.confidence === undefined || item.confidence >= 40))
+      .map(item => {
+        const height = item.rect.h * scaleY;
+        return {
+          text: String(item.str),
+          x: item.rect.x * scaleX,
+          // The bottom of the ink is the closest thing the reader gives to a
+          // baseline, which is what Td wants.
+          y: page.heightPt - (item.rect.y + item.rect.h) * scaleY,
+          size: Math.max(1, height),
+        };
+      });
   }
 
   // The legend, rendered as one more page image.
@@ -3760,7 +3825,8 @@
     undoLast, undoStack, applyLabels, labelItems, downloadKey,
     sensFor, wordSensitivity, wordBarFor, setZoom, stepZoom, ZOOM_STEPS,
     MARK_GREEN,
-    cleanName, coveredText, askName, askPassword, renderPdf, redactedName,
+    cleanName, coveredText, askName, askPassword, renderPdf, wordLayerFor,
+    redactedName,
     confirmAction, showTemplate,
     addTerm, dropTerm,
     saveDraft, draftData, restoreDraft, looksLikeDraft, fingerprint, takeDraft,
