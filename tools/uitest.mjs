@@ -424,6 +424,18 @@ try {
           fill: s && s.backgroundColor,
           panelInk: circle && getComputedStyle(circle).color,
           panelFill: circle && getComputedStyle(circle).backgroundColor,
+          // Where its middle sits against the middle of the words beside it.
+          // A fixed nudge in pixels had it hanging low.
+          offset: (() => {
+            if (!mark) return null;
+            const probe = document.createElement('span');
+            probe.textContent = 'above';
+            mark.after(probe);
+            const m = mark.getBoundingClientRect();
+            const p = probe.getBoundingClientRect();
+            probe.remove();
+            return Math.round(((m.top + m.height / 2) - (p.top + p.height / 2)) * 10) / 10;
+          })(),
         };
       });
       check('the note beside the button shows the mark itself',
@@ -433,6 +445,8 @@ try {
         JSON.stringify(note));
       check('and no longer spells out "? marks" in words',
         !/\?\s*marks?/i.test(note.text), note.text);
+      check('sitting on the same middle as the words beside it',
+        note.offset !== null && Math.abs(note.offset) <= 1, String(note.offset));
     }
 
     // Now there is a red ? beside the word, and the button that answers it
@@ -667,6 +681,36 @@ try {
   check('and the toolbar says which tool is holding',
     startsPanning.pan === 'true' && startsPanning.mark === 'false',
     JSON.stringify(startsPanning));
+
+  // Hover on the tool already in use used to grey it out, because :hover is a
+  // pseudo-class and outran the attribute selector that paints the selection.
+  // Pointing at the selected tool then looked like deselecting it.
+  {
+    const paint = async id => {
+      await page.hover('#' + id);
+      return page.evaluate(name => {
+        const s = getComputedStyle(document.getElementById(name));
+        return { bg: s.backgroundColor, ink: s.color,
+                 on: document.getElementById(name).getAttribute('aria-pressed') };
+      }, id);
+    };
+    const held = await paint('tool-pan');      // the one that is selected
+    const idle = await paint('tool-mark');     // the one that is not
+    await page.mouse.move(5, 400);
+    const atRest = await page.evaluate(() => {
+      const s = getComputedStyle(document.getElementById('tool-pan'));
+      return { bg: s.backgroundColor, ink: s.color };
+    });
+    check('hovering the tool in use leaves it blue and white',
+      held.on === 'true' && held.ink === 'rgb(255, 255, 255)'
+        && held.bg !== idle.bg, JSON.stringify({ held, idle }));
+    check('and only a shade off what it looks like at rest',
+      held.bg !== atRest.bg && held.ink === 'rgb(255, 255, 255)',
+      JSON.stringify({ held, atRest }));
+    check('while hovering an unselected one still greys it',
+      idle.on === 'false' && idle.bg === 'rgb(238, 241, 246)',
+      JSON.stringify(idle));
+  }
 
   // Four icons in a 320px panel. Words did not fit: the row overflowed and the
   // last controls could only be reached by scrolling sideways, which is how
@@ -910,6 +954,81 @@ try {
       const all = p.hits.length + p.manual.length;
       return live < all;
     }));
+
+  // ---------- a dismissed mark keeps its own colour ----------
+  //
+  // Dashed is what says "not going to be covered". Everything dismissed was
+  // also being redrawn amber, which is the colour the comprehensive check
+  // uses — so clicking a green mark off turned it into something that looked
+  // like a different kind of find.
+  {
+    // Counts the outline colours in the band along a box's edge, read back
+    // off the canvas, because the colour of a line is not in any variable.
+    const band = () => page.evaluate(() => {
+      const p = window.Blinded.state.pages[0];
+      const hit = p.hits.find(h => p.dismissed.has(h.finding.id));
+      if (!hit) return null;
+      const r = hit.rects[0];
+      const k = p.canvas.width / p.source.width;
+      const pad = Math.ceil(4 * k);
+      const x = Math.max(0, Math.round(r.x * k) - pad);
+      const y = Math.max(0, Math.round(r.y * k) - pad);
+      const w = Math.min(p.canvas.width - x, Math.round(r.w * k) + pad * 2);
+      const h = Math.min(p.canvas.height - y, Math.round(r.h * k) + pad * 2);
+      const px = p.canvas.getContext('2d').getImageData(x, y, w, h).data;
+      // Near the exact ink, not merely warm or cool. A looser rule counted
+      // the page's own brown-black lettering as amber, so the check could
+      // never have gone to zero and was asserting nothing.
+      const near = (r0, g0, b0) => (red, g, b) =>
+        Math.abs(red - r0) < 40 && Math.abs(g - g0) < 40 && Math.abs(b - b0) < 40;
+      const isGreen = near(17, 138, 78);     // MARK_GREEN
+      const isAmber = near(217, 139, 31);    // what the comprehensive check uses
+      let green = 0, amber = 0;
+      for (let i = 0; i < px.length; i += 4) {
+        if (isGreen(px[i], px[i + 1], px[i + 2])) green++;
+        else if (isAmber(px[i], px[i + 1], px[i + 2])) amber++;
+      }
+      return { green, amber };
+    });
+
+    const off = await band();
+
+    // And once the rest are covered, it is not on the page at all: the page
+    // is now what the file will be, and the file has no mark here.
+    // Covered directly rather than through the button: the button's meaning
+    // depends on whether a search has been run, and this block has not run
+    // one. What is being checked is what drawPage does with state.applied.
+    await page.evaluate(() => {
+      window.Blinded.state.searched = true;
+      window.Blinded.coverMarks();
+    });
+    const covered = await band();
+
+    // The reading with the outline gone is the baseline: whatever ink the
+    // page itself has in this band is in both readings, so what the outline
+    // contributed is the difference between them.
+    check('a dismissed mark is outlined in the colour it was found in',
+      off && covered && off.green - covered.green > 20,
+      JSON.stringify({ off, covered }));
+    check('and adds nothing in the colour the comprehensive check uses',
+      off && covered && off.amber === covered.amber,
+      JSON.stringify({ off, covered }));
+    check('and once Redact is pressed the dashed outline goes',
+      covered && covered.green === 0, JSON.stringify(covered));
+    check('without the area under it being covered',
+      await page.evaluate(() => {
+        const p = window.Blinded.state.pages[0];
+        const hit = p.hits.find(h => p.dismissed.has(h.finding.id));
+        return !window.Blinded.activeBoxes(p).some(b => b.x === hit.rects[0].x
+          && b.y === hit.rects[0].y);
+      }));
+    // Back to a proposal, which is what the checks below expect to find.
+    await page.evaluate(() => {
+      window.Blinded.uncoverMarks();
+      window.Blinded.state.searched = false;
+      window.Blinded.redrawAll();
+    });
+  }
 
   const restored = await page.evaluate(() => {
     // Driving the pointer at a page is about marking, so it asks for the
@@ -1283,6 +1402,49 @@ try {
   check('which means a template records the page it was cut from',
     typeof bigger.pageIndex === 'number', JSON.stringify(bigger));
   check('and it closes again', bigger.closedAgain === true, JSON.stringify(bigger));
+
+  // Opened while picking, which is when a reviewer most wants it: they are
+  // about to draw a second box and want to see what the first one caught.
+  // Picking dims the whole page except the document and the Images section,
+  // and the full-size view was being drawn behind that dimming — visible as a
+  // darkened, unreadable copy of the thing it was opened to show.
+  {
+    const above = await page.evaluate(() => {
+      const B = window.Blinded;
+      B.setMode('pick');
+      document.querySelector('#templates canvas').click();
+      const box = document.getElementById('imagebox');
+      const shot = document.getElementById('imagefull');
+      const r = shot.getBoundingClientRect();
+      const at = document.elementFromPoint(
+        Math.round(r.left + r.width / 2), Math.round(r.top + r.height / 2));
+      const layer = node => {
+        for (let n = node; n && n !== document.body; n = n.parentElement) {
+          const z = getComputedStyle(n).zIndex;
+          if (z !== 'auto') return Number(z);
+        }
+        return 0;
+      };
+      const out = {
+        open: !box.hidden,
+        // The dimming is drawn by body.picking::before. What has to be true is
+        // simpler than reading that rule: the thing under the pointer at the
+        // middle of the image is the image.
+        hitsTheImage: at === shot || shot.contains(at),
+        boxLayer: layer(box),
+        sectionLayer: layer(document.getElementById('imagesect')),
+      };
+      document.getElementById('imageclose').click();
+      B.setMode('box');
+      return out;
+    });
+    check('the full-size view opens while picking', above.open === true,
+      JSON.stringify(above));
+    check('and nothing is drawn over it', above.hitsTheImage === true,
+      JSON.stringify(above));
+    check('because it sits above the dimming, not under it',
+      above.boxLayer > above.sectionLayer, JSON.stringify(above));
+  }
 
   // The number is the answer; "found 4 times" beside a 4 said it twice.
   check('the picked logo is listed with its count',

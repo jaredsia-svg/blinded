@@ -1590,17 +1590,32 @@
       ctx.restore();
     }
 
-    // Dismissed detections: dashed, so a mistaken dismissal is obvious and
-    // can be clicked back on.
-    const off = page.hits.filter(h => page.dismissed.has(h.finding.id));
-    const offImages = liveImageHits(page).filter(m => page.dismissed.has(m.id));
+    // Dismissed marks: the same outline, dashed, so a mistaken dismissal is
+    // obvious and can be clicked back on.
+    //
+    // In the same colour it was drawn in, which it was not: everything
+    // dismissed came out amber, so clicking a green mark off turned it into
+    // something that looked like a find from the comprehensive check. Dashed
+    // is what says "not going to be covered"; the colour goes on saying where
+    // the mark came from.
+    //
+    // And only while the marks are still a proposal. Once Redact is pressed
+    // the page is meant to be what the file will be, and a dashed box round a
+    // word that is still there — and still readable — is a mark on a document
+    // that has none.
+    const off = state.applied ? [] : page.hits.filter(h => page.dismissed.has(h.finding.id));
+    const offImages = state.applied
+      ? [] : liveImageHits(page).filter(m => page.dismissed.has(m.id));
     if (off.length || offImages.length) {
       ctx.save();
-      ctx.strokeStyle = '#d98b1f';
       ctx.lineWidth = stroke(Math.max(1.5, page.source.width / 700));
       ctx.setLineDash([6, 5]);
+      ctx.strokeStyle = MARK_GREEN;
       for (const hit of off) for (const r of hit.rects) ctx.strokeRect(r.x, r.y, r.w, r.h);
-      for (const m of offImages) ctx.strokeRect(m.rect.x, m.rect.y, m.rect.w, m.rect.h);
+      for (const m of offImages) {
+        ctx.strokeStyle = m.bySweep ? '#d98b1f' : MARK_GREEN;
+        ctx.strokeRect(m.rect.x, m.rect.y, m.rect.w, m.rect.h);
+      }
       ctx.restore();
     }
 

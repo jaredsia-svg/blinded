@@ -246,13 +246,21 @@ a.mark { color: inherit; text-decoration: none; }
    undifferentiated. */
 #zoom-out, #undo { border-left: 1px solid var(--line); }
 
-.tool:hover:not(:disabled) { background: #eef1f6; }
+/* Not the selected one. Hover is a pseudo-class and beat the attribute
+   selector below on specificity, so pointing at the tool already in use
+   turned it grey — which reads as deselecting it. */
+.tool:hover:not(:disabled):not([aria-pressed="true"]) { background: #eef1f6; }
 /* Selected is darkened, not tinted: the reviewer has to be able to tell at a
    glance which of the two dragging means, and a pale highlight on a pale
    panel does not carry that. */
 .tool[aria-pressed="true"] {
   background: var(--accent); border-color: var(--accent); color: #fff;
   position: relative; z-index: 1;
+}
+/* Still blue under the pointer, a shade down: it is already the one in use,
+   and the only thing hover has to say is that it is a button. */
+.tool[aria-pressed="true"]:hover:not(:disabled) {
+  background: #1a5fd0; border-color: #1a5fd0;
 }
 .tool:disabled { color: var(--ink-soft); opacity: .55; cursor: default; }
 .tool:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; z-index: 2; }
@@ -516,6 +524,10 @@ body.picking::before {
 body.picking .stage,
 body.picking #imagesect { position: relative; z-index: 41; }
 body.picking #imagesect { background: var(--card); border-radius: var(--radius); }
+/* Above the dimming, not under it. A full-size look at a picked image is
+   opened from the one section picking leaves lit, and it was being drawn
+   behind the very overlay that section is sitting on top of. */
+#imagebox { z-index: 60; }
 
 /* A word in the list is a thing the reviewer put there, so it reads as an
    object with a way to take it off, not as a line of text. */
@@ -601,8 +613,14 @@ body.picking #imagesect { background: var(--card); border-radius: var(--radius);
   display: inline-flex; align-items: center; justify-content: center;
   width: 18px; height: 18px; border-radius: 999px;
   background: #fdecea; color: #d92d20; font-weight: 650; font-size: 12px;
-  vertical-align: -4px; margin: 0 1px;
+  /* Centred on the text it sits in, not hung off the baseline. A fixed
+     nudge in pixels is a guess about one font at one size, and it read as a
+     mark that had slipped. */
+  vertical-align: middle; margin: 0 2px;
 }
+/* And the line it sits in keeps its height, so the sentence does not jump
+   when the mark appears. */
+#exportnote { line-height: 1.5; }
 
 /* A term that matched nothing is the one thing in this panel a reviewer must
    not skim past: it looks identical to a term that worked. */
