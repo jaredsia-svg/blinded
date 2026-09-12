@@ -1168,6 +1168,42 @@ check('no author is carried into the output', !meta.info.Author);
 check('no title is carried into the output', !meta.info.Title);
 check('no creation date is carried into the output', !meta.info.CreationDate);
 
+// ---------- every element the code reaches for exists ----------
+//
+// This is here because its absence shipped a broken build. app.js was still
+// wiring a toggle the markup had replaced; el('pane-edit') returned null,
+// addEventListener threw on it, and app.js never reached the line that
+// assigns window.Blinded — so nothing was wired at all. Every control in the
+// review was dead.
+//
+// A browser test does catch that, loudly, but only if it is run. This costs
+// nothing, needs no browser, and fails on the exact mistake: an id in the
+// code that is not in the page.
+{
+  const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const code = readFileSync(new URL('../app.js', import.meta.url), 'utf8');
+  const ids = new Set([...html.matchAll(/id="([^"]+)"/g)].map(m => m[1]));
+  const wanted = new Set([
+    ...[...code.matchAll(/\bel\('([^']+)'\)/g)].map(m => m[1]),
+    ...[...code.matchAll(/getElementById\('([^']+)'\)/g)].map(m => m[1]),
+  ]);
+  const missing = [...wanted].filter(id => !ids.has(id));
+  check('the page has every element app.js reaches for by name',
+    missing.length === 0, 'missing from index.html: ' + missing.join(', '));
+
+  // And the same for the ids the stylesheet targets, which fail quietly
+  // rather than loudly: a rule for an element that no longer exists simply
+  // never applies.
+  const css = readFileSync(new URL('../app.css', import.meta.url), 'utf8')
+    // Colour literals are spelled the same way as id selectors and are not
+    // ids: #fff is a white, not an element.
+    .replace(/#[0-9a-fA-F]{3,8}\b/g, '');
+  const styled = new Set([...css.matchAll(/#([A-Za-z][\w-]*)/g)].map(m => m[1]));
+  const orphans = [...styled].filter(id => !ids.has(id));
+  check('and every element the stylesheet targets by id',
+    orphans.length === 0, 'styled but absent: ' + orphans.join(', '));
+}
+
 // ---------- report ----------
 
 console.log('\nBlinded self-test');
