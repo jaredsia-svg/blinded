@@ -2026,6 +2026,33 @@
     for (const page of state.pages) {
       if (page.canvas) page.canvas.parentElement.classList.toggle('picking', picking);
     }
+
+    // Zooming stays live while picking, and nothing else does.
+    //
+    // A logo is often small, and drawing a box round it is the one job in this
+    // tool that needs a close look. The toolbar was dimmed along with the rest
+    // of the panel, so the reviewer had to leave picking, zoom, and start
+    // again. The other four would each take them somewhere else mid-pick —
+    // a different tool, a step undone, a draft saved, a new file — so they go
+    // quiet rather than becoming traps.
+    for (const id of ['tool-pan', 'tool-mark', 'undo', 'savedraft', 'restart']) {
+      const button = el(id);
+      if (!button) continue;
+      if (picking) { button.disabled = true; }
+      else if (id === 'undo') { refreshUndo(); }
+      else { button.disabled = false; }
+    }
+
+    // On a phone the panel and the document take turns, and the box has to be
+    // drawn on the document — so picking moves there, and finishing or
+    // cancelling brings the panel back with the image in it. Without this the
+    // reviewer tapped the button and nothing they could reach did anything.
+    if (onPhone()) setPane(picking ? 'doc' : 'edit');
+
+    // And a way out that is over the document rather than in the panel, which
+    // on a phone is a strip down the side while the box is being drawn.
+    el('pickstop').hidden = !picking;
+
     setTip();
   }
 
@@ -3266,7 +3293,18 @@
   // What this must not do is silence the case the check exists for —
   // lettering baked into a picture, which the reader does not see at all.
   // That case has no words over the spot, so nothing vetoes it.
-  const READER_SURE = 75;
+  // Measured twice, and the second measurement moved it. On a text report the
+  // words the reader used to refuse a guess came back at 91 to 96. On a deck,
+  // looking for "KAS", the check proposed the title "KAG's" — and the reader
+  // had read that title correctly at 70, so a bar of 75 let the wrong mark
+  // through by five points. Large coloured display type is read correctly and
+  // scored lower than body text, which is a property of the reader rather
+  // than of the page.
+  //
+  // Below this is where Tesseract is genuinely unsure, and an unsure reading
+  // is exactly what the shape matcher is there to second-guess — so a doubtful
+  // word never gets to veto.
+  const READER_SURE = 60;
   const READER_OVER = 0.25;
 
   function readerContradicts(page, rect, term) {
@@ -3548,6 +3586,7 @@
 
   el('export').addEventListener('click', exportFile);
   el('savedraft').addEventListener('click', saveDraft);
+  el('pickstop').addEventListener('click', () => setMode('box'));
   el('imageclose').addEventListener('click', () => { el('imagebox').hidden = true; });
   el('draftpick').addEventListener('click', () => el('file').click());
   el('draftcancel').addEventListener('click', () => {

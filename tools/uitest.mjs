@@ -838,10 +838,14 @@ try {
   check('and says nothing when picking a logo either',
     picking.hidden === true && picking.text === '', JSON.stringify(picking));
 
+  // Both halves of what the tool does, in the reviewer's words: a box drawn by
+  // hand, and a box taken off again. It used to say "draw a box to redact
+  // selection, click box to undo", which described the gesture rather than
+  // the job.
   check('the crosshair says what it is for instead',
-    /draw a box to redact/i.test(chrome.markTitle), chrome.markTitle);
-  check('and how to take a box off again',
-    /click box to undo/i.test(chrome.markTitle), chrome.markTitle);
+    /mark/i.test(chrome.markTitle), chrome.markTitle);
+  check('and that it takes marks off as well as putting them on',
+    /unmark/i.test(chrome.markTitle), chrome.markTitle);
 
   check('and they fit inside the panel without scrolling sideways',
     bar.fits && bar.pageOverflow === 0 && bar.panelOverflow === 0, JSON.stringify(bar));
@@ -2825,6 +2829,87 @@ try {
       && badges.image.round === true,
     JSON.stringify(badges));
 
+  }
+
+  // ---------- what stays usable while a box is being drawn ----------
+  //
+  // The toolbar was dimmed along with the rest of the panel, so a reviewer who
+  // needed a closer look at a small logo had to leave picking, zoom, and start
+  // again. Zooming is the one thing picking needs; the other four would each
+  // take them somewhere else mid-pick.
+  {
+    const live = await page.evaluate(() => {
+      const B = window.Blinded;
+      const read = () => {
+        const of = id => {
+          const el = document.getElementById(id);
+          const r = el.getBoundingClientRect();
+          const mid = document.elementFromPoint(
+            Math.round(r.left + r.width / 2), Math.round(r.top + r.height / 2));
+          return { off: el.disabled, reachable: el === mid || el.contains(mid) };
+        };
+        return {
+          zoomIn: of('zoom-in'), zoomOut: of('zoom-out'),
+          pan: of('tool-pan'), mark: of('tool-mark'),
+          undo: of('undo'), restart: of('restart'), save: of('savedraft'),
+          escape: !document.getElementById('pickstop').hidden,
+        };
+      };
+      const before = read();
+      B.setMode('pick');
+      const during = read();
+      B.setMode('box');
+      return { before, during, after: read() };
+    });
+    check('zooming stays live while a box is being drawn',
+      live.during.zoomIn.off === false && live.during.zoomOut.off === false,
+      JSON.stringify(live.during));
+    check('and is not behind the dimming either',
+      live.during.zoomIn.reachable === true && live.during.zoomOut.reachable === true,
+      JSON.stringify(live.during));
+    check('the four that would take you elsewhere go quiet',
+      live.during.pan.off && live.during.mark.off && live.during.undo.off
+        && live.during.restart.off && live.during.save.off,
+      JSON.stringify(live.during));
+    check('and come back when the pick ends',
+      live.after.pan.off === false && live.after.mark.off === false
+        && live.after.restart.off === false && live.after.save.off === false,
+      JSON.stringify(live.after));
+    // Undo is the exception: it goes back to being about whether there is
+    // anything to undo, not about picking.
+    check('undo goes back to answering its own question',
+      live.after.undo.off === live.before.undo.off, JSON.stringify(live));
+    check('there is a way out of picking over the document',
+      live.before.escape === false && live.during.escape === true
+        && live.after.escape === false, JSON.stringify(live));
+  }
+
+  // ---------- picking on a phone ----------
+  //
+  // The panel and the document take turns on a narrow screen, and the box has
+  // to be drawn on the document. Tapping the button left the reviewer in the
+  // panel with nothing they could reach: picking was impossible.
+  {
+    const phone = await page.evaluate(() => {
+      const B = window.Blinded;
+      if (!B.onPhone()) return { narrow: false };
+      const out = { narrow: true };
+      B.setPane('edit');
+      B.setMode('pick');
+      out.went = document.body.dataset.pane;
+      out.escape = !document.getElementById('pickstop').hidden;
+      B.setMode('box');
+      out.came = document.body.dataset.pane;
+      return out;
+    });
+    if (phone.narrow) {
+      check('picking brings the document forward on a phone',
+        phone.went === 'doc', JSON.stringify(phone));
+      check('with a way out that is not in the hidden panel',
+        phone.escape === true, JSON.stringify(phone));
+      check('and finishing brings the panel back',
+        phone.came === 'edit', JSON.stringify(phone));
+    }
   }
 
   // ---------- a bar high enough to tell one letter from another ----------

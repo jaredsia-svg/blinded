@@ -31,7 +31,7 @@
 <title>Blinded – Efficient redaction for your most sensitive documents, all done locally</title>
 <meta name="description" content="Redact PDFs, images and text in your browser. The file never leaves your machine.">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="app.css?v=02f5c808">
+<link rel="stylesheet" href="app.css?v=2134fc59">
 </head>
 <body>
 
@@ -102,6 +102,15 @@
     <div class="review">
       <button type="button" id="peek-edit" class="peek" hidden>Edit</button>
       <button type="button" id="peek-doc" class="peek" hidden>Document</button>
+      <!-- The way out of picking, over the document where the picking happens.
+           The Cancel in the panel is unreachable on a phone, where the panel
+           is a strip down the side while the box is being drawn. -->
+      <button type="button" id="pickstop" class="pickstop" hidden
+        title="Stop picking" aria-label="Stop picking">
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <path d="M6 6l12 12M18 6L6 18"/>
+        </svg>
+      </button>
 
       <aside class="panel">
         <div class="panel-head">
@@ -114,7 +123,7 @@
               </svg><span class="sr-only">Move the pages</span>
             </button>
             <button type="button" id="tool-mark" class="tool" aria-pressed="false"
-              title="Draw a box to redact selection. Click box to undo">
+              title="Manually mark or unmark redacted areas">
               <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
                 <path d="M12 3v18M3 12h18"/>
               </svg><span class="sr-only">Mark the pages</span>
@@ -434,7 +443,7 @@
 <script src="lib/pdfwrite.js?v=4b977425"></script>
 <script src="lib/pdfread.js?v=624c5ef9"></script>
 <script src="lib/render.js?v=7bf6e0a9"></script>
-<script src="app.js?v=dd3521c0"></script>
+<script src="app.js?v=4fa69273"></script>
 <script type="module" src="lib/boot.mjs?v=8b98ed8f"></script>
 </body>
 </html>
