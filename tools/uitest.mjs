@@ -1430,7 +1430,6 @@ try {
   await reveal(page, 'labelling');
   await page.check('#labelling');
   check('turning labelling on reveals the legend', await page.isVisible('#legendbox'));
-  check('and its options', await page.isVisible('#labelopts'));
 
   const legendRows = await page.evaluate(() =>
     window.Blinded.state.labels.entries.map(e => [e.label, e.count]));
@@ -1479,8 +1478,11 @@ try {
 
   const pdfjs2 = await import('pdfjs-dist/legacy/build/pdf.mjs');
   const labelledDoc = await pdfjs2.getDocument({ data: labelledBytes }).promise;
-  check('the labelled export gains a legend page',
-    labelledDoc.numPages === 2, labelledDoc.numPages + ' pages');
+  // No legend page. It was a ticked checkbox nobody untucked, and it wrote a
+  // page describing the redaction into the redacted file — the key, which is
+  // downloaded separately and warns about itself, is the place for that.
+  check('the export is the document and nothing appended to it',
+    labelledDoc.numPages === 1, labelledDoc.numPages + ' pages');
 
   let extracted = '';
   for (let n = 1; n <= labelledDoc.numPages; n++) {
@@ -1489,9 +1491,13 @@ try {
   }
   check('the placeholders are extractable as real text',
     extracted.includes('[CLAIMANT]') && extracted.includes('[E1]'), extracted.slice(0, 200));
-  check('the legend page names each placeholder',
-    extracted.includes('Redaction legend') && extracted.includes("a person's name"),
-    extracted.slice(-300));
+  check('and carries no legend describing itself',
+    !extracted.includes('Redaction legend'), extracted.slice(-300));
+  // The placeholders are still machine-readable, which was the other
+  // checkbox: it was ticked, and turning it off made the labels a picture of
+  // themselves. That is not a trade anyone was choosing on purpose.
+  check('placeholders are still written as real text, without being asked',
+    extracted.includes('[CLAIMANT]'), extracted.slice(0, 200));
 
   // The whole safety argument, checked against the finished bytes rather than
   // against intentions: everything the labels replaced must be absent.

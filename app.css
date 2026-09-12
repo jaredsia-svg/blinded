@@ -657,7 +657,6 @@ button.wide.on { background: var(--accent); color: #fff; border-color: var(--acc
   background: #eef1f6; border-radius: 20px; padding: 1px 8px; color: var(--ink-soft);
 }
 
-#labelopts { margin-left: 22px; padding-left: 10px; border-left: 2px solid var(--line); }
 
 code {
   font: 11.5px var(--mono); background: #eef1f6;
@@ -682,6 +681,12 @@ code {
 }
 .primary.ghostly:hover:not(:disabled) { background: #f2f7ff; border-color: var(--accent); }
 .primary.ghostly:disabled { background: transparent; color: #9db8e6; border-color: #dbe6f8; }
+
+/* Red while there are still question marks in the panel, which is what the
+   button is there to answer. It turns blue for the decision to cover what was
+   found, and green once it is covered. */
+.primary.hunt { background: #d92d20; border-color: #d92d20; }
+.primary.hunt:hover { background: #b42318; border-color: #b42318; }
 
 /* Once applied the button says so in green, and stays pressable: "Redacted" is
    a state the reviewer can step back out of for another look at what a bar is

@@ -587,6 +587,10 @@
     // is a state the reviewer can step back out of rather than a dead end.
     button.textContent = !state.searched ? 'Search'
       : state.applied ? 'Redacted' : 'Redact';
+    // Three states, three colours, and they match what is on the page: red
+    // while things are still unanswered, blue for the decision to cover them,
+    // green once they are covered.
+    button.classList.toggle('hunt', !state.searched);
     button.classList.toggle('done', state.applied);
     button.title = state.applied ? 'Press to uncover and look at the marks again' : '';
     // Not while the comprehensive check is running: it is a pass over the same
@@ -612,9 +616,16 @@
       note.textContent = 'The comprehensive check is running. Let it finish, or '
         + 'stop it in the panel.';
     } else if (!state.searched) {
-      note.textContent = state.terms.length || state.templates.length
-        ? 'Press Search to find them.'
-        : 'Press Search to find what is in this document.';
+      // Named by what the reviewer can see. Every word and every picked image
+      // that nothing has looked for yet wears a red question mark in the
+      // panel, and this is the button that answers them.
+      const unanswered = state.terms.filter(t => !state.countedTerms.includes(t)).length
+        + state.templates.filter(t => !t.searched).length;
+      note.textContent = unanswered === 0
+        ? 'Press Search to find what is in this document.'
+        : unanswered === 1
+          ? 'One red ? above. Press Search to find it.'
+          : unanswered + ' red ? marks above. Press Search to find them.';
     } else if (state.applied) {
       note.textContent = marks === 0 ? 'Nothing is covered.' : '';
     } else if (unread && unread < state.pages.length && ocrPending()) {
@@ -2706,7 +2717,7 @@
           // file explains its own notation.
           out = Detect.applyToText(state.text, spans.map(span => ({
             ...span, replacement: Labels.render(state.labels.byId[span.id]),
-          })), 'replacement') + legendText();
+          })), 'replacement');
         } else {
           out = Detect.applyToText(state.text, spans, 'block');
         }
@@ -2717,7 +2728,11 @@
         download(await Render.canvasToBlob(flat, 'image/png'), state.saveAs);
       } else {
         const lossless = el('lossless').checked;
-        const machineReadable = state.labelling && el('textlayer').checked;
+        // Placeholders are written as invisible text over the bars whenever
+        // labelling is on. It was a checkbox, ticked, and turning it off made
+        // the labels a picture of themselves — which is not a trade anyone was
+        // choosing on purpose.
+        const machineReadable = state.labelling;
         const built = [];
 
         for (const page of state.pages) {
@@ -2730,11 +2745,6 @@
             image: await Render.encodeForPdf(flat, lossless),
             labels: machineReadable ? textLayerFor(page, boxes) : undefined,
           });
-        }
-
-        if (state.labelling && el('legendpage').checked && state.labels.entries.length) {
-          busy(true, 'Adding the legend…');
-          built.push(await legendPage(lossless, machineReadable));
         }
 
         const bytes = PdfWrite.build(built);
@@ -2776,41 +2786,6 @@
   // back to the name it replaced would undo the redaction completely, which is
   // why the mapping is a separate download and why Labels.legend() is the
   // function used here rather than Labels.key().
-  async function legendPage(lossless, machineReadable) {
-    const first = state.pages[0];
-    const built = Render.legendCanvas(Labels.legend(state.labels.entries), {
-      width: first.source.width,
-      height: first.source.height,
-    });
-
-    const scaleX = first.widthPt / built.canvas.width;
-    const scaleY = first.heightPt / built.canvas.height;
-
-    return {
-      widthPt: first.widthPt,
-      heightPt: first.heightPt,
-      image: await Render.encodeForPdf(built.canvas, lossless),
-      labels: machineReadable ? built.lines.map(line => ({
-        text: line.text,
-        x: line.x * scaleX,
-        y: first.heightPt - line.y * scaleY,
-        size: Math.max(4, line.size * scaleY),
-      })) : undefined,
-    };
-  }
-
-  // The legend as plain text, appended to a redacted text file.
-  function legendText() {
-    if (!state.labels.entries.length) return '';
-    const rows = Labels.legend(state.labels.entries).map(entry =>
-      '  ' + Labels.render(entry.label) + '  ' + entry.description +
-      ' — appears ' + (entry.count === 1 ? 'once' : entry.count + ' times'));
-    return '\n\n---\nRedaction legend\n' +
-      'Each placeholder above replaces content removed from this document. The same\n' +
-      'placeholder always stands for the same thing. This list does not record what\n' +
-      'any of them were.\n\n' + rows.join('\n') + '\n';
-  }
-
   // The mapping back to the originals — the one artefact here that is as
   // sensitive as the unredacted document, because it reconstructs everything
   // the redaction removed. It is a separate file, requested by its own button,
@@ -3337,7 +3312,6 @@
 
   el('labelling').addEventListener('change', e => {
     state.labelling = e.target.checked;
-    el('labelopts').hidden = !state.labelling;
     el('legendbox').hidden = !state.labelling;
     renderSectionNotes();
     redrawAll();
@@ -3458,7 +3432,7 @@
   });
 
   window.Blinded = { state, rescan, loadFile, exportFile, setMode, addTemplate,
-    undoLast, undoStack, applyLabels, labelItems, legendText, downloadKey,
+    undoLast, undoStack, applyLabels, labelItems, downloadKey,
     sensitivity, wordSensitivity, wordBarFor, setZoom, stepZoom, ZOOM_STEPS,
     MARK_GREEN,
     cleanName, coveredText, askName, redactedName, confirmAction, showTemplate,
