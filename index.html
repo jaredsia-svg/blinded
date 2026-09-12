@@ -37,13 +37,25 @@
 <title>Blinded – Efficient redaction for your most sensitive documents, all done locally</title>
 <meta name="description" content="Redact PDFs, images and text in your browser. The file never leaves your machine.">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="app.css?v=8b97be7e">
+<link rel="stylesheet" href="app.css?v=e3d221e5">
 </head>
 <body>
 
 <header class="top">
   <div class="wrap top-inner">
-    <div class="mark"><span class="bar"></span> Blinded</div>
+    <div class="mark">
+      <!-- Two lines of a redacted paragraph, the second coming apart at its
+           end: what a bar covers here is taken away rather than hidden, so the
+           line does not end in a neat block. Solid shapes only — a fade made
+           of opacity disappears wherever a mark is drawn flat. -->
+      <svg class="markmark" viewBox="0 0 26 15" aria-hidden="true" focusable="false">
+        <g fill="currentColor">
+          <rect width="26" height="6.4" rx="2"/>
+          <rect y="8.6" width="14" height="6.4" rx="2"/>
+          <rect x="16.6" y="8.6" width="3.6" height="6.4" rx="1.5"/>
+          <rect x="22.2" y="8.6" width="2" height="6.4" rx="1"/>
+        </g>
+      </svg> Blinded</div>
     <p class="claim" id="claim">Efficient redaction for your most sensitive documents, all done locally.</p>
     <button type="button" class="top-link" id="faq-open">Q&amp;A</button>
   </div>

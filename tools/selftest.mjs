@@ -1176,6 +1176,51 @@ check('no author is carried into the output', !meta.info.Author);
 check('no title is carried into the output', !meta.info.Title);
 check('no creation date is carried into the output', !meta.info.CreationDate);
 
+// ---------- the mark ----------
+//
+// It is drawn twice — inline in the header, and again in icon.svg for the
+// favicon — because one is a single colour that follows the text and the other
+// is a self-contained tile. Two drawings of one mark drift, so their shapes
+// are held together here.
+//
+// Solid shapes only. The fading end was opacity once, which disappears
+// wherever a favicon is drawn flat and leaves the mark looking like a plain
+// pair of bars.
+{
+  const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const icon = readFileSync(new URL('../icon.svg', import.meta.url), 'utf8');
+
+  const inline = html.match(/<svg class="markmark"[\s\S]*?<\/svg>/);
+  check('the header carries the mark as markup, not a bare rectangle',
+    Boolean(inline), 'no markmark svg in index.html');
+
+  const boxes = s => [...s.matchAll(/<rect[^>]*>/g)].map(m => m[0]);
+  const widthOf = r => Number((r.match(/width="([\d.]+)"/) || [])[1]);
+  const xOf = r => Number((r.match(/x="([\d.]+)"/) || [0, 0])[1]) || 0;
+
+  if (inline) {
+    const parts = boxes(inline[0]);
+    check('drawn as four shapes: a whole line and one coming apart',
+      parts.length === 4, parts.length + ' rects');
+    // The story the mark tells: the fragments after the break get smaller.
+    const tail = parts.slice(1).sort((a, b) => xOf(a) - xOf(b)).map(widthOf);
+    check('and the pieces after the break narrow as they go',
+      tail.length === 3 && tail[0] > tail[1] && tail[1] > tail[2],
+      JSON.stringify(tail));
+    check('with nothing relying on opacity to fade',
+      !/opacity/.test(inline[0]), inline[0]);
+  }
+
+  const tile = boxes(icon).filter(r => /fill="#ffffff"/.test(r) || !/fill=/.test(r));
+  check('the favicon draws the same four shapes', tile.length === 4,
+    tile.length + ' rects in icon.svg');
+  check('and it too fades by size rather than by opacity',
+    !/opacity/.test(icon), 'icon.svg uses opacity');
+  // A favicon is a tile of its own, so it carries the header's own black.
+  check('the favicon tile is the colour of the header',
+    /fill="#0d1117"/.test(icon), 'icon.svg background is not the header black');
+}
+
 // ---------- every element the code reaches for exists ----------
 //
 // This is here because its absence shipped a broken build. app.js was still

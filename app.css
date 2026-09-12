@@ -61,7 +61,9 @@ body { padding-top: var(--top-h); }
   font-size: 17px; font-weight: 650; letter-spacing: -0.01em;
   display: flex; align-items: center; gap: 8px; flex: none;
 }
-.mark .bar { display: inline-block; width: 26px; height: 11px; background: #fff; border-radius: 2px; }
+/* Named, because .bar is also the progress bar in the overlay and the two
+   had nothing to do with each other beyond a word. */
+.markmark { display: block; width: 26px; height: 15px; flex: none; fill: currentColor; }
 .claim {
   margin: 0; color: #9aa4b2; font-size: 13px;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0;

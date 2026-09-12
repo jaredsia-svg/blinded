@@ -5137,6 +5137,37 @@ try {
              visible: r.width > 0 && r.height > 0,
              onTheRight: r.left > window.innerWidth / 2 };
   });
+  // The mark itself, as the page actually paints it.
+  {
+    const mark = await page.evaluate(() => {
+      const svg = document.querySelector('.mark .markmark');
+      if (!svg) return null;
+      const r = svg.getBoundingClientRect();
+      const s = getComputedStyle(svg);
+      const name = document.querySelector('.mark');
+      const at = name.getBoundingClientRect();
+      return {
+        wide: Math.round(r.width), tall: Math.round(r.height),
+        fill: s.fill, shapes: svg.querySelectorAll('rect').length,
+        // White on the header's black, by following the text rather than by
+        // being told a colour of its own.
+        ink: getComputedStyle(name).color,
+        // Beside the name, not above or below it.
+        beside: Math.abs((r.top + r.height / 2) - (at.top + at.height / 2)) < 4,
+        before: r.left < at.left + 30,
+      };
+    });
+    check('the header draws the mark', mark !== null, JSON.stringify(mark));
+    check('as four shapes, not one rectangle',
+      mark && mark.shapes === 4, JSON.stringify(mark));
+    check('painted in the same ink as the name beside it',
+      mark && mark.fill === mark.ink, JSON.stringify(mark));
+    check('sitting on the name\'s own line, ahead of it',
+      mark && mark.beside === true && mark.before === true, JSON.stringify(mark));
+    check('and small enough to leave the header thin',
+      mark && mark.tall <= 18 && mark.wide <= 30, JSON.stringify(mark));
+  }
+
   check('the header carries a way to the questions', headerLink !== null,
     JSON.stringify(headerLink));
   check('and it is labelled Q&A', headerLink && headerLink.text === 'Q&A',
