@@ -377,6 +377,9 @@ try {
     const state = () => page.evaluate(() => ({
       label: document.getElementById('apply').textContent.trim(),
       green: document.getElementById('apply').classList.contains('done'),
+      red: document.getElementById('apply').classList.contains('hunt'),
+      // The circles the red is supposed to be answering.
+      marks: document.querySelectorAll('.termcounts .n.unknown, .templates .n.unknown').length,
       searched: window.Blinded.state.searched,
       applied: window.Blinded.state.applied,
       drawn: window.Blinded.state.pages.reduce(
@@ -391,6 +394,11 @@ try {
     const opened = await state();
     check('a document opens asking to be searched, not redacted',
       opened.label === 'Search', JSON.stringify(opened));
+    // Nothing typed yet, so there is no red ? anywhere and nothing for a red
+    // button to be about. An alarm raised over nothing teaches the reviewer to
+    // stop reading it.
+    check('with nothing to look for the button is not red',
+      opened.red === false && opened.marks === 0, JSON.stringify(opened));
 
     await setTerms(page, ["Jane"]);
     await page.waitForTimeout(400);
@@ -399,6 +407,12 @@ try {
       typed.drawn === 0, JSON.stringify(typed));
     check('and the button still says Search',
       typed.label === 'Search' && typed.searched === false, JSON.stringify(typed));
+    // Now there is a red ? beside the word, and the button that answers it
+    // wears the same red.
+    check('a word nothing has looked for puts a red ? on the panel',
+      typed.marks === 1, JSON.stringify(typed));
+    check('and turns the button red to match it',
+      typed.red === true, JSON.stringify(typed));
 
     await page.click('#apply');
     await page.waitForFunction(() => window.Blinded.state.searched === true,
@@ -410,6 +424,8 @@ try {
     check('but covers nothing yet', found.applied === false, JSON.stringify(found));
     check('and the button now offers to redact',
       found.label === 'Redact' && !found.green, JSON.stringify(found));
+    check('the red ? is answered, so neither it nor the red button remains',
+      found.marks === 0 && found.red === false, JSON.stringify(found));
     check('the export stays shut until it is redacted',
       found.exportOff === true, JSON.stringify(found));
 
@@ -432,6 +448,26 @@ try {
     // Stepping back out must not need the search run again.
     check('stepping back does not undo the search',
       back.searched === true, JSON.stringify(back));
+
+    // Not the same class, the same colour: the button is supposed to be the
+    // circle's red, and a hex typed twice is a hex that drifts.
+    {
+      await setTerms(page, ["Zebediah"]);
+      await page.waitForTimeout(400);
+      // Off the button: the last click left the pointer on it, and hover is a
+      // darker red than the one being compared.
+      await page.mouse.move(5, 300);
+      const paint = await page.evaluate(() => {
+        const circle = document.querySelector('.termcounts .n.unknown');
+        const button = document.getElementById('apply');
+        return circle
+          ? { ink: getComputedStyle(circle).color,
+              fill: getComputedStyle(button).backgroundColor }
+          : null;
+      });
+      check('the button is painted in the question mark\'s own red',
+        paint && paint.ink === paint.fill, JSON.stringify(paint));
+    }
 
     // Changing what to look for is a different question, so the answer goes.
     await setTerms(page, ["Jane", "Amphitheatre"]);

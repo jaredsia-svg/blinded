@@ -587,10 +587,19 @@
     // is a state the reviewer can step back out of rather than a dead end.
     button.textContent = !state.searched ? 'Search'
       : state.applied ? 'Redacted' : 'Redact';
-    // Three states, three colours, and they match what is on the page: red
-    // while things are still unanswered, blue for the decision to cover them,
-    // green once they are covered.
-    button.classList.toggle('hunt', !state.searched);
+    // How many red question marks are on the panel right now. A word that no
+    // search has counted yet and a picked image nothing has looked for each
+    // draw one, and this is the same predicate the circles themselves render
+    // from, so the two cannot disagree.
+    const unanswered = state.terms.filter(t => !state.countedTerms.includes(t)).length
+      + state.templates.filter(t => !t.searched).length;
+
+    // The button wears the panel's red only while there is a red ? for it to
+    // answer. Red with nothing outstanding is an alarm about nothing: the
+    // reviewer who has just deleted their last word does not need the footer
+    // shouting at them. With nothing to find it is an ordinary blue button,
+    // which is what it will be for the next press anyway.
+    button.classList.toggle('hunt', !state.searched && unanswered > 0);
     button.classList.toggle('done', state.applied);
     button.title = state.applied ? 'Press to uncover and look at the marks again' : '';
     // Not while the comprehensive check is running: it is a pass over the same
@@ -619,8 +628,6 @@
       // Named by what the reviewer can see. Every word and every picked image
       // that nothing has looked for yet wears a red question mark in the
       // panel, and this is the button that answers them.
-      const unanswered = state.terms.filter(t => !state.countedTerms.includes(t)).length
-        + state.templates.filter(t => !t.searched).length;
       note.textContent = unanswered === 0
         ? 'Press Search to find what is in this document.'
         : unanswered === 1
