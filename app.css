@@ -1011,11 +1011,12 @@ body.reviewing .exportbar { position: static; flex: none; margin: 14px 0 18px; }
   #exportnote { display: none; }
   .exportbar .primary { flex: 1; white-space: nowrap; padding: 10px 12px; }
 
-  /* Pinch is how anyone zooms anything on a phone. The canvas took every
-     touch so that a drag could pan or draw, which left two fingers doing
-     nothing at all; pinch-zoom hands the two-finger gesture back to the
-     browser and keeps the one-finger drag. */
-  .page canvas { touch-action: pinch-zoom; }
+  /* Pinch is how anyone zooms anything on a phone, and on the document it
+     means the document. Handing the gesture to the browser zoomed the whole
+     app instead — panel, toolbar and header swelling together, with the page
+     no more readable than before. The canvas keeps every touch and the
+     two-finger one drives the document's own zoom. */
+  .page canvas { touch-action: none; }
 
   /* Room for a thumb. The zoom and tool buttons are 34px on a desktop, which
      is a comfortable click and an awkward tap. */

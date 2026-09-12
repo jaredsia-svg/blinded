@@ -3255,6 +3255,98 @@ try {
       moved.refused === null, JSON.stringify(moved));
   }
 
+  // ---------- pinching the document, and only the document ----------
+  //
+  // The browser's own pinch zoomed the whole app: panel, toolbar and header
+  // swelling together, with the page no more readable than before. It is off
+  // in the viewport tag now, and two fingers on the document drive the
+  // document's own zoom instead — the same ladder the buttons use, so a pinch
+  // and a button press leave it in the same state.
+  {
+    if (await page.isVisible('#view-review')) await newFile();
+    await page.waitForSelector('#view-drop:not([hidden])', { timeout: 15000 });
+    await page.setInputFiles('#file', fixturePath);
+    await page.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
+
+    const pinch = await page.evaluate(async (where) => {
+      const B = window.Blinded;
+      const target = where === 'doc'
+        ? (document.querySelector('.page canvas') || document.querySelector('.stage'))
+        : document.querySelector('.panel');
+      const r = target.getBoundingClientRect();
+      const cx = r.left + r.width / 2, cy = r.top + Math.min(160, r.height / 2);
+      const send = (type, id, x, y) => target.dispatchEvent(new PointerEvent(type, {
+        pointerId: id, pointerType: 'touch', clientX: x, clientY: y,
+        bubbles: true, cancelable: true,
+      }));
+      B.setZoom(1);
+      const spread = (from, to, step) => {
+        for (let d = from; step > 0 ? d <= to : d >= to; d += step) {
+          send('pointermove', 1, cx - d, cy);
+          send('pointermove', 2, cx + d, cy);
+        }
+      };
+      const before = B.state.zoom;
+      send('pointerdown', 1, cx - 20, cy);
+      send('pointerdown', 2, cx + 20, cy);
+      spread(25, 70, 5);
+      const out = B.state.zoom;
+      spread(70, 15, -5);
+      const back = B.state.zoom;
+      send('pointerup', 1, cx - 15, cy);
+      send('pointerup', 2, cx + 15, cy);
+      return { before, out, back, held: B.pinching(),
+               marks: B.state.pages.reduce((n, p) => n + p.manual.length, 0),
+               ladder: B.ZOOM_STEPS.includes(B.state.zoom) };
+    }, 'doc');
+
+    check('spreading two fingers on the document zooms it in',
+      pinch.out > pinch.before, JSON.stringify(pinch));
+    check('and bringing them together zooms it out again',
+      pinch.back < pinch.out, JSON.stringify(pinch));
+    check('it lands on the same sizes the buttons use',
+      pinch.ladder === true, JSON.stringify(pinch));
+    // The first finger of a pinch starts what looks like a drag, and a drag on
+    // the document draws a box or dismisses a mark.
+    check('and leaves no box behind for the finger that started it',
+      pinch.marks === 0, JSON.stringify(pinch));
+    check('and nothing is left mid-pinch once the fingers lift',
+      pinch.held === false, JSON.stringify(pinch));
+
+    const elsewhere = await page.evaluate(async () => {
+      const B = window.Blinded;
+      const target = document.querySelector('.panel');
+      const r = target.getBoundingClientRect();
+      const cx = r.left + r.width / 2, cy = r.top + 120;
+      const send = (type, id, x, y) => target.dispatchEvent(new PointerEvent(type, {
+        pointerId: id, pointerType: 'touch', clientX: x, clientY: y,
+        bubbles: true, cancelable: true,
+      }));
+      B.setZoom(1);
+      const before = B.state.zoom;
+      send('pointerdown', 5, cx - 20, cy);
+      send('pointerdown', 6, cx + 20, cy);
+      for (let d = 25; d <= 70; d += 5) {
+        send('pointermove', 5, cx - d, cy);
+        send('pointermove', 6, cx + d, cy);
+      }
+      send('pointerup', 5, cx - 70, cy);
+      send('pointerup', 6, cx + 70, cy);
+      return { before, after: B.state.zoom };
+    });
+    check('a pinch anywhere else does nothing at all',
+      elsewhere.after === elsewhere.before, JSON.stringify(elsewhere));
+
+    // And the browser is told not to zoom the app itself, which is what a
+    // pinch used to do.
+    const viewport = await page.evaluate(() =>
+      (document.querySelector('meta[name="viewport"]') || {}).content || '');
+    check('the page forbids the browser its own pinch',
+      /user-scalable\s*=\s*no/.test(viewport) && /maximum-scale\s*=\s*1/.test(viewport),
+      viewport);
+    await page.evaluate(() => window.Blinded.setZoom(1));
+  }
+
   // ---------- what the bar turned away ----------
   //
   // Reported on a deck of near-identical letter badges: at the highest setting
@@ -4735,10 +4827,36 @@ try {
         return document.body.dataset.pane === before;
       }));
 
-    // Two fingers have to do the thing two fingers do.
-    check('pinch is left to the browser',
+    // Two fingers have to do the thing two fingers do — which is zoom the
+    // document, not the app around it. Handing the gesture to the browser
+    // swelled panel, toolbar and header together and left the page no more
+    // readable, so the canvas keeps every touch and answers the pinch itself.
+    check('the canvas keeps the two-finger gesture rather than handing it over',
       await phone.evaluate(() => getComputedStyle(
-        document.querySelector('.page canvas')).touchAction) === 'pinch-zoom');
+        document.querySelector('.page canvas')).touchAction) === 'none');
+    check('and a pinch on it zooms the document',
+      await phone.evaluate(() => {
+        const B = window.Blinded;
+        B.setZoom(1);
+        const c = document.querySelector('.page canvas');
+        const r = c.getBoundingClientRect();
+        const cx = r.left + r.width / 2, cy = r.top + Math.min(150, r.height / 2);
+        const send = (type, id, x, y) => c.dispatchEvent(new PointerEvent(type, {
+          pointerId: id, pointerType: 'touch', clientX: x, clientY: y,
+          bubbles: true, cancelable: true,
+        }));
+        send('pointerdown', 91, cx - 20, cy);
+        send('pointerdown', 92, cx + 20, cy);
+        for (let d = 25; d <= 70; d += 5) {
+          send('pointermove', 91, cx - d, cy);
+          send('pointermove', 92, cx + d, cy);
+        }
+        const zoomed = B.state.zoom > 1;
+        send('pointerup', 91, cx - 70, cy);
+        send('pointerup', 92, cx + 70, cy);
+        B.setZoom(1);
+        return zoomed;
+      }));
 
     // Following a page number from the tally has to bring the document over.
     await phone.click('#peek-edit');

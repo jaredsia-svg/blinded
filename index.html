@@ -2,7 +2,13 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- The browser's own pinch zooms the whole app: the panel, the toolbar and
+     the header all swell together and the document is no easier to read for
+     it. The document has a zoom of its own, which is what a pinch on it should
+     drive, so the browser's is turned off and the gesture handled where it
+     means something. -->
+<meta name="viewport"
+  content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <!--
   The promise this tool makes is that the document never leaves the machine.
   That is true of the code, but a promise kept by inspection is only as good as
@@ -31,7 +37,7 @@
 <title>Blinded – Efficient redaction for your most sensitive documents, all done locally</title>
 <meta name="description" content="Redact PDFs, images and text in your browser. The file never leaves your machine.">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="app.css?v=67451311">
+<link rel="stylesheet" href="app.css?v=98f5b48b">
 </head>
 <body>
 
@@ -484,7 +490,7 @@
 <script src="lib/pdfwrite.js?v=4b977425"></script>
 <script src="lib/pdfread.js?v=ca229552"></script>
 <script src="lib/render.js?v=7bf6e0a9"></script>
-<script src="app.js?v=f9aa20f1"></script>
+<script src="app.js?v=b91f3770"></script>
 <script type="module" src="lib/boot.mjs?v=8b98ed8f"></script>
 </body>
 </html>

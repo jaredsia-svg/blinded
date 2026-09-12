@@ -1828,6 +1828,11 @@
     };
 
     canvas.addEventListener('pointerdown', event => {
+      // A second finger turns whatever was happening into a pinch. Whatever
+      // the first one had started — a pan, half a box — is abandoned, because
+      // finishing it with the hand that is now zooming is not what anyone
+      // meant.
+      if (pinching()) { panning = null; start = null; drawPage(page); return; }
       if (!marking()) {
         // Screen coordinates, not canvas ones: this moves the window, and the
         // relationship between the two changes as it moves.
@@ -1844,6 +1849,7 @@
     });
 
     canvas.addEventListener('pointermove', event => {
+      if (pinching()) { panning = null; start = null; return; }
       if (panning) {
         const dx = panning.x - event.clientX;
         const dy = panning.y - event.clientY;
@@ -1859,6 +1865,9 @@
     });
 
     canvas.addEventListener('pointerup', event => {
+      // Lifting one finger of a pinch is not a click, and must not dismiss a
+      // mark or leave a box behind.
+      if (pinching()) { panning = null; start = null; return; }
       // A drag that moved the page leaves nothing behind, and neither does a
       // click while the hand is held: nothing on the page changes unless the
       // reviewer has asked for the tool that changes it.
@@ -2117,6 +2126,67 @@
     const percent = Math.round(wanted * 100) + '%';
     el('zoom-in').title = 'Zoom in (now ' + percent + ')';
     el('zoom-out').title = 'Zoom out (now ' + percent + ')';
+  }
+
+  // ---------- pinching the document ----------
+  //
+  // Two fingers on the document mean the document, not the app around it. The
+  // browser's own pinch is turned off in the viewport tag, so this is the only
+  // thing that answers the gesture — and only here: a pinch on the panel, the
+  // toolbar or the header now does nothing, which is the point.
+  //
+  // It drives the same ladder of sizes the zoom buttons use rather than a
+  // continuous scale, so a pinch and a button press leave the document in the
+  // same state and the reading beside the buttons stays true.
+  const PINCH_IN = 1.28;        // how far apart before it counts as a step
+  const PINCH_OUT = 1 / PINCH_IN;
+
+  // The pointers currently down on the document, and the span between the
+  // first two of them when the current step began.
+  const pinchPointers = new Map();
+  let pinchSpan = 0;
+
+  function pinching() {
+    return pinchPointers.size >= 2;
+  }
+
+  function spanOf() {
+    const [a, b] = [...pinchPointers.values()];
+    return Math.hypot(a.x - b.x, a.y - b.y);
+  }
+
+  function watchPinch(stage) {
+    const track = event => {
+      if (event.pointerType === 'mouse') return;
+      pinchPointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+      if (pinching() && !pinchSpan) pinchSpan = spanOf();
+    };
+    const drop = event => {
+      pinchPointers.delete(event.pointerId);
+      if (!pinching()) pinchSpan = 0;
+    };
+
+    // Capture, so the gesture is recognised before a canvas underneath starts
+    // treating the first finger as a drag.
+    stage.addEventListener('pointerdown', track, true);
+    stage.addEventListener('pointermove', event => {
+      if (event.pointerType === 'mouse') return;
+      if (!pinchPointers.has(event.pointerId)) return;
+      pinchPointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+      if (!pinching() || !pinchSpan) return;
+      event.preventDefault();
+      const ratio = spanOf() / pinchSpan;
+      // One step per gesture-worth of movement, then the span is re-baselined
+      // so a long pinch keeps stepping rather than stopping at one.
+      if (ratio > PINCH_IN) { stepZoom(1); pinchSpan = spanOf(); }
+      else if (ratio < PINCH_OUT) { stepZoom(-1); pinchSpan = spanOf(); }
+    }, true);
+    stage.addEventListener('pointerup', drop, true);
+    stage.addEventListener('pointercancel', drop, true);
+    // A pointer that leaves the element without an up — which is what a finger
+    // sliding off the edge of the document column does — would otherwise sit
+    // in the map for ever and leave the app permanently mid-pinch.
+    stage.addEventListener('lostpointercapture', drop, true);
   }
 
   function stepZoom(by) {
@@ -4044,6 +4114,23 @@
   el('peek-edit').addEventListener('click', () => setPane('edit'));
   el('peek-doc').addEventListener('click', () => setPane('doc'));
   watchSwipes();
+  {
+    // The document column, which is the only place a pinch means anything.
+    const stage = document.querySelector('.stage');
+    if (stage) watchPinch(stage);
+  }
+  // Safari ignores user-scalable and zooms on a pinch anyway, through its own
+  // gesture events. Refusing them outright is the only way to keep the whole
+  // app from swelling; the document's own pinch is a pointer gesture and is
+  // unaffected.
+  for (const kind of ['gesturestart', 'gesturechange', 'gestureend']) {
+    document.addEventListener(kind, event => event.preventDefault(), { passive: false });
+  }
+  // The same for a two-finger double tap, which some browsers treat as a zoom
+  // even when the viewport forbids scaling.
+  document.addEventListener('dblclick', event => {
+    if (event.touches || event.pointerType === 'touch') event.preventDefault();
+  }, { passive: false });
   placeToolbar();
   setPane(state.pane);
   // Crossing the breakpoint moves the toolbar and decides whether the strips
@@ -4158,7 +4245,7 @@
   window.Blinded = { state, rescan, loadFile, exportFile, setMode, addTemplate,
     undoLast, undoStack, applyLabels, labelItems, downloadKey,
     sensFor, barFromScores, lowerBarIfEmpty, AUTO_FLOOR, REAL_GAP,
-    wordSensitivity, wordBarFor,
+    watchPinch, pinching, PINCH_IN, wordSensitivity, wordBarFor,
     setZoom, stepZoom, ZOOM_STEPS,
     MARK_GREEN,
     cleanName, coveredText, askName, askPassword, renderPdf, wordLayerFor,
