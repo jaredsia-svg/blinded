@@ -4232,6 +4232,31 @@
 
   el('export').addEventListener('click', exportFile);
   el('savedraft').addEventListener('click', saveDraft);
+  // The sample slide on the front page, shown large.
+  //
+  // Anyone deciding whether to hand this a confidential document should be
+  // able to see what it produces first, and at thumbnail size the labels —
+  // which are the point — are not readable.
+  {
+    const box = el('samplebox');
+    const show = () => {
+      box.hidden = false;
+      el('sampleclose').focus();
+    };
+    const hide = () => {
+      if (box.hidden) return;
+      box.hidden = true;
+      el('sample-open').focus();
+    };
+    el('sample-open').addEventListener('click', show);
+    el('sampleclose').addEventListener('click', hide);
+    // The backdrop is the other way out, and the one people reach for.
+    box.addEventListener('click', event => { if (event.target === box) hide(); });
+    document.addEventListener('keydown', event => {
+      if (event.key === 'Escape') hide();
+    });
+  }
+
   el('pickstop').addEventListener('click', () => setMode('box'));
   el('imageclose').addEventListener('click', () => { el('imagebox').hidden = true; });
   el('draftpick').addEventListener('click', () => el('file').click());

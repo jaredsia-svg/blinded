@@ -3261,6 +3261,101 @@ try {
       moved.refused === null, JSON.stringify(moved));
   }
 
+  // ---------- the sample slide on the front page ----------
+  //
+  // Someone deciding whether to hand this a confidential document should be
+  // able to see what it produces without handing one over first. At thumbnail
+  // size the labels — which are the whole point — are not readable, so it
+  // opens.
+  {
+    if (await page.isVisible('#view-review')) await newFile();
+    await page.waitForSelector('#view-drop:not([hidden])', { timeout: 15000 });
+
+    const shot = await page.evaluate(() => {
+      const open = document.getElementById('sample-open');
+      if (!open) return null;
+      open.scrollIntoView({ block: 'center' });
+      const img = open.querySelector('img');
+      const r = img.getBoundingClientRect();
+      return {
+        onTheFrontPage: open.closest('#view-drop') !== null,
+        drawn: r.width > 0 && r.height > 0,
+        // Below the reasons to use it, which is where someone who is still
+        // deciding has got to.
+        belowTheFeatures: open.getBoundingClientRect().top
+          > document.querySelector('.features').getBoundingClientRect().top,
+        described: (img.getAttribute('alt') || '').length > 40,
+        says: (document.querySelector('.sample-zoom') || {}).textContent,
+      };
+    });
+    check('the front page shows a redacted slide', shot !== null && shot.drawn,
+      JSON.stringify(shot));
+    check('after the reasons to use it, not before',
+      shot && shot.belowTheFeatures === true, JSON.stringify(shot));
+    check('with a description for anyone who cannot see it',
+      shot && shot.described === true, JSON.stringify(shot));
+    check('and it says it can be opened',
+      /enlarge|larger|bigger/i.test(shot && shot.says || ''), String(shot && shot.says));
+
+    const big = await page.evaluate(async () => {
+      const box = document.getElementById('samplebox');
+      const shut = box.hidden;
+      document.getElementById('sample-open').click();
+      await new Promise(r => setTimeout(r, 150));
+      const img = document.getElementById('samplebig').getBoundingClientRect();
+      const thumb = document.querySelector('.sample-shot img').getBoundingClientRect();
+      return {
+        shut, open: !box.hidden,
+        // Bigger than the thumbnail it was opened from, or there was no point.
+        bigger: img.width > thumb.width,
+        // The focus lands on the way out, so a keyboard is not left stranded.
+        focused: document.activeElement && document.activeElement.id,
+      };
+    });
+    check('the slide was not open to begin with', big.shut === true, JSON.stringify(big));
+    check('clicking it opens it larger',
+      big.open === true && big.bigger === true, JSON.stringify(big));
+    check('and the focus goes to the way out',
+      big.focused === 'sampleclose', JSON.stringify(big));
+
+    // Three ways out, because a picture that traps you is worse than no
+    // picture: the button, the key, and the dark around it.
+    await page.click('#sampleclose');
+    await page.waitForTimeout(120);
+    check('the button closes it',
+      await page.evaluate(() => document.getElementById('samplebox').hidden) === true);
+
+    await page.click('#sample-open');
+    await page.waitForTimeout(120);
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(120);
+    check('Escape closes it',
+      await page.evaluate(() => document.getElementById('samplebox').hidden) === true);
+
+    const backdrop = await page.evaluate(async () => {
+      const box = document.getElementById('samplebox');
+      document.getElementById('sample-open').click();
+      await new Promise(r => setTimeout(r, 120));
+      box.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await new Promise(r => setTimeout(r, 120));
+      const shut = box.hidden;
+      // And a click on the picture itself does not, or a drag to read it
+      // would keep shutting it.
+      document.getElementById('sample-open').click();
+      await new Promise(r => setTimeout(r, 120));
+      document.getElementById('samplebig').dispatchEvent(
+        new MouseEvent('click', { bubbles: true }));
+      await new Promise(r => setTimeout(r, 120));
+      const stillOpen = !box.hidden;
+      box.hidden = true;
+      return { shut, stillOpen };
+    });
+    check('a click on the dark around it closes it', backdrop.shut === true,
+      JSON.stringify(backdrop));
+    check('while a click on the slide itself leaves it open',
+      backdrop.stillOpen === true, JSON.stringify(backdrop));
+  }
+
   // ---------- pinching the document, and only the document ----------
   //
   // The browser's own pinch zoomed the whole app: panel, toolbar and header

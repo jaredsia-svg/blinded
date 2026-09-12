@@ -1176,6 +1176,42 @@ check('no author is carried into the output', !meta.info.Author);
 check('no title is carried into the output', !meta.info.Title);
 check('no creation date is carried into the output', !meta.info.CreationDate);
 
+// ---------- the sample slide ----------
+//
+// It sits on the front page to show what a finished redaction looks like,
+// which means it is a picture of a confidential document — so it had better
+// not contain one. Everything on it is invented, and the detectors this tool
+// ships are pointed at it here to say so: if a real-looking email, card
+// number, phone number or address ever found its way in, this fails.
+{
+  const svg = readFileSync(new URL('../sample.svg', import.meta.url), 'utf8');
+  const words = svg.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+
+  const found = Detect.findAll(words, { kinds: Detect.KINDS.map(k => k.kind) });
+  check('the sample carries nothing the detectors would want to redact',
+    found.length === 0,
+    found.map(f => f.kind + ': ' + words.slice(f.start, f.end)).join(' | '));
+
+  // The point of the picture is the labels, not the bars: a bar alone says
+  // "something was here", and this tool's argument is that you can still read
+  // the sentence around it.
+  const labels = [...svg.matchAll(/\[[A-Z]+\d\]/g)].map(m => m[0]);
+  check('and it shows a redaction of more than one kind',
+    new Set(labels.map(l => l.replace(/\d/, ''))).size >= 4,
+    labels.join(' '));
+  check('with every bar labelled rather than left blank',
+    labels.length >= 6, labels.join(' '));
+  // Same thing, same name — which is what makes a placeholder worth reading.
+  check('and no two different things sharing a label',
+    labels.length === new Set(labels).size, labels.join(' '));
+
+  // It is drawn, not photographed, so it stays sharp when it is enlarged and
+  // costs a few kilobytes rather than a few hundred.
+  check('the sample is a drawing rather than a photograph',
+    svg.trim().startsWith('<svg') && svg.length < 20000,
+    svg.length + ' bytes');
+}
+
 // ---------- the mark ----------
 //
 // It is drawn twice — inline in the header, and again in icon.svg for the

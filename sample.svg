@@ -1,0 +1,111 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 540" role="img"
+     aria-label="A sample corporate slide after redaction: the logo, the company name, a person's name, an email address and several figures are covered by black bars carrying placeholder labels.">
+  <title>A redacted slide</title>
+  <!--
+    Everything on this slide is invented. It exists to show what a finished
+    redaction looks like — the bars, and the placeholders that let a later
+    reader still follow the sentence — so the visible copy is deliberately
+    ordinary and the covered parts are the ones a real deck would guard.
+  -->
+  <defs>
+    <style>
+      .pg { fill: #fff; }
+      .rule { stroke: #e3e6eb; stroke-width: 1.4; }
+      .h1 { font: 700 30px ui-sans-serif, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; fill: #14161a; }
+      .h2 { font: 600 16px ui-sans-serif, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; fill: #2f3640; }
+      .b  { font: 400 15px ui-sans-serif, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; fill: #3d4550; }
+      .s  { font: 400 12.5px ui-sans-serif, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; fill: #8792a2; }
+      .k  { font: 700 26px ui-sans-serif, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; fill: #14161a; }
+      .ph { font: 600 12px ui-monospace, SFMono-Regular, Menlo, monospace; fill: #fff; }
+      .php{ font: 600 15px ui-monospace, SFMono-Regular, Menlo, monospace; fill: #fff; }
+      .bar{ fill: #14161a; }
+      .col{ fill: #2f6fe4; }
+      .colq{ fill: #b9ccf2; }
+    </style>
+  </defs>
+
+  <rect class="pg" width="960" height="540"/>
+
+  <!-- masthead: the logo is gone, the confidentiality line is not -->
+  <rect class="bar" x="48" y="34" width="132" height="34" rx="5"/>
+  <text class="php" x="63" y="56">[LOGO1]</text>
+  <text class="s" x="912" y="52" text-anchor="end">Confidential — not for distribution</text>
+  <line class="rule" x1="48" y1="88" x2="912" y2="88"/>
+
+  <text class="h1" x="48" y="134">Operating review and outlook</text>
+
+  <!-- the client's name, covered, mid-sentence -->
+  <text class="b" x="48" y="166">Prepared for</text>
+  <rect class="bar" x="150" y="150" width="112" height="22" rx="4"/>
+  <text class="ph" x="160" y="166">[COMPANY1]</text>
+  <text class="b" x="272" y="166">· third quarter · board copy</text>
+
+  <!-- left column -->
+  <text class="h2" x="48" y="218">Where the quarter landed</text>
+
+  <circle cx="53" cy="245" r="3" fill="#2f6fe4"/>
+  <text class="b" x="66" y="250">Revenue ahead of plan in two of three regions,</text>
+  <text class="b" x="66" y="272">with the shortfall concentrated in</text>
+  <rect class="bar" x="290" y="256" width="92" height="22" rx="4"/>
+  <text class="ph" x="299" y="272">[REGION1]</text>
+
+  <circle cx="53" cy="303" r="3" fill="#2f6fe4"/>
+  <text class="b" x="66" y="308">Integration of the bolt-on is complete; the</text>
+  <text class="b" x="66" y="330">operating lead is now</text>
+  <rect class="bar" x="215" y="314" width="74" height="22" rx="4"/>
+  <text class="ph" x="224" y="330">[NAME1]</text>
+  <text class="b" x="295" y="330">, based in Singapore</text>
+
+  <circle cx="53" cy="361" r="3" fill="#2f6fe4"/>
+  <text class="b" x="66" y="366">Renewal pricing agreed with the top ten accounts;</text>
+  <text class="b" x="66" y="388">contract value up</text>
+  <rect class="bar" x="188" y="372" width="60" height="22" rx="4"/>
+  <text class="ph" x="196" y="388">[FIG1]</text>
+  <text class="b" x="256" y="388">year on year</text>
+
+  <circle cx="53" cy="419" r="3" fill="#2f6fe4"/>
+  <text class="b" x="66" y="424">Questions to</text>
+  <rect class="bar" x="160" y="408" width="108" height="22" rx="4"/>
+  <text class="ph" x="169" y="424">[EMAIL1]</text>
+  <text class="b" x="276" y="424">before the meeting</text>
+
+  <!-- right: a chart with one covered series label -->
+  <rect x="536" y="196" width="376" height="236" rx="8" fill="#f6f7f9"/>
+  <text class="h2" x="560" y="226">Revenue by segment</text>
+
+  <line class="rule" x1="560" y1="396" x2="888" y2="396"/>
+  <rect class="col"  x="572" y="318" width="38" height="78" rx="3"/>
+  <rect class="col"  x="632" y="286" width="38" height="110" rx="3"/>
+  <rect class="col"  x="692" y="252" width="38" height="144" rx="3"/>
+  <rect class="colq" x="752" y="300" width="38" height="96" rx="3"/>
+  <rect class="col"  x="812" y="238" width="38" height="158" rx="3"/>
+
+  <text class="s" x="591" y="414" text-anchor="middle">Q1</text>
+  <text class="s" x="651" y="414" text-anchor="middle">Q2</text>
+  <text class="s" x="711" y="414" text-anchor="middle">Q3</text>
+  <rect class="bar" x="744" y="402" width="54" height="18" rx="4"/>
+  <text class="ph" x="750" y="415">[SEG1]</text>
+  <text class="s" x="831" y="414" text-anchor="middle">Q5</text>
+
+  <!-- the tall bar's own figure, covered -->
+  <rect class="bar" x="806" y="208" width="50" height="20" rx="4"/>
+  <text class="ph" x="813" y="222">[FIG2]</text>
+
+  <!-- footer tiles: one number withheld -->
+  <line class="rule" x1="48" y1="458" x2="912" y2="458"/>
+  <text class="s" x="48" y="482">Gross margin</text>
+  <text class="k" x="48" y="512">41.2%</text>
+
+  <text class="s" x="230" y="482">Net retention</text>
+  <text class="k" x="230" y="512">118%</text>
+
+  <text class="s" x="412" y="482">Headcount</text>
+  <rect class="bar" x="412" y="492" width="76" height="24" rx="4"/>
+  <text class="php" x="420" y="510">[FIG3]</text>
+
+  <text class="s" x="594" y="482">Largest customer</text>
+  <rect class="bar" x="594" y="492" width="118" height="24" rx="4"/>
+  <text class="php" x="602" y="510">[COMPANY2]</text>
+
+  <text class="s" x="912" y="512" text-anchor="end">12</text>
+</svg>

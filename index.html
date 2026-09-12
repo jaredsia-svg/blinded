@@ -37,7 +37,7 @@
 <title>Blinded – Efficient redaction for your most sensitive documents, all done locally</title>
 <meta name="description" content="Redact PDFs, images and text in your browser. The file never leaves your machine.">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="app.css?v=e3d221e5">
+<link rel="stylesheet" href="app.css?v=1ea1e19f">
 </head>
 <body>
 
@@ -113,6 +113,25 @@
           author, title or history either.</p>
       </li>
     </ul>
+
+    <!-- What the finished thing looks like, before anyone has to try it on a
+         document of their own. Invented from end to end: there is no company
+         here, and no data. -->
+    <section class="sample">
+      <h2>What comes out the other end</h2>
+      <p class="sample-lede">A board slide after a pass through Blinded. The
+        logo, the client, a colleague, an address and three figures are gone —
+        and each one leaves a label behind, so the sentence around it still
+        reads. Nothing here is real.</p>
+      <button type="button" id="sample-open" class="sample-shot"
+        aria-label="See this slide larger">
+        <img src="sample.svg" alt="A corporate slide after redaction: the logo,
+          company name, a person's name, an email address and several figures
+          are covered by black bars carrying placeholder labels." width="960"
+          height="540" draggable="false">
+        <span class="sample-zoom">Click to enlarge</span>
+      </button>
+    </section>
   </section>
 
   <!-- ---------- 2. review ---------- -->
@@ -426,6 +445,19 @@
   </div>
 </div>
 
+<div id="samplebox" class="busy" hidden>
+  <div class="busy-inner sampleinner">
+    <h2 class="namehead">A redacted slide</h2>
+    <div class="samplestage"><img id="samplebig" src="sample.svg" alt="" draggable="false"></div>
+    <p class="hint">Invented from end to end. Every bar carries the label the
+      redaction gave it, so the same thing gets the same name wherever it
+      appears.</p>
+    <div class="namego">
+      <button type="button" id="sampleclose" class="primary">Close</button>
+    </div>
+  </div>
+</div>
+
 <div id="cropbox" class="busy" hidden>
   <div class="busy-inner cropinner">
     <h2 class="namehead">Image redaction selection</h2>
@@ -502,7 +534,7 @@
 <script src="lib/pdfwrite.js?v=4b977425"></script>
 <script src="lib/pdfread.js?v=ca229552"></script>
 <script src="lib/render.js?v=7bf6e0a9"></script>
-<script src="app.js?v=56035f27"></script>
+<script src="app.js?v=328ced52"></script>
 <script type="module" src="lib/boot.mjs?v=8b98ed8f"></script>
 </body>
 </html>

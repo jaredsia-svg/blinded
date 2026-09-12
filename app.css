@@ -537,6 +537,48 @@ body.picking .tools {
   position: relative;
   background: var(--card); border-radius: var(--radius);
 }
+/* ---------- the sample slide on the front page ---------- */
+/*
+   Someone deciding whether to trust this with a confidential document should
+   be able to see what it produces without handing one over first.
+*/
+.sample { max-width: var(--front-width); margin: 34px auto 0; }
+.sample h2 { font-size: 19px; margin: 0 0 6px; letter-spacing: -0.01em; }
+.sample-lede { margin: 0 0 14px; color: var(--ink-soft); line-height: 1.6; font-size: 14px; }
+.sample-shot {
+  display: block; width: 100%; padding: 0; position: relative;
+  background: var(--card); border: 1px solid var(--line);
+  border-radius: var(--radius); overflow: hidden; cursor: zoom-in;
+}
+.sample-shot img { display: block; width: 100%; height: auto; }
+.sample-shot:hover { border-color: #b9c3d2; }
+.sample-shot:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.sample-zoom {
+  position: absolute; right: 10px; bottom: 10px;
+  background: rgba(13, 17, 23, 0.82); color: #fff;
+  font-size: 11.5px; padding: 4px 9px; border-radius: 999px;
+}
+/* The slide is wide and detailed; on a phone it is a thumbnail of itself and
+   the point is the tap that makes it big. */
+@media (max-width: 640px) { .sample-zoom { right: 8px; bottom: 8px; } }
+
+/* A width, not a maximum. The overlay centres its box on its contents, and an
+   image asked to be 100% of a box that is sizing itself to the image settles
+   at whatever the image's own minimum happens to be — which on a wide screen
+   left the slide far smaller than the room it had. */
+.sampleinner {
+  min-width: 0; width: min(1100px, 96vw); max-width: none;
+  max-height: 94vh; overflow-y: auto;
+}
+.samplestage {
+  margin: 10px 0; background: #eef1f6; border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 8px; overflow: auto;
+}
+/* Big enough to read the small print, and scrollable when the screen is not.
+   On a phone that means it starts wider than the window, which is the whole
+   reason for opening it. */
+#samplebig { display: block; width: 100%; min-width: 680px; height: auto; }
+
 /* Confirming a pick. The crop is shown big, because the whole point is to see
    what was actually caught — at the size it sits on the page a logo is a few
    dozen pixels and a box a little too wide looks exactly like a box that
