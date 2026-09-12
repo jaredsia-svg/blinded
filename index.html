@@ -37,7 +37,7 @@
 <title>Blinded – Efficient redaction for your most sensitive documents, all done locally</title>
 <meta name="description" content="Redact PDFs, images and text in your browser. The file never leaves your machine.">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="app.css?v=1ea1e19f">
+<link rel="stylesheet" href="app.css?v=f09df1e2">
 </head>
 <body>
 
@@ -57,7 +57,11 @@
         </g>
       </svg> Blinded</div>
     <p class="claim" id="claim">Efficient redaction for your most sensitive documents, all done locally.</p>
-    <button type="button" class="top-link" id="faq-open">Q&amp;A</button>
+    <div class="top-actions">
+      <!-- Only once there is something to start over from. -->
+      <button type="button" class="top-link" id="reset-top" hidden>Reset</button>
+      <button type="button" class="top-link" id="faq-open">Q&amp;A</button>
+    </div>
   </div>
 </header>
 
@@ -164,6 +168,21 @@
                 <path d="M12 3v18M3 12h18"/>
               </svg><span class="sr-only">Mark the pages</span>
             </button>
+            <!-- Two buttons in one icon's worth of room: up on the top half,
+                 down on the bottom. Paging is a different job from scrolling —
+                 it lands on a page rather than somewhere in one. -->
+            <div class="tool toolstack" role="group" aria-label="Pages">
+              <button type="button" id="page-prev" class="half" title="Previous page">
+                <svg viewBox="0 0 24 14" aria-hidden="true" focusable="false">
+                  <path d="M5 10l7-6 7 6"/>
+                </svg><span class="sr-only">Previous page</span>
+              </button>
+              <button type="button" id="page-next" class="half" title="Next page">
+                <svg viewBox="0 0 24 14" aria-hidden="true" focusable="false">
+                  <path d="M5 4l7 6 7-6"/>
+                </svg><span class="sr-only">Next page</span>
+              </button>
+            </div>
             <button type="button" id="zoom-out" class="tool" title="Zoom out">
               <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
                 <circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5M8 11h6"/>
@@ -184,11 +203,6 @@
                 <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
                 <path d="M8 21v-7h8v7M8 3v5h6"/>
               </svg><span class="sr-only">Save a draft</span>
-            </button>
-            <button type="button" id="restart" class="tool" title="Open a different file">
-              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-                <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8zm0 0v5h5M12 11v6m-3-3h6"/>
-              </svg><span class="sr-only">Open a different file</span>
             </button>
           </div>
           <p class="hint drafthint" id="draftnote" hidden></p>
@@ -530,7 +544,7 @@
 <script src="lib/pdfwrite.js?v=4b977425"></script>
 <script src="lib/pdfread.js?v=ca229552"></script>
 <script src="lib/render.js?v=7bf6e0a9"></script>
-<script src="app.js?v=3bf4fa0d"></script>
+<script src="app.js?v=2dcfe4b3"></script>
 <script type="module" src="lib/boot.mjs?v=8b98ed8f"></script>
 </body>
 </html>

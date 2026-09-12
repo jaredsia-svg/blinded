@@ -455,3 +455,38 @@ export function buildLockedPdf(password = 'letmein', lines) {
 
   return Buffer.concat(chunks);
 }
+
+// A plain document with many pages, for the things that are only wrong on a
+// long one: losing your place when the zoom changes, and paging through.
+export function buildManyPdf(n = 14) {
+  const chunks = []; let length = 0; const offsets = [0];
+  const push = s => { const b = Buffer.from(s, 'latin1'); chunks.push(b); length += b.length; };
+  const begin = id => { offsets[id] = length; push(id + ' 0 obj\n'); };
+  const kids = [];
+  for (let i = 0; i < n; i++) kids.push((3 + i * 2) + ' 0 R');
+  const fontId = 3 + n * 2;
+
+  push('%PDF-1.4\n');
+  begin(1); push('<< /Type /Catalog /Pages 2 0 R >>\n'); push('endobj\n');
+  begin(2); push('<< /Type /Pages /Count ' + n + ' /Kids [' + kids.join(' ') + '] >>\n'); push('endobj\n');
+  for (let i = 0; i < n; i++) {
+    const body = 'BT\n/F1 36 Tf\n60 700 Td\n(Page ' + (i + 1) + ' of ' + n + ') Tj\nET\n';
+    begin(3 + i * 2);
+    push('<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792]'
+      + ' /Resources << /Font << /F1 ' + fontId + ' 0 R >> >>'
+      + ' /Contents ' + (4 + i * 2) + ' 0 R >>\n');
+    push('endobj\n');
+    begin(4 + i * 2);
+    push('<< /Length ' + Buffer.byteLength(body, 'latin1') + ' >>\nstream\n' + body + 'endstream\n');
+    push('endobj\n');
+  }
+  begin(fontId);
+  push('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\n'); push('endobj\n');
+
+  const xrefAt = length;
+  const count = fontId + 1;
+  push('xref\n0 ' + count + '\n0000000000 65535 f \n');
+  for (let id = 1; id < count; id++) push(String(offsets[id] || 0).padStart(10, '0') + ' 00000 n \n');
+  push('trailer\n<< /Size ' + count + ' /Root 1 0 R >>\nstartxref\n' + xrefAt + '\n%%EOF\n');
+  return Buffer.concat(chunks);
+}

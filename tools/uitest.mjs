@@ -12,7 +12,7 @@ import { fileURLToPath } from 'node:url';
 
 import { chromium } from 'playwright';
 import { isStale } from './stamp.mjs';
-import { buildTextPdf, buildReadablePdf, buildLogoPdf, buildLockedPdf, LOGO_PLACEMENTS,
+import { buildTextPdf, buildReadablePdf, buildLogoPdf, buildLockedPdf, buildManyPdf, LOGO_PLACEMENTS,
   buildWordmarkPdf, WORDMARK_PLACEMENTS, WORDMARK_ASPECT,
   buildSmallLogoPdf, SMALL_LOGO_PLACEMENTS, WORDMARK_BOX,
   buildDoubleFoundPdf, DOUBLE_TERM } from './fixture.mjs';
@@ -53,6 +53,8 @@ const readablePath = join(tmpdir(), 'blinded-readable.pdf');
 writeFileSync(readablePath, buildReadablePdf());
 const logoPath = join(tmpdir(), 'blinded-logo.pdf');
 writeFileSync(logoPath, buildLogoPdf());
+const manyPath = join(tmpdir(), 'blinded-many.pdf');
+writeFileSync(manyPath, buildManyPdf(14));
 const lockedPath = join(tmpdir(), 'blinded-locked.pdf');
 writeFileSync(lockedPath, buildLockedPdf('letmein'));
 const doublePath = join(tmpdir(), 'blinded-double.pdf');
@@ -131,7 +133,7 @@ try {
   // Opening another file now asks before it throws the current one away, so
   // every reset in these tests goes through that step rather than around it.
   const newFile = async () => {
-    await page.click('#restart');
+    await page.click('#reset-top');
     if (await page.isVisible('#confirmbox')) await page.click('#confirmyes');
     await page.waitForSelector('#view-drop:not([hidden])', { timeout: 15000 });
   };
@@ -721,7 +723,7 @@ try {
     const tools = document.querySelector('.tools').getBoundingClientRect();
     const panel = document.querySelector('.panel').getBoundingClientRect();
     const ids = ['tool-pan', 'tool-mark', 'zoom-out', 'zoom-in', 'undo',
-                 'savedraft', 'restart'];
+                 'savedraft'];
     const buttons = ids.map(id => document.getElementById(id));
     return {
       count: document.querySelectorAll('.tools .tool').length,
@@ -1083,7 +1085,7 @@ try {
     const opened = await pagesOpen();
     check('a document is open to be lost', opened > 0, String(opened));
 
-    await page.click('#restart');
+    await page.click('#reset-top');
     const asked = await page.isVisible('#confirmbox');
     check('opening another file asks first', asked === true);
     const wording = await page.textContent('#confirmbody');
@@ -1104,13 +1106,13 @@ try {
       (await page.isVisible('#view-review')) === true);
 
     // Escape is the same answer as Cancel.
-    await page.click('#restart');
+    await page.click('#reset-top');
     await page.waitForSelector('#confirmbox:not([hidden])', { timeout: 15000 });
     await page.keyboard.press('Escape');
     check('escape cancels too', (await pagesOpen()) === opened);
 
     // And confirming actually does it.
-    await page.click('#restart');
+    await page.click('#reset-top');
     await page.waitForSelector('#confirmbox:not([hidden])', { timeout: 15000 });
     await page.click('#confirmyes');
     await page.waitForSelector('#view-drop:not([hidden])', { timeout: 15000 });
@@ -1120,7 +1122,7 @@ try {
 
     // With nothing open there is nothing to ask about, and a prompt that
     // always fires is one people learn to click through.
-    await page.evaluate(() => document.getElementById('restart').click());
+    await page.evaluate(() => document.getElementById('reset-top').click());
     check('with no document open it does not ask',
       (await page.isVisible('#confirmbox')) === false);
 
@@ -3174,7 +3176,7 @@ try {
         return {
           zoomIn: of('zoom-in'), zoomOut: of('zoom-out'),
           pan: of('tool-pan'), mark: of('tool-mark'),
-          undo: of('undo'), restart: of('restart'), save: of('savedraft'),
+          undo: of('undo'), reset: of('reset-top'), save: of('savedraft'),
           // Shown, not merely un-hidden: on a wide screen the stylesheet keeps
           // it away, because the Cancel in the panel is right there.
           escape: getComputedStyle(document.getElementById('pickstop')).display !== 'none',
@@ -3194,11 +3196,11 @@ try {
       JSON.stringify(live.during));
     check('the four that would take you elsewhere go quiet',
       live.during.pan.off && live.during.mark.off && live.during.undo.off
-        && live.during.restart.off && live.during.save.off,
+        && live.during.reset.off && live.during.save.off,
       JSON.stringify(live.during));
     check('and come back when the pick ends',
       live.after.pan.off === false && live.after.mark.off === false
-        && live.after.restart.off === false && live.after.save.off === false,
+        && live.after.reset.off === false && live.after.save.off === false,
       JSON.stringify(live.after));
     // Undo is the exception: it goes back to being about whether there is
     // anything to undo, not about picking.
@@ -3783,6 +3785,148 @@ try {
     })();
     check('and without the option the file has no text layer of its own',
       !/Parkway/i.test(plain), plain.slice(0, 200));
+  }
+
+  // ---------- zooming keeps you where you were ----------
+  //
+  // Every page changes height when the zoom does, so a scroll position measured
+  // in pixels means something different afterwards. Reported from a real
+  // document: on page nine, zoom in, and you are looking at page seven —
+  // leaning in to see something closer takes you somewhere else entirely.
+  {
+    if (await page.isVisible('#view-review')) await newFile();
+    await page.waitForSelector('#view-drop:not([hidden])', { timeout: 15000 });
+    await page.setInputFiles('#file', manyPath);
+    await page.waitForSelector('#view-review:not([hidden])', { timeout: 60000 });
+
+    const held = await page.evaluate(async () => {
+      const B = window.Blinded;
+      const host = document.getElementById('pages');
+      const sc = B.scrollerFor(host);
+      const topPage = () => {
+        const edge = sc === window ? 0 : sc.getBoundingClientRect().top;
+        const kids = [...host.children];
+        for (let i = 0; i < kids.length; i++) {
+          if (kids[i].getBoundingClientRect().bottom > edge + 1) return i + 1;
+        }
+        return kids.length;
+      };
+      B.setZoom(1);
+      await new Promise(r => setTimeout(r, 150));
+      B.goToPage(8);                                  // page 9
+      await new Promise(r => setTimeout(r, 1200));    // the scroll is smooth
+      const before = topPage();
+      B.stepZoom(1);
+      await new Promise(r => setTimeout(r, 200));
+      const zoomedIn = topPage();
+      B.stepZoom(-1);
+      await new Promise(r => setTimeout(r, 200));
+      const zoomedOut = topPage();
+      B.setZoom(1);
+      return { pages: host.children.length, before, zoomedIn, zoomedOut };
+    });
+    // Without somewhere to get lost, the rest would pass vacuously.
+    check('the document is long enough to lose your place in',
+      held.pages >= 10, JSON.stringify(held));
+    check('and deep enough into it to notice',
+      held.before >= 8, JSON.stringify(held));
+    check('zooming in leaves you on the page you were reading',
+      held.zoomedIn === held.before, JSON.stringify(held));
+    check('and zooming out too', held.zoomedOut === held.before, JSON.stringify(held));
+  }
+
+  // ---------- a page at a time ----------
+  //
+  // Scrolling lands somewhere in a page; these land on one, which is what is
+  // wanted when the job is "check the next one".
+  {
+    const paging = await page.evaluate(async () => {
+      const B = window.Blinded;
+      const host = document.getElementById('pages');
+      const sc = B.scrollerFor(host);
+      const topPage = () => {
+        const edge = sc === window ? 0 : sc.getBoundingClientRect().top;
+        const kids = [...host.children];
+        for (let i = 0; i < kids.length; i++) {
+          if (kids[i].getBoundingClientRect().bottom > edge + 1) return i + 1;
+        }
+        return kids.length;
+      };
+      const settle = () => new Promise(r => setTimeout(r, 900));
+      B.goToPage(0);
+      await settle();
+      const start = topPage();
+      document.getElementById('page-next').click();
+      await settle();
+      const next = topPage();
+      document.getElementById('page-next').click();
+      await settle();
+      const twice = topPage();
+      document.getElementById('page-prev').click();
+      await settle();
+      const back = topPage();
+      // And it stops at the ends rather than running off them.
+      B.goToPage(0);
+      await settle();
+      document.getElementById('page-prev').click();
+      await settle();
+      const atTheTop = topPage();
+      return { start, next, twice, back, atTheTop };
+    });
+    check('the down arrow goes to the next page',
+      paging.next === paging.start + 1, JSON.stringify(paging));
+    check('and again', paging.twice === paging.start + 2, JSON.stringify(paging));
+    check('the up arrow comes back', paging.back === paging.twice - 1,
+      JSON.stringify(paging));
+    check('and the first page is as far back as it goes',
+      paging.atTheTop === 1, JSON.stringify(paging));
+
+    // Two buttons in one icon's worth of room, to the right of the crosshair.
+    const shape = await page.evaluate(() => {
+      const up = document.getElementById('page-prev').getBoundingClientRect();
+      const down = document.getElementById('page-next').getBoundingClientRect();
+      const mark = document.getElementById('tool-mark').getBoundingClientRect();
+      const zoom = document.getElementById('zoom-out').getBoundingClientRect();
+      const cell = document.querySelector('.toolstack').getBoundingClientRect();
+      return {
+        stacked: down.top >= up.bottom - 1,
+        sameWidth: Math.abs((up.width + down.width) / 2 - mark.width) < 3,
+        // The cell they share is one icon, the same as every other in the row.
+        together: Math.abs(cell.height - mark.height) < 1
+          && Math.abs(cell.width - mark.width) < 1,
+        afterTheCrosshair: up.left >= mark.right - 1 && up.left < zoom.left,
+        gone: document.getElementById('restart') === null,
+      };
+    });
+    check('the arrows are stacked, up above down',
+      shape.stacked === true, JSON.stringify(shape));
+    check('in one icon\'s worth of room',
+      shape.sameWidth === true && shape.together === true, JSON.stringify(shape));
+    check('to the right of the crosshair',
+      shape.afterTheCrosshair === true, JSON.stringify(shape));
+    check('and the new-file icon has left the toolbar',
+      shape.gone === true, JSON.stringify(shape));
+  }
+
+  // ---------- starting over, from the header ----------
+  {
+    const reset = await page.evaluate(() => {
+      const button = document.getElementById('reset-top');
+      const faq = document.getElementById('faq-open');
+      const r = button.getBoundingClientRect();
+      const f = faq.getBoundingClientRect();
+      return {
+        shown: !button.hidden,
+        leftOfTheQuestions: r.right <= f.left + 1,
+        inTheHeader: button.closest('.top') !== null,
+        says: button.textContent.trim(),
+      };
+    });
+    check('a loaded document gets a Reset in the header',
+      reset.shown === true && reset.inTheHeader === true, JSON.stringify(reset));
+    check('on the left of the questions', reset.leftOfTheQuestions === true,
+      JSON.stringify(reset));
+    check('and it says Reset', reset.says === 'Reset', reset.says);
   }
 
   // ---------- a locked file ----------
@@ -5379,7 +5523,7 @@ try {
   // lives on the questions page, reached from the header, and the test follows
   // the same route a reader would.
   const headerLink = await page.evaluate(() => {
-    const a = document.querySelector('.top .top-link');
+    const a = document.getElementById('faq-open');
     if (!a) return null;
     const r = a.getBoundingClientRect();
     return { tag: a.tagName, text: a.textContent.trim(),
@@ -5429,7 +5573,7 @@ try {
   check('it is a button, not a link that would unload the document',
     headerLink && headerLink.tag === 'BUTTON', JSON.stringify(headerLink));
 
-  await page.click('.top .top-link');
+  await page.click('#faq-open');
   await page.waitForSelector('#view-faq:not([hidden])', { timeout: 15000 });
   // Off the button before measuring it: the click that opened this page left
   // the pointer sitting on it, and hover is not the colour being asserted.
@@ -5448,7 +5592,7 @@ try {
       firstQuestion: (document.querySelector('.faq h2') || {}).textContent,
       openSource: /free and open source/i.test(document.body.textContent),
       back: !!document.getElementById('faq-back-bottom'),
-      header: document.querySelector('.top .top-link').textContent.trim(),
+      header: document.getElementById('faq-open').textContent.trim(),
       title: (document.querySelector('.faqtitle') || {}).textContent,
       // Every policy directive the answer quotes at the reader, so the prose
       // can be held to what the browser is actually told.
@@ -5456,7 +5600,7 @@ try {
         .map(el => el.textContent.trim())
         .filter(text => /^[a-z-]+ /.test(text)),
       // Both doors wear the header's coat.
-      doors: [document.querySelector('.top .top-link'),
+      doors: [document.getElementById('faq-open'),
               document.querySelector('.faqbackbtn')].map(el => {
         if (!el) return null;
         const s = getComputedStyle(el);
@@ -5497,7 +5641,7 @@ try {
 
   // Closing them returns to whatever was open before, which here is whatever
   // the previous block left behind.
-  await page.click('.top .top-link');
+  await page.click('#faq-open');
   await page.waitForFunction(
     () => document.getElementById('view-faq').hidden, undefined, { timeout: 15000 });
   check('closing the answers puts the previous view back',
@@ -5519,7 +5663,7 @@ try {
         (n, p) => n + window.Blinded.activeBoxes(p).length, 0),
     }));
 
-    await page.click('.top .top-link');
+    await page.click('#faq-open');
     await page.waitForSelector('#view-faq:not([hidden])', { timeout: 15000 });
     check('the review goes out of sight while the answers are open',
       (await page.isVisible('#view-review')) === false);

@@ -273,6 +273,12 @@
     // page is an ordinary scrolling page, so the class comes and goes with the
     // view rather than living on the body for good.
     document.body.classList.toggle('reviewing', name === 'review');
+    // Starting over only means something once there is something to start
+    // over from, and the questions page is not that: leaving it puts the
+    // document back, so the button would be offering to throw away work the
+    // reviewer is not even looking at.
+    el('reset-top').hidden = !(name === 'review'
+      || (name === 'faq' && viewBefore === 'review'));
   }
 
   function fail(message) {
@@ -454,6 +460,7 @@
     show('review');
     rescan();
     refreshApply();
+    refreshPaging();
   }
 
   // ---------- detection ----------
@@ -2165,15 +2172,54 @@
   const MARK_GREEN = '#118a4e';
   const MARK_GREEN_FILL = 'rgba(17, 138, 78, 0.13)';
 
+  // Which page the reviewer is looking at, and how far down it, so zooming can
+  // put them back there.
+  //
+  // Every page changes height when the zoom does, so a scroll position measured
+  // in pixels means something different afterwards: on a hundred-page document
+  // the same scrollTop that showed page nine shows page seven once the pages
+  // grow, and leaning in to look closer at something takes you somewhere else
+  // entirely. The position is remembered as a page and a fraction down it,
+  // which survives the resize.
+  function anchorOn(scroller) {
+    const pages = [...el('pages').children];
+    if (!pages.length) return null;
+    const edge = scroller === window ? 0 : scroller.getBoundingClientRect().top;
+    // The page under the top edge of the view, or the first one below it if the
+    // view is in the gap between two.
+    let found = pages[0];
+    for (const page of pages) {
+      const box = page.getBoundingClientRect();
+      found = page;
+      if (box.bottom > edge) break;
+    }
+    const box = found.getBoundingClientRect();
+    return { page: found, into: box.height ? (edge - box.top) / box.height : 0 };
+  }
+
+  function returnTo(anchor, scroller) {
+    if (!anchor || !anchor.page.isConnected) return;
+    const edge = scroller === window ? 0 : scroller.getBoundingClientRect().top;
+    const box = anchor.page.getBoundingClientRect();
+    const by = box.top + anchor.into * box.height - edge;
+    if (!by) return;
+    if (scroller === window) window.scrollBy(0, by);
+    else scroller.scrollTop += by;
+  }
+
   function setZoom(zoom) {
     const wanted = ZOOM_STEPS.reduce((best, step) =>
       Math.abs(step - zoom) < Math.abs(best - zoom) ? step : best, ZOOM_STEPS[0]);
+    const scroller = scrollerFor(el('pages'));
+    const was = state.zoom === wanted ? null : anchorOn(scroller);
     state.zoom = wanted;
     el('pages').style.setProperty('--zoom', String(wanted));
     // Zooming changes how big a page is shown, so it changes how much bitmap
     // is worth holding. Without this, leaning in would enlarge a canvas that
     // had been sized for the smaller view and show it soft.
     updateLivePages();
+    // After the pages have their new size, not before.
+    returnTo(was, scroller);
     el('zoom-out').disabled = wanted === ZOOM_STEPS[0];
     el('zoom-in').disabled = wanted === ZOOM_STEPS[ZOOM_STEPS.length - 1];
     const percent = Math.round(wanted * 100) + '%';
@@ -2273,6 +2319,29 @@
     stage.addEventListener('lostpointercapture', drop, true);
   }
 
+  // A page at a time, from wherever the reviewer is.
+  //
+  // Scrolling lands somewhere in a page; this lands on one, which is what is
+  // wanted when the job is "check the next one". The page it counts from is
+  // the one under the top of the view — the same anchor zooming uses.
+  function stepPage(by) {
+    const pages = [...el('pages').children];
+    if (!pages.length) return;
+    const here = anchorOn(scrollerFor(el('pages')));
+    const at = here ? pages.indexOf(here.page) : 0;
+    const next = Math.max(0, Math.min(pages.length - 1, (at < 0 ? 0 : at) + by));
+    goToPage(next);
+    refreshPaging();
+  }
+
+  function refreshPaging() {
+    const only = el('pages').children.length <= 1;
+    const prev = el('page-prev');
+    const next = el('page-next');
+    if (prev) prev.disabled = only;
+    if (next) next.disabled = only;
+  }
+
   function stepZoom(by) {
     const at = ZOOM_STEPS.indexOf(state.zoom);
     const next = Math.max(0, Math.min(ZOOM_STEPS.length - 1, (at < 0 ? 2 : at) + by));
@@ -2338,7 +2407,9 @@
     // again. The other four would each take them somewhere else mid-pick —
     // a different tool, a step undone, a draft saved, a new file — so they go
     // quiet rather than becoming traps.
-    for (const id of ['tool-pan', 'tool-mark', 'undo', 'savedraft', 'restart']) {
+    // Paging stays live with zooming: both are ways of getting to the mark
+    // being picked, and neither takes the reviewer anywhere else.
+    for (const id of ['tool-pan', 'tool-mark', 'undo', 'savedraft', 'reset-top']) {
       const button = el(id);
       if (!button) continue;
       if (picking) { button.disabled = true; }
@@ -3347,6 +3418,7 @@
     renderSectionNotes();
     redrawAll();
     refreshApply();
+    refreshPaging();
     draftNote('Draft restored.');
     return true;
   }
@@ -4392,7 +4464,9 @@
   });
   el('faq-back-bottom').addEventListener('click', closeFaq);
 
-  el('restart').addEventListener('click', async () => {
+  el('page-prev').addEventListener('click', () => stepPage(-1));
+  el('page-next').addEventListener('click', () => stepPage(1));
+  el('reset-top').addEventListener('click', async () => {
     // Nothing open means nothing to lose, and a confirmation for that would be
     // the kind of prompt people learn to click through.
     if (state.pages.length || state.text) {
@@ -4431,6 +4505,7 @@
   window.Blinded = { state, rescan, loadFile, exportFile, setMode, addTemplate,
     undoLast, undoStack, applyLabels, labelItems, downloadKey,
     sensFor, barFromScores, lowerBarIfEmpty, AUTO_FLOOR, REAL_GAP,
+    anchorOn, returnTo, stepPage, refreshPaging,
     watchPinch, pinching, PINCH_IN, wordSensitivity, wordBarFor,
     setZoom, stepZoom, ZOOM_STEPS,
     MARK_GREEN,
