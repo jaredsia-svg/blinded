@@ -802,7 +802,7 @@ check('cropping lifts out exactly the requested rectangle', (() => {
   check('a newly picked image starts at the matcher\'s own threshold',
     /const DEFAULT_SENS = Match\.THRESHOLD;/.test(js),
     'DEFAULT_SENS is not tied to Match.THRESHOLD');
-  const bounds = js.match(/slider\.min = '(\d+)';[\s\S]{0,80}?slider\.max = '(\d+)';/);
+  const bounds = js.match(/slider\.min = '(\d+)';[\s\S]{0,900}?slider\.max = '(\d+)';/);
   check('the row slider declares its range', Boolean(bounds), 'not found in app.js');
   if (bounds) {
     check('and it can reach below the default, to find more',
@@ -812,9 +812,16 @@ check('cropping lifts out exactly the requested rectangle', (() => {
   }
   // Whatever a draft or a stray value says, the search is run somewhere inside
   // that range: a threshold of 0 would propose every pixel of every page.
-  check('and nothing outside that range can reach the matcher',
-    /Math\.min\(0\.95, Math\.max\(0\.45, n\)\)/.test(js),
-    'clampSens does not hold the slider\'s own bounds');
+  // The clamp and the slider are the same range written twice, so they are
+  // held together here rather than left to drift.
+  if (bounds) {
+    const clamp = js.match(/Math\.min\((0?\.\d+), Math\.max\((0?\.\d+), n\)\)/);
+    check('the clamp exists', Boolean(clamp), 'clampSens not found');
+    check('and nothing outside the slider\'s own range can reach the matcher',
+      clamp && Number(clamp[1]) === Number(bounds[2]) / 100
+        && Number(clamp[2]) === Number(bounds[1]) / 100,
+      clamp ? clamp[1] + '/' + clamp[2] + ' vs ' + bounds[2] + '/' + bounds[1] : 'none');
+  }
 }
 
 // ---------- placeholder labels ----------

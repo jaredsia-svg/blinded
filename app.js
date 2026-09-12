@@ -1087,8 +1087,23 @@
     // the count is beside the picked image. What is worth saying is what
     // happened when nothing matched, which is below.
     if (found.matches.length) {
-      hint.textContent = '';
-      hint.hidden = true;
+      // What the matches scored, worst first in the reviewer's mind: the
+      // weakest one is the number the bar has to clear to drop it.
+      //
+      // Measured on a deck whose footnotes are circular letter badges: the F
+      // badges scored 1.00 down to 0.948 and the E badges beside them 0.927.
+      // Two hundredths apart, and nothing on screen said so — the reviewer
+      // moved the slider, re-ran, counted boxes and guessed again. The numbers
+      // were there the whole time.
+      const scores = found.matches.map(m => m.score);
+      const low = Math.min(...scores), high = Math.max(...scores);
+      hint.textContent = found.matches.length === 1
+        ? 'One match, scoring ' + high.toFixed(2) + '.'
+        : found.matches.length + ' matches, scoring ' + high.toFixed(2)
+          + ' down to ' + low.toFixed(2)
+          + (high - low > 0.06
+            ? ' — if the weakest are wrong, set the bar just above them.' : '.');
+      hint.hidden = false;
       hint.classList.remove('warnhint');
       return;
     }
@@ -1803,7 +1818,7 @@
   function clampSens(value) {
     const n = Number(value);
     if (!Number.isFinite(n)) return DEFAULT_SENS;
-    return Math.min(0.95, Math.max(0.45, n));
+    return Math.min(0.99, Math.max(0.45, n));
   }
 
   // The bar a picked image has to clear. Older drafts have no per-image value,
@@ -2166,11 +2181,18 @@
       const slider = document.createElement('input');
       slider.type = 'range';
       slider.min = '45';
-      slider.max = '95';
+      // Up to 0.99, not 0.95. Measured on a row of circular letter badges of
+      // the kind decks use for footnotes: the F badge matched itself at 1.00
+      // and the E badge beside it at 0.943 — the circle is most of the tile
+      // and only the glyph differs. The whole range that separates them was
+      // above the old ceiling, so at the highest setting the reviewer could
+      // reach, the E was still being proposed.
+      slider.max = '99';
       slider.step = '1';
       slider.value = String(Math.round(sensFor(template) * 100));
       slider.title = 'How closely something must resemble this image to be '
-        + 'proposed. Lower finds more, including things that only resemble it.';
+        + 'proposed. Lower finds more, including things that only resemble it. '
+        + 'Two marks that differ by one letter need a bar above 0.95.';
       slider.setAttribute('aria-label', 'Sensitivity for this image');
       const reading = document.createElement('span');
       reading.className = 'v';
@@ -2263,6 +2285,11 @@
       for (const match of liveImageHits(page)) {
         if (match.templateId !== templateId) continue;
         out.push({ pageIndex: page.index, kind: 'image',
+                   // What it actually scored. Without this the slider is a
+                   // dial with no reading: the reviewer moves it, re-runs,
+                   // counts the marks, and guesses again. With it, the
+                   // weakest match on the list is the number to set it above.
+                   score: typeof match.score === 'number' ? match.score : null,
                    at: match.rect ? match.rect.y : 0 });
       }
     }
@@ -2432,8 +2459,12 @@
       text.textContent = 'Page ' + (spot.pageIndex + 1);
       const how = document.createElement('span');
       how.className = 'how';
+      // Every row in a picked image's list was found as a picture, so saying
+      // so said nothing. What it scored is the thing the reviewer can act on.
       how.textContent = spot.kind === 'shape' ? 'by shape'
-        : spot.kind === 'image' ? 'as a picture' : 'in the text';
+        : spot.kind === 'image'
+          ? (spot.score === null ? 'as a picture' : spot.score.toFixed(2))
+          : 'in the text';
       jump.append(dot, text, how);
       jump.addEventListener('click', () => goToPage(spot.pageIndex));
       item.append(jump);

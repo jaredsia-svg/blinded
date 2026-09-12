@@ -1403,6 +1403,15 @@ try {
     typeof bigger.pageIndex === 'number', JSON.stringify(bigger));
   check('and it closes again', bigger.closedAgain === true, JSON.stringify(bigger));
 
+  // A search that found things used to say nothing at all, so the slider was
+  // a dial with no reading: move it, re-run, count the boxes, guess again.
+  check('a finished image search says how the matches scored',
+    /^(\d+ matches, scoring \d\.\d\d down to \d\.\d\d|One match, scoring \d\.\d\d)/
+      .test((await page.textContent('#pickhint')).trim()),
+    await page.textContent('#pickhint'));
+  check('and that note is actually on screen',
+    await page.isVisible('#pickhint'));
+
   // Opened while picking, which is when a reviewer most wants it: they are
   // about to draw a second box and want to see what the first one caught.
   // Picking dims the whole page except the document and the Images section,
@@ -1466,8 +1475,12 @@ try {
       && imageWhere.open > 0, JSON.stringify(imageWhere));
   check('each one names its page',
     imageWhere.shown.every(s => /^Page \d+/.test(s)), JSON.stringify(imageWhere.shown));
-  check('and says it was found as a picture',
-    imageWhere.shown.every(s => /as a picture/.test(s)), JSON.stringify(imageWhere.shown));
+  // Not "as a picture": every row in this list was found as a picture, so it
+  // said nothing. What it scored is the number the slider has to be set
+  // against, and the weakest row on the list is where to set it.
+  check('and says what each one scored',
+    imageWhere.shown.every(s => /^Page \d+\d\.\d\d$/.test(s)),
+    JSON.stringify(imageWhere.shown));
   check('pressing it again closes the list', imageWhere.after === 0,
     JSON.stringify(imageWhere));
 
@@ -2812,6 +2825,73 @@ try {
       && badges.image.round === true,
     JSON.stringify(badges));
 
+  }
+
+  // ---------- a bar high enough to tell one letter from another ----------
+  //
+  // Reported on a strategy deck whose footnotes are circular letter badges:
+  // picking the F badge also marked every E, at the slider's highest setting.
+  // Measured here on the same shape — the circle is most of the tile and only
+  // the glyph differs, so the E scores very nearly what the F does. The whole
+  // range that separates them was above the old ceiling of 0.95.
+  {
+    const scores = await page.evaluate(async () => {
+      const LETTERS = ['A', 'B', 'C', 'D', 'E', 'F'];
+      const R = 18, GAP = 70;
+      const c = document.createElement('canvas');
+      c.width = GAP * LETTERS.length + 60; c.height = 120;
+      const g = c.getContext('2d');
+      g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height);
+      const spots = {};
+      LETTERS.forEach((ch, i) => {
+        const cx = 50 + i * GAP, cy = 60;
+        g.beginPath(); g.arc(cx, cy, R, 0, Math.PI * 2);
+        g.fillStyle = '#1f9ed9'; g.fill();
+        g.fillStyle = '#fff';
+        g.font = '600 22px Helvetica, Arial, sans-serif';
+        g.textAlign = 'center'; g.textBaseline = 'middle';
+        g.fillText(ch, cx, cy + 1);
+        spots[ch] = { x: cx - R - 3, y: cy - R - 3, w: (R + 3) * 2, h: (R + 3) * 2 };
+      });
+      const cut = window.BlindedImageSearch.templateFrom(c, spots.F);
+      const found = (await window.BlindedImageSearch.searchAllParallel(
+        [{ index: 0, source: c }],
+        [{ key: 'F', template: cut, threshold: 0.1 }], {}, () => {})).get('F');
+      const on = {};
+      for (const m of found.matches) {
+        for (const [ch, r] of Object.entries(spots)) {
+          const ox = Math.max(0, Math.min(r.x + r.w, m.x + m.w) - Math.max(r.x, m.x));
+          const oy = Math.max(0, Math.min(r.y + r.h, m.y + m.h) - Math.max(r.y, m.y));
+          if ((ox * oy) / (r.w * r.h) > 0.5) on[ch] = Math.max(on[ch] || 0, m.score);
+        }
+      }
+      return on;
+    });
+    check('the picked badge matches itself', scores.F > 0.99, JSON.stringify(scores));
+    // The measurement that sets the ceiling. If this ever falls below 0.95 the
+    // old maximum would have been enough and this whole change was unneeded;
+    // if it rises above the new one, the ceiling has to go up again.
+    check('and the badge beside it scores high enough to be proposed too',
+      scores.E > 0.9 && scores.E < 0.99, JSON.stringify(scores));
+    check('so no setting below 0.95 can separate them',
+      scores.E > 0.93, JSON.stringify(scores));
+
+    const reach = await page.evaluate(() => {
+      const B = window.Blinded;
+      const slider = document.querySelector('.templates .rowsens input');
+      return {
+        max: slider ? Number(slider.max) / 100 : null,
+        // And the clamp lets that setting through rather than pulling it back.
+        clamped: B.sensFor({ sens: 0.99 }),
+        overshoot: B.sensFor({ sens: 2 }),
+      };
+    });
+    check('the slider reaches a bar above what the wrong badge scores',
+      reach.max !== null && reach.max > scores.E, JSON.stringify({ reach, e: scores.E }));
+    check('and that setting survives the clamp',
+      Math.abs(reach.clamped - reach.max) < 1e-9, JSON.stringify(reach));
+    check('while anything past the end is still held to it',
+      Math.abs(reach.overshoot - reach.max) < 1e-9, JSON.stringify(reach));
   }
 
   // ---------- one control, not two ----------
