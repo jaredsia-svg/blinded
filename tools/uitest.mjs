@@ -1821,6 +1821,50 @@ try {
   check('and the suppression is what did it, not an empty search',
     doubled.superseded === doubled.pictures,
     doubled.superseded + ' of ' + doubled.pictures);
+  // ---------- but a bigger mark is not a duplicate of a smaller one ----------
+  //
+  // Reported on a deck carrying a company lockup: the word "VinaCapital" and
+  // the VinaCapital logo were both redacted, and the logo was not covered on
+  // any page. The word's mark sat inside the logo's, and "already covered" was
+  // being asked as a fraction of whichever box was smaller — so a perfect
+  // overlap, so all four logo matches were dropped as duplicates of the word.
+  // The panel said "4 matches" and the tally said 0, and on the page the
+  // wordmark was covered while the red triangle beside it stayed showing.
+  {
+    const both = await page.evaluate(() => {
+      const B = window.Blinded;
+      const p = B.state.pages[0];
+      const kept = p.imageHits.slice();
+      const word = p.hits.find(h => h.rects && h.rects.length);
+      if (!word) return { skip: true };
+      const inner = word.rects[0];
+      // A mark around the word and a good deal more, which is what a logo
+      // containing a wordmark looks like.
+      const around = { x: inner.x - inner.w * 0.4, y: inner.y - inner.h * 0.3,
+                       w: inner.w * 1.9, h: inner.h * 1.7 };
+      // And one drawn all but on top of the word, which really is the same find.
+      const onTop = { x: inner.x + 1, y: inner.y, w: inner.w, h: inner.h };
+      p.imageHits = [
+        { id: 'lockup', templateId: 'tplX', rect: around, score: 1 },
+        { id: 'same', templateId: 'tplX', rect: onTop, score: 1 },
+      ];
+      B.markDuplicates();
+      const out = {
+        lockup: p.imageHits.find(m => m.id === 'lockup').superseded,
+        same: p.imageHits.find(m => m.id === 'same').superseded,
+      };
+      p.imageHits = kept;
+      B.markDuplicates();
+      return out;
+    });
+    if (!both.skip) {
+      check('a mark that covers more than the word inside it survives',
+        both.lockup === false, JSON.stringify(both));
+      check('while one drawn on top of that word is still the same find',
+        both.same === true, JSON.stringify(both));
+    }
+  }
+
   // The tally beside the word is the count now, and a duplicate suppressed on
   // the page must not reappear as a number in the panel.
   check('so the panel counts the word once, not twice',

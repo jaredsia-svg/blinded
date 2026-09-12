@@ -1177,10 +1177,19 @@
 
   // ---------- one occurrence, one mark ----------
 
-  // How much two marks must overlap to be treated as the same find. The pair
-  // that prompted this had one box entirely inside the other, so anything
-  // above a half is comfortably clear of a genuine near-miss.
-  const SAME_MARK = 0.5;
+  // How much of a mark must already be covered for it to be the same find.
+  //
+  // Measured against the mark's own area, so this is "nearly all of me is
+  // inside that" and the number has to be near one. It was a half, from when
+  // the question was asked as a fraction of whichever box was smaller — and at
+  // a half a logo whose wordmark was separately redacted came out 0.64
+  // covered, was called a duplicate of the word, and vanished. The third of it
+  // that stuck out was the company's red triangle, left showing on every page.
+  //
+  // A tenth of slack, for a box drawn a few pixels differently around the same
+  // thing. Anything more than that sticking out is something the bar is not
+  // covering, and a mark that covers it is not a duplicate.
+  const SAME_MARK = 0.9;
 
   // A word that is real text *and* recognisable by its shape gets found twice:
   // once from the text layer, once by the picture search. Two boxes appear,
@@ -1202,10 +1211,22 @@
       // anyway would overrule them.
       for (const hit of page.hits) for (const rect of hit.rects) textRects.push(rect);
 
+      // Superseded means "already covered", and that is a question about this
+      // match's own area — how much of it lies inside something else — not
+      // about the overlap as a fraction of whichever box is smaller.
+      //
+      // The difference is the whole bug. Redacting the word "VinaCapital" and
+      // the VinaCapital logo, the word's mark sat inside the logo's: measured
+      // against the smaller box that is a perfect overlap, so all four logo
+      // matches were dropped as duplicates of it. The panel said "4 matches"
+      // and the tally said 0, and on the page the wordmark was covered while
+      // the red triangle beside it was left showing.
       const kept = [];
       for (const match of page.imageHits) {
-        const overText = textRects.some(rect => Match.overlapFraction(match.rect, rect) > SAME_MARK);
-        const overImage = kept.some(other => Match.overlapFraction(match.rect, other.rect) > SAME_MARK);
+        const overText = textRects.some(
+          rect => Match.coveredFraction(match.rect, rect) > SAME_MARK);
+        const overImage = kept.some(
+          other => Match.coveredFraction(match.rect, other.rect) > SAME_MARK);
         match.superseded = overText || overImage;
         if (!match.superseded) kept.push(match);
       }
@@ -3836,7 +3857,8 @@
     scrollerFor, setTool, marking,
     runSearch, applyRedaction: runSearch, coverMarks, uncoverMarks, applyButton,
     activeBoxes,
-    markPending, needsSearch, plannedCount, pendingTemplates, termsNeedingPictures,
+    markPending, needsSearch, markDuplicates, plannedCount, pendingTemplates,
+    termsNeedingPictures,
     readPages, matchOcr, ocrPending, ocrMatchStale, showWordControls,
     sweepTemplates, runSweep, renderSweep, alreadyCovered, readerContradicts,
     READER_SURE, sweepProgress,
