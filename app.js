@@ -2808,7 +2808,63 @@
       // travel, and rebuilding the list under the reviewer's thumb takes the
       // slider out from under it. The two things that go stale are edited in
       // place instead.
+      // Moving it is undoable, like everything else that changes what will be
+      // covered. A slider is the easiest control on the panel to knock by
+      // accident — a stray drag on a phone, a scroll wheel over it on a
+      // laptop — and without this the way back was to remember the old number
+      // and everything the old number had found.
+      //
+      // What is remembered is taken before the first pixel of movement, not
+      // when the drag ends: by then the marks it is about have already been
+      // thrown away. And one entry per gesture, not per pixel: `input` fires
+      // continuously and would bury the rest of the stack.
+      let beforeDrag = null;
+      const remember = () => {
+        if (beforeDrag) return;
+        beforeDrag = {
+          sens: sensFor(template),
+          searched: template.searched,
+          matches: template.matches,
+          rawMatches: template.rawMatches,
+          best: template.best,
+          // The marks this image had, page by page, so undoing the setting
+          // brings back what it had found rather than only the number.
+          hits: state.pages.map(page =>
+            page.imageHits.filter(m => m.templateId === template.id)),
+        };
+      };
+      for (const start of ['pointerdown', 'keydown', 'focus']) {
+        slider.addEventListener(start, remember);
+      }
+      // `change` is the end of the gesture: the release, or the key.
+      slider.addEventListener('change', () => {
+        const was = beforeDrag;
+        beforeDrag = null;
+        if (!was || Math.abs(was.sens - sensFor(template)) < 1e-9) return;
+        pushUndo('that sensitivity change', () => {
+          template.sens = was.sens;
+          template.searched = was.searched;
+          template.matches = was.matches;
+          template.rawMatches = was.rawMatches;
+          template.best = was.best;
+          state.pages.forEach((page, i) => {
+            page.imageHits = page.imageHits
+              .filter(m => m.templateId !== template.id)
+              .concat(was.hits[i]);
+          });
+          // The document counts as searched again only if nothing else is
+          // waiting to be looked for. Forcing it true because this one image
+          // was searched would claim an answer for a word typed since, or for
+          // another image picked since — both of which the button is
+          // supposed to still be asking about.
+          if (was.searched && !pendingTemplates().length && !ocrPending()) {
+            state.searched = true;
+          }
+        });
+      });
+
       slider.addEventListener('input', () => {
+        remember();
         template.sens = clampSens(Number(slider.value) / 100);
         reading.textContent = sensFor(template).toFixed(2);
         if (template.searched) {

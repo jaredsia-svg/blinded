@@ -2963,6 +2963,76 @@ try {
         return live && Number(live.value) === 55;
       }));
 
+    // ---------- a knocked slider is undoable ----------
+    //
+    // A slider is the easiest control on the panel to move by accident — a
+    // stray drag on a phone, a wheel over it on a laptop — and the way back
+    // used to be remembering the old number and everything the old number had
+    // found.
+    const knocked = await page.evaluate(async () => {
+      const B = window.Blinded;
+      const t = B.state.templates[0];
+      t.sens = 0.75;
+      t.searched = false;
+      await B.runSearch();
+      const marks = () => B.state.pages.reduce((n, p) =>
+        n + p.imageHits.filter(m => m.templateId === t.id).length, 0);
+      const before = { sens: B.sensFor(t), marks: marks(), searched: t.searched };
+
+      const slider = document.querySelector('.templates .rowsens input');
+      slider.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerId: 3 }));
+      slider.value = '99';
+      slider.dispatchEvent(new Event('input', { bubbles: true }));
+      slider.dispatchEvent(new Event('change', { bubbles: true }));
+      const after = { sens: B.sensFor(t), marks: marks(), searched: t.searched,
+                      offered: document.getElementById('undo').title,
+                      pressable: !document.getElementById('undo').disabled };
+
+      B.undoLast();
+      const live = document.querySelector('.templates .rowsens input');
+      const back = { sens: B.sensFor(t), marks: marks(), searched: t.searched,
+                     slider: live && live.value,
+                     reading: document.querySelector('.templates .rowsens .v').textContent };
+      return { before, after, back };
+    });
+    check('moving the slider is offered as something to undo',
+      /sensitivity/i.test(knocked.after.offered) && knocked.after.pressable,
+      JSON.stringify(knocked));
+    check('and it really had thrown the marks away',
+      knocked.before.marks > 0 && knocked.after.marks === 0,
+      JSON.stringify(knocked));
+    check('undo puts the setting back',
+      Math.abs(knocked.back.sens - knocked.before.sens) < 1e-9,
+      JSON.stringify(knocked));
+    // The number alone would be a poor undo: the reviewer would have the old
+    // setting and an unsearched document.
+    check('and what that setting had found',
+      knocked.back.marks === knocked.before.marks
+        && knocked.back.searched === true, JSON.stringify(knocked));
+    check('with the control itself agreeing again',
+      Number(knocked.back.slider) / 100 === knocked.back.sens
+        && knocked.back.reading === knocked.back.sens.toFixed(2),
+      JSON.stringify(knocked));
+
+    // One entry for the gesture, not one per pixel of it: `input` fires
+    // continuously and would bury everything else on the stack.
+    const depth = await page.evaluate(async () => {
+      const B = window.Blinded;
+      const before = B.undoStack.length;
+      const slider = document.querySelector('.templates .rowsens input');
+      slider.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerId: 4 }));
+      for (let v = 76; v <= 92; v += 2) {
+        slider.value = String(v);
+        slider.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+      slider.dispatchEvent(new Event('change', { bubbles: true }));
+      const after = B.undoStack.length;
+      B.undoLast();
+      return { before, after, added: after - before };
+    });
+    check('a whole drag leaves one thing to undo, not one per pixel',
+      depth.added === 1, JSON.stringify(depth));
+
     // Put back what the later sections expect to find.
     await page.evaluate(() => { window.Blinded.state.termImages = true; });
   }
