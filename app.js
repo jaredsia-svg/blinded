@@ -1779,18 +1779,85 @@
   // ---------- one thing at a time, on a small screen ----------
   //
   // Side by side, the panel and the document each got about 300 pixels of a
-  // phone: too little to read a page in and too little to work the controls
-  // in. On a narrow screen only one is shown and a toggle says which. Both are
-  // shown at any width where they fit, and the toggle is not there at all.
+  // phone. On a narrow screen one of them is open and the other is a strip
+  // down the side, tapped or swiped to trade places — a strip rather than
+  // nothing at all, because a pane that vanishes is a pane you have to
+  // remember is there.
+  const NARROW = '(max-width: 900px)';
+
+  function onPhone() {
+    return window.matchMedia(NARROW).matches;
+  }
+
   function setPane(name) {
     const pane = name === 'doc' ? 'doc' : 'edit';
     state.pane = pane;
     document.body.dataset.pane = pane;
-    el('pane-edit').setAttribute('aria-pressed', String(pane === 'edit'));
-    el('pane-doc').setAttribute('aria-pressed', String(pane === 'doc'));
-    // The document column has no size while it is hidden, so every page gave
+    const narrow = onPhone();
+    // Each strip is the way back to the half it names, so it shows only while
+    // that half is shut.
+    el('peek-edit').hidden = !narrow || pane === 'edit';
+    el('peek-doc').hidden = !narrow || pane === 'doc';
+    // The document column has no size while it is a strip, so every page gave
     // up its bitmap; coming back needs them drawn again.
     if (pane === 'doc') updateLivePages();
+  }
+
+  // The toolbar belongs above both halves on a phone, because which half is
+  // open has no bearing on wanting to undo something or zoom in — and because
+  // it would otherwise be inside the panel, and the panel is sometimes a strip
+  // 46 pixels wide. Moved rather than duplicated: two copies would be two sets
+  // of the same ids and two sets of listeners to keep in step.
+  function placeToolbar() {
+    const head = document.querySelector('.panel-head');
+    const review = el('view-review');
+    const panel = document.querySelector('.panel');
+    if (!head || !review || !panel) return;
+    if (onPhone()) {
+      if (head.parentElement !== review) {
+        head.classList.add('afloat');
+        review.insertBefore(head, review.firstChild);
+      }
+    } else if (head.parentElement !== panel) {
+      head.classList.remove('afloat');
+      panel.insertBefore(head, panel.firstChild);
+    }
+  }
+
+  // Swiping between them.
+  //
+  // Deliberately not any horizontal drag: with the hand tool a drag across a
+  // page is a pan, and stealing that would make a zoomed-in document
+  // impossible to move around. So a swipe counts when it starts anywhere but
+  // on a page — the panel, the strip, the gap — or when it starts at the very
+  // edge of the screen, which is the gesture everybody already knows.
+  const SWIPE_MIN = 55;
+  const EDGE = 28;
+
+  function watchSwipes() {
+    const review = el('view-review');
+    let from = null;
+
+    review.addEventListener('pointerdown', event => {
+      if (!onPhone()) return;
+      const onPage = event.target.closest && event.target.closest('.page');
+      const fromEdge = event.clientX <= EDGE
+        || event.clientX >= window.innerWidth - EDGE;
+      if (onPage && !fromEdge) { from = null; return; }
+      from = { x: event.clientX, y: event.clientY };
+    });
+
+    review.addEventListener('pointerup', event => {
+      if (!from) return;
+      const dx = event.clientX - from.x;
+      const dy = event.clientY - from.y;
+      from = null;
+      // Sideways, and decisively so: a scroll that wanders is not a swipe.
+      if (Math.abs(dx) < SWIPE_MIN || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+      setPane(dx < 0 ? 'doc' : 'edit');
+    });
+
+    review.addEventListener('pointercancel', () => { from = null; });
   }
 
   // Zooming.
@@ -3237,9 +3304,18 @@
 
 
   el('pick').addEventListener('click', () => setMode(state.mode === 'pick' ? 'box' : 'pick'));
-  el('pane-edit').addEventListener('click', () => setPane('edit'));
-  el('pane-doc').addEventListener('click', () => setPane('doc'));
+  el('peek-edit').addEventListener('click', () => setPane('edit'));
+  el('peek-doc').addEventListener('click', () => setPane('doc'));
+  watchSwipes();
+  placeToolbar();
   setPane(state.pane);
+  // Crossing the breakpoint moves the toolbar and decides whether the strips
+  // mean anything.
+  window.matchMedia(NARROW).addEventListener('change', () => {
+    placeToolbar();
+    setPane(state.pane);
+    updateLivePages();
+  });
 
   el('zoom-in').addEventListener('click', () => stepZoom(1));
   el('zoom-out').addEventListener('click', () => stepZoom(-1));
@@ -3379,7 +3455,7 @@
     saveDraft, draftData, restoreDraft, looksLikeDraft, fingerprint, takeDraft,
     occurrencesFor, placesFor, renderTermCounts, renderTemplates, goToPage,
     updateLivePages, fitCanvas, releaseCanvas, isLive, displayWidthFor, NEAR_PAGES,
-    setPane,
+    setPane, placeToolbar, onPhone,
     scrollerFor, setTool, marking,
     runSearch, applyRedaction: runSearch, coverMarks, uncoverMarks, applyButton,
     activeBoxes,
