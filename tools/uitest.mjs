@@ -3426,6 +3426,125 @@ try {
     if (bubble) bubble.hidden = true;
   });
 
+  // ---------- a phone shows one thing at a time ----------
+  //
+  // Side by side, the panel and the document each got about 300 pixels of an
+  // 844-pixel phone: too little to read a page in and too little to work the
+  // controls in. And the frame was built to 100vh, which on a phone is taller
+  // than what you can see for as long as the browser's own bar is showing —
+  // so the bottom of it, the Search and Export buttons, sat underneath that
+  // bar.
+  {
+    const phone = await context.newPage();
+    await phone.setViewportSize({ width: 390, height: 844 });
+    await phone.goto(base);
+    await phone.setInputFiles('#file', fixturePath);
+    await phone.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
+    await phone.waitForTimeout(400);
+
+    const look = () => phone.evaluate(() => {
+      const seen = sel => {
+        const n = document.querySelector(sel);
+        if (!n) return null;
+        const b = n.getBoundingClientRect();
+        return { h: Math.round(b.height), bottom: Math.round(b.bottom),
+                 shown: b.width > 0 && b.height > 0 };
+      };
+      return {
+        viewport: window.innerHeight,
+        toggle: seen('.panes'),
+        panel: seen('.panel'),
+        stage: seen('.stage'),
+        bar: seen('.exportbar'),
+        search: seen('#apply'),
+        pane: document.body.dataset.pane,
+        pageScrolls: document.documentElement.scrollHeight
+          > document.documentElement.clientHeight + 1,
+      };
+    });
+
+    const start = await look();
+    check('the toggle is there on a phone', start.toggle.shown === true,
+      JSON.stringify(start.toggle));
+    check('and it starts on the controls', start.pane === 'edit'
+      && start.panel.shown === true && start.stage.shown === false,
+      JSON.stringify(start));
+    // The whole point: one pane gets the room both used to share.
+    check('the pane on show gets the height both used to split',
+      start.panel.h > start.viewport * 0.6, JSON.stringify(start));
+    // The reported fault. Checked twice, because half of it cannot be
+    // reproduced here: a headless browser has no bar of its own, so 100vh and
+    // the visible height are the same number and the layout passes either way.
+    // What can be asserted is that the frame is built to the dynamic height,
+    // which is what differs on a real phone.
+    check('the export bar is fully on screen',
+      start.bar.bottom <= start.viewport, JSON.stringify(start.bar));
+    check('and the frame is measured against the visible viewport, not 100vh',
+      await phone.evaluate(() => {
+        const sheet = [...document.styleSheets].find(s => /app\.css/.test(s.href || ''));
+        const rules = [...(sheet ? sheet.cssRules : [])].map(r => r.cssText).join(' ');
+        // Both are present: dvh for browsers that have it, vh as the fallback
+        // for those that do not.
+        return /100dvh/.test(rules) && /100vh/.test(rules);
+      }));
+    check('and so are its buttons',
+      start.search.shown === true && start.search.bottom <= start.viewport,
+      JSON.stringify(start.search));
+    check('nothing has pushed the page itself into scrolling',
+      start.pageScrolls === false, JSON.stringify(start));
+
+    await phone.click('#pane-doc');
+    await phone.waitForTimeout(400);
+    const doc = await look();
+    check('switching shows the document and hides the controls',
+      doc.pane === 'doc' && doc.stage.shown === true && doc.panel.shown === false,
+      JSON.stringify(doc));
+    check('the document gets the same room',
+      doc.stage.h > doc.viewport * 0.6, JSON.stringify(doc));
+    check('and the export bar is still fully on screen',
+      doc.bar.bottom <= doc.viewport, JSON.stringify(doc));
+    // Hidden means no size, which means every page had given up its bitmap.
+    check('the pages are drawn again when the document comes forward',
+      await phone.evaluate(() =>
+        window.Blinded.state.pages.some(p => window.Blinded.isLive(p))));
+    // Two fingers have to do the thing two fingers do.
+    check('pinch is left to the browser',
+      await phone.evaluate(() => getComputedStyle(
+        document.querySelector('.page canvas')).touchAction) === 'pinch-zoom');
+
+    // Following a page number from the tally has to bring the document over,
+    // or the tap does nothing a reviewer can see.
+    await phone.click('#pane-edit');
+    await phone.waitForTimeout(200);
+    await phone.evaluate(() => window.Blinded.goToPage(0));
+    await phone.waitForTimeout(300);
+    check('following a page number brings the document forward',
+      await phone.evaluate(() => document.body.dataset.pane) === 'doc');
+
+    await phone.close();
+  }
+
+  // And none of it on a screen with room for both.
+  {
+    const wide = await context.newPage();
+    await wide.setViewportSize({ width: 1280, height: 800 });
+    await wide.goto(base);
+    await wide.setInputFiles('#file', fixturePath);
+    await wide.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
+    await wide.waitForTimeout(300);
+    const both = await wide.evaluate(() => ({
+      toggle: document.querySelector('.panes').getBoundingClientRect().height,
+      panel: document.querySelector('.panel').getBoundingClientRect().width,
+      stage: document.querySelector('.stage').getBoundingClientRect().width,
+      note: document.getElementById('exportnote').getBoundingClientRect().width,
+    }));
+    check('a wide screen shows both halves and no toggle',
+      both.toggle === 0 && both.panel > 0 && both.stage > 0, JSON.stringify(both));
+    check('and keeps the sentence beside the buttons',
+      both.note > 0, JSON.stringify(both));
+    await wide.close();
+  }
+
   // ---------- what is held in memory ----------
   //
   // Every page used to keep two canvases at the full rendered resolution.

@@ -114,6 +114,8 @@
     searched: false,
     countedTerms: [],
     zoom: 1,
+    // Which half of the review a small screen is showing.
+    pane: 'edit',
     sourceSize: 0,
     sourceDigest: null,
     // Which word's list of places is open, if any.
@@ -1774,6 +1776,23 @@
     return Math.max(0.3, Math.round((wordSensitivity() - TextImage.shapeRelief(term)) * 1000) / 1000);
   }
 
+  // ---------- one thing at a time, on a small screen ----------
+  //
+  // Side by side, the panel and the document each got about 300 pixels of a
+  // phone: too little to read a page in and too little to work the controls
+  // in. On a narrow screen only one is shown and a toggle says which. Both are
+  // shown at any width where they fit, and the toggle is not there at all.
+  function setPane(name) {
+    const pane = name === 'doc' ? 'doc' : 'edit';
+    state.pane = pane;
+    document.body.dataset.pane = pane;
+    el('pane-edit').setAttribute('aria-pressed', String(pane === 'edit'));
+    el('pane-doc').setAttribute('aria-pressed', String(pane === 'doc'));
+    // The document column has no size while it is hidden, so every page gave
+    // up its bitmap; coming back needs them drawn again.
+    if (pane === 'doc') updateLivePages();
+  }
+
   // Zooming.
   //
   // The pages are drawn at the width of the column and scaled from there, so
@@ -2084,6 +2103,11 @@
   function goToPage(pageIndex) {
     const page = state.pages[pageIndex];
     if (!page || !page.canvas) return;
+    // On a phone the page being named is behind the toggle, so following a
+    // page number has to bring the document forward or the tap does nothing.
+    if (state.pane === 'edit' && window.matchMedia('(max-width: 900px)').matches) {
+      setPane('doc');
+    }
     page.canvas.parentElement.scrollIntoView({ block: 'start', behavior: 'smooth' });
   }
 
@@ -3213,6 +3237,10 @@
 
 
   el('pick').addEventListener('click', () => setMode(state.mode === 'pick' ? 'box' : 'pick'));
+  el('pane-edit').addEventListener('click', () => setPane('edit'));
+  el('pane-doc').addEventListener('click', () => setPane('doc'));
+  setPane(state.pane);
+
   el('zoom-in').addEventListener('click', () => stepZoom(1));
   el('zoom-out').addEventListener('click', () => stepZoom(-1));
   setZoom(state.zoom);
@@ -3351,6 +3379,7 @@
     saveDraft, draftData, restoreDraft, looksLikeDraft, fingerprint, takeDraft,
     occurrencesFor, placesFor, renderTermCounts, renderTemplates, goToPage,
     updateLivePages, fitCanvas, releaseCanvas, isLive, displayWidthFor, NEAR_PAGES,
+    setPane,
     scrollerFor, setTool, marking,
     runSearch, applyRedaction: runSearch, coverMarks, uncoverMarks, applyButton,
     activeBoxes,

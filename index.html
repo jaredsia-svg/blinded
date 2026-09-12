@@ -31,7 +31,7 @@
 <title>Blinded – Efficient redaction for your most sensitive documents, all done locally</title>
 <meta name="description" content="Redact PDFs, images and text in your browser. The file never leaves your machine.">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="app.css?v=1becdad5">
+<link rel="stylesheet" href="app.css?v=64e8d067">
 </head>
 <body>
 
@@ -99,6 +99,11 @@
 
   <!-- ---------- 2. review ---------- -->
   <section id="view-review" class="view" hidden>
+    <div class="panes" role="group" aria-label="What to show">
+      <button type="button" id="pane-edit" class="pane" aria-pressed="true">Edit</button>
+      <button type="button" id="pane-doc" class="pane" aria-pressed="false">Document</button>
+    </div>
+
     <div class="review">
 
       <aside class="panel">
@@ -419,7 +424,7 @@
 <script src="lib/pdfwrite.js?v=4b977425"></script>
 <script src="lib/pdfread.js?v=624c5ef9"></script>
 <script src="lib/render.js?v=7bf6e0a9"></script>
-<script src="app.js?v=38963f9d"></script>
+<script src="app.js?v=24c61dc7"></script>
 <script type="module" src="lib/boot.mjs?v=8b98ed8f"></script>
 </body>
 </html>

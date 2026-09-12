@@ -801,3 +801,26 @@ The floor is the sources themselves, about 7.5 MB a page, which cannot be given
 up while the document is open. Past 250 pages the tool now says so before
 starting, because dying halfway through a review is worse than being told
 first.
+
+## On a phone
+
+Side by side, the panel and the document each got about 300 pixels of an
+844-pixel phone: too little to read a page in and too little to work the
+controls in. On a narrow screen only one is shown and a toggle at the top says
+which, so the pane on show gets the height both used to share — measured, 305
+pixels became 634. The export bar stays under both, because deciding to redact
+is the one thing you do from either.
+
+The bar was also being cut off, and that was 100vh. On a phone the visible
+viewport is shorter than 100vh for as long as the browser's own bar is showing,
+so a frame built to 100vh puts its bottom — the Search and Export buttons —
+underneath that bar. The frame is built to 100dvh now, with the vh line kept as
+a fallback. The test suite cannot reproduce this half: a headless browser has
+no bar of its own, so both heights are the same number and the layout passes
+either way. What it asserts instead is that the frame is measured against the
+dynamic height.
+
+Two fingers do what two fingers do. The canvas took every touch so that a drag
+could pan or draw, which left pinch doing nothing; it now hands the two-finger
+gesture back to the browser and keeps the one-finger drag. Tool buttons grow
+from a comfortable click to a comfortable tap.

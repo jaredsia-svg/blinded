@@ -686,9 +686,15 @@ code {
 
    The front page is left alone: it is an ordinary page and reads like one.
 */
-body.reviewing { height: 100vh; overflow: hidden; }
+/* 100dvh, not 100vh.
+   On a phone the visible viewport is shorter than 100vh for as long as the
+   browser's own bar is showing, so a frame built to 100vh puts its bottom —
+   the Search and Export buttons — underneath that bar. The vh line stays as a
+   fallback for browsers without dvh. */
+body.reviewing { height: 100vh; height: 100dvh; overflow: hidden; }
 body.reviewing > main.wrap {
   height: calc(100vh - var(--top-h));
+  height: calc(100dvh - var(--top-h));
   display: flex; flex-direction: column; min-height: 0;
 }
 body.reviewing > footer.foot { display: none; }
@@ -781,3 +787,55 @@ body.reviewing .exportbar { position: static; flex: none; margin: 14px 0 18px; }
 }
 #imagefull { max-width: 100%; height: auto; display: block; image-rendering: auto; }
 .templates canvas { cursor: zoom-in; }
+
+/* ---------- one thing at a time, on a small screen ---------- */
+/*
+   Side by side, the panel and the document each got about 300 pixels of a
+   844-pixel phone: too little to read a page in and too little to work the
+   controls in. So on a narrow screen only one is shown, and a toggle at the
+   top says which. The export bar stays put underneath both, because deciding
+   to redact is the one thing you do from either.
+*/
+.panes { display: none; }
+
+@media (max-width: 900px) {
+  .panes {
+    display: flex; flex: none; gap: 0; margin: 0 0 12px;
+  }
+  .pane {
+    flex: 1; font: inherit; font-size: 13.5px; font-weight: 600;
+    padding: 9px 10px; cursor: pointer;
+    background: var(--card); color: var(--ink-soft);
+    border: 1px solid var(--line);
+  }
+  .pane:first-child { border-radius: var(--radius) 0 0 var(--radius); }
+  .pane:last-child { border-radius: 0 var(--radius) var(--radius) 0; margin-left: -1px; }
+  .pane[aria-pressed="true"] {
+    background: var(--accent); border-color: var(--accent); color: #fff;
+  }
+
+  body.reviewing #view-review { padding-top: 12px; }
+  body.reviewing[data-pane="doc"] .panel { display: none; }
+  body.reviewing[data-pane="edit"] .stage { display: none; }
+  body.reviewing .review { grid-template-columns: minmax(0, 1fr); }
+
+  /* The bar is the same two buttons, without the sentence beside them: on a
+     phone that sentence took a column of its own and pushed the buttons into
+     three lines of text. */
+  .exportbar { padding: 10px 12px; gap: 10px; flex-wrap: nowrap; }
+  .exportbar .exportgo { flex: 1; gap: 10px; }
+  #exportnote { display: none; }
+  .exportbar .primary { flex: 1; white-space: nowrap; padding: 10px 12px; }
+
+  /* Pinch is how anyone zooms anything on a phone. The canvas took every
+     touch so that a drag could pan or draw, which left two fingers doing
+     nothing at all; pinch-zoom hands the two-finger gesture back to the
+     browser and keeps the one-finger drag. */
+  .page canvas { touch-action: pinch-zoom; }
+
+  /* Room for a thumb. The zoom and tool buttons are 34px on a desktop, which
+     is a comfortable click and an awkward tap. */
+  .tool { width: 44px; height: 40px; }
+  .termadd input, .termadd button { min-height: 44px; }
+  .termdrop { width: 32px; height: 32px; }
+}
