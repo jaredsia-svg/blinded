@@ -402,6 +402,21 @@
   </div>
 </div>
 
+<div id="passbox" class="busy" hidden>
+  <div class="busy-inner nameinner">
+    <h2 class="namehead">This PDF is locked</h2>
+    <label class="namelabel" for="password">Password</label>
+    <input id="password" type="password" class="nameinput" spellcheck="false"
+      autocomplete="off">
+    <p class="hint" id="passnote">The password is used here, in this tab, to
+      open the file. Like the file, it is never sent anywhere.</p>
+    <div class="namego">
+      <button type="button" id="passcancel" class="ghost">Cancel</button>
+      <button type="button" id="passgo" class="primary">Open</button>
+    </div>
+  </div>
+</div>
+
 <div id="namebox" class="busy" hidden>
   <div class="busy-inner nameinner">
     <h2 class="namehead">Save as</h2>
@@ -441,9 +456,9 @@
 <script src="lib/ocr.js?v=d6ec7f84"></script>
 <script src="lib/textimage.js?v=ba90cd37"></script>
 <script src="lib/pdfwrite.js?v=4b977425"></script>
-<script src="lib/pdfread.js?v=624c5ef9"></script>
+<script src="lib/pdfread.js?v=ca229552"></script>
 <script src="lib/render.js?v=7bf6e0a9"></script>
-<script src="app.js?v=8ebe41fe"></script>
+<script src="app.js?v=20174c48"></script>
 <script type="module" src="lib/boot.mjs?v=8b98ed8f"></script>
 </body>
 </html>

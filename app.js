@@ -344,7 +344,7 @@
         // Every pass over the pages reports the same way: which page, and a
         // bar. Three different sentences for three loops that all mean "this
         // is taking a while" is three things to read instead of one.
-        const pages = await PdfRead.load(bytes, (n, total) =>
+        const pages = await renderPdf(bytes, (n, total) =>
           pageProgress(n - 1, total, 'Rendering pages'));
         await warnIfHuge(pages.length);
         startReview('pdf', file.name, pages);
@@ -373,10 +373,14 @@
         await restoreDraft(draft);
       }
     } catch (error) {
+      // Cancelling the password box is a decision, not a failure. Saying "that
+      // file could not be opened" to someone who has just pressed Cancel tells
+      // them something they already know, in the voice of a fault.
+      if (error && error.blindedCancelled) { show('drop'); return; }
       // A failure here means the document was not fully understood, and a
       // partial review is worse than none: it looks complete.
-      fail('That file could not be opened: ' + (error && error.message ? error.message : String(error)) +
-        '. Nothing was redacted. If the PDF is password-protected, remove the password first.');
+      fail('That file could not be opened: ' + (error && error.message ? error.message : String(error))
+        + '. Nothing was redacted.');
       show('drop');
     } finally {
       busy(false);
@@ -2867,6 +2871,82 @@
 
   // Offers the name, and resolves to the one to save under, or null if the
   // reviewer changes their mind.
+  // Asks for the password to a locked PDF.
+  //
+  // It is typed here and used here: handed to pdf.js in this tab to open the
+  // reviewer's own file. Nothing about it leaves, which is the same promise
+  // the document itself gets, and the dialog says so — a password box on a
+  // web page is exactly the thing people are right to be wary of.
+  function askPassword(wrong) {
+    return new Promise(resolve => {
+      const box = el('passbox');
+      const input = el('password');
+      const note = el('passnote');
+      input.value = '';
+      note.textContent = wrong
+        ? 'That password did not open the file. The password is used here, in '
+          + 'this tab, and is never sent anywhere.'
+        : 'The password is used here, in this tab, to open the file. Like the '
+          + 'file, it is never sent anywhere.';
+      note.classList.toggle('warnhint', Boolean(wrong));
+      box.hidden = false;
+      input.focus();
+
+      const done = value => {
+        box.hidden = true;
+        // Not left sitting in the DOM once it has been used.
+        input.value = '';
+        el('passgo').removeEventListener('click', go);
+        el('passcancel').removeEventListener('click', cancel);
+        input.removeEventListener('keydown', key);
+        resolve(value);
+      };
+      const go = () => { if (input.value) done(input.value); else input.focus(); };
+      const cancel = () => done(null);
+      const key = event => {
+        if (event.key === 'Enter') { event.preventDefault(); go(); }
+        if (event.key === 'Escape') { event.preventDefault(); cancel(); }
+      };
+      el('passgo').addEventListener('click', go);
+      el('passcancel').addEventListener('click', cancel);
+      input.addEventListener('keydown', key);
+    });
+  }
+
+  // Renders a PDF, asking for a password if it turns out to need one.
+  //
+  // The rest of the app works from the rendered pages, so a file opened this
+  // way is unlocked for every purpose that follows: the export is built from
+  // pixels and carries no encryption of its own.
+  async function renderPdf(bytes, onProgress) {
+    let password = null;
+    let wrong = false;
+    for (;;) {
+      try {
+        // A fresh copy every attempt. pdf.js hands the buffer to its worker by
+        // transfer, which detaches it here — so a second attempt with the same
+        // bytes fails with "ArrayBuffer is already detached" rather than with
+        // anything about passwords, and the reviewer is told their file is
+        // broken when they have simply mistyped.
+        return await PdfRead.load(bytes.slice(), onProgress,
+          password ? { password } : undefined);
+      } catch (error) {
+        if (!error || !error.blindedLocked) throw error;
+        wrong = error.blindedLocked === PdfRead.WRONG_PASSWORD;
+        // The overlay is in front of the dialog, and a reviewer cannot type
+        // into something they cannot see.
+        busy(false);
+        password = await askPassword(wrong);
+        if (password === null) {
+          const stopped = new Error('The file was not opened.');
+          stopped.blindedCancelled = true;
+          throw stopped;
+        }
+        busy(true, 'Reading the PDF…');
+      }
+    }
+  }
+
   function askName(suggested) {
     return new Promise(resolve => {
       const box = el('namebox');
@@ -3680,7 +3760,8 @@
     undoLast, undoStack, applyLabels, labelItems, downloadKey,
     sensFor, wordSensitivity, wordBarFor, setZoom, stepZoom, ZOOM_STEPS,
     MARK_GREEN,
-    cleanName, coveredText, askName, redactedName, confirmAction, showTemplate,
+    cleanName, coveredText, askName, askPassword, renderPdf, redactedName,
+    confirmAction, showTemplate,
     addTerm, dropTerm,
     saveDraft, draftData, restoreDraft, looksLikeDraft, fingerprint, takeDraft,
     occurrencesFor, placesFor, renderTermCounts, renderTemplates, goToPage,

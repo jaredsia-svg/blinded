@@ -12,7 +12,7 @@ import { fileURLToPath } from 'node:url';
 
 import { chromium } from 'playwright';
 import { isStale } from './stamp.mjs';
-import { buildTextPdf, buildReadablePdf, buildLogoPdf, LOGO_PLACEMENTS,
+import { buildTextPdf, buildReadablePdf, buildLogoPdf, buildLockedPdf, LOGO_PLACEMENTS,
   buildWordmarkPdf, WORDMARK_PLACEMENTS, WORDMARK_ASPECT,
   buildSmallLogoPdf, SMALL_LOGO_PLACEMENTS, WORDMARK_BOX,
   buildDoubleFoundPdf, DOUBLE_TERM } from './fixture.mjs';
@@ -53,6 +53,8 @@ const readablePath = join(tmpdir(), 'blinded-readable.pdf');
 writeFileSync(readablePath, buildReadablePdf());
 const logoPath = join(tmpdir(), 'blinded-logo.pdf');
 writeFileSync(logoPath, buildLogoPdf());
+const lockedPath = join(tmpdir(), 'blinded-locked.pdf');
+writeFileSync(lockedPath, buildLockedPdf('letmein'));
 const doublePath = join(tmpdir(), 'blinded-double.pdf');
 writeFileSync(doublePath, buildDoubleFoundPdf());
 const smallLogoPath = join(tmpdir(), 'blinded-smalllogo.pdf');
@@ -3033,6 +3035,79 @@ try {
     const span = told.hint.match(/more scored (\d\.\d\d) down to (\d\.\d\d)/);
     check('and only counts the ones close enough to be worth a nudge',
       !span || Number(span[1]) - Number(span[2]) <= 0.08 + 1e-9, told.hint);
+  }
+
+  // ---------- a locked file ----------
+  //
+  // Really encrypted, not a mocked exception: RC4 with a standard security
+  // handler, the thing an office suite produced a decade ago. A reviewer with
+  // one of these used to be told the file could not be opened, and left to go
+  // and strip the password somewhere else — which for a confidential document
+  // means uploading it to a stranger, the one thing this tool exists to avoid.
+  {
+    if (await page.isVisible('#view-review')) await newFile();
+    await page.waitForSelector('#view-drop:not([hidden])', { timeout: 15000 });
+    await page.setInputFiles('#file', lockedPath);
+    await page.waitForSelector('#passbox:not([hidden])', { timeout: 30000 });
+    check('a locked PDF asks for its password instead of failing',
+      await page.isVisible('#passbox'));
+    check('and says nothing about the file being broken',
+      (await page.isVisible('#drop-error')) === false,
+      await page.textContent('#drop-error'));
+    // A password box on a web page is exactly the thing people are right to be
+    // wary of, so the box says where the password goes.
+    check('the box says the password stays in this tab',
+      /never sent anywhere|in this tab/i.test(await page.textContent('#passnote')),
+      await page.textContent('#passnote'));
+    check('and the field is a password field, not a text one',
+      await page.getAttribute('#password', 'type') === 'password');
+
+    // The wrong one. This used to come back as "ArrayBuffer is already
+    // detached", because pdf.js transfers the buffer to its worker and the
+    // retry had nothing left to send — so a mistyped password reported a
+    // broken file.
+    await page.fill('#password', 'nope');
+    await page.click('#passgo');
+    await page.waitForTimeout(1200);
+    check('a wrong password asks again rather than giving up',
+      await page.isVisible('#passbox'));
+    check('and says so',
+      /did not open/i.test(await page.textContent('#passnote')),
+      await page.textContent('#passnote'));
+    check('still without claiming the file is broken',
+      (await page.isVisible('#drop-error')) === false,
+      await page.textContent('#drop-error'));
+
+    await page.fill('#password', 'letmein');
+    await page.click('#passgo');
+    await page.waitForSelector('#view-review:not([hidden])', { timeout: 60000 });
+    const opened = await page.evaluate(() => ({
+      pages: window.Blinded.state.pages.length,
+      text: (window.Blinded.state.pages[0].items || []).map(i => i.str).join(' '),
+      field: document.getElementById('password').value,
+      boxShut: document.getElementById('passbox').hidden,
+    }));
+    check('the right password opens it', opened.pages === 1, JSON.stringify(opened));
+    check('with its text there to search',
+      /locked document/i.test(opened.text), opened.text.slice(0, 80));
+    check('and the box is put away', opened.boxShut === true);
+    // Not left sitting in the DOM for the rest of the session.
+    check('the password is not left in the field', opened.field === '');
+
+    // Cancelling is a decision, not a failure: saying "that file could not be
+    // opened" to someone who has just pressed Cancel tells them something they
+    // know, in the voice of a fault.
+    await newFile();
+    await page.waitForSelector('#view-drop:not([hidden])', { timeout: 15000 });
+    await page.setInputFiles('#file', lockedPath);
+    await page.waitForSelector('#passbox:not([hidden])', { timeout: 30000 });
+    await page.click('#passcancel');
+    await page.waitForTimeout(600);
+    check('cancelling goes back to the drop page',
+      await page.isVisible('#view-drop'));
+    check('without reporting a fault',
+      (await page.isVisible('#drop-error')) === false,
+      await page.textContent('#drop-error'));
   }
 
   // ---------- one control, not two ----------

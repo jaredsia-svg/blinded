@@ -340,3 +340,118 @@ export function buildTrackedPdf(word = 'KAG') {
 
   return Buffer.concat(chunks);
 }
+
+// A genuinely password-protected PDF, so the locked-file path is tested
+// against real encryption rather than a mocked exception.
+//
+// Standard security handler, revision 2 (RC4, 40-bit). Old and weak, which is
+// exactly why it is right here: it is what a document produced by an office
+// suite a decade ago carries, it is the cheapest thing to implement correctly
+// from the specification, and pdf.js opens it the same way it opens any other
+// encrypted file. What is under test is Blinded asking for the password and
+// carrying on, not the strength of the cipher.
+import { createHash } from 'crypto';
+
+// The 32-byte string every PDF password is padded with, from the spec.
+const PAD = Buffer.from([
+  0x28, 0xBF, 0x4E, 0x5E, 0x4E, 0x75, 0x8A, 0x41, 0x64, 0x00, 0x4E, 0x56,
+  0xFF, 0xFA, 0x01, 0x08, 0x2E, 0x2E, 0x00, 0xB6, 0xD0, 0x68, 0x3E, 0x80,
+  0x2F, 0x0C, 0xA9, 0xFE, 0x64, 0x53, 0x69, 0x7A,
+]);
+
+function padded(password) {
+  const bytes = Buffer.from(password, 'latin1');
+  return Buffer.concat([bytes, PAD]).subarray(0, 32);
+}
+
+function rc4(key, data) {
+  const s = new Uint8Array(256);
+  for (let i = 0; i < 256; i++) s[i] = i;
+  for (let i = 0, j = 0; i < 256; i++) {
+    j = (j + s[i] + key[i % key.length]) & 255;
+    [s[i], s[j]] = [s[j], s[i]];
+  }
+  const out = Buffer.alloc(data.length);
+  for (let n = 0, i = 0, j = 0; n < data.length; n++) {
+    i = (i + 1) & 255;
+    j = (j + s[i]) & 255;
+    [s[i], s[j]] = [s[j], s[i]];
+    out[n] = data[n] ^ s[(s[i] + s[j]) & 255];
+  }
+  return out;
+}
+
+export function buildLockedPdf(password = 'letmein', lines) {
+  const id = Buffer.from('0123456789abcdef', 'latin1');   // 16 bytes, fixed
+  const permissions = -1;                                  // allow everything
+  const owner = padded(password);                          // same as the user's
+
+  // /O: the user password padded, RC4'd with a key from the owner password.
+  const ownerKey = createHash('md5').update(owner).digest().subarray(0, 5);
+  const O = rc4(ownerKey, padded(password));
+
+  // The file key, and /U from it.
+  const perm = Buffer.alloc(4);
+  perm.writeInt32LE(permissions, 0);
+  const fileKey = createHash('md5')
+    .update(padded(password)).update(O).update(perm).update(id)
+    .digest().subarray(0, 5);
+  const U = rc4(fileKey, PAD);
+
+  // Each object's string and stream data gets its own key.
+  const keyFor = (num, gen) => {
+    const extra = Buffer.from([num & 255, (num >> 8) & 255, (num >> 16) & 255,
+                               gen & 255, (gen >> 8) & 255]);
+    return createHash('md5').update(Buffer.concat([fileKey, extra]))
+      .digest().subarray(0, Math.min(16, fileKey.length + 5));
+  };
+
+  const escape = s => s.replace(/[\\()]/g, m => '\\' + m);
+  const text = (lines || [
+    'CONFIDENTIAL — locked document',
+    'Jane Doe can be reached at jane.doe@example.com',
+    'This file needed a password to open.',
+  ]);
+  const body = 'BT\n/F1 13 Tf\n16 TL\n40 740 Td\n'
+    + text.map(l => '(' + escape(l) + ') Tj T*\n').join('') + 'ET\n';
+  const stream = rc4(keyFor(4, 0), Buffer.from(body, 'latin1'));
+
+  const chunks = [];
+  let length = 0;
+  const offsets = [0];
+  const push = s => {
+    const b = Buffer.isBuffer(s) ? s : Buffer.from(s, 'latin1');
+    chunks.push(b);
+    length += b.length;
+  };
+  const begin = n => { offsets[n] = length; push(n + ' 0 obj\n'); };
+  const hex = b => '<' + b.toString('hex') + '>';
+
+  push('%PDF-1.4\n');
+  begin(1); push('<< /Type /Catalog /Pages 2 0 R >>\n'); push('endobj\n');
+  begin(2); push('<< /Type /Pages /Count 1 /Kids [3 0 R] >>\n'); push('endobj\n');
+  begin(3);
+  push('<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792]'
+    + ' /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>\n');
+  push('endobj\n');
+  begin(4);
+  push('<< /Length ' + stream.length + ' >>\nstream\n');
+  push(stream);
+  push('\nendstream\n');
+  push('endobj\n');
+  begin(5);
+  push('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>\n');
+  push('endobj\n');
+  begin(6);
+  push('<< /Filter /Standard /V 1 /R 2 /Length 40 /P ' + permissions
+    + ' /O ' + hex(O) + ' /U ' + hex(U) + ' >>\n');
+  push('endobj\n');
+
+  const xrefAt = length;
+  push('xref\n0 7\n0000000000 65535 f \n');
+  for (let n = 1; n <= 6; n++) push(String(offsets[n]).padStart(10, '0') + ' 00000 n \n');
+  push('trailer\n<< /Size 7 /Root 1 0 R /Encrypt 6 0 R /ID [' + hex(id) + ' ' + hex(id)
+    + '] >>\nstartxref\n' + xrefAt + '\n%%EOF\n');
+
+  return Buffer.concat(chunks);
+}
