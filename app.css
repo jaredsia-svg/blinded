@@ -615,9 +615,21 @@ li.tally { display: block; padding: 0 0 8px; border: 0; }
 button.wide { width: 100%; padding: 8px; }
 button.wide.on { background: var(--accent); color: #fff; border-color: var(--accent); }
 
-.sens { display: flex; align-items: center; gap: 8px; font-size: 12.5px; margin-top: 14px; color: var(--ink-soft); }
-.sens input { flex: 1; min-width: 0; }
-.sens span { font-variant-numeric: tabular-nums; flex: none; }
+.senshead {
+  display: flex; align-items: center; gap: 4px;
+  margin: 12px 0 0; font-size: 11.5px; color: var(--ink-soft);
+}
+
+/* The bar belongs to one picked image, so it lives on that image's row,
+   between the thumbnail that says which image and the tally that says how
+   many. It took the caption's place, which was empty: a picture of the logo
+   needs no label saying "picked image". */
+.rowsens { flex: 1; min-width: 0; display: flex; align-items: center; gap: 7px; }
+.rowsens input { flex: 1; min-width: 42px; margin: 0; }
+.rowsens .v {
+  flex: none; font-variant-numeric: tabular-nums; font-size: 11.5px;
+  color: var(--ink-soft);
+}
 
 /* While picking, the page invites a different kind of drag. A crosshair, not
    the thick cell cross: the thing being aimed at is a box corner, and the fine

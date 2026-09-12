@@ -537,8 +537,6 @@
   }
 
   // Whether a document still needs reading before its terms can be found.
-  // The sensitivity slider belongs to the shape matcher, so it is shown only
-  // when the shape matcher is what is running.
   function showWordControls() {
     const note = el('ocrnote');
     note.hidden = !(state.termImages && state.ocrFailed);
@@ -944,7 +942,10 @@
 
     for (const template of state.templates) {
       if (template.searched) continue;
-      entries.push({ key: 'logo:' + template.id, template: template.cut, logo: template });
+      entries.push({ key: 'logo:' + template.id, template: template.cut, logo: template,
+                     // Its own bar, not a shared one: this is the whole point
+                     // of the slider sitting on the row.
+                     threshold: sensFor(template) });
     }
 
     for (const term of termsNeedingPictures()) {
@@ -974,8 +975,9 @@
     allowPause();
     let results;
     try {
-      results = await ImageSearch.searchAllParallel(state.pages, entries,
-        { threshold: sensitivity() },
+      // No shared threshold: every entry carries its own — a picked image from
+      // its row's slider, a word from what its shape is worth.
+      results = await ImageSearch.searchAllParallel(state.pages, entries, {},
         (done, total) => progress(done, total));
     } finally {
       busy(false);
@@ -995,7 +997,7 @@
       entry.logo.rawMatches = found.matches.length;
       entry.logo.best = found.best;
       entry.logo.searched = true;
-      reportSearch(found);
+      reportSearch(found, sensFor(entry.logo));
     }
 
     // Words: several typefaces per word, pooled and then de-duplicated. One
@@ -1060,7 +1062,7 @@
   // "0 found" on its own reads as a broken feature. Saying what the best score
   // actually was turns it into a decision the reviewer can act on — and the
   // sensitivity named here is the one control that still governs this search.
-  function reportSearch(found) {
+  function reportSearch(found, bar) {
     const hint = el('pickhint');
     // A match that worked needs no commentary: the marks are on the page and
     // the count is beside the picked image. What is worth saying is what
@@ -1073,7 +1075,7 @@
     }
     const near = found.best > 0 ? found.best.toFixed(2) : null;
     hint.textContent = near
-      ? 'No match at ' + sensitivity().toFixed(2) + '. The closest thing scored '
+      ? 'No match at ' + clampSens(bar).toFixed(2) + '. The closest thing scored '
         + near + ' — lower the sensitivity below that to include it.'
       : 'Nothing resembling that was found anywhere in the document.';
     hint.hidden = false;
@@ -1756,8 +1758,25 @@
 
   // ---------- picking a logo, and finding it again ----------
 
-  function sensitivity() {
-    return Number(el('sens').value) / 100;
+  // Where a newly picked image starts. It used to be a slider at the foot of
+  // the Images section governing every picked image at once, which meant two
+  // things a reviewer never asked for: a wordmark that matches cleanly at 0.85
+  // and a scanned signature that needs 0.60 could not both be set right, and
+  // moving the slider to tune one threw away the finished results for all the
+  // others. Each image now carries its own bar, on its own row.
+  const DEFAULT_SENS = Match.THRESHOLD;
+
+  function clampSens(value) {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return DEFAULT_SENS;
+    return Math.min(0.95, Math.max(0.45, n));
+  }
+
+  // The bar a picked image has to clear. Older drafts have no per-image value,
+  // so they fall back to what the one slider was set to when they were saved.
+  function sensFor(template) {
+    return clampSens(template && template.sens !== undefined
+      ? template.sens : DEFAULT_SENS);
   }
 
   // The bar a word drawn as a picture has to clear, on its own control.
@@ -1982,6 +2001,9 @@
       pageIndex: page.index,
       thumbnail: thumbnailOf(page.source, rect),
       matches: 0,
+      // Its own bar, starting where the matcher does. A logo picked next is
+      // unaffected by whatever this one is tuned to.
+      sens: DEFAULT_SENS,
       // Not searched yet, and deliberately so: sweeping the document here is
       // what made picking a second logo mean waiting through the first.
       searched: false,
@@ -2082,6 +2104,10 @@
     // sentence left standing from a previous one — or from a previous
     // document, since this survived starting over — reads as a report about an
     // image the reviewer has not chosen.
+    // The column heading goes with the column: with nothing picked there are
+    // no sliders for it to head.
+    el('senshead').hidden = !state.templates.length;
+
     if (!state.templates.length) {
       const hint = el('pickhint');
       hint.hidden = true;
@@ -2091,8 +2117,6 @@
 
     for (const template of state.templates) {
       const row = document.createElement('li');
-      const name = document.createElement('span');
-      name.className = 't';
       // Counted from what survives, not from what the search returned: a
       // match already covered by a text mark is not a second thing found.
       const live = state.pages.reduce((sum, page) =>
@@ -2100,8 +2124,24 @@
 
       // Nothing in words at all. The thumbnail says which image this is and
       // the number says how many of it were found; "picked image" beside a
-      // picture of it was a caption for something already on screen.
-      name.textContent = '';
+      // picture of it was a caption for something already on screen. What sits
+      // between them is this image's own bar, because that is the one setting
+      // that belongs to this image and nothing else.
+      const bar = document.createElement('span');
+      bar.className = 'rowsens';
+      const slider = document.createElement('input');
+      slider.type = 'range';
+      slider.min = '45';
+      slider.max = '95';
+      slider.step = '1';
+      slider.value = String(Math.round(sensFor(template) * 100));
+      slider.title = 'How closely something must resemble this image to be '
+        + 'proposed. Lower finds more, including things that only resemble it.';
+      slider.setAttribute('aria-label', 'Sensitivity for this image');
+      const reading = document.createElement('span');
+      reading.className = 'v';
+      reading.textContent = sensFor(template).toFixed(2);
+      bar.append(slider, reading);
 
       const count = document.createElement('button');
       count.type = 'button';
@@ -2132,7 +2172,43 @@
       template.thumbnail.style.cursor = 'zoom-in';
       template.thumbnail.onclick = () => showTemplate(template.id);
 
-      row.append(template.thumbnail, name, count, remove);
+      // Moving it is a different question about this image, so its answer
+      // goes — and only its answer. Every other picked image keeps the
+      // results it already has, which is what the one shared slider could not
+      // do: tuning a stubborn signature threw away three finished logos.
+      //
+      // The row is not re-rendered here. A drag fires this on every pixel of
+      // travel, and rebuilding the list under the reviewer's thumb takes the
+      // slider out from under it. The two things that go stale are edited in
+      // place instead.
+      slider.addEventListener('input', () => {
+        template.sens = clampSens(Number(slider.value) / 100);
+        reading.textContent = sensFor(template).toFixed(2);
+        if (template.searched) {
+          template.searched = false;
+          template.matches = 0;
+          template.rawMatches = 0;
+          // What this image found was found at the old bar. The comprehensive
+          // check's marks are not this slider's to throw away: they cost
+          // minutes, and they are not about this image.
+          for (const page of state.pages) {
+            page.imageHits = page.imageHits.filter(
+              m => m.bySweep || m.templateId !== template.id);
+          }
+        }
+        count.className = 'n unknown';
+        count.textContent = '?';
+        count.disabled = true;
+        count.removeAttribute('aria-expanded');
+        count.title = 'Not searched for yet \u2014 press Search';
+        // needsSearch closes the open tally, but the list it drew is already
+        // on screen and only a re-render would take it off.
+        const open = row.nextSibling;
+        if (open && open.classList && open.classList.contains('tally')) open.remove();
+        needsSearch();
+      });
+
+      row.append(template.thumbnail, bar, count, remove);
       host.append(row);
 
       if (state.openTally === template.id && !count.disabled) {
@@ -2425,10 +2501,6 @@
                 pages: state.pages.length },
       terms: state.terms.slice(),
       settings: {
-        // The slider's id is 'sens'. Guarded against a missing element, this
-        // read the wrong one and quietly stored null in every draft ever
-        // saved — a setting silently not kept is worse than one that throws.
-        sensitivity: el('sens').value,
         includeMedium: state.includeMedium,
         labelling: state.labelling,
         labelOverrides: state.labelOverrides,
@@ -2440,6 +2512,9 @@
       // pixels are in the document, and the document is not in the draft.
       templates: state.templates.map(t => ({
         id: t.id, pageIndex: t.pageIndex, rect: t.rect,
+        // Each image's own bar. It used to be one number for the whole
+        // document, kept under settings.
+        sens: sensFor(t),
       })),
       pages: state.pages.map(page => ({
         index: page.index,
@@ -2534,7 +2609,11 @@
       : String(data.terms || '').split('\n').map(t => t.trim()).filter(Boolean);
 
     const settings = data.settings || {};
-    if (settings.sensitivity) el('sens').value = settings.sensitivity;
+    // A draft saved before the bar moved onto the row carries one number for
+    // every image. It is still the right answer for all of them, so it stands
+    // in for the per-image values those drafts do not have.
+    const wasShared = settings.sensitivity
+      ? clampSens(Number(settings.sensitivity) / 100) : DEFAULT_SENS;
     state.includeMedium = Boolean(settings.includeMedium);
     if (el('medium')) el('medium').checked = state.includeMedium;
     state.labelling = Boolean(settings.labelling);
@@ -2565,6 +2644,7 @@
       state.templates.push({
         id: saved.id, cut, rect: saved.rect, pageIndex: saved.pageIndex,
         thumbnail: thumbnailOf(page.source, saved.rect),
+        sens: saved.sens !== undefined ? clampSens(saved.sens) : wasShared,
         matches: 0, rawMatches: 0, best: 0, searched: true,
       });
     }
@@ -2910,6 +2990,11 @@
       left = Math.max(margin, Math.min(left, window.innerWidth - size.width - margin));
       let top = at.bottom + 6;
       if (top + size.height > window.innerHeight - margin) top = at.top - size.height - 6;
+      // And held inside the viewport whatever the button did. Flipping above
+      // only helps a button near the bottom edge; a button scrolled past the
+      // bottom edge put the bubble past it too, which is a hint nobody can
+      // read. Both ends are clamped, so it lands somewhere visible.
+      top = Math.min(top, window.innerHeight - size.height - margin);
       bubble.style.left = Math.round(left) + 'px';
       bubble.style.top = Math.round(Math.max(margin, top)) + 'px';
     };
@@ -3138,7 +3223,7 @@
     let results;
     try {
       results = await ImageSearch.searchAllParallel(state.pages, entries,
-        { threshold: sensitivity(), stop: () => state.sweepStopped },
+        { stop: () => state.sweepStopped },
         done => sweepProgress(done, state.pages.length));
     } catch (error) {
       state.sweepRunning = false;
@@ -3347,34 +3432,6 @@
     }
   });
 
-  // The slider moves continuously; re-running the whole document on every
-  // pixel of travel would make it unusable, so the search waits for it to
-  // settle. The read-out updates immediately either way.
-  // Moving the slider invalidates every search rather than re-running them.
-  // Re-running on each pixel of travel was unusable, and re-running once it
-  // settled still meant a multi-second sweep nobody asked for.
-  el('sens').addEventListener('input', () => {
-    el('sensvalue').textContent = sensitivity().toFixed(2);
-    for (const template of state.templates) {
-      if (template.searched) { template.searched = false; template.matches = 0; }
-    }
-    // Everything the searches found goes, because every one of them was run
-    // at the old setting — except what the comprehensive check turned up,
-    // which is minutes of work the reviewer asked for by hand. Those marks
-    // are kept and come back with the next search.
-    for (const page of state.pages) {
-      page.imageHits = page.imageHits.filter(m => m.bySweep);
-    }
-    state.searchedTerms = [];
-    // The check's own results were found at the old setting too, so it is
-    // offered again — the marks stay, and re-running is a choice rather than
-    // the only way to get them back.
-    state.sweptTerms = [];
-    renderTemplates();
-    renderTermCounts();
-    needsSearch();
-    redrawAll();
-  });
   el('export').addEventListener('click', exportFile);
   el('savedraft').addEventListener('click', saveDraft);
   el('imageclose').addEventListener('click', () => { el('imagebox').hidden = true; });
@@ -3440,7 +3497,7 @@
 
   window.Blinded = { state, rescan, loadFile, exportFile, setMode, addTemplate,
     undoLast, undoStack, applyLabels, labelItems, downloadKey,
-    sensitivity, wordSensitivity, wordBarFor, setZoom, stepZoom, ZOOM_STEPS,
+    sensFor, wordSensitivity, wordBarFor, setZoom, stepZoom, ZOOM_STEPS,
     MARK_GREEN,
     cleanName, coveredText, askName, redactedName, confirmAction, showTemplate,
     addTerm, dropTerm,

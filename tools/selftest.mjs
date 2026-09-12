@@ -791,29 +791,30 @@ check('cropping lifts out exactly the requested rectangle', (() => {
   })(), 'no adjacent positions were tested');
 }
 
-// The sensitivity slider's default and the matcher's threshold are the same
-// number written in two files, and they had drifted: the slider shipped at
-// 0.82 while the matcher was tuned to 0.75, so the app searched stricter than
-// anything tested and quietly dropped real matches scoring in between. Held
-// together here, since nothing else can notice.
+// The bar a picked image has to clear starts where the matcher itself is
+// tuned, and the two are written in different files. They had drifted once
+// before, when the control shipped at 0.82 against a matcher tuned to 0.75 —
+// so the app searched stricter than anything tested and quietly dropped real
+// matches scoring in between. The control is now one slider per picked image,
+// built in app.js, so that is where these numbers live.
 {
-  const html = readFileSync(join(root, 'index.html'), 'utf8');
-  const slider = html.match(/id="sens"[^>]*value="(\d+)"/);
-  check('the sensitivity slider declares a default', Boolean(slider), 'not found in index.html');
-  if (slider) {
-    check('and it matches the matcher\'s own threshold',
-      Number(slider[1]) / 100 === Match.THRESHOLD,
-      'slider ' + (Number(slider[1]) / 100) + ' vs threshold ' + Match.THRESHOLD);
+  const js = readFileSync(join(root, 'app.js'), 'utf8');
+  check('a newly picked image starts at the matcher\'s own threshold',
+    /const DEFAULT_SENS = Match\.THRESHOLD;/.test(js),
+    'DEFAULT_SENS is not tied to Match.THRESHOLD');
+  const bounds = js.match(/slider\.min = '(\d+)';[\s\S]{0,80}?slider\.max = '(\d+)';/);
+  check('the row slider declares its range', Boolean(bounds), 'not found in app.js');
+  if (bounds) {
+    check('and it can reach below the default, to find more',
+      Number(bounds[1]) / 100 < Match.THRESHOLD, bounds[1]);
+    check('and above it, to find only near-certain matches',
+      Number(bounds[2]) / 100 > Match.THRESHOLD, bounds[2]);
   }
-  const shown = html.match(/id="sensvalue">([\d.]+)</);
-  check('the read-out beside it starts at the same value',
-    shown && Number(shown[1]) === Match.THRESHOLD,
-    shown ? shown[1] : 'not found');
-  const bounds = html.match(/id="sens"[^>]*min="(\d+)"[^>]*max="(\d+)"/);
-  check('the slider can reach below the default, to find more',
-    bounds && Number(bounds[1]) / 100 < Match.THRESHOLD, bounds ? bounds[1] : 'no min');
-  check('and above it, to find only near-certain matches',
-    bounds && Number(bounds[2]) / 100 > Match.THRESHOLD, bounds ? bounds[2] : 'no max');
+  // Whatever a draft or a stray value says, the search is run somewhere inside
+  // that range: a threshold of 0 would propose every pixel of every page.
+  check('and nothing outside that range can reach the matcher',
+    /Math\.min\(0\.95, Math\.max\(0\.45, n\)\)/.test(js),
+    'clampSens does not hold the slider\'s own bounds');
 }
 
 // ---------- placeholder labels ----------
@@ -1202,6 +1203,34 @@ check('no creation date is carried into the output', !meta.info.CreationDate);
   const orphans = [...styled].filter(id => !ids.has(id));
   check('and every element the stylesheet targets by id',
     orphans.length === 0, 'styled but absent: ' + orphans.join(', '));
+
+  // The same mistake one level up. window.Blinded is built from a list of
+  // bare identifiers, and renaming a function without renaming its entry
+  // throws a ReferenceError on the very last statement of app.js — so the
+  // object is never assigned and, again, every control in the review is dead.
+  // This shipped once as el('pane-edit') and was written a second time this
+  // way, by leaving `sensitivity` in the list after the function became
+  // sensFor. The declarations are found by name, which is enough: what is
+  // being caught is a name in the list that app.js does not define at all.
+  const exported = code.match(/window\.Blinded = \{([\s\S]*?)\};\s*\n\}\)\(\);/);
+  check('app.js publishes an object to hang the tests off', Boolean(exported),
+    'window.Blinded assignment not found');
+  if (exported) {
+    const declared = new Set([
+      ...[...code.matchAll(/\bfunction ([A-Za-z_$][\w$]*)/g)].map(m => m[1]),
+      ...[...code.matchAll(/\b(?:const|let|var) ([A-Za-z_$][\w$]*)/g)].map(m => m[1]),
+    ]);
+    const listed = exported[1]
+      .replace(/\/\/[^\n]*/g, '')
+      .split(',')
+      .map(part => part.trim())
+      // For `alias: name` it is the value that has to exist, not the key.
+      .map(part => (part.includes(':') ? part.split(':')[1].trim() : part))
+      .filter(name => /^[A-Za-z_$][\w$]*$/.test(name));
+    check('and every name in that list is something app.js defines',
+      listed.every(name => declared.has(name)),
+      'not defined: ' + listed.filter(name => !declared.has(name)).join(', '));
+  }
 }
 
 // ---------- report ----------

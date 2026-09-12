@@ -1186,7 +1186,7 @@ try {
   // A red question mark, not a dash and not a zero: nothing has looked yet,
   // and that is a different thing from having looked and found nothing.
   check('and the panel says so with a question mark',
-    (await page.textContent('#templates')).trim().startsWith('?'),
+    (await page.textContent('#templates .n')).trim() === '?',
     await page.textContent('#templates'));
   check('marked as unanswered rather than as a count',
     await page.evaluate(() =>
@@ -2428,6 +2428,84 @@ try {
     String(await control.evaluate(() => window.__rafCalls)));
   await control.close();
 
+  // ---------- each picked image keeps its own bar ----------
+  //
+  // One slider governed every picked image at once, and it was wrong twice
+  // over: a clean wordmark that matches at 0.85 and a scanned signature that
+  // needs 0.60 cannot both be set right by one number, and moving it to tune
+  // the stubborn one threw away the finished results for all the others.
+  {
+    if (await page.isVisible('#view-review')) await newFile();
+    await page.waitForSelector('#view-drop:not([hidden])', { timeout: 15000 });
+    await page.setInputFiles('#file', logoPath);
+    await page.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
+    await page.evaluate(() => {
+      const B = window.Blinded;
+      B.state.termImages = false;        // picked images only, no reading
+      B.addTemplate(B.state.pages[0], { x: 40, y: 40, w: 120, h: 120 });
+      B.addTemplate(B.state.pages[0], { x: 200, y: 40, w: 120, h: 120 });
+    });
+    await page.waitForTimeout(200);
+
+    const rows = await page.evaluate(() => ({
+      sliders: document.querySelectorAll('.templates .rowsens input').length,
+      heading: !document.getElementById('senshead').hidden,
+      // Between the thumbnail on the left and the tally on the right, which
+      // is where it was asked for.
+      between: [...document.querySelectorAll('.templates li')].every(li => {
+        const kids = [...li.children];
+        const thumb = kids.findIndex(k => k.tagName === 'CANVAS');
+        const bar = kids.findIndex(k => k.classList.contains('rowsens'));
+        const tally = kids.findIndex(k => k.classList.contains('n'));
+        return thumb >= 0 && bar > thumb && tally > bar;
+      }),
+    }));
+    check('every picked image carries a slider of its own', rows.sliders === 2,
+      JSON.stringify(rows));
+    check('sitting between the thumbnail and the tally', rows.between === true,
+      JSON.stringify(rows));
+    check('under a heading that says what the column is', rows.heading === true,
+      JSON.stringify(rows));
+
+    await redact(page);
+    const both = await page.evaluate(() =>
+      window.Blinded.state.templates.map(t => t.searched));
+    check('both are searched at their own bar', both.every(Boolean),
+      JSON.stringify(both));
+
+    // Move the first one's slider. Only the first one's answer should go.
+    const after = await page.evaluate(() => {
+      const B = window.Blinded;
+      const slider = document.querySelectorAll('.templates .rowsens input')[0];
+      slider.value = '55';
+      slider.dispatchEvent(new Event('input', { bubbles: true }));
+      return {
+        bars: B.state.templates.map(t => B.sensFor(t)),
+        searched: B.state.templates.map(t => t.searched),
+        reading: [...document.querySelectorAll('.templates .rowsens .v')]
+          .map(v => v.textContent),
+      };
+    });
+    check('the two images now sit at different bars',
+      Math.abs(after.bars[0] - 0.55) < 1e-9 && after.bars[1] > after.bars[0],
+      JSON.stringify(after));
+    check('and the row says so beside the slider', after.reading[0] === '0.55',
+      JSON.stringify(after));
+    // The whole point. The old slider set every one of these back to false.
+    check('only the image whose bar moved has to be looked for again',
+      after.searched[0] === false && after.searched[1] === true,
+      JSON.stringify(after));
+    // And the slider survives the change, because a drag that rebuilds the
+    // list under the reviewer's thumb loses the thumb.
+    check('the slider the reviewer is holding is still the same element',
+      await page.evaluate(() => {
+        const live = document.querySelectorAll('.templates .rowsens input')[0];
+        return live && Number(live.value) === 55;
+      }));
+
+    await page.evaluate(() => { window.Blinded.state.termImages = true; });
+  }
+
   // ---------- one control, not two ----------
   //
   // There used to be a Word match slider beside the image sensitivity. Reading
@@ -2438,14 +2516,17 @@ try {
     const B = window.Blinded;
     return {
       wordControl: Boolean(document.getElementById('wordsens')),
-      imageControl: Boolean(document.getElementById('sens')),
+      // No section-wide image slider either: the bar moved onto each
+      // picked image's own row.
+      sharedImageControl: Boolean(document.getElementById('sens')),
       shortBar: B.wordBarFor('KAG'),
       longBar: B.wordBarFor('proprietary'),
       phraseBar: B.wordBarFor('proprietary innovation'),
     };
   });
   check('the word sensitivity control is gone', bars.wordControl === false);
-  check('the image sensitivity control remains', bars.imageControl === true);
+  check('and so is the one slider that governed every picked image at once',
+    bars.sharedImageControl === false);
   check('the fallback still holds a short word to the measured bar',
     Math.abs(bars.shortBar - 0.66) < 1e-9, String(bars.shortBar));
   check('and still lets a long word down, since it scores lower',
@@ -3465,6 +3546,10 @@ try {
 
   const shown = await page.evaluate(async () => {
     const b = document.querySelector('.why');
+    // Scrolled to, because a reviewer hovers a hint they can see. What is
+    // asserted below is that the bubble lands on screen, and a button parked
+    // below the fold is not the question being asked.
+    b.scrollIntoView({ block: 'center' });
     b.dispatchEvent(new PointerEvent('pointerenter', { bubbles: true }));
     const bubble = document.querySelector('.tipbubble');
     if (!bubble) return { visible: false };
@@ -4005,6 +4090,10 @@ try {
     await page.setInputFiles('#file', fixturePath);
     await page.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
     await setTerms(page, ['Jane']);
+    // A picked image, because the setting changed below is now its own
+    // slider rather than one that governed the whole section.
+    await page.evaluate(() => window.Blinded.addTemplate(
+      window.Blinded.state.pages[0], { x: 40, y: 40, w: 120, h: 120 }));
     await redact(page);
 
     const during = await page.evaluate(async () => {
@@ -4016,7 +4105,7 @@ try {
                         running: B.state.sweepRunning };
 
       // Change a setting while it runs, exactly as a reviewer would.
-      const slider = document.getElementById('sens');
+      const slider = document.querySelector('.templates .rowsens input');
       slider.value = String(Math.max(45, Number(slider.value) - 5));
       slider.dispatchEvent(new Event('input', { bubbles: true }));
       await new Promise(r => setTimeout(r, 80));
@@ -4066,6 +4155,8 @@ try {
     await page.setInputFiles('#file', fixturePath);
     await page.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
     await setTerms(page, ['Jane']);
+    await page.evaluate(() => window.Blinded.addTemplate(
+      window.Blinded.state.pages[0], { x: 40, y: 40, w: 120, h: 120 }));
     await redact(page);
 
     const planted = await page.evaluate(() => {
@@ -4087,7 +4178,7 @@ try {
 
     // Move a setting: anything that changes what to look for.
     await page.evaluate(() => {
-      const slider = document.getElementById('sens');
+      const slider = document.querySelector('.templates .rowsens input');
       slider.value = String(Math.max(45, Number(slider.value) - 5));
       slider.dispatchEvent(new Event('input', { bubbles: true }));
       slider.dispatchEvent(new Event('change', { bubbles: true }));
