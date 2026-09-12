@@ -3906,6 +3906,56 @@ try {
       shape.afterTheCrosshair === true, JSON.stringify(shape));
     check('and the new-file icon has left the toolbar',
       shape.gone === true, JSON.stringify(shape));
+
+    // It is a div holding two buttons, so it misses the rounding every other
+    // icon gets from being a button — which left one square-cornered cell in a
+    // row of rounded ones.
+    const dressed = await page.evaluate(() => {
+      const cell = getComputedStyle(document.querySelector('.toolstack'));
+      const other = getComputedStyle(document.getElementById('zoom-out'));
+      return { radius: cell.borderTopLeftRadius, otherRadius: other.borderTopLeftRadius,
+               border: cell.borderTopColor, otherBorder: other.borderTopColor,
+               clipped: cell.overflow };
+    });
+    check('the cell is rounded and bordered like every other icon',
+      dressed.radius === dressed.otherRadius && dressed.border === dressed.otherBorder,
+      JSON.stringify(dressed));
+
+    // Hovering one arrow answers that arrow. The wrapper carries the .tool
+    // class for its border and size, and the whole-cell hover was firing on it
+    // — greying both halves for a pointer that was over one.
+    const hovered = await page.evaluate(async () => {
+      const read = () => {
+        const up = getComputedStyle(document.getElementById('page-prev')).backgroundColor;
+        const down = getComputedStyle(document.getElementById('page-next')).backgroundColor;
+        const cell = getComputedStyle(document.querySelector('.toolstack')).backgroundColor;
+        return { up, down, cell };
+      };
+      const rest = read();
+      document.getElementById('page-prev').classList.add('probe-hover');
+      return { rest };
+    });
+    await page.hover('#page-prev');
+    await page.waitForTimeout(120);
+    const onUp = await page.evaluate(() => ({
+      up: getComputedStyle(document.getElementById('page-prev')).backgroundColor,
+      down: getComputedStyle(document.getElementById('page-next')).backgroundColor,
+    }));
+    await page.hover('#page-next');
+    await page.waitForTimeout(120);
+    const onDown = await page.evaluate(() => ({
+      up: getComputedStyle(document.getElementById('page-prev')).backgroundColor,
+      down: getComputedStyle(document.getElementById('page-next')).backgroundColor,
+    }));
+    await page.mouse.move(5, 600);
+    check('hovering the up arrow greys the top half',
+      onUp.up !== hovered.rest.up, JSON.stringify({ rest: hovered.rest, onUp }));
+    check('and leaves the bottom half alone',
+      onUp.down === hovered.rest.down, JSON.stringify({ rest: hovered.rest, onUp }));
+    check('hovering the down arrow greys the bottom half',
+      onDown.down !== hovered.rest.down, JSON.stringify({ rest: hovered.rest, onDown }));
+    check('and leaves the top half alone',
+      onDown.up === hovered.rest.up, JSON.stringify({ rest: hovered.rest, onDown }));
   }
 
   // ---------- starting over, from the header ----------

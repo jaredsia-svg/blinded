@@ -253,7 +253,9 @@ a.mark { color: inherit; text-decoration: none; }
 /* Not the selected one. Hover is a pseudo-class and beat the attribute
    selector below on specificity, so pointing at the tool already in use
    turned it grey — which reads as deselecting it. */
-.tool:hover:not(:disabled):not([aria-pressed="true"]) { background: #eef1f6; }
+/* Not the stack: it is two buttons sharing a cell, and greying the cell would
+   answer a pointer that is only over one of them. */
+.tool:hover:not(:disabled):not([aria-pressed="true"]):not(.toolstack) { background: #eef1f6; }
 /* Selected is darkened, not tinted: the reviewer has to be able to tell at a
    glance which of the two dragging means, and a pale highlight on a pale
    panel does not carry that. */
@@ -269,7 +271,16 @@ a.mark { color: inherit; text-decoration: none; }
 /* Two buttons in one icon's worth of room: the top half and the bottom half.
    The cell keeps the toolbar's own border and size so the row stays seamless,
    and the halves inside it carry nothing but their arrow. */
-.toolstack { flex-direction: column; padding: 0; overflow: hidden; }
+/* The stack is a div holding two buttons, so it misses the rounding every
+   other icon gets from being a button — which left one square-cornered cell in
+   a row of rounded ones. It is stated here rather than inherited.
+
+   overflow keeps a half's hover inside those corners, so the grey follows the
+   icon's shape instead of squaring off its outer edge. */
+.toolstack {
+  flex-direction: column; padding: 0;
+  border-radius: 8px; overflow: hidden;
+}
 .toolstack .half {
   flex: 1; width: 100%; min-height: 0; padding: 0;
   display: flex; align-items: center; justify-content: center;
