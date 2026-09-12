@@ -69,27 +69,32 @@ exported file with a real PDF parser and fails if a single text object survives.
 Everything Blinded finds is a *proposal*. Nothing is covered that you have not
 seen, and every proposal can be switched off by clicking it on the page.
 
-Detection is rule-based and runs locally. Where a value can check itself it
-must: card numbers are validated with Luhn, IBANs with mod-97, and US Social
-Security numbers against the ranges that have never been issued. Detectors that
-match on shape alone — postcodes, street addresses, bare ten-digit numbers — are
-marked lower-confidence and are off until you ask for them.
+Detection is rule-based and runs locally. Every detector has to stand on its
+own: whatever an enabled detector proposes is acted on, so there is no
+lower-confidence tier to hide a loose pattern behind. A five-digit number is
+only proposed as a postal code when something in the text says it is one — a
+state abbreviation, the word ZIP, the name of the country.
 
 The bias is towards precision, because recall has a backstop and precision does
 not: you can catch a missed value by eye during review, but a list padded with
 hundreds of false positives trains you to approve everything, which loses both.
 
-| Detector | Validated by |
+| Detector | Anchored on |
 | --- | --- |
 | Email addresses | structure |
-| Payment card numbers | Luhn checksum |
-| Bank accounts (IBAN) | mod-97 checksum |
 | Phone numbers | E.164 and NANP shapes |
-| IP addresses | octet range |
 | Web addresses | scheme and host |
-| Street addresses | house number + street type *(lower confidence)* |
-| Postal codes | US ZIP, UK postcode *(lower confidence)* |
+| Street addresses | house number + street type; `#12-34` units and `Blk` numbers (SG/MY); `12/F`, `G/F` floors and room numbers (HK); `Jalan`/`Lorong`; `Đường`, `Phường`, `Quận` (VN) |
+| Postal codes | US ZIP behind a state or the word ZIP, UK postcode, six digits behind `Singapore` or in `S(......)`, five or six beside `Vietnam` |
 | Dates of birth | requires a birth-date keyword |
+
+Hong Kong has no postal codes; its addresses are found by the floor and unit
+notation instead.
+
+Card numbers, bank accounts and IP addresses used to be on that list and are
+not any more. They are consumer and engineering data in a tool pointed at deal
+documents, where they do not appear and their patterns only lengthened a list
+that has to stay short enough to read. Anyone who needs one can type it.
 
 **Names are not on that list, and cannot be.** No rule finds a name reliably.
 

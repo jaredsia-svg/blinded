@@ -30,7 +30,6 @@
     pages: [],         // { index, source, canvas, widthPt, heightPt, items, findings, hits, manual, dismissed }
     text: '',
     enabled: new Set(Detect.KINDS.map(k => k.kind).concat('term')),
-    includeMedium: false,
     terms: [],
     // Logos the reviewer has picked. Each holds the greyscale patch it was cut
     // from, so its matches can be recomputed when the sensitivity moves
@@ -469,17 +468,18 @@
     return Array.from(state.enabled).filter(k => k !== 'term');
   }
 
-  // What counts as worth covering, given the settings. Handed to findAll
-  // rather than applied afterwards: filtering after the overlap resolution
-  // let a span that was about to be discarded take a typed word down with it.
-  function acceptable(finding) {
-    return finding.confidence === 'high' || state.includeMedium;
-  }
-
+  // Everything an enabled detector proposes is covered.
+  //
+  // There used to be a second switch here, "include lower-confidence matches",
+  // and it asked the reviewer a question they had no way to answer: two
+  // detectors were useless with it off and noisy with it on, and which was
+  // which was not written anywhere. The tick box is gone and the detectors it
+  // was propping up were tightened until they could stand without it — a
+  // five-digit number is only a postal code now if something in the text says
+  // so. Confidence still exists inside findAll, where it decides which of two
+  // overlapping spans wins, but it is no longer a setting.
   function scanText(text) {
-    return Detect.findAll(text, {
-      kinds: acceptedKinds(), terms: state.terms, accept: acceptable,
-    });
+    return Detect.findAll(text, { kinds: acceptedKinds(), terms: state.terms });
   }
 
   // Recomputes everything downstream of the settings. Cheap enough to run on
@@ -1273,8 +1273,7 @@
     set('image-note', logos ? logos + (logos === 1 ? ' image' : ' images') : '', logos > 0);
 
     const kinds = Detect.KINDS.filter(k => state.enabled.has(k.kind)).length;
-    set('kind-note', kinds + ' of ' + Detect.KINDS.length
-      + (state.includeMedium ? ' · low-confidence' : ''), false);
+    set('kind-note', kinds + ' of ' + Detect.KINDS.length, false);
 
     set('label-note', state.labelling
       ? (state.labels.entries.length || 0) + ' labels'
@@ -1495,17 +1494,19 @@
     const tally = {};
     for (const text of texts) {
       const all = Detect.findAll(text, { terms: state.terms });
-      for (const f of all) {
-        if (f.confidence === 'medium' && !state.includeMedium) continue;
-        tally[f.kind] = (tally[f.kind] || 0) + 1;
-      }
+      for (const f of all) tally[f.kind] = (tally[f.kind] || 0) + 1;
     }
     return tally;
   }
 
   function renderKinds() {
     const tally = countsByKind();
-    const rows = Detect.KINDS.concat([{ kind: 'term', label: 'Terms you listed', hint: 'Literal matches on what you typed above.' }]);
+    // Only the detectors are listed. Words the reviewer typed were once a
+    // tenth row with a tick box of its own, which invited exactly one
+    // question — why would I type a word and then ask for it not to be
+    // covered? Typing a word is the instruction; there is nothing left to
+    // agree to. It is always on, and the terms box above shows its own count.
+    const rows = Detect.KINDS;
     const host = el('kinds');
     host.textContent = '';
 
@@ -3264,7 +3265,6 @@
                 pages: state.pages.length },
       terms: state.terms.slice(),
       settings: {
-        includeMedium: state.includeMedium,
         labelling: state.labelling,
         labelOverrides: state.labelOverrides,
         zoom: state.zoom,
@@ -3377,8 +3377,6 @@
     // in for the per-image values those drafts do not have.
     const wasShared = settings.sensitivity
       ? clampSens(Number(settings.sensitivity) / 100) : DEFAULT_SENS;
-    state.includeMedium = Boolean(settings.includeMedium);
-    if (el('medium')) el('medium').checked = state.includeMedium;
     state.labelling = Boolean(settings.labelling);
     if (el('labelling')) el('labelling').checked = state.labelling;
     state.labelOverrides = settings.labelOverrides || {};
@@ -4006,8 +4004,6 @@
     el('termbox').focus();
   });
   refreshTermBox();
-
-  el('medium').addEventListener('change', e => { state.includeMedium = e.target.checked; rescan(); });
 
   // The box and the state start from the same value, rather than each
   // asserting a default of its own.

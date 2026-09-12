@@ -264,10 +264,6 @@
           <summary><span class="s-title">Detectors</span><span class="s-note" id="kind-note"></span></summary>
           <div class="s-body">
             <div id="kinds" class="kinds"></div>
-            <label class="check"><input type="checkbox" id="medium">
-              Include lower-confidence matches
-              <button type="button" class="why" aria-label="What does this mean?" data-tip="Shape-only matches, like a five-digit number that may be a postcode.">?</button>
-            </label>
           </div>
         </details>
 
@@ -355,7 +351,15 @@
       pick out with a box: a signature, a stamp, a face, a letterhead. Pick one
       and every other copy of it in the document is found too, at any size.</p>
     <p>There are also built-in detectors for the usual things that leak: email
-      addresses, phone numbers, card numbers and so on.</p>
+      addresses, phone numbers, web addresses, dates of birth, and street
+      addresses and postal codes — the last two written the way they are in
+      Britain and America, and the way they are in Singapore, Hong Kong and
+      Vietnam. Tick the ones you want; each shows how many it can see before
+      you commit to it.</p>
+    <p>Names of people are not on that list, and no rule can put them there
+      reliably. Type them into the box instead — that is what it is for, and a
+      name typed once is then found in the text, in the lettering of a
+      screenshot, and inside a logo.</p>
   </section>
 
   <section class="faq">
@@ -533,8 +537,8 @@
 
 
 <script src="lib/schedule.js?v=50cdd235"></script>
-<script src="lib/detect.js?v=95745e1c"></script>
-<script src="lib/labels.js?v=7da5cad6"></script>
+<script src="lib/detect.js?v=2eb64ccd"></script>
+<script src="lib/labels.js?v=30a714ca"></script>
 <script src="lib/boxes.js?v=e1b41b2b"></script>
 <script src="lib/measure.js?v=3e3dc5dc"></script>
 <script src="lib/match.js?v=68d0f03f"></script>
@@ -544,7 +548,7 @@
 <script src="lib/pdfwrite.js?v=4b977425"></script>
 <script src="lib/pdfread.js?v=ca229552"></script>
 <script src="lib/render.js?v=7bf6e0a9"></script>
-<script src="app.js?v=97058c2d"></script>
+<script src="app.js?v=5064ac63"></script>
 <script type="module" src="lib/boot.mjs?v=8b98ed8f"></script>
 </body>
 </html>

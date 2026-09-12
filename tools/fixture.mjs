@@ -8,15 +8,15 @@ const LINES = [
   'CONFIDENTIAL — internal only',
   'Jane Doe can be reached at jane.doe@example.com',
   'or on (415) 555-0132 during office hours.',
-  'Card on file 4242 4242 4242 4242, SSN 123-45-6789.',
-  'Mailing address: 1600 Amphitheatre Parkway, 94043.',
+  'Data room at https://example.com/deal?key=abc123, SSN 123-45-6789.',
+  'Mailing address: 1600 Amphitheatre Parkway, Mountain View, CA 94043.',
   'Nothing else on this line is sensitive at all.',
   // A deliberately adversarial line for the box-placement test. Every
   // character before the value is unusually narrow, so estimating positions by
   // dividing the run's width evenly across its characters puts the value far
   // from where it really is. A line of average-width text would hide that
   // error; this one will not.
-  'iiiiiiiiiiiiiiiiiiii 4242424242424242',
+  'iiiiiiiiiiiiiiiiiiii +14155550132',
 ];
 
 export function buildTextPdf(lines = LINES) {

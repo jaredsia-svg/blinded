@@ -35,17 +35,6 @@ const TextImage = globalThis.BlindedTextImage;
 const Ocr = globalThis.BlindedOcr;
 const Schedule = globalThis.BlindedSchedule;
 
-// ---------- checksums ----------
-
-check('luhn accepts a real card', Detect.luhnValid('4242424242424242'));
-check('luhn accepts amex length', Detect.luhnValid('378282246310005'));
-check('luhn rejects a transposition', !Detect.luhnValid('4242424242424252'));
-check('luhn rejects repeated digits', !Detect.luhnValid('4444444444444444'));
-check('luhn rejects a short number', !Detect.luhnValid('42424242'));
-check('iban accepts a valid GB number', Detect.ibanValid('GB82 WEST 1234 5698 7654 32'));
-check('iban rejects a bad check digit', !Detect.ibanValid('GB83 WEST 1234 5698 7654 32'));
-check('mod97 of a known value', Detect.mod97('3214282912345698765432161182') === 1);
-
 // ---------- detectors ----------
 
 const kindsIn = (text, options) => Detect.findAll(text, options).map(f => f.kind);
@@ -70,8 +59,20 @@ check('a separated number is reported at high confidence', (() => {
   return found.length === 1 && found[0].confidence === 'high';
 })());
 
-check('finds a Luhn-valid card', kindsIn('card 4242 4242 4242 4242 ok').includes('card'));
-check('ignores a sixteen-digit non-card', !kindsIn('ref 1234 5678 9012 3456 ok').includes('card'));
+// Card numbers, bank accounts and IP addresses were removed: they are consumer
+// and engineering data in a tool pointed at deal documents, and their patterns
+// only lengthened a list that has to stay short enough to read.
+for (const [gone, sample] of [['card', 'card 4242 4242 4242 4242 ok'],
+  ['iban', 'pay GB82 WEST 1234 5698 7654 32 today'],
+  ['ip', 'host 192.168.1.44 up']]) {
+  check('no detector claims to find ' + gone,
+    !Detect.DETECTORS.some(d => d.kind === gone), Detect.DETECTORS.map(d => d.kind).join(', '));
+  check('and nothing in "' + sample + '" is picked up as one',
+    !kindsIn(sample).includes(gone), kindsIn(sample).join(','));
+}
+check('while a typed term still covers a card number for anyone who wants it',
+  Detect.findAll('card 4242 4242 4242 4242 ok',
+    { terms: ['4242 4242 4242 4242'] }).length === 1);
 // The US Social Security detector was removed: it is one country's identifier
 // in a tool that is not otherwise US-specific, and a nine-digit rule earns its
 // keep only where those numbers actually appear. Anyone who needs them can
@@ -84,12 +85,115 @@ check('and a Social Security number is no longer picked up on its own',
   JSON.stringify(Detect.findAll('ssn 123-45-6789').map(s => s.kind)));
 check('while a typed term still covers one for anyone who wants it',
   Detect.findAll('ssn 123-45-6789', { terms: ['123-45-6789'] }).length === 1);
-check('finds an IPv4 address', kindsIn('host 192.168.1.44 up').includes('ip'));
-check('rejects an out-of-range dotted quad', !kindsIn('build 999.1.1.1 failed').includes('ip'));
 check('finds a URL', kindsIn('see https://example.com/a?token=abc for more').includes('url'));
 check('a URL drops the sentence full stop',
   textsOf('see https://example.com/a.', 'url')[0] === 'https://example.com/a');
 check('finds a street address', kindsIn('at 1600 Amphitheatre Parkway today').includes('address'));
+check('but not a year beside a capitalised noun',
+  !kindsIn('revenue in 2020 Park rose').includes('address'),
+  JSON.stringify(textsOf('revenue in 2020 Park rose', 'address')));
+
+// ---------- addresses as they are written in Asia ----------
+//
+// Singapore, Hong Kong and Vietnam each write an address in a shape the
+// anglophone pattern cannot see: the unit before the street, the floor instead
+// of a postcode, the street type in front of the street name.
+const addr = text => textsOf(text, 'address');
+check('finds a Singapore unit number',
+  addr('1 Raffles Place #44-02, Singapore 048616').includes('#44-02'),
+  JSON.stringify(addr('1 Raffles Place #44-02, Singapore 048616')));
+check('finds a Singapore block number',
+  addr('Blk 123A Toa Payoh').includes('Blk 123A'), JSON.stringify(addr('Blk 123A Toa Payoh')));
+check('finds a Lorong that leads with its street type',
+  addr('Toa Payoh Lorong 1').includes('Lorong 1'), JSON.stringify(addr('Toa Payoh Lorong 1')));
+check('finds a Jalan the same way',
+  addr('15 Jalan Besar, Singapore').includes('Jalan Besar'),
+  JSON.stringify(addr('15 Jalan Besar, Singapore')));
+check('finds a Singapore street type the anglophone list would have missed',
+  addr('8 Marina Quay').includes('8 Marina Quay'), JSON.stringify(addr('8 Marina Quay')));
+check('finds a Hong Kong floor',
+  addr('Suite 2701, 27/F, Two IFC').some(t => t.includes('27/F')),
+  JSON.stringify(addr('Suite 2701, 27/F, Two IFC')));
+check('and a ground floor written G/F',
+  addr("G/F, 88 Queen's Road Central").includes('G/F'),
+  JSON.stringify(addr("G/F, 88 Queen's Road Central")));
+check('finds a Vietnamese street, accents and all',
+  addr('12 Đường Lê Lợi, Quận 1').includes('Đường Lê Lợi'),
+  JSON.stringify(addr('12 Đường Lê Lợi, Quận 1')));
+check('finds a Vietnamese ward and district',
+  addr('Phường Bến Nghé, Quận 1').includes('Quận 1'),
+  JSON.stringify(addr('Phường Bến Nghé, Quận 1')));
+check('finds the unaccented spelling too',
+  addr('So 8 Duong Nguyen Hue, Quan 1').includes('Duong Nguyen Hue'),
+  JSON.stringify(addr('So 8 Duong Nguyen Hue, Quan 1')));
+check('but not the soup',
+  addr('a pho restaurant on the corner').length === 0,
+  JSON.stringify(addr('a pho restaurant on the corner')));
+
+// ---------- postal codes need an anchor ----------
+//
+// Every one of these is five or six digits, and so is half of a deal document.
+// A postal code is only proposed where the text says what it is.
+const pc = text => textsOf(text, 'postcode');
+check('a bare five-digit number is not a postal code',
+  pc('headcount rose to 94043 last year').length === 0,
+  JSON.stringify(pc('headcount rose to 94043 last year')));
+check('nor is one behind two capitals in the middle of a heading',
+  pc('REVENUE IN 12345 UNITS').length === 0, JSON.stringify(pc('REVENUE IN 12345 UNITS')));
+check('a US ZIP behind its state is',
+  pc('Mountain View, CA 94043').includes('94043'), JSON.stringify(pc('Mountain View, CA 94043')));
+check('and the state itself is left readable',
+  !pc('Mountain View, CA 94043').some(t => t.includes('CA')),
+  JSON.stringify(pc('Mountain View, CA 94043')));
+check('a ZIP behind the word ZIP is', pc('ZIP code: 94043').includes('94043'),
+  JSON.stringify(pc('ZIP code: 94043')));
+check('and the word itself is left readable',
+  !pc('ZIP code: 94043').some(t => /zip/i.test(t)), JSON.stringify(pc('ZIP code: 94043')));
+check('a ZIP+4 stands on its own', pc('sent to 94043-1351').includes('94043-1351'),
+  JSON.stringify(pc('sent to 94043-1351')));
+check('a UK postcode stands on its own', pc('London SW1A 2AA').includes('SW1A 2AA'),
+  JSON.stringify(pc('London SW1A 2AA')));
+check('a bare six-digit number is not a Singapore postal code',
+  pc('a fleet of 310123 units').length === 0, JSON.stringify(pc('a fleet of 310123 units')));
+check('but six digits behind the country name is',
+  pc('Singapore 048616').includes('048616'), JSON.stringify(pc('Singapore 048616')));
+check('as is the S(......) form', pc('S(310123)').includes('310123'),
+  JSON.stringify(pc('S(310123)')));
+check('and the country name is left readable',
+  !pc('Singapore 048616').some(t => t.toLowerCase().includes('singapore')),
+  JSON.stringify(pc('Singapore 048616')));
+check('a Vietnamese code beside the country name is found',
+  pc('Ho Chi Minh City, Vietnam 700000').includes('700000'),
+  JSON.stringify(pc('Ho Chi Minh City, Vietnam 700000')));
+check('on either side of it',
+  pc('700000, Viet Nam').includes('700000'), JSON.stringify(pc('700000, Viet Nam')));
+// Hong Kong has no postal code, and claiming to find one would be a lie.
+check('nothing is proposed as a Hong Kong postal code',
+  pc('Central, Hong Kong').length === 0, JSON.stringify(pc('Central, Hong Kong')));
+
+// ---------- a typed word is never swallowed by a guess ----------
+//
+// The address is longer than the word inside it, so it wins the overlap. It
+// must not win the word's identity with it: a reviewer who typed a word and is
+// then told it was found nowhere has been told something false.
+{
+  const found = Detect.findAll('Mailing address: 1600 Amphitheatre Parkway.',
+    { terms: ['Amphitheatre'] });
+  check('the wider span still wins, so the whole address is covered',
+    found.length === 1 && found[0].text.startsWith('1600 Amphitheatre Parkway'),
+    JSON.stringify(found.map(f => f.text)));
+  check('but it is reported as the typed word',
+    found.length === 1 && found[0].kind === 'term' && found[0].term === 'Amphitheatre',
+    JSON.stringify(found.map(f => f.kind)));
+}
+// Only a guess gives way like that. An email address that happens to contain a
+// typed name is still an email address, and the legend must not call it a
+// person.
+{
+  const found = Detect.findAll('write to jane@example.com', { terms: ['jane'] });
+  check('a high-confidence span keeps its own identity',
+    found.length === 1 && found[0].kind === 'email', JSON.stringify(found.map(f => f.kind)));
+}
 check('finds a labelled date of birth', kindsIn('DOB: 04/11/1979').includes('dob'));
 check('ignores an unlabelled date', !kindsIn('shipped 04/11/1979').includes('dob'));
 

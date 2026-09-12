@@ -65,7 +65,7 @@ const wordmarkPath = join(tmpdir(), 'blinded-wordmark.pdf');
 writeFileSync(wordmarkPath, buildWordmarkPdf());
 const textPath = join(tmpdir(), 'blinded-fixture.txt');
 // The address line is here so that a typed word can be tested inside a
-// medium-confidence finding, which is the case that used to lose both.
+// shape-only finding, which is the case that used to lose both.
 writeFileSync(textPath, 'Jane Doe — jane.doe@example.com — (415) 555-0132\n'
   + 'Mailing address: 1600 Amphitheatre Parkway, 94043.\n'
   + 'nothing sensitive here\n');
@@ -211,7 +211,7 @@ try {
   // ---------- detection ----------
   const kinds = await page.evaluate(() =>
     window.Blinded.state.pages[0].findings.map(f => f.kind));
-  for (const kind of ['email', 'phone', 'card']) {
+  for (const kind of ['email', 'phone', 'url']) {
     check('the page view detected a ' + kind, kinds.includes(kind), kinds.join(','));
   }
 
@@ -222,12 +222,13 @@ try {
 
   // ---------- a typed word is never lost to a detector ----------
   //
-  // Overlapping findings collapse to a single winner, longest first. A medium
-  // confidence address containing a word the reviewer typed beat the word —
-  // and then the confidence filter dropped the address for being medium, so
-  // both were gone and a word somebody had explicitly asked for went
-  // uncovered. On a PDF the reading happened to find it anyway; on a text file
-  // there is no such second chance, which is what this checks.
+  // Overlapping findings collapse to a single winner, longest first. The
+  // address around the typed word is longer, so it wins — and used to carry
+  // the word off with it, leaving a reviewer who had explicitly asked for that
+  // word told it was found nowhere. The wider span is still the one that gets
+  // covered, which is more ink, not less; what it must not do is keep its own
+  // name. On a PDF the reading happened to find the word anyway; on a text
+  // file there is no such second chance, which is what this checks.
   {
     if (await page.isVisible('#view-review')) await newFile();
     await page.waitForSelector('#view-drop:not([hidden])', { timeout: 15000 });
@@ -240,19 +241,21 @@ try {
       const D = window.BlindedDetect;
       return {
         inTheText: /Amphitheatre/.test(B.state.text),
-        // The address around it is a medium-confidence finding, which is what
-        // used to win and then be discarded.
-        addressExists: D.findAll(B.state.text, { kinds: null })
+        // The address around it, on its own, is the span that used to win.
+        addressExists: D.findAll(B.state.text, { kinds: ['address'] })
           .some(f => f.kind === 'address'),
-        mediumOff: B.state.includeMedium === false,
         marked: B.state.findings.filter(f => f.kind === 'term').length,
+        covers: (B.state.findings.find(f => f.kind === 'term') || {}).text || '',
       };
     });
     check('the fixture really does hold the word', seen.inTheText === true,
       JSON.stringify(seen));
-    check('and an address around it, at the confidence being filtered out',
-      seen.addressExists === true && seen.mediumOff === true, JSON.stringify(seen));
+    check('and an address around it, which is the longer span',
+      seen.addressExists === true, JSON.stringify(seen));
     check('the typed word is still marked', seen.marked === 1, JSON.stringify(seen));
+    check('and the mark covers the whole address, not just the word',
+      seen.covers.includes('1600') && seen.covers.includes('Parkway'),
+      JSON.stringify(seen));
 
     await redact(page);
     const out = await exportFile();
@@ -607,7 +610,7 @@ try {
   // — must be covered end to end.
   const guard = await page.evaluate(() => {
     const p = window.Blinded.state.pages[0];
-    const hit = p.hits.find(h => h.finding.text === '4242424242424242');
+    const hit = p.hits.find(h => h.finding.text === '+14155550132');
     if (!hit) return { found: false };
     const r = hit.rects[0];
 
@@ -940,7 +943,7 @@ try {
     // Click the middle of a detection through the same coordinate path a real
     // pointer would take, so the scaling maths is under test too.
     const p = window.Blinded.state.pages[0];
-    const hit = p.hits.find(h => h.finding.kind === 'card');
+    const hit = p.hits.find(h => h.finding.kind === 'url');
     const r = hit.rects[0];
     const rect = p.canvas.getBoundingClientRect();
     const sx = rect.width / p.source.width;
@@ -1236,7 +1239,7 @@ try {
     Math.round(vp.width) === 612 && Math.round(vp.height) === 792, vp.width + 'x' + vp.height);
 
   const asString = Buffer.from(bytes).toString('latin1');
-  for (const secret of ['jane.doe@example.com', '4242', '123-45-6789', 'Jane Doe', 'Helvetica']) {
+  for (const secret of ['jane.doe@example.com', 'key=abc123', '555-0132', 'Jane Doe', 'Helvetica']) {
     check('the raw bytes of the export do not contain "' + secret + '"', !asString.includes(secret));
   }
   const meta = await doc.getMetadata();
@@ -1838,7 +1841,7 @@ try {
   check('the typed name is suggested as a person',
     legendRows.some(([label]) => label === 'P1'), JSON.stringify(legendRows));
   check('the detectors get their own kinds',
-    ['E1', 'PH1', 'C1', 'C2'].every(want =>
+    ['E1', 'PH1', 'U1', 'A1', 'PC1'].every(want =>
       legendRows.some(([label]) => label === want)), JSON.stringify(legendRows));
   check('every suggested placeholder is short enough for a narrow bar',
     legendRows.every(([label]) => label.length <= 4), JSON.stringify(legendRows));
@@ -1902,7 +1905,7 @@ try {
   // The whole safety argument, checked against the finished bytes rather than
   // against intentions: everything the labels replaced must be absent.
   const labelledRaw = Buffer.from(labelledBytes).toString('latin1');
-  for (const secret of ['Jane Doe', 'jane.doe@example.com', '4242', '123-45-6789',
+  for (const secret of ['Jane Doe', 'jane.doe@example.com', 'key=abc123',
     '555-0132', 'guarded.value']) {
     check('a labelled export does not contain "' + secret + '"',
       !labelledRaw.includes(secret) && !extracted.includes(secret));
@@ -2792,12 +2795,13 @@ try {
   await page.waitForSelector('#view-review:not([hidden])');
   check('a text file shows the text view', await page.isVisible('#textview'));
   const marks = await page.locator('#textview mark').count();
-  check('the text view marks the email and the phone number', marks === 2, String(marks));
+  check('the text view marks the email, the phone number and the address',
+    marks === 3, String(marks));
 
   await setTerms(page, ["Jane Doe"]);
   await page.waitForTimeout(400);
   check('a listed term adds a mark in the text view',
-    await page.locator('#textview mark').count() === 3,
+    await page.locator('#textview mark').count() === 4,
     String(await page.locator('#textview mark').count()));
 
   // Clicking a mark keeps that occurrence rather than covering it.
@@ -5172,11 +5176,13 @@ try {
   // they read as decoration that does nothing. What matters is that the text
   // actually becomes visible, so that is what is asserted, not that a handler
   // is attached.
-  // Three, not four: the fourth explained the "find these words as pictures"
-  // checkbox, which is gone — the tool always does that now, and what it means
-  // is answered on the questions page instead.
+  // Two, not four. One explained the "find these words as pictures" checkbox,
+  // which is gone — the tool always does that now. The other explained
+  // "include lower-confidence matches", which is also gone: the detectors it
+  // was propping up were tightened until they could stand on their own, and a
+  // setting nobody could answer sensibly is worse than no setting.
   const whyCount = await page.evaluate(() => document.querySelectorAll('.why').length);
-  check('the panel still has its hints', whyCount === 3, String(whyCount));
+  check('the panel still has its hints', whyCount === 2, String(whyCount));
   check('every hint carries text to show',
     await page.evaluate(() => [...document.querySelectorAll('.why')]
       .every(b => (b.getAttribute('data-tip') || '').length > 20)));
@@ -5232,9 +5238,9 @@ try {
   // The hints sit inside <label>s. A click that reached the label would
   // silently toggle the checkbox the hint is explaining.
   const toggled = await page.evaluate(() => {
-    const box = document.getElementById('medium');
+    const box = document.getElementById('labelling');
     const before = box.checked;
-    document.querySelector('#medium').closest('label').querySelector('.why').click();
+    document.querySelector('#labelling').closest('label').querySelector('.why').click();
     return { before, after: box.checked };
   });
   check('asking what a checkbox means does not tick it',
