@@ -4340,6 +4340,25 @@
         + (state.sweepAdded === 1 ? ' mark' : ' marks')
         + ', outlined in amber. Press Redact to cover '
         + (state.sweepAdded === 1 ? 'it' : 'them') + '.';
+
+    // And what it found but stood down from.
+    //
+    // The check refuses a spot the page reader has already read as a different
+    // word, which is right far more often than it is wrong: on a text report
+    // it threw out fifty-four wrong guesses. But when it is wrong — a heading
+    // the reader misread confidently — the mark simply never appears, and
+    // there is no way to tell that from the check having found nothing there.
+    // Saying how many were refused is the difference between "it missed this"
+    // and "it decided against this", which are different problems with
+    // different answers.
+    if (state.sweepRefused) {
+      note.textContent += ' ' + state.sweepRefused
+        + (state.sweepRefused === 1 ? ' other spot was' : ' other spots were')
+        + ' left alone because the page reader had already read '
+        + (state.sweepRefused === 1 ? 'it' : 'them')
+        + ' as something else. If a mark you expected is missing, that is where'
+        + ' to look.';
+    }
   }
 
 

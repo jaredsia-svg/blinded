@@ -4529,6 +4529,41 @@ try {
       swept.marks >= 1, JSON.stringify(swept));
     check('afterwards it says what it added', /added \d+ mark/.test(swept.note),
       JSON.stringify(swept.note));
+
+    // And what it found and stood down from. The check refuses a spot the
+    // reader has already read as a different word — right far more often than
+    // wrong, but when it is wrong the mark simply never appears, and that is
+    // indistinguishable from the check having found nothing there.
+    const refused = await page.evaluate(() => {
+      const B = window.Blinded;
+      const was = B.state.sweepRefused;
+      // The note only reports a finished check of the words as they stand.
+      const swept = B.state.sweptTerms;
+      const terms = B.state.terms;
+      // A finished check of the words as they stand, which is the only state
+      // in which the note reports what the check did.
+      B.state.terms = ['Parkway'];
+      B.state.sweptTerms = ['Parkway'];
+      B.state.sweepStopped = false;
+      B.state.sweepAdded = 1;
+      B.state.sweepRefused = 2;
+      B.renderSweep();
+      const withSome = document.getElementById('sweepnote').textContent;
+      B.state.sweepRefused = 0;
+      B.renderSweep();
+      const withNone = document.getElementById('sweepnote').textContent;
+      B.state.sweepRefused = was;
+      B.state.sweptTerms = swept;
+      B.state.terms = terms;
+      B.renderSweep();
+      return { withSome, withNone };
+    });
+    check('a refusal is reported, not silently swallowed',
+      /2 other spots were left alone/.test(refused.withSome), refused.withSome);
+    check('and it says where to look when a mark is missing',
+      /read them as something else/.test(refused.withSome), refused.withSome);
+    check('while refusing nothing says nothing',
+      !/left alone/.test(refused.withNone), refused.withNone);
     check('and stops offering itself for the same words',
       swept.buttonGone === true, JSON.stringify(swept));
 
