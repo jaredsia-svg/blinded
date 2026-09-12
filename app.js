@@ -1158,6 +1158,20 @@
           + ' left out — lower the bar past ' + top.toFixed(2) + ' to include '
           + (near.length === 1 ? 'it.' : 'them.');
       }
+      // And when it turned nothing away, say so — because the silence looks
+      // like an omission.
+      //
+      // "15 matches, scoring 0.99 down to 0.78" beside a slider reading 0.75
+      // invites the obvious question: is 0.78 the real setting, and why is the
+      // control saying something else? It is not. The bar is a floor, 0.78 is
+      // simply where the weakest true match happened to land, and the space
+      // between them is empty — which is worth knowing, because it is room the
+      // bar can move into without losing anything.
+      if (!near.length && low - clampSens(bar) > 0.015) {
+        text += ' Nothing landed between the bar at ' + clampSens(bar).toFixed(2)
+          + ' and the weakest of these, so it has room to move up.';
+      }
+
       if (autoBar !== null && autoBar !== undefined) {
         text = 'Nothing matched at the setting it was on, so the bar came down '
           + 'to ' + autoBar.toFixed(2) + '. ' + text

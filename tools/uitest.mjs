@@ -3550,6 +3550,40 @@ try {
     const span = told.hint.match(/more scored (\d\.\d\d) down to (\d\.\d\d)/);
     check('and only counts the ones close enough to be worth a nudge',
       !span || Number(span[1]) - Number(span[2]) <= 0.08 + 1e-9, told.hint);
+
+    // And when it turned nothing away, it says so, because the silence looks
+    // like an omission. "15 matches, scoring 0.99 down to 0.78" beside a
+    // slider reading 0.75 invites the obvious question — is 0.78 the real
+    // setting, and why is the control saying something else? It is not: the
+    // bar is a floor, and the space between it and the weakest match is empty.
+    const quiet = await page.evaluate(async () => {
+      const B = window.Blinded;
+      const template = B.state.templates[0];
+      // Well below everything, so nothing is anywhere near being turned away.
+      template.sens = B.AUTO_FLOOR;
+      template.searched = false;
+      for (const p of B.state.pages) {
+        p.imageHits = p.imageHits.filter(m => m.templateId !== template.id);
+      }
+      await B.runSearch();
+      const scores = B.state.pages
+        .flatMap(p => p.imageHits.filter(m => m.templateId === template.id))
+        .map(m => m.score);
+      return { hint: document.getElementById('pickhint').textContent.trim(),
+               bar: B.sensFor(template),
+               weakest: scores.length ? Math.min(...scores) : null };
+    });
+    check('a bar with nothing near it says the space below is empty',
+      /nothing landed between the bar at \d\.\d\d/i.test(quiet.hint),
+      JSON.stringify(quiet));
+    check('and names the bar rather than the weakest match',
+      quiet.weakest === null
+        || quiet.hint.includes('bar at ' + quiet.bar.toFixed(2)),
+      JSON.stringify(quiet));
+    // Both halves cannot be true at once: either something was turned away or
+    // nothing was.
+    check('and does not also claim something was left out',
+      !/left out/.test(quiet.hint), quiet.hint);
   }
 
   // ---------- a searchable redacted file ----------
