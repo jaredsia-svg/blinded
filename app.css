@@ -70,18 +70,18 @@ body { padding-top: var(--top-h); }
 @media (max-width: 640px) { .claim { display: none; } }
 
 a.mark { color: inherit; text-decoration: none; }
-button.top-link { font: inherit; cursor: pointer; }
-.faqbackbtn {
-  font: inherit; font-weight: 600; color: var(--accent);
-  background: none; border: 0; padding: 0; cursor: pointer;
+/* The two doors between the tool and its answers, wearing the same coat: the
+   header's black, white, bold. In the header it reads as part of the bar; at
+   the foot of a white page it is the one dark thing on it, which is where the
+   eye goes looking for the way back. */
+.top-link, .faqbackbtn {
+  font: inherit; font-size: 13px; font-weight: 700;
+  background: #0d1117; color: #fff; border: 1px solid #0d1117;
+  border-radius: var(--radius); padding: 5px 11px;
+  text-decoration: none; cursor: pointer;
 }
-.faqbackbtn:hover { text-decoration: underline; }
-.top-link {
-  margin-left: auto; flex: none; color: #c7ced8; text-decoration: none;
-  font-size: 13px; border: 1px solid #2a313c; border-radius: var(--radius);
-  padding: 5px 11px;
-}
-.top-link:hover { color: #fff; border-color: #48505c; }
+.top-link:hover, .faqbackbtn:hover { background: #222a35; border-color: #222a35; }
+.top-link { margin-left: auto; flex: none; }
 
 /* ---------- drop ---------- */
 

@@ -31,7 +31,7 @@
 <title>Blinded – Efficient redaction for your most sensitive documents, all done locally</title>
 <meta name="description" content="Redact PDFs, images and text in your browser. The file never leaves your machine.">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="app.css?v=bc671656">
+<link rel="stylesheet" href="app.css?v=c199965e">
 </head>
 <body>
 
@@ -247,7 +247,7 @@
 
 <section id="view-faq" class="view faqmain" hidden>
 
-  <h1 class="faqtitle">Questions</h1>
+  <h1 class="faqtitle">Q&amp;A</h1>
 
   <section class="faq">
     <h2>Does my document get uploaded anywhere?</h2>
@@ -258,6 +258,15 @@
       nothing leave.</p>
     <p>You can also just pull out the network cable. The tool carries on
       working.</p>
+    <p>You do not have to take that on trust. This page carries a <strong>content
+      security policy</strong> — a set of rules the browser itself enforces, not
+      something the code can decide to ignore. View the source of this page and
+      you will find it in the first few lines. The line that matters is
+      <span class="ph">connect-src 'self'</span>: the browser will block any
+      attempt to send data anywhere but back to where this page came from, and
+      nothing here asks it to. <span class="ph">form-action 'none'</span> means
+      no form can post anywhere at all. If the code were ever changed to try, the
+      browser would refuse the request and log the refusal in the console.</p>
   </section>
 
   <section class="faq">

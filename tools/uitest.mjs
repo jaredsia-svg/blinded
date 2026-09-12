@@ -3797,6 +3797,9 @@ try {
 
   await page.click('.top .top-link');
   await page.waitForSelector('#view-faq:not([hidden])', { timeout: 15000 });
+  // Off the button before measuring it: the click that opened this page left
+  // the pointer sitting on it, and hover is not the colour being asserted.
+  await page.mouse.move(5, 400);
   const faq = await page.evaluate(() => {
     const link = document.querySelector('.faq a[href*="github.com"]');
     const r = link && link.getBoundingClientRect();
@@ -3812,8 +3815,38 @@ try {
       openSource: /free and open source/i.test(document.body.textContent),
       back: !!document.getElementById('faq-back-bottom'),
       header: document.querySelector('.top .top-link').textContent.trim(),
+      title: (document.querySelector('.faqtitle') || {}).textContent,
+      // Every policy directive the answer quotes at the reader, so the prose
+      // can be held to what the browser is actually told.
+      quoted: [...document.querySelectorAll('.faq .ph')]
+        .map(el => el.textContent.trim())
+        .filter(text => /^[a-z-]+ /.test(text)),
+      // Both doors wear the header's coat.
+      doors: [document.querySelector('.top .top-link'),
+              document.querySelector('.faqbackbtn')].map(el => {
+        if (!el) return null;
+        const s = getComputedStyle(el);
+        return { bg: s.backgroundColor, color: s.color, weight: s.fontWeight };
+      }),
     };
   });
+  check('the page is titled Q&A, the same as the way in', faq.title === 'Q&A', faq.title);
+  // The answer tells the reader to go and read the policy. If the prose named
+  // a directive the page does not carry, that instruction would send them
+  // looking for a promise nobody made.
+  check('the upload answer quotes at least two directives to check',
+    faq.quoted.length >= 2, JSON.stringify(faq.quoted));
+  for (const directive of faq.quoted) {
+    check('and the policy really says ' + directive,
+      (policy || '').replace(/\s+/g, ' ').includes(directive), policy);
+  }
+  const [wayIn, wayBack] = faq.doors;
+  check('both doors are black, white and bold, like the header',
+    wayIn && wayBack
+      && wayIn.bg === 'rgb(13, 17, 23)' && wayBack.bg === 'rgb(13, 17, 23)'
+      && wayIn.color === 'rgb(255, 255, 255)' && wayBack.color === 'rgb(255, 255, 255)'
+      && Number(wayIn.weight) >= 700 && Number(wayBack.weight) >= 700,
+    JSON.stringify(faq.doors));
   check('the questions page asks between five and ten things',
     faq.questions >= 5 && faq.questions <= 10, String(faq.questions));
   check('and every one of them is actually answered', faq.answered === true);
