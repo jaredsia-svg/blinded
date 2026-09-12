@@ -1384,8 +1384,6 @@ try {
   });
   check('dragging a corner changes the box', dragged.before !== dragged.after,
     JSON.stringify(dragged));
-  check('and it still reports a size', /\d+ by \d+ pixels/.test(dragged.after),
-    dragged.after);
 
   // Cancelling leaves nothing behind, which is what makes the dialog safe to
   // open: a look at the pick costs nothing.
@@ -1395,6 +1393,73 @@ try {
     await page.evaluate(() => window.Blinded.state.templates.length) === 0);
   check('and puts the dialog away',
     await page.evaluate(() => document.getElementById('cropbox').hidden) === true);
+
+  // Whatever shape the pick is, and however narrow the window.
+  //
+  // The sizing fitted the width only and forced the zoom to at least 1, so a
+  // wide pick was laid out wider than the stage: max-width then shrank the
+  // width and left the height alone. The mark came out squashed, and every
+  // corner ended up somewhere other than where it was drawn — which is why
+  // they could not be grabbed at all. A tall pick had the opposite problem and
+  // pushed the buttons off the bottom of a phone.
+  {
+    const shapes = await page.evaluate(async () => {
+      const B = window.Blinded;
+      const p = B.state.pages[0];
+      const out = [];
+      for (const pick of [
+        { x: 40, y: 40, w: 300, h: 60 },     // wide and short
+        { x: 40, y: 40, w: 60, h: 300 },     // tall and narrow
+        { x: 40, y: 40, w: 160, h: 160 },    // square
+      ]) {
+        const promise = B.confirmCrop(p, pick);
+        await new Promise(r => setTimeout(r, 60));
+        const view = document.getElementById('cropview');
+        const r = view.getBoundingClientRect();
+        const use = document.getElementById('cropuse').getBoundingClientRect();
+
+        // What the canvas is painting: the pick plus its margin, clamped to
+        // the page. Its shape is what the box on screen must have.
+        const pad = { x: pick.w * 0.6, y: pick.h * 0.6 };
+        const ax = Math.max(0, pick.x - pad.x), ay = Math.max(0, pick.y - pad.y);
+        const aw = Math.min(p.source.width - ax, pick.w + pad.x * 2);
+        const ah = Math.min(p.source.height - ay, pick.h + pad.y * 2);
+
+        // And the corner really is where the pointer has to go for it.
+        const before = document.getElementById('cropsize').textContent;
+        const send = (type, cx, cy) => view.dispatchEvent(new PointerEvent(type, {
+          clientX: cx, clientY: cy, bubbles: true, pointerId: 61,
+        }));
+        send('pointerdown', r.left + 3, r.top + 3);
+        send('pointermove', r.left + 28, r.top + 22);
+        send('pointerup', r.left + 28, r.top + 22);
+        const after = document.getElementById('cropsize').textContent;
+
+        document.getElementById('cropcancel').click();
+        await promise;
+        out.push({
+          pick: pick.w + 'x' + pick.h,
+          shown: +(r.width / r.height).toFixed(3),
+          want: +(aw / ah).toFixed(3),
+          onScreen: use.bottom <= window.innerHeight && use.top >= 0,
+          fits: r.width <= window.innerWidth,
+          grabbed: before !== after,
+        });
+      }
+      return out;
+    });
+    for (const s of shapes) {
+      check('a ' + s.pick + ' pick keeps its shape on screen',
+        Math.abs(s.shown - s.want) < 0.02, JSON.stringify(s));
+      check('and its corners are where the pointer has to go for them',
+        s.grabbed === true, JSON.stringify(s));
+      check('and the button that accepts it can be reached',
+        s.onScreen === true && s.fits === true, JSON.stringify(s));
+    }
+  }
+  check('and it still reports a size', /\d+ by \d+ pixels/.test(dragged.after),
+    dragged.after);
+
 
   // Draw it again, and take it this time.
   await page.evaluate(({ x, y, size }) => {

@@ -539,13 +539,25 @@ body.picking .tools {
    what was actually caught — at the size it sits on the page a logo is a few
    dozen pixels and a box a little too wide looks exactly like a box that
    fits. */
-.cropinner { min-width: 0; max-width: min(560px, 94vw); }
+/* Never taller than the screen, whatever shape the pick is: the buttons at the
+   foot are how the dialog is answered, and a tall pick used to push them off
+   the bottom of a phone. */
+.cropinner {
+  min-width: 0; max-width: min(560px, 94vw);
+  max-height: 92vh; overflow-y: auto;
+}
 .cropstage {
-  margin: 10px 0 6px; display: flex; justify-content: center;
+  margin: 10px 0 6px; display: flex; justify-content: center; align-items: center;
   background: #eef1f6; border: 1px solid var(--line); border-radius: var(--radius);
   padding: 8px; overflow: hidden;
 }
-#cropview { max-width: 100%; touch-action: none; cursor: crosshair; display: block; }
+/* The canvas is sized to fit in script, so nothing here needs to clamp it —
+   and a clamp on one side only is what squashed the mark. If one ever applies,
+   height: auto keeps the shape. */
+#cropview {
+  max-width: 100%; height: auto;
+  touch-action: none; cursor: crosshair; display: block;
+}
 #cropsize { margin: 0 0 2px; font-variant-numeric: tabular-nums; }
 
 /* The way out of picking, sitting over the document. Red, because it undoes

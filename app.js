@@ -2212,6 +2212,10 @@
   // So the pick is shown large enough to judge, with its corners in hand.
   const CROP_MARGIN = 0.6;      // how much of the surroundings to show
   const CROP_VIEW = 520;        // the stage's widest, in CSS pixels
+  // And its tallest. A pick that is taller than it is wide was being drawn at
+  // whatever height its shape asked for, which pushed the buttons below it off
+  // the bottom of a phone — a dialog you cannot accept or cancel.
+  const CROP_TALL = 0.46;       // of the window's height
   const CROP_GRAB = 14;         // how near a corner counts as grabbing it
 
   function confirmCrop(page, picked) {
@@ -2231,14 +2235,40 @@
       area.w = Math.min(page.source.width - area.x, picked.w + pad.x * 2);
       area.h = Math.min(page.source.height - area.y, picked.h + pad.y * 2);
 
-      // Big enough to judge, never so big it leaves the screen.
-      const room = Math.min(CROP_VIEW, Math.max(240, window.innerWidth - 90));
-      const zoom = Math.min(6, Math.max(1, room / area.w));
+      // Big enough to judge, never so big it leaves the screen — in both
+      // directions.
+      //
+      // This used to fit the width only, and force the zoom to at least 1. A
+      // wide pick then laid the canvas out wider than the stage, where
+      // max-width shrank the width and left the height alone: the mark came
+      // out squashed, and every corner ended up somewhere other than where it
+      // was drawn, which is why they could not be grabbed. One number now
+      // fits both sides, so nothing overrides it afterwards.
+      // The dialog goes up first so the stage can be measured rather than
+      // guessed at. Guessing was the last of this bug: a width taken from the
+      // window was wider than the stage actually is, max-width clamped it, and
+      // the inline height stayed — which is a squashed mark however carefully
+      // the ratio was worked out beforehand.
+      box.hidden = false;
+      // clientWidth counts the stage's own padding, and a canvas sized to
+      // include it overflows by exactly that much — where max-width clamps the
+      // width and the inline height stays put, which is the squashing again.
+      const stage = el('cropstage');
+      const inset = (() => {
+        const s = getComputedStyle(stage);
+        return (parseFloat(s.paddingLeft) || 0) + (parseFloat(s.paddingRight) || 0);
+      })();
+      const roomW = Math.max(160, Math.min(CROP_VIEW,
+        (stage.clientWidth || window.innerWidth - 90) - inset));
+      const roomH = Math.max(180, window.innerHeight * CROP_TALL);
+      const zoom = Math.min(6, roomW / area.w, roomH / area.h);
       const dpr = window.devicePixelRatio || 1;
-      view.style.width = Math.round(area.w * zoom) + 'px';
-      view.style.height = Math.round(area.h * zoom) + 'px';
-      view.width = Math.round(area.w * zoom * dpr);
-      view.height = Math.round(area.h * zoom * dpr);
+      const wide = Math.round(area.w * zoom);
+      const tall = Math.round(area.h * zoom);
+      view.style.width = wide + 'px';
+      view.style.height = tall + 'px';
+      view.width = Math.round(wide * dpr);
+      view.height = Math.round(tall * dpr);
 
       const rect = { ...picked };
       const toView = p => ({ x: (p.x - area.x) * zoom, y: (p.y - area.y) * zoom });
@@ -2281,9 +2311,14 @@
       };
 
       let holding = null;
+      // Measured against the canvas as it actually sits on the page, not
+      // against the size it was asked for. A stylesheet that clamps it — or a
+      // browser that rounds differently — must not put every corner a few
+      // pixels from where the finger goes.
       const where = event => {
         const r = view.getBoundingClientRect();
-        return { x: event.clientX - r.left, y: event.clientY - r.top };
+        const k = r.width > 0 ? (area.w * zoom) / r.width : 1;
+        return { x: (event.clientX - r.left) * k, y: (event.clientY - r.top) * k };
       };
 
       // Capture keeps a drag alive when the pointer leaves the canvas, which
@@ -2374,7 +2409,6 @@
       el('cropcancel').addEventListener('click', cancel);
       document.addEventListener('keydown', key);
 
-      box.hidden = false;
       draw();
     });
   }

@@ -31,7 +31,7 @@
 <title>Blinded – Efficient redaction for your most sensitive documents, all done locally</title>
 <meta name="description" content="Redact PDFs, images and text in your browser. The file never leaves your machine.">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="app.css?v=896202fc">
+<link rel="stylesheet" href="app.css?v=67451311">
 </head>
 <body>
 
@@ -410,10 +410,10 @@
 
 <div id="cropbox" class="busy" hidden>
   <div class="busy-inner cropinner">
-    <h2 class="namehead">Is this the mark?</h2>
+    <h2 class="namehead">Image redaction selection</h2>
     <p class="hint" id="cropnote">Drag a corner to fit the box to it. A box drawn
       tightly around the mark finds it far more reliably than a loose one.</p>
-    <div class="cropstage">
+    <div class="cropstage" id="cropstage">
       <canvas id="cropview"></canvas>
     </div>
     <p class="hint" id="cropsize"></p>
@@ -484,7 +484,7 @@
 <script src="lib/pdfwrite.js?v=4b977425"></script>
 <script src="lib/pdfread.js?v=ca229552"></script>
 <script src="lib/render.js?v=7bf6e0a9"></script>
-<script src="app.js?v=46004e14"></script>
+<script src="app.js?v=f9aa20f1"></script>
 <script type="module" src="lib/boot.mjs?v=8b98ed8f"></script>
 </body>
 </html>
