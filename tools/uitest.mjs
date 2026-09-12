@@ -1416,6 +1416,7 @@ try {
   check('and that note is actually on screen',
     await page.isVisible('#pickhint'));
 
+
   // Opened while picking, which is when a reviewer most wants it: they are
   // about to draw a second box and want to see what the first one caught.
   // Picking dims the whole page except the document and the Images section,
@@ -2977,6 +2978,61 @@ try {
       Math.abs(reach.clamped - reach.max) < 1e-9, JSON.stringify(reach));
     check('while anything past the end is still held to it',
       Math.abs(reach.overshoot - reach.max) < 1e-9, JSON.stringify(reach));
+  }
+
+  // ---------- what the bar turned away ----------
+  //
+  // Reported on a deck of near-identical letter badges: at the highest setting
+  // two of seven were marked, and nothing on screen said the other five were
+  // one nudge of the slider away. The panel could only describe what it found,
+  // which is the half that does not help — so the reviewer guessed the bar
+  // downwards and re-ran until something appeared.
+  {
+    if (await page.isVisible('#view-review')) await newFile();
+    await page.waitForSelector('#view-drop:not([hidden])', { timeout: 15000 });
+    await page.setInputFiles('#file', logoPath);
+    await page.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
+
+    const told = await page.evaluate(async () => {
+      const B = window.Blinded;
+      B.state.termImages = false;          // picked images only, no reading
+      await B.addTemplate(B.state.pages[0], { x: 40, y: 40, w: 120, h: 120 });
+      const template = B.state.templates[0];
+      // Learn what this fixture's copies actually score, then set the bar just
+      // above the second one. Guessing a number here would be guessing about
+      // the fixture rather than testing the note: on a document whose copies
+      // are all far apart, a high bar leaves no near misses at all and the
+      // note would be right to stay quiet.
+      template.sens = 0.45;
+      template.searched = false;
+      await B.runSearch();
+      const scores = B.state.pages
+        .flatMap(p => p.imageHits.filter(m => m.templateId === template.id))
+        .map(m => m.score).sort((a, b) => b - a);
+      template.sens = Math.min(0.99, scores[1] + 0.01);
+      template.searched = false;
+      for (const p of B.state.pages) {
+        p.imageHits = p.imageHits.filter(m => m.templateId !== template.id);
+      }
+      await B.runSearch();
+      const out = { scores: scores.map(s => +s.toFixed(3)),
+                    hint: document.getElementById('pickhint').textContent.trim(),
+                    marks: B.state.pages.reduce((n, p) =>
+                      n + p.imageHits.filter(m => m.templateId === template.id).length, 0) };
+      B.state.termImages = true;
+      return out;
+    });
+    check('a bar that turns matches away says how many and what they scored',
+      /\d+ more scored \d\.\d\d( down to \d\.\d\d)? and (was|were) left out/.test(told.hint),
+      JSON.stringify(told));
+    check('and names the number to come down past',
+      /lower the bar past \d\.\d\d/.test(told.hint), told.hint);
+    // The weak echoes a picked mark turns up all over a page are not near
+    // misses: counting them in made the note say "30 more" when five of them
+    // were the point.
+    const span = told.hint.match(/more scored (\d\.\d\d) down to (\d\.\d\d)/);
+    check('and only counts the ones close enough to be worth a nudge',
+      !span || Number(span[1]) - Number(span[2]) <= 0.08 + 1e-9, told.hint);
   }
 
   // ---------- one control, not two ----------

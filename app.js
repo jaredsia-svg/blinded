@@ -1097,12 +1097,40 @@
       // were there the whole time.
       const scores = found.matches.map(m => m.score);
       const low = Math.min(...scores), high = Math.max(...scores);
-      hint.textContent = found.matches.length === 1
+      let text = found.matches.length === 1
         ? 'One match, scoring ' + high.toFixed(2) + '.'
         : found.matches.length + ' matches, scoring ' + high.toFixed(2)
-          + ' down to ' + low.toFixed(2)
-          + (high - low > 0.06
-            ? ' — if the weakest are wrong, set the bar just above them.' : '.');
+          + ' down to ' + low.toFixed(2) + '.';
+
+      // And what the bar turned away, which is the half that tells a reviewer
+      // where to put it. Looking at two marks where seven were expected, the
+      // useful fact is not that both scored 0.99 — it is that five more scored
+      // 0.95 down to 0.93 and are one nudge of the slider away.
+      // Only the ones close enough to be worth a nudge. A picked mark turns up
+      // dozens of weak echoes of itself all over a page — 0.67 against a bar
+      // of 0.99 is not a near miss, and counting it in makes the sentence say
+      // "30 more" when five of them are the point.
+      //
+      // Measured from the bar, not from the weakest match that cleared it.
+      // Those are different numbers whenever the matches sit well above the
+      // setting — one copy at 1.00 against a bar of 0.93 left a window that
+      // started at 0.92, so a match at 0.919 that the bar had turned away by
+      // a hundredth was reported as nothing at all.
+      const NEARLY = 0.08;
+      const near = (found.near || [])
+        .filter(s => s >= clampSens(bar) - NEARLY)
+        .sort((a, b) => b - a);
+      if (near.length) {
+        const top = near[0], bottom = near[near.length - 1];
+        text += ' ' + near.length + (near.length === 1 ? ' more scored ' : ' more scored ')
+          + (near.length === 1 || top.toFixed(2) === bottom.toFixed(2)
+            ? top.toFixed(2)
+            : top.toFixed(2) + ' down to ' + bottom.toFixed(2))
+          + ' and ' + (near.length === 1 ? 'was' : 'were')
+          + ' left out — lower the bar past ' + top.toFixed(2) + ' to include '
+          + (near.length === 1 ? 'it.' : 'them.');
+      }
+      hint.textContent = text;
       hint.hidden = false;
       hint.classList.remove('warnhint');
       return;
