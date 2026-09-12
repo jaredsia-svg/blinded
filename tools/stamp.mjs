@@ -22,7 +22,7 @@ const root = resolve(join(dirname(fileURLToPath(import.meta.url)), '..'));
 const PAGES = ['index.html'];
 
 // Only local assets: a versioned URL for a file we do not control is a lie.
-const LINK = /(\s(?:href|src)=")([A-Za-z0-9_./-]+\.(?:css|js))(?:\?v=[0-9a-f]+)?(")/g;
+const LINK = /(\s(?:href|src)=")([A-Za-z0-9_./-]+\.(?:css|js|mjs))(?:\?v=[0-9a-f]+)?(")/g;
 
 export function stamped(html) {
   return html.replace(LINK, (whole, before, path, after) => {

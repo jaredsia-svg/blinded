@@ -3,6 +3,31 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<!--
+  The promise this tool makes is that the document never leaves the machine.
+  That is true of the code, but a promise kept by inspection is only as good as
+  the next change to it; this asks the browser to enforce it.
+
+  connect-src 'self' rather than 'none' because the page reader fetches its own
+  WebAssembly and language data from this origin. Everything else is shut:
+  nothing may be posted anywhere, no form may submit, no plugin may load, and
+  no <base> may redirect a relative URL somewhere else.
+
+  'unsafe-eval' is required by the WebAssembly the reader runs; 'wasm-unsafe-eval'
+  alone is not honoured by every browser that matters yet. It permits code
+  execution, not exfiltration — connect-src is what holds the promise.
+-->
+<meta http-equiv="Content-Security-Policy" content="
+  default-src 'self';
+  script-src 'self' 'unsafe-eval';
+  style-src 'self' 'unsafe-inline';
+  img-src 'self' data: blob:;
+  connect-src 'self' blob:;
+  worker-src 'self' blob:;
+  frame-src 'none';
+  object-src 'none';
+  base-uri 'none';
+  form-action 'none'">
 <title>Blinded – Efficient redaction for your most sensitive documents, all done locally</title>
 <meta name="description" content="Redact PDFs, images and text in your browser. The file never leaves your machine.">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
@@ -395,16 +420,6 @@
 <script src="lib/pdfread.js?v=624c5ef9"></script>
 <script src="lib/render.js?v=7bf6e0a9"></script>
 <script src="app.js?v=dea10902"></script>
-<script type="module">
-  // pdf.js ships as an ES module; everything else here is a classic script, so
-  // it is bridged onto the global the other modules already look for. Both the
-  // library and its worker come from vendor/ — no CDN, because a tool that
-  // promises the file never leaves the machine should not be fetching code
-  // from somewhere else while it makes that promise.
-  import * as pdfjsLib from './vendor/pdf.min.mjs';
-  pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('./vendor/pdf.worker.min.mjs', import.meta.url).href;
-  window.pdfjsLib = pdfjsLib;
-  window.dispatchEvent(new Event('blinded:ready'));
-</script>
+<script type="module" src="lib/boot.mjs?v=8b98ed8f"></script>
 </body>
 </html>

@@ -3405,6 +3405,32 @@ try {
     if (bubble) bubble.hidden = true;
   });
 
+  // ---------- the promise, enforced ----------
+  //
+  // "Nothing is uploaded" is true of the code, but a promise kept by
+  // inspection is only as good as the next change to it. The policy asks the
+  // browser to hold it: nothing may be posted anywhere, no form may submit,
+  // no plugin may load, and no <base> may point a relative URL elsewhere.
+  const policy = await page.evaluate(() => {
+    const meta = document.querySelector('meta[http-equiv="Content-Security-Policy"]');
+    return meta ? meta.getAttribute('content').replace(/\s+/g, ' ').trim() : null;
+  });
+  check('the page carries a content security policy', policy !== null);
+  check('nothing may be sent anywhere but back to this origin',
+    /connect-src 'self'/.test(policy || ''), policy);
+  check('and no form may submit', /form-action 'none'/.test(policy || ''), policy);
+  check('nor any plugin load', /object-src 'none'/.test(policy || ''), policy);
+  check('nor a base tag redirect a relative url',
+    /base-uri 'none'/.test(policy || ''), policy);
+  // Inline script is refused outright, which is why the pdf.js bridge is a
+  // file: an inline block would need its hash in the policy, and that is a
+  // thing to forget on every edit.
+  check('inline script is refused, so there is no hash to keep in step',
+    !/script-src[^;]*unsafe-inline/.test(policy || ''), policy);
+  check('and the page still worked, which every check above this one proves',
+    await page.evaluate(() => typeof window.Blinded === 'object'
+      && typeof window.pdfjsLib === 'object'));
+
   // ---------- the questions page ----------
   //
   // The claim on the front page is that nothing is uploaded. That claim is
