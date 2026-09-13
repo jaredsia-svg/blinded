@@ -1940,8 +1940,11 @@ try {
     legendRows.length >= 5, JSON.stringify(legendRows));
   check('the typed name is suggested as a person',
     legendRows.some(([label]) => label === 'P1'), JSON.stringify(legendRows));
+  // PC1 was here, for a postal code. That detector is gone: a five-digit
+  // number needed a country or a state beside it before it was safe to
+  // propose, which is a detector asking the document to introduce it.
   check('the detectors get their own kinds',
-    ['E1', 'PH1', 'U1', 'A1', 'PC1'].every(want =>
+    ['E1', 'PH1', 'U1', 'A1'].every(want =>
       legendRows.some(([label]) => label === want)), JSON.stringify(legendRows));
   check('every suggested placeholder is short enough for a narrow bar',
     legendRows.every(([label]) => label.length <= 4), JSON.stringify(legendRows));
@@ -3580,6 +3583,70 @@ try {
       JSON.stringify(backdrop));
     check('while a click on the slide itself leaves it open',
       backdrop.stillOpen === true, JSON.stringify(backdrop));
+
+    // On a phone the picture is the screen: no card, no mat, no page-width
+    // minimum dragging it sideways before any of it can be read.
+    {
+      const small = await context.newPage();
+      await small.setViewportSize({ width: 390, height: 844 });
+      await small.goto(base);
+      await small.waitForSelector('#sample-open', { timeout: 15000 });
+      const full = await small.evaluate(async () => {
+        document.getElementById('sample-open').click();
+        await new Promise(r => setTimeout(r, 200));
+        const img = document.getElementById('samplebig').getBoundingClientRect();
+        const stage = document.querySelector('.samplestage');
+        const inner = document.querySelector('.sampleinner');
+        const seen = getComputedStyle(stage);
+        return {
+          // As wide as the screen, give or take a rounded pixel.
+          wide: Math.abs(img.width - window.innerWidth) <= 2,
+          width: Math.round(img.width), screen: window.innerWidth,
+          // And nothing drawn around it.
+          border: seen.borderTopWidth, pad: seen.paddingTop,
+          card: getComputedStyle(inner).borderTopWidth,
+          // Two fingers are ours to read, not the browser's to scroll with.
+          fingers: seen.touchAction,
+        };
+      });
+      check('on a phone the enlarged slide fills the width',
+        full.wide === true, JSON.stringify(full));
+      check('with no frame or mat around it',
+        full.border === '0px' && full.pad === '0px' && full.card === '0px',
+        JSON.stringify(full));
+      check('and two fingers belong to the picture',
+        full.fingers === 'none', JSON.stringify(full));
+
+      const zoomed = await small.evaluate(async () => {
+        const stage = document.querySelector('.samplestage');
+        const img = document.getElementById('samplebig');
+        const before = img.getBoundingClientRect().width;
+        const at = (type, id, x, y) => stage.dispatchEvent(new PointerEvent(type, {
+          pointerId: id, pointerType: 'touch', clientX: x, clientY: y,
+          bubbles: true, isPrimary: id === 1,
+        }));
+        at('pointerdown', 1, 120, 400);
+        at('pointerdown', 2, 260, 400);
+        at('pointermove', 1, 40, 400);
+        at('pointermove', 2, 340, 400);
+        await new Promise(r => setTimeout(r, 60));
+        const after = img.getBoundingClientRect().width;
+        at('pointerup', 1, 40, 400);
+        at('pointerup', 2, 340, 400);
+        // Opening it again starts from the whole picture.
+        document.querySelector('#sampleclose').click();
+        await new Promise(r => setTimeout(r, 80));
+        document.getElementById('sample-open').click();
+        await new Promise(r => setTimeout(r, 150));
+        return { before: Math.round(before), after: Math.round(after),
+          reopened: Math.round(img.getBoundingClientRect().width) };
+      });
+      check('pinching it open makes it bigger',
+        zoomed.after > zoomed.before, JSON.stringify(zoomed));
+      check('and opening it again starts from the whole picture',
+        Math.abs(zoomed.reopened - zoomed.before) <= 2, JSON.stringify(zoomed));
+      await small.close();
+    }
 
     // The dialog is the picture. A heading naming it and a button saying
     // Close were two rows of chrome around the one thing being looked at.
@@ -7113,12 +7180,16 @@ try {
     });
 
     const before = await readKinds();
+    // However many there are, rather than a number that has to be edited every
+    // time one is added or taken away.
+    const total = await page.evaluate(() => window.BlindedDetect.KINDS.length);
     check('before the search every detector shows a question, not a number',
       before.known === false && before.rows.length > 0
         && before.rows.every(r => r.says === '?' && r.asking),
       JSON.stringify(before));
     check('and all of them are listed, since none has been answered',
-      before.rows.length === 7 && before.hidden === false, JSON.stringify(before));
+      before.rows.length === total && before.hidden === false,
+      JSON.stringify(before));
     check('the count of detectors is gone from the heading',
       before.note === false, JSON.stringify(before));
     check('and what the section is for is a hint on it instead',
@@ -7133,7 +7204,7 @@ try {
       JSON.stringify(after));
     check('and only the detectors that found something are listed',
       after.rows.length > 0 && after.rows.every(r => Number(r.says) > 0)
-        && after.rows.length < 7,
+        && after.rows.length < total,
       JSON.stringify(after));
 
     // The tally is the same control the words and the pictures carry: green,

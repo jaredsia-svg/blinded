@@ -178,46 +178,25 @@ check('but not the soup',
   addr('a pho restaurant on the corner').length === 0,
   JSON.stringify(addr('a pho restaurant on the corner')));
 
-// ---------- postal codes need an anchor ----------
+// ---------- what is no longer offered ----------
 //
-// Every one of these is five or six digits, and so is half of a deal document.
-// A postal code is only proposed where the text says what it is.
-const pc = text => textsOf(text, 'postcode');
-check('a bare five-digit number is not a postal code',
-  pc('headcount rose to 94043 last year').length === 0,
-  JSON.stringify(pc('headcount rose to 94043 last year')));
-check('nor is one behind two capitals in the middle of a heading',
-  pc('REVENUE IN 12345 UNITS').length === 0, JSON.stringify(pc('REVENUE IN 12345 UNITS')));
-check('a US ZIP behind its state is',
-  pc('Mountain View, CA 94043').includes('94043'), JSON.stringify(pc('Mountain View, CA 94043')));
-check('and the state itself is left readable',
-  !pc('Mountain View, CA 94043').some(t => t.includes('CA')),
-  JSON.stringify(pc('Mountain View, CA 94043')));
-check('a ZIP behind the word ZIP is', pc('ZIP code: 94043').includes('94043'),
-  JSON.stringify(pc('ZIP code: 94043')));
-check('and the word itself is left readable',
-  !pc('ZIP code: 94043').some(t => /zip/i.test(t)), JSON.stringify(pc('ZIP code: 94043')));
-check('a ZIP+4 stands on its own', pc('sent to 94043-1351').includes('94043-1351'),
-  JSON.stringify(pc('sent to 94043-1351')));
-check('a UK postcode stands on its own', pc('London SW1A 2AA').includes('SW1A 2AA'),
-  JSON.stringify(pc('London SW1A 2AA')));
-check('a bare six-digit number is not a Singapore postal code',
-  pc('a fleet of 310123 units').length === 0, JSON.stringify(pc('a fleet of 310123 units')));
-check('but six digits behind the country name is',
-  pc('Singapore 048616').includes('048616'), JSON.stringify(pc('Singapore 048616')));
-check('as is the S(......) form', pc('S(310123)').includes('310123'),
-  JSON.stringify(pc('S(310123)')));
-check('and the country name is left readable',
-  !pc('Singapore 048616').some(t => t.toLowerCase().includes('singapore')),
-  JSON.stringify(pc('Singapore 048616')));
-check('a Vietnamese code beside the country name is found',
-  pc('Ho Chi Minh City, Vietnam 700000').includes('700000'),
-  JSON.stringify(pc('Ho Chi Minh City, Vietnam 700000')));
-check('on either side of it',
-  pc('700000, Viet Nam').includes('700000'), JSON.stringify(pc('700000, Viet Nam')));
-// Hong Kong has no postal code, and claiming to find one would be a lie.
-check('nothing is proposed as a Hong Kong postal code',
-  pc('Central, Hong Kong').length === 0, JSON.stringify(pc('Central, Hong Kong')));
+// Postal codes and dates of birth went the way of card numbers, bank accounts
+// and IP addresses. Every one of them is a shape made of digits, and on the
+// documents this is pointed at they either do not appear or cannot be told
+// from the figures around them: a postal code needed a country name or a state
+// beside it before it was safe to propose at all, which is a detector asking
+// the document to introduce it. Anyone who needs one types it.
+for (const [gone, sample] of [['postcode', 'Mountain View, CA 94043'],
+  ['postcode', 'Singapore 048616'],
+  ['dob', 'DOB: 04/11/1979']]) {
+  check('no detector claims to find ' + gone + ' any more',
+    !Detect.DETECTORS.some(d => d.kind === gone),
+    Detect.DETECTORS.map(d => d.kind).join(', '));
+  check('and "' + sample + '" is left alone',
+    !kindsIn(sample).includes(gone), kindsIn(sample).join(','));
+}
+check('while a typed term still covers one for anyone who wants it',
+  Detect.findAll('DOB: 04/11/1979', { terms: ['04/11/1979'] }).length === 1);
 
 // ---------- a typed word is never swallowed by a guess ----------
 //
@@ -318,8 +297,6 @@ check('a name with no anchor anywhere near it is not proposed',
     who(slide).length === 1, JSON.stringify(who(slide)));
 }
 
-check('finds a labelled date of birth', kindsIn('DOB: 04/11/1979').includes('dob'));
-check('ignores an unlabelled date', !kindsIn('shipped 04/11/1979').includes('dob'));
 
 // ---------- terms ----------
 

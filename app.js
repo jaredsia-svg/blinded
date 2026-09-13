@@ -5511,6 +5511,7 @@
     const box = el('samplebox');
     const show = () => {
       box.hidden = false;
+      box.dispatchEvent(new CustomEvent('blinded:sample'));
       el('sampleclose').focus();
     };
     const hide = () => {
@@ -5518,6 +5519,53 @@
       box.hidden = true;
       el('sample-open').focus();
     };
+    // Pinch to zoom, on a phone, where the picture fills the screen and the
+    // small print is the point. The browser's own pinch is off for the whole
+    // app — it zoomed the panel and the header along with the page and left
+    // nothing more readable — so this is the gesture handled here, as the
+    // document does it.
+    //
+    // The width is what moves, not a transform: the stage scrolls, so panning
+    // around a zoomed picture is ordinary scrolling instead of arithmetic
+    // about an origin.
+    {
+      const stage = box.querySelector('.samplestage');
+      const img = el('samplebig');
+      const held = new Map();
+      let span = 0;
+      let from = 1;
+      let big = 1;
+      const spanOf = () => {
+        const [a, b] = [...held.values()];
+        return Math.hypot(a.x - b.x, a.y - b.y);
+      };
+      stage.addEventListener('pointerdown', event => {
+        if (event.pointerType === 'mouse') return;
+        held.set(event.pointerId, { x: event.clientX, y: event.clientY });
+        if (held.size === 2) { span = spanOf(); from = big; }
+      });
+      stage.addEventListener('pointermove', event => {
+        if (!held.has(event.pointerId)) return;
+        held.set(event.pointerId, { x: event.clientX, y: event.clientY });
+        if (held.size !== 2 || !span) return;
+        event.preventDefault();
+        big = Math.max(1, Math.min(5, from * (spanOf() / span)));
+        img.style.setProperty('--big', (big * 100) + '%');
+      });
+      const let_go = event => {
+        held.delete(event.pointerId);
+        if (held.size < 2) span = 0;
+      };
+      stage.addEventListener('pointerup', let_go);
+      stage.addEventListener('pointercancel', let_go);
+      // Every opening starts at the whole picture, rather than wherever the
+      // last one was left.
+      box.addEventListener('blinded:sample', () => {
+        big = 1;
+        img.style.setProperty('--big', '100%');
+      });
+    }
+
     el('sample-open').addEventListener('click', show);
     el('sampleclose').addEventListener('click', hide);
     // Anywhere but the picture is a way out, and the one people reach for.
