@@ -4258,6 +4258,9 @@ try {
         .every(name => rolled.says.includes(name)), JSON.stringify(rolled));
 
     const unrolled = await page.evaluate(async () => {
+      // Every one of them open before the sheet took them, so that what comes
+      // back is a decision this makes rather than the state it was handed.
+      for (const sect of document.querySelectorAll('details.sect')) sect.open = true;
       document.getElementById('sectroll').click();
       await new Promise(r => setTimeout(r, 80));
       const others = [...document.querySelectorAll('details.sect')]
@@ -4266,6 +4269,7 @@ try {
         roll: document.getElementById('sectroll').hidden,
         back: others.filter(d => !d.hidden).length,
         of: others.length,
+        open: others.map(d => d.open),
         sheet: document.getElementById('organisesect').open,
         sheetShown: document.getElementById('organisesect').hidden === false,
       };
@@ -4275,6 +4279,11 @@ try {
       JSON.stringify(unrolled));
     check('with the sheet shut again and the line gone',
       unrolled.sheet === false && unrolled.roll === true, JSON.stringify(unrolled));
+    // Open as the panel opens, not as it was left. Handing back four open
+    // sections is handing back the scrolling the sheet was opened to escape.
+    check('the words and the images are open, and the settings are not',
+      JSON.stringify(unrolled.open) === JSON.stringify([true, true, false, false]),
+      JSON.stringify(unrolled.open));
 
     await page.evaluate(async () => {
       document.getElementById('organisesect').open = true;

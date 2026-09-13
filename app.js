@@ -5714,10 +5714,21 @@
   el('choose-done').addEventListener('click', stopChoosing);
 
   el('sectroll').addEventListener('click', () => {
-    // Not "open the four" — shut the one. Opening a section here would pick a
-    // winner among four the reviewer has not chosen between, and shutting the
-    // sheet is what puts the panel back exactly as they left it.
+    // Shutting the sheet is what brings the four back; that much was always
+    // true. What they come back as is a choice, and "however they were before
+    // the sheet swallowed them" turned out to be the wrong one: a reviewer
+    // who had every section open, organised the pages, then came back, was
+    // handed the whole panel again and had to shut most of it.
+    //
+    // So the panel comes back to the state it opens in. The first two — the
+    // words and the images — are where a redaction is actually made, and the
+    // rest are settings to look at once. Taken in document order rather than
+    // by name, so that renaming a section does not quietly change which two
+    // are open.
     el('organisesect').open = false;
+    const others = [...document.querySelectorAll('details.sect')]
+      .filter(sect => sect !== el('organisesect'));
+    others.forEach((sect, i) => { sect.open = i < 2; });
   });
 
   window.addEventListener('resize', fitSheet);
