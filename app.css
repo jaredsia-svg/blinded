@@ -406,6 +406,10 @@ textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; border-
 .page {
   position: relative; background: var(--card); border: 1px solid var(--line);
   border-radius: var(--radius); overflow: hidden; box-shadow: 0 1px 3px rgba(16, 22, 32, .06);
+  /* Notes are placed in shares of the page's width and sized in container
+     units, so zooming, a phone turning on its side and a window being dragged
+     wider all move them without a line of JavaScript. */
+  container-type: inline-size;
 }
 /* The wrapper owns the shape — its aspect-ratio comes from the page — so a
    canvas that has given up its bitmap does not collapse the document under
@@ -421,6 +425,72 @@ textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; border-
   position: absolute; top: 8px; left: 8px; background: rgba(13,17,23,.75); color: #fff;
   font-size: 11px; padding: 2px 7px; border-radius: 20px; pointer-events: none;
 }
+
+/* ---------- notes written on the page ---------- */
+
+/* The layer itself catches nothing: a press that misses a note is a press on
+   the page, and must still pan it or draw a mark. */
+.notelayer { position: absolute; inset: 0; pointer-events: none; }
+
+.notechip {
+  position: absolute; pointer-events: auto;
+  left: calc(var(--x) * 1cqw); top: calc(var(--y) * 1cqw);
+  width: calc(var(--w) * 1cqw); min-height: calc(var(--h) * 1cqw);
+  font: calc(var(--s) * 1cqw)/1.3 Helvetica, Arial, "Helvetica Neue", sans-serif;
+  cursor: move; touch-action: none;
+}
+/* Nothing is drawn round a note that is not in hand. What is on the page is
+   the note, and an outline round every one of them would be a set of boxes
+   the reviewer never asked for over a document they are reading. */
+.notechip.on { outline: 1px dashed var(--accent); outline-offset: 3px; }
+
+/* The words while they are being typed. Same family, same size, same colour
+   as the canvas will paint them in, so the note does not jump when the caret
+   leaves it. */
+.notewrite {
+  display: block; width: 100%; min-height: calc(var(--h) * 1cqw);
+  margin: 0; padding: 0; border: 0; outline: 0; resize: none; overflow: hidden;
+  background: transparent; color: inherit; font: inherit; letter-spacing: inherit;
+}
+.notewrite::placeholder { color: currentColor; opacity: .45; }
+
+/* The controls. They exist only while a note is in hand, sit above it, and
+   are sized in screen pixels rather than page ones: a note the size of a
+   caption and a note the size of a heading need the same buttons. */
+.notebar {
+  position: absolute; bottom: calc(100% + 8px); left: 0;
+  display: flex; align-items: center; gap: 5px; padding: 4px 6px;
+  background: var(--card); border: 1px solid var(--line); border-radius: 8px;
+  box-shadow: 0 2px 10px rgba(16, 22, 32, .16);
+  font: 12px/1 var(--sans); color: var(--ink); white-space: nowrap;
+  cursor: default; touch-action: none;
+}
+/* A note near the top of the page has no room above it. */
+.notechip.low .notebar { bottom: auto; top: calc(100% + 8px); }
+
+.notedot {
+  width: 16px; height: 16px; padding: 0; border-radius: 50%;
+  border: 1px solid rgba(16, 22, 32, .25); cursor: pointer;
+}
+.notedot.on { box-shadow: 0 0 0 2px var(--accent); }
+.notestep {
+  min-width: 24px; height: 22px; padding: 0 5px; cursor: pointer;
+  background: var(--bg); color: var(--ink);
+  border: 1px solid var(--line); border-radius: 6px; font: 12px/1 var(--sans);
+}
+.notestep:hover { background: var(--line); }
+.notebin { color: var(--danger); }
+
+/* The corner that sets how wide the note is, and therefore where its words
+   wrap. Only the width: the height is whatever the words need. */
+.notegrab {
+  position: absolute; right: -5px; bottom: -5px; width: 12px; height: 12px;
+  background: var(--accent); border: 2px solid var(--card); border-radius: 50%;
+  cursor: ew-resize; touch-action: none;
+}
+
+/* Waiting for the tap that says where a note goes. */
+.placing-text .page canvas { cursor: text; }
 
 .textview {
   background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);

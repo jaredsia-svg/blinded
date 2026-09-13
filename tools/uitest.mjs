@@ -15,7 +15,7 @@ import { isStale } from './stamp.mjs';
 import { buildTextPdf, buildReadablePdf, buildLogoPdf, buildLockedPdf, buildManyPdf, LOGO_PLACEMENTS,
   buildWordmarkPdf, WORDMARK_PLACEMENTS, WORDMARK_ASPECT,
   buildSmallLogoPdf, SMALL_LOGO_PLACEMENTS, WORDMARK_BOX,
-  buildDoubleFoundPdf, DOUBLE_TERM } from './fixture.mjs';
+  buildDoubleFoundPdf, DOUBLE_TERM, buildStackedPdf } from './fixture.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = resolve(join(here, '..'));
@@ -59,6 +59,8 @@ const lockedPath = join(tmpdir(), 'blinded-locked.pdf');
 writeFileSync(lockedPath, buildLockedPdf('letmein'));
 const doublePath = join(tmpdir(), 'blinded-double.pdf');
 writeFileSync(doublePath, buildDoubleFoundPdf());
+const stackedPath = join(tmpdir(), 'blinded-stacked.pdf');
+writeFileSync(stackedPath, buildStackedPdf());
 const smallLogoPath = join(tmpdir(), 'blinded-smalllogo.pdf');
 writeFileSync(smallLogoPath, buildSmallLogoPdf());
 const wordmarkPath = join(tmpdir(), 'blinded-wordmark.pdf');
@@ -4566,6 +4568,376 @@ try {
     // test that leaves it that way hands the next three hundred checks a panel
     // they did not ask for.
     await page.evaluate(() => {
+      document.getElementById('organisesect').open = false;
+      for (const sect of document.querySelectorAll('details.sect')) sect.open = true;
+      document.getElementById('organisesect').open = false;
+    });
+  }
+
+  // ---------- a text layer that says it more than once ----------
+  //
+  // Reported from a real CIM: a word marked four times on the page, counted
+  // twenty-three times in the panel. Nothing was wrong with the marks. The
+  // deck had been converted to PDF by something that re-emits each line five
+  // or six times at identical coordinates, so the text layer really did hold
+  // twenty-one copies of the name — and the count was reading the file's
+  // duplicates as places in the document.
+  {
+    if (await page.isVisible('#view-review')) await newFile();
+    await page.waitForSelector('#view-drop:not([hidden])', { timeout: 15000 });
+    await page.setInputFiles('#file', stackedPath);
+    await page.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
+    await setTerms(page, ['KAG']);
+    await page.waitForTimeout(300);
+
+    const stacked = await page.evaluate(() => {
+      const B = window.Blinded;
+      const p = B.state.pages[0];
+      return {
+        // What the file says, which is what makes this fixture worth having:
+        // without duplicates in the text layer the rest passes vacuously.
+        inFile: window.BlindedDetect.findTerms(p.text, ['KAG']).length,
+        marks: p.hits.filter(h => h.finding.term === 'KAG').length,
+        counted: B.occurrencesFor('KAG').length,
+        pages: B.occurrencesFor('KAG').map(spot => spot.pageIndex),
+      };
+    });
+    check('the fixture really does say it several times over',
+      stacked.inFile === 7, JSON.stringify(stacked));
+    check('but the page is marked once per place, not once per copy',
+      stacked.marks === 2, JSON.stringify(stacked));
+    check('and the count now agrees with the marks',
+      stacked.counted === stacked.marks, JSON.stringify(stacked));
+    check('with every place on the page it was found on',
+      stacked.pages.every(i => i === 0), JSON.stringify(stacked));
+
+    // The list under the tally is the same answer in longer form, so it has
+    // to hold the same number of rows. The circle is a question mark until
+    // something has looked, so this searches first.
+    await redact(page);
+    const listed = await page.evaluate(() => {
+      const dot = document.querySelector('#termcounts .dot-green');
+      if (dot) dot.click();
+      return { rows: document.querySelectorAll('#termcounts .tallywhere li').length,
+        said: dot ? dot.textContent : null };
+    });
+    check('the tally says what the page shows', listed.said === '2',
+      JSON.stringify(listed));
+    check('and its list has a row for each', listed.rows === 2, JSON.stringify(listed));
+  }
+
+  // ---------- turning a page ----------
+  //
+  // A scan fed the wrong way is not a cosmetic problem here: the reader
+  // cannot read sideways lettering, so a sideways page is a page the search
+  // is blind on. The turn has to be real — the pixels themselves — and
+  // everything measured against those pixels has to move with them or be
+  // withdrawn.
+  {
+    if (await page.isVisible('#view-review')) await newFile();
+    await page.waitForSelector('#view-drop:not([hidden])', { timeout: 15000 });
+    await page.setInputFiles('#file', fixturePath);
+    await page.waitForSelector('#view-review:not([hidden])', { timeout: 60000 });
+    await page.evaluate(() => { document.getElementById('organisesect').open = true; });
+    await page.waitForTimeout(80);
+
+    const turned = await page.evaluate(() => {
+      const B = window.Blinded;
+      const first = B.state.pages[0];
+      const was = { w: first.source.width, h: first.source.height,
+        widthPt: first.widthPt, heightPt: first.heightPt,
+        items: first.items.length, text: first.text.length };
+      // A hand-drawn box, to see whether what is measured against the page
+      // travels with it.
+      first.manual.push({ id: 'turn-test', x: 10, y: 20, w: 30, h: 40 });
+      B.state.searched = true;
+      B.state.sweptTerms = ['whatever'];
+      B.state.ocrRead = true;
+      first.ocrText = 'read already';
+      B.state.picked = new Set([first]);
+      B.renderSheet();
+      const offered = !document.getElementById('page-turn').disabled;
+      document.getElementById('page-turn').click();
+      const box = first.manual.find(m => m.id === 'turn-test');
+      const wrap = first.canvas.parentElement;
+      return {
+        offered, was,
+        now: { w: first.source.width, h: first.source.height,
+          widthPt: first.widthPt, heightPt: first.heightPt },
+        turn: first.turn,
+        box,
+        // Turned clockwise, the old bottom-left corner becomes the top left.
+        wanted: { x: was.h - (20 + 40), y: 10, w: 40, h: 30 },
+        shape: wrap.style.aspectRatio,
+        layer: first.items.length,
+        readAgain: first.ocrText === null && B.state.ocrRead === false,
+        searched: B.state.searched,
+        swept: B.state.sweptTerms.length,
+        label: (B.undoStack[B.undoStack.length - 1] || {}).label,
+      };
+    });
+    check('turning is offered once a page is selected', turned.offered === true);
+    check('a turned page is the other way round',
+      turned.now.w === turned.was.h && turned.now.h === turned.was.w,
+      JSON.stringify(turned.now));
+    check('and keeps its size on paper, turned with it',
+      turned.now.widthPt === turned.was.heightPt
+      && turned.now.heightPt === turned.was.widthPt, JSON.stringify(turned.now));
+    check('the wrapper takes the new shape, so the document does not stretch',
+      turned.shape === turned.now.w + ' / ' + turned.now.h, String(turned.shape));
+    check('a mark drawn by hand turns with the pixels it was drawn over',
+      turned.box.x === turned.wanted.x && turned.box.y === turned.wanted.y
+      && turned.box.w === turned.wanted.w && turned.box.h === turned.wanted.h,
+      JSON.stringify([turned.box, turned.wanted]));
+    // The honest cost, asserted rather than hoped for: the text layer's runs
+    // advance along the page's x axis, and turned they would be drawn across
+    // the words instead of along them. So it goes, and the page is read again
+    // from its new pixels.
+    check('the text layer, which cannot be turned, is dropped',
+      turned.layer === 0 && turned.was.items > 0, JSON.stringify(turned));
+    check('and so is what was read off the page',
+      turned.readAgain === true, JSON.stringify(turned));
+    check('a turn withdraws the search rather than leaving it standing',
+      turned.searched === false && turned.swept === 0, JSON.stringify(turned));
+    check('and is undoable', turned.label === 'turning a page', String(turned.label));
+
+    const back = await page.evaluate(() => {
+      const B = window.Blinded;
+      const first = B.state.pages[0];
+      B.undoLast();
+      return { w: first.source.width, h: first.source.height, turn: first.turn,
+        items: first.items.length, box: first.manual.find(m => m.id === 'turn-test'),
+        searched: B.state.searched, read: B.state.ocrRead,
+        shape: first.canvas.parentElement.style.aspectRatio };
+    });
+    check('undoing a turn puts the pixels back',
+      back.w === turned.was.w && back.h === turned.was.h && back.turn === 0,
+      JSON.stringify(back));
+    check('and the text layer with them, which turning four times would not',
+      back.items === turned.was.items, JSON.stringify(back));
+    check('and the box, and what the search knew',
+      back.box.x === 10 && back.box.y === 20 && back.searched === true
+      && back.read === true, JSON.stringify(back));
+    check('and the wrapper goes back to the old shape',
+      back.shape === turned.was.w + ' / ' + turned.was.h, String(back.shape));
+
+    await page.evaluate(() => {
+      const B = window.Blinded;
+      B.state.pages[0].manual = B.state.pages[0].manual.filter(m => m.id !== 'turn-test');
+      B.state.picked = new Set();
+      B.renderSheet();
+    });
+  }
+
+  // ---------- notes written on the page ----------
+  //
+  // One button, and after that the note is its own control: nothing is on
+  // screen unless a note is in hand. The checks below are as much about what
+  // is absent as about what works.
+  {
+    const armed = await page.evaluate(() => {
+      document.getElementById('page-text').click();
+      const tip = document.getElementById('tip');
+      return { placing: window.Blinded.state.placingText,
+        said: tip.hidden === false && /tap the page/i.test(tip.textContent),
+        pressed: document.getElementById('page-text').getAttribute('aria-pressed') };
+    });
+    check('Add a note arms the next tap on the page',
+      armed.placing === true && armed.pressed === 'true', JSON.stringify(armed));
+    check('and says so, because nothing else in the tool waits for a tap',
+      armed.said === true, JSON.stringify(armed));
+
+    const placed = await page.evaluate(() => {
+      const B = window.Blinded;
+      const canvas = B.state.pages[0].canvas;
+      const box = canvas.getBoundingClientRect();
+      // Down and up. A dispatched press with no release leaves the pinch
+      // watcher holding a finger that never lifted, and everything after it
+      // in this file is then a two-finger gesture.
+      for (const type of ['pointerdown', 'pointerup']) {
+        canvas.dispatchEvent(new PointerEvent(type, { bubbles: true, pointerId: 71,
+          clientX: box.left + box.width * 0.25, clientY: box.top + box.height * 0.4 }));
+      }
+      const note = B.notesOf(B.state.pages[0])[0];
+      return {
+        notes: B.notesOf(B.state.pages[0]).length,
+        placing: B.state.placingText,
+        editing: B.state.textEdit === note.id,
+        chips: document.querySelectorAll('.notechip').length,
+        writing: document.querySelectorAll('.notewrite').length,
+        focused: document.activeElement && document.activeElement.className,
+        // Placed where it was tapped, in the page's own pixels.
+        near: Math.abs(note.x - B.state.pages[0].source.width * 0.25)
+          < B.state.pages[0].source.width * 0.02,
+        label: (B.undoStack[B.undoStack.length - 1] || {}).label,
+      };
+    });
+    check('tapping the page puts a note there',
+      placed.notes === 1 && placed.near === true, JSON.stringify(placed));
+    check('the tap is spent, not a mode left running',
+      placed.placing === false, JSON.stringify(placed));
+    check('and the caret is already in it, so typing is the next thing that happens',
+      placed.editing === true && placed.writing === 1
+      && placed.focused === 'notewrite', JSON.stringify(placed));
+    check('adding a note is undoable', placed.label === 'the note you added',
+      String(placed.label));
+
+    const typed = await page.evaluate(async () => {
+      const B = window.Blinded;
+      const area = document.querySelector('.notewrite');
+      area.value = 'Covered at the request of the board.';
+      area.dispatchEvent(new Event('input', { bubbles: true }));
+      const note = B.notesOf(B.state.pages[0])[0];
+      const whileWriting = B.notesToDraw(B.state.pages[0]).length;
+      area.blur();
+      await new Promise(r => setTimeout(r, 30));
+      return { text: note.text, whileWriting,
+        afterwards: B.notesToDraw(B.state.pages[0]).length,
+        editing: B.state.textEdit, writing: document.querySelectorAll('.notewrite').length };
+    });
+    check('what is typed is the note', typed.text === 'Covered at the request of the board.',
+      JSON.stringify(typed));
+    // Otherwise the words are drawn twice, half a pixel apart, and the note
+    // looks like a printing fault while it is being written.
+    check('the canvas leaves the note being typed to its own textarea',
+      typed.whileWriting === 0, JSON.stringify(typed));
+    check('and takes it back when the caret leaves',
+      typed.afterwards === 1 && typed.editing === null && typed.writing === 0,
+      JSON.stringify(typed));
+
+    // Still in hand after the caret leaves it, which is the useful place to
+    // be: the colour and the size are the next thing anyone reaches for.
+    const after = await page.evaluate(() => ({
+      bars: document.querySelectorAll('.notebar').length,
+      selected: window.Blinded.state.textSel !== null,
+    }));
+    check('a note just written is still in hand', after.bars === 1
+      && after.selected === true, JSON.stringify(after));
+
+    const bare = await page.evaluate(() => {
+      document.querySelector('.panel').dispatchEvent(
+        new PointerEvent('pointerdown', { bubbles: true, pointerId: 72 }));
+      return {
+        bars: document.querySelectorAll('.notebar').length,
+        grabs: document.querySelectorAll('.notegrab').length,
+        selected: window.Blinded.state.textSel,
+        notes: window.Blinded.notesOf(window.Blinded.state.pages[0]).length,
+      };
+    });
+    check('touching anything else puts it down, and nothing is left standing over the page',
+      bare.bars === 0 && bare.grabs === 0 && bare.selected === null
+      && bare.notes === 1, JSON.stringify(bare));
+
+    const held = await page.evaluate(() => {
+      const box = document.querySelector('.notechip').getBoundingClientRect();
+      for (const type of ['pointerdown', 'pointerup']) {
+        // Looked up again between the two: picking a note up rebuilds it, and
+        // releasing on the element that has been replaced is a release the
+        // page never hears — which on a real phone is a finger the pinch
+        // watcher goes on holding.
+        document.querySelector('.notechip').dispatchEvent(
+          new PointerEvent(type, { bubbles: true, pointerId: 73,
+            clientX: box.left + 4, clientY: box.top + 4 }));
+      }
+      const now = document.querySelector('.notechip');
+      return {
+        on: now.classList.contains('on'),
+        dots: now.querySelectorAll('.notedot').length,
+        steps: now.querySelectorAll('.notestep').length,
+        grabs: now.querySelectorAll('.notegrab').length,
+        selected: window.Blinded.state.textSel !== null,
+        writing: document.querySelectorAll('.notewrite').length,
+      };
+    });
+    check('touching a note puts it in hand, with its controls over it',
+      held.on === true && held.selected === true && held.dots === 4
+      && held.steps === 3 && held.grabs === 1, JSON.stringify(held));
+    check('but does not put the caret in it, or every note touched would open',
+      held.writing === 0, JSON.stringify(held));
+
+    const restyled = await page.evaluate(() => {
+      const B = window.Blinded;
+      const note = B.notesOf(B.state.pages[0])[0];
+      const was = { colour: note.colour, size: note.size };
+      document.querySelectorAll('.notedot')[2].click();
+      document.querySelectorAll('.notestep')[1].click();
+      return { was, colour: note.colour, size: note.size,
+        marked: document.querySelectorAll('.notedot.on').length,
+        label: (B.undoStack[B.undoStack.length - 1] || {}).label };
+    });
+    check('the colour is a dot away', restyled.colour === '#c0392b'
+      && restyled.was.colour !== restyled.colour, JSON.stringify(restyled));
+    check('and the size a press away', restyled.size > restyled.was.size,
+      JSON.stringify(restyled));
+    check('with the colour it is written in marked as chosen',
+      restyled.marked === 1, JSON.stringify(restyled));
+    check('and both undoable', restyled.label === 'that size', String(restyled.label));
+
+    // The note is painted by the function the export uses, which is the only
+    // reason the preview can be trusted to be the file.
+    const inked = await page.evaluate(() => {
+      const R = window.BlindedRender;
+      const blank = document.createElement('canvas');
+      blank.width = 200; blank.height = 80;
+      const ctx = blank.getContext('2d');
+      ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, 200, 80);
+      const flat = R.flatten(blank, [], [{ x: 8, y: 8, w: 180, size: 18,
+        colour: '#000000', text: 'Removed by request' }]);
+      const data = flat.getContext('2d').getImageData(0, 0, 200, 80).data;
+      let dark = 0;
+      for (let i = 0; i < data.length; i += 4) if (data[i] < 120) dark++;
+      const tall = R.textBox({ x: 0, y: 0, w: 80, size: 18, text: 'one two three four five six' });
+      const short = R.textBox({ x: 0, y: 0, w: 80, size: 18, text: 'one' });
+      return { dark, tall: tall.h, short: short.h };
+    });
+    check('a note is burned into the exported picture', inked.dark > 40,
+      JSON.stringify(inked));
+    check('and wraps inside the width it was given',
+      inked.tall > inked.short * 2, JSON.stringify(inked));
+
+    const gone = await page.evaluate(() => {
+      const B = window.Blinded;
+      document.querySelector('.notebin').click();
+      const after = B.notesOf(B.state.pages[0]).length;
+      B.undoLast();
+      return { after, back: B.notesOf(B.state.pages[0]).length,
+        bars: document.querySelectorAll('.notebar').length };
+    });
+    check('the bin removes the note it belongs to', gone.after === 0, JSON.stringify(gone));
+    check('undo brings it back', gone.back === 1, JSON.stringify(gone));
+    check('and takes its controls with it', gone.bars === 0, JSON.stringify(gone));
+
+    // An empty note is nothing but an invisible thing to trip over later.
+    const dropped = await page.evaluate(async () => {
+      const B = window.Blinded;
+      const page0 = B.state.pages[0];
+      const before = B.notesOf(page0).length;
+      B.addNoteAt(page0, 40, 40);
+      const made = B.notesOf(page0).length;
+      B.commitNote();
+      return { before, made, after: B.notesOf(page0).length };
+    });
+    check('a note left empty is thrown away rather than kept',
+      dropped.made === dropped.before + 1 && dropped.after === dropped.before,
+      JSON.stringify(dropped));
+
+    // A note is the reviewer's, not the document's, so it belongs in a draft.
+    const kept = await page.evaluate(() => {
+      const B = window.Blinded;
+      const saved = B.draftData();
+      return { texts: saved.pages[0].texts.length,
+        turn: saved.pages[0].turn,
+        said: saved.pages[0].texts[0] && saved.pages[0].texts[0].text };
+    });
+    check('a draft carries the notes and the turn',
+      kept.texts === 1 && kept.turn === 0
+      && kept.said === 'Covered at the request of the board.', JSON.stringify(kept));
+
+    await page.evaluate(() => {
+      const B = window.Blinded;
+      B.state.pages[0].texts = [];
+      B.selectNote(null);
+      B.renderNotes(B.state.pages[0]);
       document.getElementById('organisesect').open = false;
       for (const sect of document.querySelectorAll('details.sect')) sect.open = true;
       document.getElementById('organisesect').open = false;

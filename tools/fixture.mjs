@@ -293,6 +293,37 @@ export function buildDoubleFoundPdf() {
 // which makes pdf.js hand back "K", " ", "A", " ", "G" as separate text
 // items with spaces standing in for the gaps. A redactor that matched the
 // term literally covered the first two and left the third in plain sight.
+// A page whose text layer says the same thing several times over, in the same
+// place. Measured on a real CIM page: a deck converted to PDF had each line
+// re-emitted five or six times at identical coordinates — the reader saw one
+// sentence, the text layer held twenty-one copies of the company's name, and
+// the panel reported twenty-three matches over four visible marks.
+export function buildStackedPdf() {
+  const line = 'BT /F1 24 Tf 60 700 Td (On the back-end, KAG supplies parts) Tj ET\n';
+  const body = line.repeat(6)
+    + 'BT /F1 24 Tf 60 640 Td (KAG again, once) Tj ET\n';
+
+  const chunks = [];
+  let length = 0;
+  const offsets = [0];
+  const push = t => { const b = Buffer.from(t, 'latin1'); chunks.push(b); length += b.length; };
+  const begin = id => { offsets[id] = length; push(id + ' 0 obj\n'); };
+
+  push('%PDF-1.4\n');
+  begin(1); push('<< /Type /Catalog /Pages 2 0 R >>\n'); push('endobj\n');
+  begin(2); push('<< /Type /Pages /Count 1 /Kids [3 0 R] >>\n'); push('endobj\n');
+  begin(3); push('<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792]'
+    + ' /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>\n'); push('endobj\n');
+  begin(4); push('<< /Length ' + Buffer.byteLength(body, 'latin1') + ' >>\nstream\n' + body + 'endstream\n'); push('endobj\n');
+  begin(5); push('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\n'); push('endobj\n');
+
+  const xrefAt = length;
+  push('xref\n0 6\n0000000000 65535 f \n');
+  for (let id = 1; id <= 5; id++) push(String(offsets[id]).padStart(10, '0') + ' 00000 n \n');
+  push('trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n' + xrefAt + '\n%%EOF\n');
+  return Buffer.concat(chunks);
+}
+
 export function buildTrackedPdf(word = 'KAG') {
   const chunks = [];
   let length = 0;

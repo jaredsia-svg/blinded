@@ -37,7 +37,7 @@
 <title>Blinded – Efficient redaction for your most sensitive documents, all done locally</title>
 <meta name="description" content="Redact PDFs, images and text in your browser. The file never leaves your machine.">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="app.css?v=59863576">
+<link rel="stylesheet" href="app.css?v=c07577f9">
 </head>
 <body>
 
@@ -365,7 +365,7 @@
         <details class="sect" id="kindsect">
           <summary><span class="s-title">Detectors</span><button type="button"
               class="why" aria-label="What does this section do?"
-              data-tip="Things worth covering that nobody had to type: email addresses, phone numbers, web addresses, dates of birth, street addresses and postal codes, and names read off the layout around them. Only the kinds actually found in this document are listed, with how many of each.">?</button></summary>
+              data-tip="Things worth covering that nobody had to type: email addresses, phone numbers, web addresses, street addresses, and names read off the layout around them. Only the kinds actually found in this document are listed, with how many of each.">?</button></summary>
           <div class="s-body">
             <div id="kinds" class="kinds"></div>
           </div>
@@ -391,7 +391,7 @@
         <details class="sect" id="organisesect">
           <summary><span class="s-title">Organise</span><button type="button"
               class="why" id="sheet-why" aria-label="How to organise pages"
-              data-tip="Tap a page to select it. Shift-click to select a continuous series, and Ctrl-click to select multiple pages. Drag a page by its grip to move it. Undo if you make a mistake.">?</button></summary>
+              data-tip="Tap a page to select it. Shift-click to select a continuous series, and Ctrl-click to select multiple pages. Drag a page by its grip to move it. The selected pages can be kept on their own, thrown away, or turned a quarter at a time. Add a note and tap the page where it should go; tap the note again to change it. Undo if you make a mistake.">?</button></summary>
           <div class="s-body">
             <!-- The same five actions the words used to spell out. As icons
                  they fit one row instead of three, which is the difference
@@ -400,16 +400,6 @@
                  title for a pointer, and a held icon says the same on a
                  phone. -->
             <div class="tools sheettools" role="group" aria-label="Organise pages">
-              <button type="button" id="page-left" class="tool" disabled title="Shift back">
-                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-                  <path d="M19 12H5M11 6l-6 6 6 6"/>
-                </svg><span class="sr-only">Shift back</span>
-              </button>
-              <button type="button" id="page-right" class="tool" disabled title="Shift forward">
-                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-                  <path d="M5 12h14M13 6l6 6-6 6"/>
-                </svg><span class="sr-only">Shift forward</span>
-              </button>
               <button type="button" id="page-keep" class="tool" disabled title="Keep only these – throw away every page that is not selected">
                 <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
                   <path d="M3 5h18l-7 8v6l-4 2v-8z"/>
@@ -419,6 +409,16 @@
                 <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
                   <path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>
                 </svg><span class="sr-only">Remove the selected pages</span>
+              </button>
+              <button type="button" id="page-turn" class="tool" disabled title="Turn the selected pages a quarter clockwise">
+                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                  <path d="M4 9a8 8 0 1 1 1.6 7M4 4v5h5"/>
+                </svg><span class="sr-only">Turn the selected pages</span>
+              </button>
+              <button type="button" id="page-text" class="tool" title="Add a note – then tap the page where it should go">
+                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                  <path d="M5 7V5h14v2M12 5v14M9 19h6"/>
+                </svg><span class="sr-only">Add a note to the page</span>
               </button>
               <button type="button" id="page-add" class="tool" title="Add another document after the page selected">
                 <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
@@ -706,7 +706,7 @@
 <script src="lib/schedule.js?v=50cdd235"></script>
 <script src="lib/detect.js?v=46e8c75b"></script>
 <script src="lib/labels.js?v=f1bffa91"></script>
-<script src="lib/boxes.js?v=e1b41b2b"></script>
+<script src="lib/boxes.js?v=31920d2d"></script>
 <script src="lib/measure.js?v=3e3dc5dc"></script>
 <script src="lib/match.js?v=68d0f03f"></script>
 <script src="lib/imagesearch.js?v=01f80e87"></script>
@@ -714,8 +714,8 @@
 <script src="lib/textimage.js?v=ba90cd37"></script>
 <script src="lib/pdfwrite.js?v=4b977425"></script>
 <script src="lib/pdfread.js?v=ca229552"></script>
-<script src="lib/render.js?v=7bf6e0a9"></script>
-<script src="app.js?v=daa18cc5"></script>
+<script src="lib/render.js?v=70e96ff0"></script>
+<script src="app.js?v=8dd473f1"></script>
 <script type="module" src="lib/boot.mjs?v=8b98ed8f"></script>
 </body>
 </html>

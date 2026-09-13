@@ -27,7 +27,7 @@
   const state = {
     kind: null,        // 'pdf' | 'image' | 'text'
     name: '',
-    pages: [],         // { index, source, canvas, widthPt, heightPt, items, findings, hits, manual, dismissed }
+    pages: [],         // { index, source, canvas, widthPt, heightPt, items, findings, hits, manual, texts, dismissed }
     text: '',
     enabled: new Set(Detect.KINDS.map(k => k.kind).concat('term')),
     terms: [],
@@ -40,6 +40,14 @@
     // no shift and no ctrl, so without a mode of its own there is no way to
     // select a second page at all.
     choosing: false,
+    // Adding a note: the button has been pressed and the next tap on a page
+    // says where it goes. One tap's worth of mode, cancelled by Escape.
+    placingText: false,
+    // The note under the reviewer's hand, and the one with the caret in it.
+    // Only one of each, because both are answers to "which one am I talking
+    // about" and there is only ever one.
+    textSel: null,
+    textEdit: null,
     // Logos the reviewer has picked. Each holds the greyscale patch it was cut
     // from, so its matches can be recomputed when the sensitivity moves
     // without making them draw the box again.
@@ -468,6 +476,8 @@
       hits: [],
       imageHits: [],
       manual: [],
+      texts: [],
+      turn: 0,
       dismissed: new Set(),
     }));
 
@@ -738,8 +748,7 @@
       : n === 1 ? 'Page ' + (picked[0].index + 1) + ' selected.'
         : n + ' pages selected.';
     el('choose-done').hidden = !state.choosing;
-    el('page-left').disabled = !n || picked[0].index === 0;
-    el('page-right').disabled = !n || picked[n - 1].index === only - 1;
+    el('page-turn').disabled = !n;
     // Keeping only everything is a no-op, and removing everything leaves no
     // document at all — neither is offered rather than refused after the fact.
     el('page-keep').disabled = !n || n === only;
@@ -1120,17 +1129,125 @@
     setOrder(next, moving.length === 1 ? 'moving a page' : 'moving pages');
   }
 
-  function nudge(delta) {
-    const moving = pickedInOrder();
-    if (!moving.length) return;
-    if (delta < 0 && moving[0].index === 0) return;
-    if (delta > 0 && moving[moving.length - 1].index === state.pages.length - 1) return;
-    // Back: into the gap in front of the page before this run. On: into the
-    // gap after the page that follows it, which is two along because the gap
-    // immediately after the run is the one it already occupies.
-    moveTo(moving, delta < 0
-      ? moving[0].index - 1
-      : moving[moving.length - 1].index + 2);
+  // ---------- turning a page ----------
+  //
+  // A page arrives sideways often enough — a scan fed the wrong way, a
+  // landscape exhibit in a portrait bundle — and until now the only answer
+  // was to go back to whatever made the PDF. It matters more here than in a
+  // viewer: the reader cannot read sideways lettering, so a sideways page is
+  // a page the search is blind on.
+  //
+  // The turn is real. The pixels are rotated and the page is that shape from
+  // then on, because everything downstream — the reader, the matcher, the
+  // export — works on those pixels, and a page that was only *displayed*
+  // turned would be searched in the orientation nobody can read.
+  //
+  // What rotates exactly, and what cannot:
+  //
+  //   Boxes rotate exactly. A mark, a picked logo's patch and a note are
+  //   rectangles over pixels, and the pixels moved in a way rectangles
+  //   survive.
+  //
+  //   The text layer does not. Its runs carry a position and an advance, and
+  //   the advance is along the page's x axis; turned, the words run down the
+  //   page and every rectangle built from them would be drawn across it. So
+  //   the layer is dropped, along with what was read off the page, and the
+  //   turned page is searched again from its new pixels. That is the cost,
+  //   and it is stated here rather than hidden: turning a page after a search
+  //   asks for the search again.
+  function turnPage(page) {
+    const was = page.source;
+    const canvas = document.createElement('canvas');
+    canvas.width = was.height;
+    canvas.height = was.width;
+    const ctx = canvas.getContext('2d', { alpha: false });
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    // Move the origin to the top right and turn: the old top-left corner ends
+    // up there, which is what a quarter clockwise means.
+    ctx.translate(canvas.width, 0);
+    ctx.rotate(Math.PI / 2);
+    ctx.drawImage(was, 0, 0);
+
+    const tall = was.height;
+    page.source = canvas;
+    page.thumb = null;
+    page.thumbFrom = null;
+    page.turn = ((page.turn || 0) + 90) % 360;
+    const wide = page.widthPt;
+    page.widthPt = page.heightPt;
+    page.heightPt = wide;
+
+    page.manual = page.manual.map(box => ({ ...box, ...Boxes.turn(box, tall) }));
+    page.imageHits = page.imageHits.map(match =>
+      match.rect ? { ...match, rect: Boxes.turn(match.rect, tall) } : match);
+    // A note stays the right way up. Its words were written to be read, and a
+    // page turned to be read should not turn them out of reach; only where
+    // the note sits moves, by its middle, so it stays over what it was about.
+    page.texts = notesOf(page).map(note => {
+      const box = Render.textBox(note);
+      const middle = Boxes.turn({ x: note.x, y: note.y, w: box.w, h: box.h }, tall);
+      return { ...note,
+        x: middle.x + middle.w / 2 - note.w / 2,
+        y: middle.y + middle.h / 2 - box.h / 2 };
+    });
+    for (const template of state.templates) {
+      if (state.pages[template.pageIndex] === page && template.rect) {
+        template.rect = Boxes.turn(template.rect, tall);
+      }
+    }
+
+    page.items = [];
+    page.text = '';
+    page.findings = [];
+    page.hits = [];
+    page.ocrItems = null;
+    page.ocrText = null;
+    page.ocrPlaced = null;
+    page.ocrSkipped = false;
+  }
+
+  // Everything a turn changes about one page, kept so that Undo can put it
+  // back. Turning three more times would not do it: the text layer and the
+  // reading are thrown away by the first turn and no amount of turning brings
+  // them back.
+  const PAGE_KEPT = ['source', 'thumb', 'thumbFrom', 'widthPt', 'heightPt', 'turn',
+    'items', 'text', 'findings', 'hits', 'manual', 'imageHits', 'texts',
+    'ocrItems', 'ocrText', 'ocrPlaced', 'ocrSkipped'];
+
+  function pageSnapshot(page) {
+    const kept = {};
+    for (const key of PAGE_KEPT) kept[key] = page[key];
+    return kept;
+  }
+
+  function turnPages() {
+    const turning = pickedInOrder();
+    if (!turning.length) return;
+    const before = turning.map(page => ({ page, kept: pageSnapshot(page) }));
+    const templates = state.templates.map(t => ({ template: t, rect: t.rect }));
+    const knew = { searched: state.searched, swept: state.sweptTerms.slice(),
+      read: state.ocrRead };
+
+    for (const page of turning) turnPage(page);
+    // The turned pages have to be read again, and only they do: the reader
+    // skips pages that already have their words. A search that has been run
+    // no longer covers the document, so it is withdrawn rather than left
+    // standing over pages it has never seen in this orientation.
+    state.ocrRead = false;
+    state.searched = false;
+    state.sweptTerms = [];
+
+    pushUndo(turning.length === 1 ? 'turning a page' : 'turning ' + turning.length + ' pages',
+      () => {
+        for (const { page, kept } of before) Object.assign(page, kept);
+        for (const { template, rect } of templates) template.rect = rect;
+        state.searched = knew.searched;
+        state.sweptTerms = knew.swept;
+        state.ocrRead = knew.read;
+        rebuildAfterOrder();
+      });
+    rebuildAfterOrder();
   }
 
   function keepOnlyPicked() {
@@ -1186,6 +1303,8 @@
       hits: [],
       imageHits: [],
       manual: [],
+      texts: [],
+      turn: 0,
       dismissed: new Set(),
     }));
     const picked = pickedInOrder();
@@ -2555,13 +2674,22 @@
       const canvas = document.createElement('canvas');
       page.canvas = canvas;
 
+      // Notes live in their own layer over the canvas rather than being
+      // hit-tested on it. Selecting, dragging and above all typing are things
+      // the browser already does well, and re-implementing a caret on a canvas
+      // to save one div would be a poor trade.
+      const layer = document.createElement('div');
+      layer.className = 'notelayer';
+      page.layer = layer;
+
       const num = document.createElement('span');
       num.className = 'num';
       num.textContent = 'Page ' + (page.index + 1);
 
-      wrap.append(canvas, num);
+      wrap.append(canvas, layer, num);
       host.append(wrap);
       attachDrawing(page, canvas);
+      renderNotes(page);
     }
     // Once, now, so the first pages are drawn — and again after a frame, when
     // the wrappers have been laid out and it is possible to tell which pages
@@ -2709,6 +2837,11 @@
       ctx.restore();
     }
 
+    // The reviewer's own writing, over the bars and through the same function
+    // the export uses. Anything with a caret in it is left to its textarea,
+    // which is drawing it already.
+    Render.drawTexts(ctx, notesToDraw(page));
+
     if (preview) {
       ctx.save();
       ctx.strokeStyle = MARK_GREEN;
@@ -2765,6 +2898,18 @@
     };
 
     canvas.addEventListener('pointerdown', event => {
+      // Placing a note is one tap, and it outranks every other meaning a
+      // press on the page has: the reviewer pressed a button a moment ago
+      // that asked them for exactly this.
+      if (state.placingText) {
+        event.preventDefault();
+        const where = at(event);
+        stopPlacingText();
+        addNoteAt(page, where.x, where.y);
+        return;
+      }
+      // A press on the page is a press away from whatever note was in hand.
+      if (state.textSel) { commitNote(); selectNote(null); }
       // A second finger turns whatever was happening into a pinch. Whatever
       // the first one had started — a pan, half a box — is abandoned, because
       // finishing it with the hand that is now zooming is not what anyone
@@ -2893,6 +3038,410 @@
         return;
       }
     }
+  }
+
+  // ---------- notes the reviewer writes on the page ----------
+  //
+  // One button, and after that the note is its own control. Press Add a note,
+  // tap where it goes, type. Tap a note to pick it up and a small bar appears
+  // over it — a colour, two sizes, a bin — and goes away again when anything
+  // else is touched. Tap a note that is already picked up and the caret goes
+  // back into the words. Drag it to move it, drag its corner to set how wide
+  // it is.
+  //
+  // No permanent bar, which is the point: this is a document being reviewed,
+  // and a row of drawing tools standing over it the whole time would say
+  // otherwise. Controls appear on the thing they control and only while it is
+  // in hand.
+  //
+  // A note is stored in the page's own pixels, like every mark, so it survives
+  // zooming, turning and reordering — and it is painted by the function the
+  // export uses, so what is on screen is what ends up in the file.
+
+  const NOTE_COLOURS = [
+    { name: 'Black', value: '#111111' },
+    { name: 'White', value: '#ffffff' },
+    { name: 'Red', value: '#c0392b' },
+    { name: 'Blue', value: '#1a56db' },
+  ];
+
+  // Sizes are a share of the page's width rather than a number of points, so
+  // a note is the same size on a scan rendered at 2000 pixels and on one
+  // rendered at 800.
+  const NOTE_SIZE = 1 / 42;
+  const NOTE_WIDEST = 1 / 10;
+  const NOTE_SMALLEST = 1 / 120;
+  const NOTE_STEP = 1.25;
+  const NOTE_WIDTH = 0.34;     // how wide a fresh note is
+  const NOTE_MARGIN = 0.02;    // and how close to the edge it is allowed to sit
+
+  let nextNoteId = 1;
+
+  function notesOf(page) {
+    if (!page.texts) page.texts = [];
+    return page.texts;
+  }
+
+  function noteWith(id) {
+    for (const page of state.pages) {
+      const note = notesOf(page).find(item => item.id === id);
+      if (note) return { page, note };
+    }
+    return null;
+  }
+
+  // Snapshot first, mutate after. The whole array is copied because a note is
+  // four numbers and a string, and an undo that restores the list wholesale
+  // cannot be wrong about which of them changed.
+  function noteUndo(page, label) {
+    const before = notesOf(page).map(note => ({ ...note }));
+    pushUndo(label, () => {
+      page.texts = before;
+      state.textSel = null;
+      state.textEdit = null;
+      renderNotes(page);
+      drawPage(page);
+    });
+  }
+
+  function startPlacingText() {
+    if (!state.pages.length) return;
+    commitNote();
+    state.placingText = true;
+    state.textSel = null;
+    document.body.classList.add('placing-text');
+    el('page-text').setAttribute('aria-pressed', 'true');
+    // On a phone the panel and the document take turns, and the tap that says
+    // where the note goes has to land on the document.
+    if (onPhone()) setPane('doc');
+    setTip();
+  }
+
+  function stopPlacingText() {
+    if (!state.placingText) return;
+    state.placingText = false;
+    document.body.classList.remove('placing-text');
+    el('page-text').setAttribute('aria-pressed', 'false');
+    setTip();
+  }
+
+  function addNoteAt(page, x, y) {
+    const width = page.source.width;
+    const wide = width * NOTE_WIDTH;
+    const margin = width * NOTE_MARGIN;
+    const note = {
+      id: 'note' + (nextNoteId++),
+      // Kept inside the page, so a note placed near the right edge is not
+      // written off it.
+      x: Math.max(margin, Math.min(x, width - wide - margin)),
+      y: Math.max(0, y),
+      w: wide,
+      size: width * NOTE_SIZE,
+      colour: NOTE_COLOURS[0].value,
+      text: '',
+    };
+    noteUndo(page, 'the note you added');
+    notesOf(page).push(note);
+    state.textSel = note.id;
+    renderNotes(page);
+    drawPage(page);
+    // Straight into typing. A note placed and then waiting to be tapped again
+    // before it will take a word is a note the reviewer has to be told about;
+    // a caret is its own instruction.
+    editNote(note.id);
+  }
+
+  // Leaves whatever note is being written. An empty one is thrown away rather
+  // than left on the page as an invisible thing to trip over later.
+  function commitNote() {
+    const id = state.textEdit;
+    state.textEdit = null;
+    if (!id) return;
+    const found = noteWith(id);
+    if (!found) return;
+    if (!found.note.text.trim()) {
+      found.page.texts = notesOf(found.page).filter(note => note.id !== id);
+      if (state.textSel === id) state.textSel = null;
+    }
+    renderNotes(found.page);
+    drawPage(found.page);
+  }
+
+  function selectNote(id) {
+    if (state.textEdit && state.textEdit !== id) commitNote();
+    const was = state.textSel;
+    state.textSel = id;
+    for (const page of state.pages) {
+      if (notesOf(page).some(note => note.id === id || note.id === was)) renderNotes(page);
+    }
+  }
+
+  function editNote(id) {
+    const found = noteWith(id);
+    if (!found) return;
+    state.textSel = id;
+    state.textEdit = id;
+    renderNotes(found.page);
+    drawPage(found.page);
+    const area = found.page.layer && found.page.layer.querySelector('.notewrite');
+    if (area) { area.focus(); area.setSelectionRange(area.value.length, area.value.length); }
+  }
+
+  function dropNote(id) {
+    const found = noteWith(id);
+    if (!found) return;
+    noteUndo(found.page, 'removing that note');
+    found.page.texts = notesOf(found.page).filter(note => note.id !== id);
+    if (state.textSel === id) state.textSel = null;
+    if (state.textEdit === id) state.textEdit = null;
+    renderNotes(found.page);
+    drawPage(found.page);
+  }
+
+  function restyleNote(id, change, label) {
+    const found = noteWith(id);
+    if (!found) return;
+    noteUndo(found.page, label);
+    change(found.note, found.page);
+    renderNotes(found.page);
+    drawPage(found.page);
+  }
+
+  function resizeNote(id, by) {
+    restyleNote(id, (note, page) => {
+      const width = page.source.width;
+      note.size = Math.max(width * NOTE_SMALLEST,
+        Math.min(width * NOTE_WIDEST, note.size * by));
+    }, 'that size');
+  }
+
+  // What the canvas draws: every note except the one with a caret in it,
+  // which is being drawn by its own textarea and would otherwise appear
+  // twice, half a pixel apart.
+  function notesToDraw(page) {
+    return notesOf(page).filter(note => note.id !== state.textEdit);
+  }
+
+  function renderAllNotes() {
+    for (const page of state.pages) renderNotes(page);
+  }
+
+  // The overlay is rebuilt from the notes rather than adjusted in place. A
+  // note is a handful of elements and there are rarely more than a few on a
+  // page, and rebuilding means there is one description of what a note looks
+  // like instead of one for making it and another for changing it.
+  function renderNotes(page) {
+    const layer = page.layer;
+    if (!layer) return;
+    layer.textContent = '';
+    const width = page.source.width;
+    // Everything is expressed as a share of the page's width, and the CSS
+    // reads those with container units. That is what keeps a note in place
+    // through zooming and through a phone turning on its side, without a
+    // single measurement in JavaScript.
+    const share = value => (value / width) * 100;
+
+    for (const note of notesOf(page)) {
+      const box = Render.textBox(note);
+      const chip = document.createElement('div');
+      chip.className = 'notechip';
+      chip.dataset.note = note.id;
+      chip.style.setProperty('--x', share(note.x));
+      chip.style.setProperty('--y', share(note.y));
+      chip.style.setProperty('--w', share(note.w));
+      chip.style.setProperty('--h', share(box.h));
+      chip.style.setProperty('--s', share(note.size));
+      chip.style.color = note.colour;
+
+      const chosen = state.textSel === note.id;
+      const writing = state.textEdit === note.id;
+      chip.classList.toggle('on', chosen);
+      // Near the top of the page there is no room above the note for its
+      // controls, and the page clips what hangs off it.
+      chip.classList.toggle('low', note.y < width * 0.08);
+
+      if (writing) chip.append(noteWriter(page, note));
+      if (chosen) {
+        chip.append(noteBar(page, note));
+        const grab = document.createElement('span');
+        grab.className = 'notegrab';
+        grab.title = 'Drag to set how wide the note is';
+        chip.append(grab);
+        wireNoteWidth(page, note, grab);
+      }
+      wireNote(page, note, chip);
+      layer.append(chip);
+    }
+  }
+
+  function noteWriter(page, note) {
+    const area = document.createElement('textarea');
+    area.className = 'notewrite';
+    area.value = note.text;
+    area.rows = 1;
+    area.spellcheck = false;
+    area.setAttribute('aria-label', 'The note on page ' + (page.index + 1));
+    area.placeholder = 'Type your note';
+    area.addEventListener('input', () => {
+      note.text = area.value;
+      // The box grows with the words, through the same measurement the canvas
+      // will use, so the outline round the note is where the note will be.
+      area.parentElement.style.setProperty('--h',
+        (Render.textBox(note).h / page.source.width) * 100);
+    });
+    area.addEventListener('keydown', event => {
+      if (event.key === 'Escape') { event.stopPropagation(); area.blur(); }
+    });
+    area.addEventListener('blur', () => { if (state.textEdit === note.id) commitNote(); });
+    // A press inside the words is not a press on the note: it must not start
+    // dragging the thing the caret is in.
+    area.addEventListener('pointerdown', event => event.stopPropagation());
+    return area;
+  }
+
+  function noteBar(page, note) {
+    const bar = document.createElement('div');
+    bar.className = 'notebar';
+    // The bar belongs to the reviewer, not to the note, so it is not tinted
+    // by the colour the note is written in.
+    bar.style.color = '';
+    const stop = event => { event.preventDefault(); event.stopPropagation(); };
+    bar.addEventListener('pointerdown', stop);
+
+    for (const colour of NOTE_COLOURS) {
+      const dot = document.createElement('button');
+      dot.type = 'button';
+      dot.className = 'notedot' + (note.colour === colour.value ? ' on' : '');
+      dot.style.background = colour.value;
+      dot.title = colour.name;
+      dot.setAttribute('aria-label', colour.name);
+      dot.addEventListener('click', event => {
+        stop(event);
+        restyleNote(note.id, item => { item.colour = colour.value; }, 'that colour');
+      });
+      bar.append(dot);
+    }
+
+    for (const step of [{ by: 1 / NOTE_STEP, sign: '−', say: 'Smaller' },
+      { by: NOTE_STEP, sign: '+', say: 'Bigger' }]) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'notestep';
+      button.textContent = 'A' + step.sign;
+      button.title = step.say;
+      button.setAttribute('aria-label', step.say);
+      button.addEventListener('click', event => { stop(event); resizeNote(note.id, step.by); });
+      bar.append(button);
+    }
+
+    const bin = document.createElement('button');
+    bin.type = 'button';
+    bin.className = 'notestep notebin';
+    bin.textContent = '✕';
+    bin.title = 'Remove this note';
+    bin.setAttribute('aria-label', 'Remove this note');
+    bin.addEventListener('click', event => { stop(event); dropNote(note.id); });
+    bar.append(bin);
+    return bar;
+  }
+
+  // Where a pointer is, in the page's own pixels. The note layer sits exactly
+  // over the canvas, so its box is the page's box.
+  function noteSpace(page, event) {
+    const rect = page.layer.getBoundingClientRect();
+    return {
+      x: (event.clientX - rect.left) * (page.source.width / rect.width),
+      y: (event.clientY - rect.top) * (page.source.height / rect.height),
+      // Page pixels per screen pixel, for anything that has to think in
+      // screen distances — how far a press wandered, say.
+      scale: page.source.width / rect.width,
+    };
+  }
+
+  const NOTE_SLOP = 4;         // a press that wanders this far was a drag
+
+  function wireNote(page, note, chip) {
+    let from = null;
+    let moved = false;
+
+    chip.addEventListener('pointerdown', event => {
+      if (state.textEdit === note.id) return;     // the caret is in it; leave it be
+      event.preventDefault();
+      event.stopPropagation();
+      const was = state.textSel === note.id;
+      selectNote(note.id);
+      // The chip has just been rebuilt by selecting it, so the drag is
+      // tracked from the one that replaced it.
+      const live = page.layer.querySelector('[data-note="' + note.id + '"]');
+      const host = live || chip;
+      const at = noteSpace(page, event);
+      from = { x: at.x - note.x, y: at.y - note.y, already: was };
+      moved = false;
+      try { host.setPointerCapture(event.pointerId); } catch { /* not fatal */ }
+      const move = onMove => {
+        if (!from) return;
+        const now = noteSpace(page, onMove);
+        const x = now.x - from.x;
+        const y = now.y - from.y;
+        // The slop is in screen pixels, so the distance in page pixels is
+        // divided by the scale rather than multiplied by it: a page shown at
+        // half size moves two of its own pixels for every one on screen.
+        if (!moved && (Math.abs(x - note.x) / now.scale > NOTE_SLOP
+          || Math.abs(y - note.y) / now.scale > NOTE_SLOP)) {
+          moved = true;
+          noteUndo(page, 'moving that note');
+        }
+        if (!moved) return;
+        note.x = x;
+        note.y = y;
+        host.style.setProperty('--x', (note.x / page.source.width) * 100);
+        host.style.setProperty('--y', (note.y / page.source.width) * 100);
+      };
+      const done = () => {
+        host.removeEventListener('pointermove', move);
+        host.removeEventListener('pointerup', done);
+        host.removeEventListener('pointercancel', done);
+        if (moved) { renderNotes(page); drawPage(page); }
+        // A tap on a note already in hand puts the caret in it. A tap that
+        // picked it up does not, or every note would open for editing the
+        // moment it was touched.
+        else if (from && from.already) editNote(note.id);
+        from = null;
+      };
+      host.addEventListener('pointermove', move);
+      host.addEventListener('pointerup', done);
+      host.addEventListener('pointercancel', done);
+    });
+  }
+
+  function wireNoteWidth(page, note, grab) {
+    grab.addEventListener('pointerdown', event => {
+      event.preventDefault();
+      event.stopPropagation();
+      noteUndo(page, 'how wide that note is');
+      const start = noteSpace(page, event);
+      const wasWide = note.w;
+      const chip = grab.parentElement;
+      try { grab.setPointerCapture(event.pointerId); } catch { /* not fatal */ }
+      const move = onMove => {
+        const now = noteSpace(page, onMove);
+        const smallest = page.source.width * 0.04;
+        note.w = Math.max(smallest,
+          Math.min(page.source.width - note.x, wasWide + (now.x - start.x)));
+        chip.style.setProperty('--w', (note.w / page.source.width) * 100);
+        chip.style.setProperty('--h', (Render.textBox(note).h / page.source.width) * 100);
+      };
+      const done = () => {
+        grab.removeEventListener('pointermove', move);
+        grab.removeEventListener('pointerup', done);
+        grab.removeEventListener('pointercancel', done);
+        renderNotes(page);
+        drawPage(page);
+      };
+      grab.addEventListener('pointermove', move);
+      grab.addEventListener('pointerup', done);
+      grab.addEventListener('pointercancel', done);
+    });
   }
 
   // ---------- picking a logo, and finding it again ----------
@@ -3251,6 +3800,14 @@
     // the finger that would ordinarily drag the document is busy drawing the
     // box, so how to move the page is a genuine question; with a mouse it is
     // not, and a line about fingers there is noise.
+    if (state.placingText) {
+      // Said on every screen, not only a phone: nothing else in the tool
+      // waits for a tap on the document, so without a line here the button
+      // looks as though it did nothing.
+      tip.textContent = 'Tap the page where the note should go.';
+      tip.hidden = false;
+      return;
+    }
     const say = state.mode === 'pick' && onPhone();
     tip.textContent = say ? 'One finger to draw the box, two to scroll.' : '';
     tip.hidden = !say;
@@ -3954,8 +4511,28 @@
       return out;
     }
     for (const page of state.pages) {
-      for (const span of Detect.findTerms(page.text, [term])) {
-        out.push({ pageIndex: page.index, kind: 'text', at: span.start });
+      // One row per mark the page will actually draw, not per run in the text
+      // layer.
+      //
+      // These are not the same number, and on a converted deck they are not
+      // close. Measured on a real CIM: the page showed the company's name
+      // four times, its text layer held twenty-one copies of it — the same
+      // sentence re-emitted five or six times at identical coordinates, some
+      // of the copies garbled where they overlap — and the panel said
+      // twenty-three. The marks were right all along: page.hits has already
+      // been through onePerPlace, which drops a box sitting on top of an
+      // identical box. This counted the raw spans instead, so the panel
+      // reported the file's duplicated text layer as places in the document.
+      //
+      // An inflated count is not the conservative side of this. Nothing about
+      // what gets covered changes here — the boxes were and are the same. What
+      // changes is whether the number can be believed, and "23" over a page
+      // with four marks on it teaches a reviewer to stop reading the number
+      // at all, which is the one thing that would let a real miss through.
+      for (const hit of page.hits) {
+        if (hit.finding.term !== term) continue;
+        out.push({ pageIndex: page.index, kind: 'text',
+                   at: hit.rects && hit.rects[0] ? hit.rects[0].y : 0 });
       }
       for (const match of liveImageHits(page)) {
         if (match.term !== term) continue;
@@ -4226,6 +4803,12 @@
       })),
       pages: state.pages.map(page => ({
         index: page.index,
+        // How far the page has been turned, and the notes written on it.
+        // Both are the reviewer's work rather than the document's, which is
+        // exactly what a draft is for — and the marks below are stored in the
+        // turned page's coordinates, so the turn has to go back first.
+        turn: page.turn || 0,
+        texts: notesOf(page).map(note => ({ ...note })),
         manual: page.manual,
         dismissed: [...page.dismissed],
         // Only marks that came from a word or a logo. Anything the text
@@ -4330,9 +4913,25 @@
     state.sweptTerms = data.sweptTerms || [];
     state.sweepAdded = data.sweepAdded || 0;
 
+    let turned = false;
     for (const saved of data.pages || []) {
       const page = state.pages[saved.index];
       if (!page) continue;
+      // Turned back to the orientation the marks were measured against,
+      // before any of them are put back. A quarter at a time, through the
+      // same function the button uses, so a restored page is the same page a
+      // turned one is.
+      for (let quarter = (((saved.turn || 0) - (page.turn || 0)) % 360 + 360) % 360;
+        quarter > 0; quarter -= 90) {
+        turnPage(page);
+        turned = true;
+      }
+      page.texts = (saved.texts || []).map(note => ({ ...note }));
+      for (const note of page.texts) {
+        // Ids have to stay unique against the ones this session will mint.
+        const number = Number(String(note.id).replace(/\D+/g, ''));
+        if (number >= nextNoteId) nextNoteId = number + 1;
+      }
       page.manual = saved.manual || [];
       page.dismissed = new Set(saved.dismissed || []);
       page.imageHits = (saved.imageHits || []).filter(m => m && m.rect);
@@ -4355,10 +4954,15 @@
       });
     }
 
+    // A turned page is a different shape, and the elements holding the pages
+    // carry that shape. Rebuilt rather than redrawn, or the document would be
+    // drawn correctly into wrappers that are still the old way round.
+    if (turned) buildPageElements();
     rescan();
     renderTemplates();
     renderTermCounts();
     renderSectionNotes();
+    renderAllNotes();
     redrawAll();
     refreshApply();
     refreshPaging();
@@ -4612,7 +5216,7 @@
         download(new Blob([out], { type: 'text/plain' }), state.saveAs);
       } else if (state.kind === 'image') {
         const page = state.pages[0];
-        const flat = Render.flatten(page.source, activeBoxes(page));
+        const flat = Render.flatten(page.source, activeBoxes(page), notesOf(page));
         download(await Render.canvasToBlob(flat, 'image/png'), state.saveAs);
       } else {
         const lossless = el('lossless').checked;
@@ -4631,7 +5235,7 @@
         for (const page of state.pages) {
           pageProgress(page.index, state.pages.length, 'Flattening pages');
           const boxes = activeBoxes(page);
-          flats.push({ page, boxes, flat: Render.flatten(page.source, boxes) });
+          flats.push({ page, boxes, flat: Render.flatten(page.source, boxes, notesOf(page)) });
         }
 
         // Read back what the redacted pages actually say.
@@ -5059,8 +5663,11 @@
 
   window.addEventListener('resize', fitSheet);
 
-  el('page-left').addEventListener('click', () => nudge(-1));
-  el('page-right').addEventListener('click', () => nudge(1));
+  el('page-turn').addEventListener('click', turnPages);
+  el('page-text').addEventListener('click', () => {
+    if (state.placingText) stopPlacingText();
+    else startPlacingText();
+  });
   el('page-keep').addEventListener('click', keepOnlyPicked);
   el('page-drop').addEventListener('click', dropPicked);
   el('page-add').addEventListener('click', () => el('addfile').click());
@@ -5071,6 +5678,32 @@
     event.target.value = '';
     await addDocument(file);
   });
+  // A press anywhere that is not a note puts the note down. The pages have
+  // their own handler for this, because a press there also means something
+  // else; this one catches the panel, the header and the margins.
+  document.addEventListener('pointerdown', event => {
+    if (!state.textSel) return;
+    if (event.target.closest && event.target.closest('.notechip')) return;
+    commitNote();
+    selectNote(null);
+  }, true);
+
+  window.addEventListener('keydown', event => {
+    if (event.key === 'Escape' && state.placingText) {
+      stopPlacingText();
+      return;
+    }
+    // A note in hand, with the caret somewhere else: Delete removes it. Not
+    // while it is being typed into, where those keys belong to the words.
+    const typing = event.target && /^(INPUT|TEXTAREA|SELECT)$/.test(event.target.tagName);
+    if (!state.textSel || state.textEdit || typing) return;
+    if (event.key === 'Escape') { selectNote(null); return; }
+    if (event.key === 'Delete' || event.key === 'Backspace') {
+      event.preventDefault();
+      dropNote(state.textSel);
+    }
+  });
+
   // The modifier is named in the hint, and it is a different key on a Mac.
   if (/Mac|iPhone|iPad/.test(navigator.platform || '')) {
     for (const why of document.querySelectorAll('[data-tip*="Ctrl-click"]')) {
@@ -5705,7 +6338,10 @@
     scrollerFor, setTool, marking,
     runSearch, applyRedaction: runSearch, coverMarks, uncoverMarks, applyButton,
     activeBoxes,
-    renderSheet, setOrder, moveTo, nudge, keepOnlyPicked, dropPicked,
+    renderSheet, setOrder, moveTo, keepOnlyPicked, dropPicked,
+    turnPages, turnPage, addNoteAt, dropNote, selectNote, editNote, commitNote,
+    notesOf, renderNotes, notesToDraw, startPlacingText, stopPlacingText,
+    resizeNote, NOTE_COLOURS, NOTE_SIZE,
     edgeScroll, stopEdgeScroll, CREEP_EDGE, fitSheet, rollSections,
     creepEdges, pushScroll, startChoosing, stopChoosing, CHOOSE_HOLD,
     addDocument, pickedInOrder, selectPage, thumbFor, organiseStamp,
