@@ -1490,6 +1490,7 @@
       try {
         await readPages(done => leg('read', done));
         matchOcr(done => leg('read', done));
+        detectOcr();
         markDuplicates();
         renderTermCounts();
         renderSectionNotes();
@@ -1540,8 +1541,11 @@
     state.countedTerms = state.terms.slice();
     state.redacting = false;
     // The word list shows a tally only once something has counted, so it has
-    // to be redrawn when that becomes true.
+    // to be redrawn when that becomes true. The detectors are the same now
+    // that they read what OCR read: they wait on this search too, and without
+    // this they sat showing a question mark over an answer they already had.
     renderTermCounts();
+    renderKinds();
     // And the image rows, whose sliders may have moved themselves: a bar that
     // came down without the control following it would be a reading that
     // disagrees with the thing it reads.
@@ -1702,6 +1706,44 @@
       }
     }
     state.searchedTerms = state.terms.slice();
+  }
+
+  // The detectors, over what OCR read.
+  //
+  // They only ever ran on the PDF's own text layer, which means that on a
+  // scanned page — the contact sheet at the back of a CIM, a photographed
+  // slide — they found nothing at all. OCR was already reading those pages
+  // and already mapping what it read back to boxes; it was just that only
+  // typed words were being looked for in it. An email address painted into a
+  // screenshot is as much an email address as one in the text layer.
+  //
+  // Kinds are not filtered here. A detector the reviewer has switched off
+  // still has its findings collected and then dropped by acceptable(), so
+  // that switching it back on does not require another pass over the
+  // document.
+  function detectOcr() {
+    for (const page of state.pages) {
+      page.imageHits = page.imageHits.filter(m => !m.detector);
+      if (!page.ocrText || !page.ocrPlaced) continue;
+      const found = Detect.findAll(page.ocrText, { kinds: acceptedKinds() });
+      for (const span of found) {
+        for (const item of page.ocrPlaced) {
+          if (item.start >= span.end || item.end <= span.start) continue;
+          // Whole words, for the reason the term matcher covers whole words:
+          // OCR reports one box per word, and dividing it by letter count is
+          // wrong in the direction that leaves a letter showing.
+          page.imageHits.push({
+            id: 'read:' + span.kind + ':' + page.index + ':'
+              + Math.round(item.rect.x) + ':' + Math.round(item.rect.y),
+            detector: span.kind,
+            text: span.text,
+            rect: { ...item.rect },
+            score: 1,
+            read: true,
+          });
+        }
+      }
+    }
   }
 
   // Everything that needs looking for, as one list.
@@ -2010,8 +2052,6 @@
     const logos = state.templates.length;
     set('image-note', logos ? logos + (logos === 1 ? ' image' : ' images') : '', logos > 0);
 
-    const kinds = Detect.KINDS.filter(k => state.enabled.has(k.kind)).length;
-    set('kind-note', kinds + ' of ' + Detect.KINDS.length, false);
 
     if (el('organise-note')) refreshSheetBar();
 
@@ -2153,6 +2193,10 @@
         // shares a placeholder with every written occurrence of it. Anything
         // else is a picked logo.
         if (match.term) items.push({ id: match.id, kind: 'term', term: match.term, text: match.term });
+        // Something a detector found in what OCR read. It is the same kind of
+        // thing as the one found in the text layer, so it takes the same kind
+        // of placeholder.
+        else if (match.detector) items.push({ id: match.id, kind: match.detector, text: match.text });
         else items.push({ id: match.id, kind: 'image', templateId: match.templateId });
       }
       for (const box of page.manual) {
@@ -2230,36 +2274,79 @@
   // means something different from a blank, and the reviewer needs to be able
   // to tell those apart.
   function countsByKind() {
-    const texts = state.kind === 'text' ? [state.text] : state.pages.map(p => p.text);
     const tally = {};
-    for (const text of texts) {
-      const all = Detect.findAll(text, { terms: state.terms });
-      for (const f of all) tally[f.kind] = (tally[f.kind] || 0) + 1;
+    const count = (text, seen) => {
+      if (!text) return;
+      for (const f of Detect.findAll(text, { terms: state.terms })) {
+        // The same address in the text layer and again in what OCR read is
+        // one address. Counted twice it would say the page holds twice what
+        // it holds, and the number beside a detector is the only thing the
+        // reviewer has to judge it by.
+        const key = f.kind + '\u0000' + f.text.toLowerCase();
+        if (seen.has(key)) continue;
+        seen.add(key);
+        tally[f.kind] = (tally[f.kind] || 0) + 1;
+      }
+    };
+    if (state.kind === 'text') { count(state.text, new Set()); return tally; }
+    for (const page of state.pages) {
+      const seen = new Set();
+      count(page.text, seen);
+      count(page.ocrText, seen);
     }
     return tally;
   }
 
+  // Whether those numbers are answers yet.
+  //
+  // They used to be, always: the detectors read the text layer, which is there
+  // the moment the file opens. Now they also read what OCR reads, and OCR
+  // happens during the search — so before it, a number would be a count of
+  // half the document presented as a count of all of it. A red question mark
+  // says the honest thing instead, which is the same thing the term counts and
+  // the picked images say while they are waiting.
+  function kindsKnown() {
+    return state.kind === 'text' || state.searched;
+  }
+
   function renderKinds() {
     const tally = countsByKind();
+    const known = kindsKnown();
     // Only the detectors are listed. Words the reviewer typed were once a
     // tenth row with a tick box of its own, which invited exactly one
-    // question — why would I type a word and then ask for it not to be
+    // question – why would I type a word and then ask for it not to be
     // covered? Typing a word is the instruction; there is nothing left to
     // agree to. It is always on, and the terms box above shows its own count.
-    const rows = Detect.KINDS;
+    //
+    // Once the search has run, only the ones that found something. A list of
+    // seven kinds with a zero against five of them is a list of what this tool
+    // can look for, which is a fact about the tool; what the reviewer is
+    // deciding is what to do about this document. The rest is answered by the
+    // hint on the heading, where a question about the tool belongs.
+    //
+    // Before it has run, all of them, because none of them has an answer yet
+    // and hiding a detector for finding nothing would be reporting a result
+    // nobody has looked for.
+    const rows = known
+      ? Detect.KINDS.filter(row => (tally[row.kind] || 0) > 0)
+      : Detect.KINDS;
     const host = el('kinds');
     host.textContent = '';
+
+    // Nothing found means nothing to decide, so the section goes rather than
+    // standing empty. An empty panel section reads as something broken.
+    const section = el('kindsect');
+    if (section) section.hidden = rows.length === 0;
 
     for (const row of rows) {
       const n = tally[row.kind] || 0;
       const label = document.createElement('label');
-      label.className = 'kind' + (n === 0 ? ' empty' : '');
+      label.className = 'kind';
       label.title = row.hint;
 
       const box = document.createElement('input');
       box.type = 'checkbox';
       box.checked = state.enabled.has(row.kind);
-      box.disabled = n === 0;
       box.dataset.kind = row.kind;
       box.addEventListener('change', () => {
         if (box.checked) state.enabled.add(row.kind);
@@ -2272,8 +2359,9 @@
       name.textContent = row.label;
 
       const count = document.createElement('span');
-      count.className = 'n';
-      count.textContent = String(n);
+      count.className = known ? 'n' : 'n unknown';
+      count.textContent = known ? String(n) : '?';
+      if (!known) count.title = 'Not searched for yet – press Search';
 
       label.append(box, name, count);
       host.append(label);
@@ -5378,18 +5466,50 @@
   // browser's "leave site?" warning in the way of a reviewer who only wanted
   // to read what the tool does. Nothing navigates now, so nothing is lost and
   // there is nothing to warn about.
-  const closeFaq = () => show(viewBefore);
+  // Leaving the tool is navigation, so the browser's own Back has to mean what
+  // it looks like it means.
+  //
+  // The views were switched without touching history, so pressing Back on the
+  // questions page left the site altogether — taking the open document with
+  // it, since the document lives in the tab and nowhere else. That is the
+  // worst possible thing for a browser button to do here.
+  //
+  // So going away pushes an entry, and every way back — the header button, the
+  // one at the foot of the questions, and the browser's own — is the same
+  // history step. Counted, so that Back is only ever called on an entry this
+  // page put there: a page that has pushed nothing must not send the reviewer
+  // to whatever they were looking at before.
+  let pushed = 0;
+
+  function goAway(name) {
+    show(name);
+    pushed += 1;
+    history.pushState({ view: name }, '');
+  }
+
+  function comeBack() {
+    if (pushed > 0) history.back();
+    else show(viewBefore === 'faq' ? 'drop' : viewBefore);
+  }
+
+  window.addEventListener('popstate', event => {
+    pushed = Math.max(0, pushed - 1);
+    const want = (event.state && event.state.view)
+      || (hasDocument() ? 'review' : 'drop');
+    show(want);
+  });
+
   el('faq-open').addEventListener('click', () => {
     // Three jobs, one button, and the label always says which one it is doing:
     // open the questions, close them, or leave the front page for the document
     // it was being read alongside.
-    if (!views.faq.hidden) closeFaq();
-    else if (views.drop.hidden === false && hasDocument()) show('review');
-    else show('faq');
+    if (!views.faq.hidden) comeBack();
+    else if (views.drop.hidden === false && hasDocument()) comeBack();
+    else goAway('faq');
   });
-  el('faq-back-bottom').addEventListener('click', closeFaq);
-  el('home-top').addEventListener('click', () => show('drop'));
-  el('foot-faq').addEventListener('click', () => show('faq'));
+  el('faq-back-bottom').addEventListener('click', comeBack);
+  el('home-top').addEventListener('click', () => goAway('drop'));
+  el('foot-faq').addEventListener('click', () => goAway('faq'));
 
   el('page-prev').addEventListener('click', () => stepPage(-1));
   el('page-next').addEventListener('click', () => stepPage(1));
@@ -5447,7 +5567,7 @@
     saveDraft, draftData, restoreDraft, looksLikeDraft, fingerprint, takeDraft,
     occurrencesFor, placesFor, renderTermCounts, renderTemplates, goToPage,
     updateLivePages, fitCanvas, releaseCanvas, isLive, displayWidthFor, NEAR_PAGES,
-    setPane, placeToolbar, onPhone, hasDocument,
+    setPane, placeToolbar, onPhone, hasDocument, goAway, comeBack,
     scrollerFor, setTool, marking,
     runSearch, applyRedaction: runSearch, coverMarks, uncoverMarks, applyButton,
     activeBoxes,
@@ -5455,6 +5575,7 @@
     edgeScroll, stopEdgeScroll, CREEP_EDGE, fitSheet, rollSections,
     creepEdges, pushScroll, startChoosing, stopChoosing, CHOOSE_HOLD,
     addDocument, pickedInOrder, selectPage, thumbFor, organiseStamp,
+    kindsKnown, countsByKind, detectOcr, renderKinds,
     markPending, needsSearch, markDuplicates, onePerPlace, plannedCount,
     pendingTemplates,
     termsNeedingPictures,

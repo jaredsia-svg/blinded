@@ -5854,8 +5854,8 @@ try {
   // they read as decoration that does nothing. What matters is that the text
   // actually becomes visible, so that is what is asserted, not that a handler
   // is attached.
-  // Five. The sensitivity bar and the placeholder switch, plus one on each of
-  // the three section headings saying what that section is for. Those three
+  // Six. The sensitivity bar and the placeholder switch, plus one on each of
+  // the four section headings saying what that section is for. Those three
   // were standing paragraphs, which cost room every time the section was open
   // and said the same thing to someone reading it for the hundredth time.
   //
@@ -5863,7 +5863,7 @@ try {
   // always does now, and "include lower-confidence matches", whose detectors
   // were tightened until they could stand without it.
   const whyCount = await page.evaluate(() => document.querySelectorAll('.why').length);
-  check('the panel still has its hints', whyCount === 5, String(whyCount));
+  check('the panel still has its hints', whyCount === 6, String(whyCount));
   check('every hint carries text to show',
     await page.evaluate(() => [...document.querySelectorAll('.why')]
       .every(b => (b.getAttribute('data-tip') || '').length > 20)));
@@ -7002,6 +7002,122 @@ try {
     const fresh = { drop: await page.isVisible('#drop'), faq: await link('#faq-open') };
     check('with nothing open the drop zone is back',
       fresh.drop === true && fresh.faq.says === 'Q&A', JSON.stringify(fresh));
+  }
+
+  // ---------- Back means back to the tool ----------
+  //
+  // The views were switched without touching history, so the browser's Back
+  // left the site — and the document lives in the tab and nowhere else, so
+  // leaving the site is losing it. Every way out of the tool pushes an entry
+  // now, and Back is one of the ways home.
+  {
+    if (!(await page.isVisible('#view-review'))) {
+      await page.setInputFiles('#file', fixturePath);
+      await page.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
+    }
+    const opened = await page.evaluate(() => window.Blinded.state.pages.length);
+
+    await page.click('#faq-open');
+    await page.waitForSelector('#view-faq:not([hidden])', { timeout: 15000 });
+    await page.goBack();
+    await page.waitForSelector('#view-review:not([hidden])', { timeout: 15000 });
+    check('Back from the questions returns to the document',
+      (await page.evaluate(() => window.Blinded.state.pages.length)) === opened);
+
+    await page.click('#home-top');
+    await page.waitForSelector('#view-drop:not([hidden])', { timeout: 15000 });
+    await page.goBack();
+    await page.waitForSelector('#view-review:not([hidden])', { timeout: 15000 });
+    check('and Back from the front page does too',
+      (await page.evaluate(() => window.Blinded.state.pages.length)) === opened);
+
+    // The button and the browser have to be the same step, or one of them
+    // leaves an entry behind and the next Back goes somewhere surprising.
+    //
+    // Checked by what history holds afterwards rather than by pressing Back
+    // again. Back at that point is correct to leave the site — the app has
+    // nothing left of its own to go back to — and an earlier version of this
+    // test did press it, walked the browser off the page, and left every check
+    // after it reading a blank document.
+    const depth = await page.evaluate(() => history.state);
+    await page.click('#faq-open');
+    await page.waitForSelector('#view-faq:not([hidden])', { timeout: 15000 });
+    const away = await page.evaluate(() => history.state);
+    await page.click('#faq-open');
+    await page.waitForSelector('#view-review:not([hidden])', { timeout: 15000 });
+    const home = await page.evaluate(() => history.state);
+    check('going away puts an entry in history',
+      away && away.view === 'faq', JSON.stringify({ depth, away, home }));
+    check('and leaving by the button takes it out again',
+      JSON.stringify(home) === JSON.stringify(depth),
+      JSON.stringify({ depth, away, home }));
+  }
+
+  // ---------- the detectors, before and after the search ----------
+  //
+  // They read what OCR reads now, as well as the text layer — an email address
+  // painted into a screenshot is an email address. OCR happens during the
+  // search, so before it a number would be a count of half the document
+  // offered as a count of all of it. A question mark says the honest thing.
+  {
+    const readKinds = () => page.evaluate(() => {
+      const section = document.getElementById('kindsect');
+      const rows = [...document.querySelectorAll('#kinds .kind')];
+      return {
+        hidden: section.hidden,
+        known: window.Blinded.kindsKnown(),
+        note: Boolean(document.getElementById('kind-note')),
+        hint: Boolean(section.querySelector('summary .why')),
+        rows: rows.map(r => ({
+          name: r.querySelector('.name').textContent,
+          says: r.querySelector('.n').textContent,
+          asking: r.querySelector('.n').classList.contains('unknown'),
+        })),
+      };
+    });
+
+    const before = await readKinds();
+    check('before the search every detector shows a question, not a number',
+      before.known === false && before.rows.length > 0
+        && before.rows.every(r => r.says === '?' && r.asking),
+      JSON.stringify(before));
+    check('and all of them are listed, since none has been answered',
+      before.rows.length === 7 && before.hidden === false, JSON.stringify(before));
+    check('the count of detectors is gone from the heading',
+      before.note === false, JSON.stringify(before));
+    check('and what the section is for is a hint on it instead',
+      before.hint === true, JSON.stringify(before));
+
+    await page.click('#apply');
+    await page.waitForFunction(() => window.Blinded.state.searched === true,
+      null, { timeout: 90000 });
+    const after = await readKinds();
+    check('after it, numbers rather than questions',
+      after.known === true && after.rows.every(r => !r.asking && /^\d+$/.test(r.says)),
+      JSON.stringify(after));
+    check('and only the detectors that found something are listed',
+      after.rows.length > 0 && after.rows.every(r => Number(r.says) > 0)
+        && after.rows.length < 7,
+      JSON.stringify(after));
+
+    // Nothing found takes the section off the panel, rather than leaving a
+    // row of zeroes where a decision used to be.
+    const bare = await page.evaluate(async () => {
+      const B = window.Blinded;
+      const was = B.state.pages.map(p => p.text);
+      B.state.pages.forEach(p => { p.text = 'nothing of interest here at all'; });
+      B.rescan({ settled: true });
+      await new Promise(r => setTimeout(r, 60));
+      const hidden = document.getElementById('kindsect').hidden;
+      B.state.pages.forEach((p, i) => { p.text = was[i]; });
+      B.rescan({ settled: true });
+      await new Promise(r => setTimeout(r, 60));
+      return { hidden, backAgain: document.getElementById('kindsect').hidden };
+    });
+    check('a document with nothing to find has no Detectors section',
+      bare.hidden === true, JSON.stringify(bare));
+    check('and it comes back when there is something again',
+      bare.backAgain === false, JSON.stringify(bare));
   }
 
   // ---------- the foot of the page ----------
