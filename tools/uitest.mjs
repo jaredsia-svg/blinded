@@ -5754,23 +5754,35 @@ try {
       B.state.sweepStopped = false;
       B.state.sweepAdded = 1;
       B.state.sweepRefused = 2;
+      B.state.sweepRefusedAt = [{ pageIndex: 1, at: 400 }, { pageIndex: 0, at: 120 }];
       B.renderSweep();
-      const withSome = document.getElementById('sweepnote').textContent;
+      const note = document.getElementById('sweepnote');
+      const withSome = note.textContent;
+      const rows = [...note.querySelectorAll('.tallyspot')].map(b => b.textContent);
       B.state.sweepRefused = 0;
+      B.state.sweepRefusedAt = [];
       B.renderSweep();
       const withNone = document.getElementById('sweepnote').textContent;
+      const noRows = document.querySelectorAll('#sweepnote .tallyspot').length;
       B.state.sweepRefused = was;
       B.state.sweptTerms = swept;
       B.state.terms = terms;
       B.renderSweep();
-      return { withSome, withNone };
+      return { withSome, withNone, rows, noRows };
     });
     check('a refusal is reported, not silently swallowed',
       /2 other spots were left alone/.test(refused.withSome), refused.withSome);
     check('and it says where to look when a mark is missing',
       /read them as something else/.test(refused.withSome), refused.withSome);
+    // "Somewhere in this document" is not a place. Each refusal is a row that
+    // goes there, in page order.
+    check('each place it stood down from is one row of its own',
+      refused.rows.length === 2, JSON.stringify(refused.rows));
+    check('in page order, and saying why nothing was marked',
+      /^Page 1/.test(refused.rows[0]) && /^Page 2/.test(refused.rows[1])
+      && /read as something else/.test(refused.rows[0]), JSON.stringify(refused.rows));
     check('while refusing nothing says nothing',
-      !/left alone/.test(refused.withNone), refused.withNone);
+      !/left alone/.test(refused.withNone) && refused.noRows === 0, refused.withNone);
     check('and stops offering itself for the same words',
       swept.buttonGone === true, JSON.stringify(swept));
 

@@ -141,6 +141,9 @@
     sweepRunning: false,
     sweepStopped: false,
     sweepReached: 0,
+    // Spots the thorough check proposed and stood down from, so the note can
+    // hand the reviewer each one rather than a number.
+    sweepRefusedAt: [],
     // Per page: the words OCR read, and the text they stitch into.
     ocrRead: false,
     // Terms whose picture search has already run, so pressing Redact twice
@@ -462,6 +465,8 @@
     state.sweepAdded = 0;
     state.sweepStopped = false;
     state.sweepReached = 0;
+    state.sweepRefused = 0;
+    state.sweepRefusedAt = [];
     state.exported = false;
     state.searched = false;
     state.countedTerms = [];
@@ -4662,7 +4667,14 @@
   function tallyList(term, where) {
     const box = document.createElement('li');
     box.className = 'tally';
+    box.append(tallyRows(where));
+    return box;
+  }
 
+  // The rows themselves, which the sweep's note borrows: a place the check
+  // stood down from is answered the same way as a place it found, because to
+  // the reviewer they are the same question — where is it, take me there.
+  function tallyRows(where) {
     const list = document.createElement('ul');
     list.className = 'tallywhere';
     for (const spot of where) {
@@ -4679,7 +4691,8 @@
       // Every row in a picked image's list was found as a picture, so saying
       // so said nothing. What it scored is the thing the reviewer can act on.
       how.textContent = spot.kind === 'shape' ? 'by shape'
-        : spot.kind === 'read' ? 'read off the page'
+        : spot.kind === 'refused' ? 'read as something else'
+          : spot.kind === 'read' ? 'read off the page'
           : spot.kind === 'image'
             ? (spot.score === null ? 'as a picture' : spot.score.toFixed(2))
             : 'in the text';
@@ -4688,8 +4701,7 @@
       item.append(jump);
       list.append(item);
     }
-    box.append(list);
-    return box;
+    return list;
   }
 
   // ---------- text documents ----------
@@ -5899,7 +5911,7 @@
     // Several typefaces finding the same word in the same place is one find,
     // so they are pooled per page and suppressed before anything is proposed.
     let added = 0;
-    let refused = 0;
+    const refused = [];
     for (const term of new Set(entries.map(e => e.term))) {
       if (!state.terms.includes(term)) continue;
       const perPage = new Map();
@@ -5917,7 +5929,14 @@
         for (const hit of Match.suppress(hits, 0.3)) {
           const rect = { x: hit.x, y: hit.y, w: hit.w, h: hit.h };
           if (alreadyCovered(page, rect)) continue;
-          if (readerContradicts(page, rect, term)) { refused++; continue; }
+          if (readerContradicts(page, rect, term)) {
+            // Where, not just how many. The note tells the reviewer this is
+            // where to look when a mark they expected is missing, and until
+            // now there was nothing to look at: a count of two, over sixty
+            // pages, is not a place.
+            refused.push({ pageIndex, at: rect.y, term });
+            continue;
+          }
           page.imageHits.push({
             id: 'sweep:' + term + ':' + pageIndex + ':'
               + Math.round(hit.x) + ':' + Math.round(hit.y),
@@ -5937,9 +5956,9 @@
     // far it reached.
     state.sweptTerms = state.sweepStopped ? [] : asked.filter(t => state.terms.includes(t));
     state.sweepAdded = added;
-    // How many proposals the reader threw out. Not shown anywhere; kept so a
-    // measurement of this check does not have to be a guess.
-    state.sweepRefused = refused;
+    // What the reader threw out, and where each one was.
+    state.sweepRefused = refused.length;
+    state.sweepRefusedAt = refused;
     state.sweepReached = reached;
     // New marks are not yet covered, so the document is no longer redacted.
     if (added) markPending();
@@ -6055,12 +6074,23 @@
     // and "it decided against this", which are different problems with
     // different answers.
     if (state.sweepRefused) {
+      const spots = (state.sweepRefusedAt || []).slice()
+        .sort((a, b) => a.pageIndex - b.pageIndex || a.at - b.at);
       note.textContent += ' ' + state.sweepRefused
         + (state.sweepRefused === 1 ? ' other spot was' : ' other spots were')
         + ' left alone because the page reader had already read '
         + (state.sweepRefused === 1 ? 'it' : 'them')
-        + ' as something else. If a mark you expected is missing, that is where'
-        + ' to look.';
+        + ' as something else. If a mark you expected is missing, '
+        + (spots.length ? 'look here:' : 'that is where to look.');
+      // Each one, to go and see. Telling a reviewer that two places in a
+      // sixty-page document are worth checking, without saying which two, is
+      // not an answer — it is the same "look everywhere again" they came here
+      // to avoid.
+      if (spots.length) {
+        note.append(tallyRows(spots.map(spot => ({
+          pageIndex: spot.pageIndex, kind: 'refused', at: spot.at,
+        }))));
+      }
     }
   }
 

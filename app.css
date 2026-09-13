@@ -839,6 +839,9 @@ body.picking .tools {
   background: #118a4e;
 }
 .tallyspot.shape .dot { background: #d98b1f; }
+/* A place the check proposed and stood down from: neither a mark nor a
+   find, so neither green nor amber. */
+.tallyspot.refused .dot { background: transparent; border: 1px solid var(--ink-soft); }
 .tallyspot .how { margin-left: auto; font-size: 10.5px; color: var(--ink-soft); }
 
 .termcounts .n, .templates .n {

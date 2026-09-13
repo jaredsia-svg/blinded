@@ -37,7 +37,7 @@
 <title>Blinded – Efficient redaction for your most sensitive documents, all done locally</title>
 <meta name="description" content="Redact PDFs, images and text in your browser. The file never leaves your machine.">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="app.css?v=c07577f9">
+<link rel="stylesheet" href="app.css?v=40a9bae5">
 </head>
 <body>
 
@@ -332,7 +332,10 @@
                 <p class="hint" id="sweepprogress"></p>
                 <button type="button" id="sweepstop" class="ghost wide">Stop the check</button>
               </div>
-              <p class="hint doubthint" id="sweepnote"></p>
+              <!-- A div rather than a paragraph: when the check has stood down from
+                   somewhere, the note carries a list of those places, and a list
+                   inside a paragraph is not a list the browser will keep. -->
+              <div class="hint doubthint" id="sweepnote"></div>
             </div>
           </div>
         </details>
@@ -715,7 +718,7 @@
 <script src="lib/pdfwrite.js?v=4b977425"></script>
 <script src="lib/pdfread.js?v=ca229552"></script>
 <script src="lib/render.js?v=70e96ff0"></script>
-<script src="app.js?v=8dd473f1"></script>
+<script src="app.js?v=a00657e7"></script>
 <script type="module" src="lib/boot.mjs?v=8b98ed8f"></script>
 </body>
 </html>
