@@ -120,10 +120,11 @@ detector can do.
 ## Organising the pages
 
 The **Organise** panel is a sheet of thumbnails and a second view of the same
-page list. Click a page to select it, shift-click for a run, ctrl or cmd-click
-to add one on its own. Drag a page by the grip in its corner to move it, or use
-the Move buttons, which is the same thing from a keyboard or a phone. Grab a
-page that is part of the selection and the whole selection travels with it.
+page list. Click a page to select it, shift-click to select a continuous
+series, ctrl or cmd-click to select several. Drag a page by the grip in its
+corner to move it, or use the Shift back and Shift forward buttons, which are
+the same thing from a keyboard or a phone. Grab a page that is part of the
+selection and the whole selection travels with it.
 
 **Keep only these** extracts: everything not selected is thrown away.
 **Remove these** does the opposite. Neither is offered when the selection is

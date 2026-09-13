@@ -287,14 +287,15 @@
         <details class="sect" id="organisesect">
           <summary><span class="s-title">Organise</span><span class="s-note" id="organise-note"></span></summary>
           <div class="s-body">
-            <p class="hint">Tap a page to select it. Shift-click for a run, and
-              <span class="ph" id="metakey">Ctrl</span>-click to add one on its own.
-              Drag a page by its grip to move it.</p>
+            <p class="hint">Tap a page to select it. Shift-click to select a
+              continuous series, and <span class="ph" id="metakey">Ctrl</span>-click
+              to select multiple pages. Drag a page by its grip to move it. Undo
+              if you make a mistake.</p>
             <ol id="sheet" class="sheet"></ol>
             <p class="hint" id="sheet-picked" hidden></p>
             <div class="sheetbar">
-              <button type="button" id="page-left" class="ghost" disabled title="Move the selected pages earlier">Move back</button>
-              <button type="button" id="page-right" class="ghost" disabled title="Move the selected pages later">Move on</button>
+              <button type="button" id="page-left" class="ghost" disabled title="Shift the selected pages earlier">Shift back</button>
+              <button type="button" id="page-right" class="ghost" disabled title="Shift the selected pages later">Shift forward</button>
             </div>
             <div class="sheetbar">
               <button type="button" id="page-keep" class="ghost" disabled title="Throw away every page that is not selected">Keep only these</button>
@@ -302,8 +303,6 @@
             </div>
             <button type="button" id="page-add" class="ghost wide">Add another document…</button>
             <input type="file" id="addfile" accept="application/pdf,image/png,image/jpeg,.pdf,.png,.jpg,.jpeg" hidden>
-            <p class="hint">A page thrown away here is gone from the export.
-              Undo puts it back.</p>
           </div>
         </details>
 
