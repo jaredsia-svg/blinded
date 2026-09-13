@@ -37,7 +37,7 @@
 <title>Blinded – Efficient redaction for your most sensitive documents, all done locally</title>
 <meta name="description" content="Redact PDFs, images and text in your browser. The file never leaves your machine.">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="app.css?v=40a9bae5">
+<link rel="stylesheet" href="app.css?v=2634f2d5">
 </head>
 <body>
 
@@ -413,10 +413,16 @@
                   <path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>
                 </svg><span class="sr-only">Remove the selected pages</span>
               </button>
-              <button type="button" id="page-turn" class="tool" disabled title="Turn the selected pages a quarter clockwise">
+              <!-- A page with a quarter turn over its corner. The arc on its own
+                   was the undo arrow with a different curve, which is the one
+                   icon in this toolbar it must not be mistaken for: the page
+                   says what is being turned, and the right angle says how far. -->
+              <button type="button" id="page-turn" class="tool" disabled title="Turn the selected pages 90° clockwise">
                 <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-                  <path d="M4 9a8 8 0 1 1 1.6 7M4 4v5h5"/>
-                </svg><span class="sr-only">Turn the selected pages</span>
+                  <path d="M4 10h9v11H4z"/>
+                  <path d="M11 4h2a7 7 0 0 1 7 7"/>
+                  <path d="M17.6 8.6 20 11l2.4-2.4"/>
+                </svg><span class="sr-only">Turn the selected pages 90 degrees</span>
               </button>
               <button type="button" id="page-text" class="tool" title="Add a note – then tap the page where it should go">
                 <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">

@@ -4574,6 +4574,34 @@ try {
     });
   }
 
+  // ---------- one section from the next ----------
+  //
+  // Five sections divided by a hairline the same colour as the panel's own
+  // edge read as one long list: the reviewer could not see where Text ended
+  // and Images began. Two cues now, measured rather than eyeballed — the
+  // heading sits on a tint, and the rule between sections is darker than the
+  // one round the panel.
+  {
+    const bands = await page.evaluate(() => {
+      const luminance = colour => {
+        const [r, g, b] = colour.match(/\d+/g).map(Number);
+        return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+      };
+      const sect = document.querySelector('details.sect');
+      return {
+        head: getComputedStyle(sect.querySelector('summary')).backgroundColor,
+        panel: getComputedStyle(document.querySelector('.panel')).backgroundColor,
+        rule: luminance(getComputedStyle(sect).borderBottomColor),
+        edge: luminance(getComputedStyle(document.querySelector('.panel')).borderBottomColor),
+      };
+    });
+    check('a section heading sits on its own band, not on the panel',
+      bands.head !== bands.panel && !/rgba\(0, 0, 0, 0\)/.test(bands.head),
+      JSON.stringify(bands));
+    check('and the rule between sections is darker than the panel’s own edge',
+      bands.rule < bands.edge - 8, JSON.stringify(bands));
+  }
+
   // ---------- a text layer that says it more than once ----------
   //
   // Reported from a real CIM: a word marked four times on the page, counted

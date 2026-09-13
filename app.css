@@ -5,6 +5,12 @@
   --ink: #14161a;
   --ink-soft: #565c66;
   --line: #dfe3ea;
+  /* A rule meant to be seen. --line is right for a box's own edge, where
+     it is read against the page; between two sections of the same panel it
+     is read against white on both sides, and at that contrast the sections
+     ran together into one list. */
+  --line-strong: #c4ccd8;
+  --band: #f1f4f9;
   --bg: #f6f7f9;
   --card: #ffffff;
   --accent: #1f6feb;
@@ -209,7 +215,7 @@ a.mark { color: inherit; text-decoration: none; }
      long name and five controls fought over one row and the name lost, being
      the half that was ellipsised away. */
   display: flex; flex-direction: column; align-items: stretch; gap: 8px;
-  padding: 12px 14px; border-bottom: 1px solid var(--line);
+  padding: 12px 14px; border-bottom: 1px solid var(--line-strong);
   position: sticky; top: 0; background: var(--card); z-index: 2;
 }
 .panel-head h2 {
@@ -308,13 +314,22 @@ a.mark { color: inherit; text-decoration: none; }
    left of them hides behind a "?" until asked for.
 */
 
-.sect { border-bottom: 1px solid var(--line); }
+/* Each section reads as a band rather than as a line in a list.
+   The heading sits on its own tint and the body stays white, so the eye is
+   given two cues for one boundary — a change of shade and a rule it can
+   actually see — without spending the height that gaps between cards would
+   cost on a phone. */
+.sect { border-bottom: 1px solid var(--line-strong); }
 .sect:last-of-type { border-bottom: 0; }
 .sect > summary {
   list-style: none; cursor: pointer; user-select: none;
   display: flex; align-items: center; gap: 8px;
   padding: 11px 14px; font-size: 13px; font-weight: 600;
+  background: var(--band); border-bottom: 1px solid var(--line);
 }
+/* A shut section is a heading and nothing else, so the rule under it would be
+   a line under a line. */
+.sect:not([open]) > summary { border-bottom-color: transparent; }
 .sect > summary::-webkit-details-marker { display: none; }
 .sect > summary::before {
   content: ''; flex: none; width: 7px; height: 7px; margin-right: 1px;
@@ -322,7 +337,7 @@ a.mark { color: inherit; text-decoration: none; }
   transform: rotate(-45deg); transition: transform .15s;
 }
 .sect[open] > summary::before { transform: rotate(45deg); }
-.sect > summary:hover { background: #f7f9fc; }
+.sect > summary:hover { background: #e7edf6; }
 .s-title { flex: 1; }
 .s-note {
   font-weight: 500; font-size: 11.5px; color: var(--ink-soft);
@@ -335,7 +350,9 @@ a.mark { color: inherit; text-decoration: none; }
 /* A hint you ask for rather than one you have to read past. */
 .why {
   flex: none; width: 16px; height: 16px; border-radius: 50%; padding: 0;
-  background: #e6eaf1; color: var(--ink-soft); border: 0;
+  /* A shade darker than it was: the headings it sits on carry a tint now,
+     and the old grey was nearly the same colour as the band under it. */
+  background: #dbe2ec; color: var(--ink-soft); border: 0;
   font-size: 10px; font-weight: 700; line-height: 16px; text-align: center;
   cursor: help; margin-left: 2px;
 }
@@ -1383,10 +1400,10 @@ body.dragging-page .grip { cursor: grabbing; }
   display: flex; align-items: center; gap: 8px; width: 100%;
   padding: 11px 14px; font: inherit; font-size: 13px; font-weight: 600;
   color: var(--ink-soft); text-align: left; cursor: pointer;
-  background: transparent; border: 0; border-bottom: 1px solid var(--line);
+  background: var(--band); border: 0; border-bottom: 1px solid var(--line-strong);
   border-radius: 0;
 }
-.sectroll:hover { background: #f7f9fc; color: var(--ink); }
+.sectroll:hover { background: #e7edf6; color: var(--ink); }
 /* The same chevron the headings carry, pointing the way it points on a shut
    one — because that is what this is: four shut sections in a single row. */
 .sectroll::before {
