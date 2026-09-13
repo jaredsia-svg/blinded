@@ -3908,12 +3908,15 @@ try {
     const started = await page.evaluate(() => ({
       tiles: document.querySelectorAll('#sheet .sheetpage').length,
       pages: window.Blinded.state.pages.length,
-      note: document.getElementById('organise-note').textContent,
+      // The page count that used to sit beside the heading is gone: the
+      // thumbnails are the count, and a number beside them said it twice.
+      note: Boolean(document.getElementById('organise-note')),
       numbers: [...document.querySelectorAll('.sheetnum')].map(n => n.textContent).slice(0, 3),
     }));
     check('the sheet shows a thumbnail for every page',
       started.tiles === 14 && started.pages === 14, JSON.stringify(started));
-    check('and says how many there are', started.note === '14 pages', started.note);
+    check('and does not also count them in words', started.note === false,
+      JSON.stringify(started));
     check('numbered from one', started.numbers.join(',') === '1,2,3', JSON.stringify(started));
 
     const picked = await page.evaluate(() => {
@@ -7099,6 +7102,82 @@ try {
       after.rows.length > 0 && after.rows.every(r => Number(r.says) > 0)
         && after.rows.length < 7,
       JSON.stringify(after));
+
+    // The tally is the same control the words and the pictures carry: green,
+    // and it opens where they are. A grey number that does nothing teaches the
+    // reviewer that this one circle is decoration.
+    const tally = await page.evaluate(async () => {
+      const row = [...document.querySelectorAll('#kinds .kind')]
+        .find(r => Number(r.querySelector('.n').textContent) > 0);
+      if (!row) return { skip: true };
+      const dot = row.querySelector('.n');
+      const green = getComputedStyle(dot).backgroundColor;
+      dot.click();
+      await new Promise(r => setTimeout(r, 80));
+      const list = document.querySelector('#kinds .tally');
+      const spots = list ? [...list.querySelectorAll('.tallyspot')] : [];
+      const out = {
+        skip: false,
+        tag: dot.tagName,
+        green,
+        opened: Boolean(list),
+        pages: spots.map(b => b.textContent),
+        // A click on the circle must not tick the detector it reports on:
+        // the circle lives inside the label.
+        stillOn: row.querySelector('input').checked,
+      };
+      dot.click();
+      await new Promise(r => setTimeout(r, 80));
+      out.closes = !document.querySelector('#kinds .tally');
+      return out;
+    });
+    if (!tally.skip) {
+      check('the detector tally is a button, not a label',
+        tally.tag === 'BUTTON', JSON.stringify(tally));
+      check('and it is the same green the other sections use',
+        tally.green === 'rgb(227, 243, 234)', JSON.stringify(tally));
+      check('clicking it opens where they are, by page',
+        tally.opened === true && tally.pages.length > 0
+          && tally.pages.every(t => /Page \d+/.test(t)), JSON.stringify(tally));
+      check('and does not tick the detector it reports on',
+        tally.stillOn === true, JSON.stringify(tally));
+      check('clicking it again closes the list', tally.closes === true,
+        JSON.stringify(tally));
+    }
+
+    // Switching a detector off is a question about what to cover, not about
+    // what is there. Both places it looks are already in hand, so the answer
+    // must not be thrown away and asked for again.
+    const unticked = await page.evaluate(async () => {
+      const row = [...document.querySelectorAll('#kinds .kind')]
+        .find(r => Number(r.querySelector('.n').textContent) > 0);
+      if (!row) return { skip: true };
+      const name = row.querySelector('.name').textContent;
+      const box = row.querySelector('input');
+      box.click();
+      await new Promise(r => setTimeout(r, 120));
+      const rows = [...document.querySelectorAll('#kinds .kind')];
+      const same = rows.find(r => r.querySelector('.name').textContent === name);
+      const out = {
+        skip: false, name,
+        searched: window.Blinded.state.searched,
+        stillListed: Boolean(same),
+        stillCounted: same ? same.querySelector('.n').textContent : null,
+        asking: rows.some(r => r.querySelector('.n').classList.contains('unknown')),
+      };
+      same.querySelector('input').click();
+      await new Promise(r => setTimeout(r, 120));
+      return out;
+    });
+    if (!unticked.skip) {
+      check('unticking a detector leaves the search standing',
+        unticked.searched === true, JSON.stringify(unticked));
+      check('and leaves the detector on the list, still counted',
+        unticked.stillListed === true && Number(unticked.stillCounted) > 0,
+        JSON.stringify(unticked));
+      check('with nothing put back to a question mark',
+        unticked.asking === false, JSON.stringify(unticked));
+    }
 
     // Nothing found takes the section off the panel, rather than leaving a
     // row of zeroes where a decision used to be.

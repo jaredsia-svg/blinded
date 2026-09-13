@@ -744,12 +744,6 @@
     // document at all — neither is offered rather than refused after the fact.
     el('page-keep').disabled = !n || n === only;
     el('page-drop').disabled = !n || n === only;
-    const kinds = state.pages.length;
-    const set = el('organise-note');
-    if (set) {
-      set.textContent = kinds + (kinds === 1 ? ' page' : ' pages');
-      set.classList.toggle('on', Boolean(state.baseDigest));
-    }
   }
 
   // Click to select, shift-click for a run, ctrl or cmd-click to add one on
@@ -2053,7 +2047,7 @@
     set('image-note', logos ? logos + (logos === 1 ? ' image' : ' images') : '', logos > 0);
 
 
-    if (el('organise-note')) refreshSheetBar();
+    refreshSheetBar();
 
     set('label-note', state.labelling
       ? (state.labels.entries.length || 0) + ' labels'
@@ -2351,20 +2345,54 @@
       box.addEventListener('change', () => {
         if (box.checked) state.enabled.add(row.kind);
         else state.enabled.delete(row.kind);
-        rescan();
+        // Settled, because nothing new needs finding. Both places a detector
+        // looks — the text layer and what OCR read — are already in hand, so
+        // switching one off is a question about what to cover rather than
+        // about what is there. Sending the document back to un-searched would
+        // throw away the answer, put every detector back to a question mark,
+        // and ask for the whole pass again to learn something already known.
+        detectOcr();
+        rescan({ settled: true });
       });
 
       const name = document.createElement('span');
       name.className = 'name';
       name.textContent = row.label;
 
-      const count = document.createElement('span');
-      count.className = known ? 'n' : 'n unknown';
+      // The same circle the words and the pictures carry, because it answers
+      // the same question and a reviewer should not have to learn that this
+      // one is only decoration. Grey said "a number"; green says "found, and
+      // here is where".
+      const key = 'kind::' + row.kind;
+      const count = document.createElement('button');
+      count.type = 'button';
+      count.className = known ? 'n dot-green' : 'n unknown';
       count.textContent = known ? String(n) : '?';
-      if (!known) count.title = 'Not searched for yet – press Search';
+      if (!known) {
+        count.disabled = true;
+        count.title = 'Not searched for yet – press Search';
+      } else {
+        const where = placesForKind(row.kind);
+        count.disabled = where.length === 0;
+        if (!count.disabled) {
+          count.title = 'Where they are';
+          count.setAttribute('aria-expanded', String(state.openTally === key));
+          count.addEventListener('click', event => {
+            // Inside a <label>, so a click here would otherwise untick the
+            // detector it is reporting on.
+            event.preventDefault();
+            event.stopPropagation();
+            state.openTally = state.openTally === key ? null : key;
+            renderKinds();
+          });
+        }
+      }
 
       label.append(box, name, count);
       host.append(label);
+      if (known && state.openTally === key && !count.disabled) {
+        host.append(tallyList(row.label, placesForKind(row.kind)));
+      }
     }
   }
 
@@ -3835,6 +3863,31 @@
   // Where a picked image was found, page by page. The same question the tally
   // beside a word answers, and the same answer: a page number to go and look
   // at rather than a count to take on trust.
+  // Where a detector found things, page by page, in the same shape the term
+  // and image lists use — so one list-drawing function serves all three and
+  // they cannot drift into looking like different answers to the same
+  // question.
+  function placesForKind(kind) {
+    const out = [];
+    if (state.kind === 'text') return out;
+    for (const page of state.pages) {
+      for (const hit of page.hits) {
+        if (hit.finding.kind !== kind || page.dismissed.has(hit.finding.id)) continue;
+        out.push({ pageIndex: page.index, kind: 'text',
+                   at: hit.rects && hit.rects[0] ? hit.rects[0].y : 0 });
+      }
+      // The ones found in what OCR read. Marked as read rather than as text,
+      // because that is a different kind of confidence and the list says so.
+      for (const match of liveImageHits(page)) {
+        if (match.detector !== kind || page.dismissed.has(match.id)) continue;
+        out.push({ pageIndex: page.index, kind: 'read',
+                   at: match.rect ? match.rect.y : 0 });
+      }
+    }
+    out.sort((a, b) => a.pageIndex - b.pageIndex || a.at - b.at);
+    return out;
+  }
+
   function placesFor(templateId) {
     const out = [];
     for (const page of state.pages) {
@@ -4022,9 +4075,10 @@
       // Every row in a picked image's list was found as a picture, so saying
       // so said nothing. What it scored is the thing the reviewer can act on.
       how.textContent = spot.kind === 'shape' ? 'by shape'
-        : spot.kind === 'image'
-          ? (spot.score === null ? 'as a picture' : spot.score.toFixed(2))
-          : 'in the text';
+        : spot.kind === 'read' ? 'read off the page'
+          : spot.kind === 'image'
+            ? (spot.score === null ? 'as a picture' : spot.score.toFixed(2))
+            : 'in the text';
       jump.append(dot, text, how);
       jump.addEventListener('click', () => goToPage(spot.pageIndex));
       item.append(jump);
@@ -5575,7 +5629,7 @@
     edgeScroll, stopEdgeScroll, CREEP_EDGE, fitSheet, rollSections,
     creepEdges, pushScroll, startChoosing, stopChoosing, CHOOSE_HOLD,
     addDocument, pickedInOrder, selectPage, thumbFor, organiseStamp,
-    kindsKnown, countsByKind, detectOcr, renderKinds,
+    kindsKnown, countsByKind, detectOcr, renderKinds, placesForKind,
     markPending, needsSearch, markDuplicates, onePerPlace, plannedCount,
     pendingTemplates,
     termsNeedingPictures,
