@@ -5389,6 +5389,7 @@
   });
   el('faq-back-bottom').addEventListener('click', closeFaq);
   el('home-top').addEventListener('click', () => show('drop'));
+  el('foot-faq').addEventListener('click', () => show('faq'));
 
   el('page-prev').addEventListener('click', () => stepPage(-1));
   el('page-next').addEventListener('click', () => stepPage(1));

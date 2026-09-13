@@ -37,7 +37,7 @@
 <title>Blinded – Efficient redaction for your most sensitive documents, all done locally</title>
 <meta name="description" content="Redact PDFs, images and text in your browser. The file never leaves your machine.">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="app.css?v=6f3515da">
+<link rel="stylesheet" href="app.css?v=189d930e">
 </head>
 <body>
 
@@ -169,58 +169,66 @@
           <tbody>
             <tr>
               <th scope="row">Where the file goes</th>
-              <td class="us">On-device in this tab locally. Pull the cable; it still works.</td>
-              <td>Desktop is local. Acrobat on the web sends the file to Adobe.</td>
-              <td>AWS. That is the product.</td>
-              <td>On-device – then a suite login, and a footer unless you pay.</td>
+              <td class="us">Stays in this tab. Works offline.</td>
+              <td>Desktop, yes. The web version uploads.</td>
+              <td>Their cloud.</td>
+              <td>On device, then a login.</td>
             </tr>
             <tr>
-              <th scope="row">What “redact” means</th>
-              <td class="us">Pages rebuilt from pixels. No text, fonts or metadata left under the bar.</td>
-              <td>Permanent only after Apply <em>and</em> Sanitize. Until then it is a box over a live word.</td>
-              <td>Permanent on their servers; you download the copy.</td>
-              <td>Flatten and rasterise. Solid – one tile in a 26-tool workbench.</td>
+              <th scope="row">What a bar removes</th>
+              <td class="us">Everything. The page is rebuilt from pixels.</td>
+              <td>Nothing, until you Apply <em>and</em> Sanitize.</td>
+              <td>Everything, on their servers.</td>
+              <td>Everything. Flattened.</td>
             </tr>
             <tr>
-              <th scope="row">Logos, stamps, signatures</th>
-              <td class="us">Select once. Every copy, every size, every colour – in the artwork, not just the text.</td>
-              <td>Draw a rectangle. Again. And again.</td>
-              <td>Finds logos and signatures – after the deck has left the building.</td>
-              <td>Strong on text. Their own security page says a face or baked-in lettering still needs a human.</td>
+              <th scope="row">Logos, stamps, faces</th>
+              <td class="us">Pick one; every copy goes, any size or colour.</td>
+              <td>Draw a box. Every time.</td>
+              <td>Found for you – in the cloud.</td>
+              <td>Text only. A face still needs you.</td>
             </tr>
             <tr>
-              <th scope="row">Names, and words inside a screenshot</th>
-              <td class="us">Type a name once and it goes everywhere – in the text and in the pictures. Reads the page in-tab, with a shape pass for type the reader misses. No model, no API.</td>
-              <td>Find, and hope you thought of every spelling. Reads pictures, but will not hunt a logo or match the mark you just boxed.</td>
-              <td>Cloud name-matching and cloud reading. Convenient; the document is the price.</td>
-              <td>On-device names and some 45 kinds of detail – a broader list, but no “this stamp, everywhere” picker.</td>
+              <th scope="row">Names, and words in a picture</th>
+              <td class="us">Type it once. Caught in the text and the artwork.</td>
+              <td>Find, one spelling at a time.</td>
+              <td>Matched in the cloud.</td>
+              <td>On device, 45 kinds. No visual picker.</td>
             </tr>
             <tr>
               <th scope="row">Proof of privacy</th>
-              <td class="us">Read the source. A policy the browser enforces. Output that fails a text extract.</td>
-              <td>None for redaction. The audit trail is “trust the operator”.</td>
-              <td>A certificate – from the company that held your original.</td>
-              <td>A checksum receipt. Good, but it certifies an export, not a visual pass.</td>
-            </tr>
-            <tr>
-              <th scope="row">Cost</th>
-              <td class="us">Free, and no account.</td>
-              <td>A paid seat. The standard edition cannot redact at all.</td>
-              <td>A handful of free documents, then a monthly fee and a cap.</td>
-              <td>Free with their name on your file; a one-off fee to remove it.</td>
+              <td class="us">Read the source. The browser enforces it.</td>
+              <td>None. Trust the operator.</td>
+              <td>A certificate, from the host.</td>
+              <td>A checksum on the export.</td>
             </tr>
             <tr>
               <th scope="row">Readable afterwards</th>
-              <td class="us">Optional <span class="ph">[P1]</span> labels and a key file you keep offline. Send the PDF, lock the key.</td>
-              <td>Black boxes. The sentence dies.</td>
-              <td>Tokens where offered; the mapping lives in their project.</td>
-              <td>Tokenise inside their toolset.</td>
+              <td class="us"><span class="ph">[P1]</span> labels; the key stays with you.</td>
+              <td>Black boxes.</td>
+              <td>Tokens, mapped in their project.</td>
+              <td>Tokens, inside their suite.</td>
+            </tr>
+            <tr>
+              <th scope="row">Cost</th>
+              <td class="us">Free, no account.</td>
+              <td>A paid seat.</td>
+              <td>Free for a few, then monthly.</td>
+              <td>Free with their branding.</td>
             </tr>
           </tbody>
         </table>
       </div>
 
     </section>
+
+    <p class="foot">
+      <span class="foot-name">Blinded</span>
+      <span class="foot-dot" aria-hidden="true">·</span>
+      <button type="button" class="footlink" id="foot-faq">FAQ</button>
+      <span class="foot-dot" aria-hidden="true">·</span>
+      <a class="footlink" href="https://github.com/jaredsia-svg/blinded" rel="noopener">Source code on GitHub</a>
+    </p>
   </section>
 
   <!-- ---------- 2. review ---------- -->
@@ -700,7 +708,7 @@
 <script src="lib/pdfwrite.js?v=4b977425"></script>
 <script src="lib/pdfread.js?v=ca229552"></script>
 <script src="lib/render.js?v=7bf6e0a9"></script>
-<script src="app.js?v=267c00e4"></script>
+<script src="app.js?v=f51bb058"></script>
 <script type="module" src="lib/boot.mjs?v=8b98ed8f"></script>
 </body>
 </html>

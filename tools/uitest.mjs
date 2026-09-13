@@ -6886,6 +6886,15 @@ try {
         // Ours is the one in full ink; the peers are a shade back, which is
         // the difference the eye reads before it reads a word.
         inkedHeads: heads.filter(c => c === ink).length,
+        width: Math.round(document.querySelector('.versus').getBoundingClientRect().width),
+        above: Math.round(document.querySelector('.sample').getBoundingClientRect().width),
+        // A comparison is read by sweeping across it, which only works while
+        // each cell is a phrase rather than a paragraph.
+        longest: Math.max(...[...table.querySelectorAll('tbody td')]
+          .map(td => td.textContent.trim().length)),
+        worst: [...table.querySelectorAll('tbody td')]
+          .map(td => td.textContent.trim())
+          .sort((a, b) => b.length - a.length)[0],
         // It has to be able to overflow inside its own box rather than taking
         // the whole page sideways with it.
         scrolls: getComputedStyle(document.querySelector('.versus-scroll')).overflowX,
@@ -6911,6 +6920,11 @@ try {
       JSON.stringify(versus && versus.rows.map(r => r.ours)));
     check('the table scrolls inside its own box',
       versus && versus.scrolls === 'auto', JSON.stringify(versus && versus.scrolls));
+    check('it sits in the same column as the rest of the front page',
+      versus && Math.abs(versus.width - versus.above) <= 1,
+      JSON.stringify({ versus: versus && versus.width, above: versus && versus.above }));
+    check('and every cell is short enough to read at a glance',
+      versus && versus.longest <= 60, JSON.stringify(versus && versus.worst));
     check('and does not push the page sideways',
       versus && versus.pageWide <= 0, JSON.stringify(versus && versus.pageWide));
   }
@@ -6988,6 +7002,41 @@ try {
     const fresh = { drop: await page.isVisible('#drop'), faq: await link('#faq-open') };
     check('with nothing open the drop zone is back',
       fresh.drop === true && fresh.faq.says === 'Q&A', JSON.stringify(fresh));
+  }
+
+  // ---------- the foot of the page ----------
+  {
+    await page.evaluate(() => window.Blinded.state.pages.length
+      && document.getElementById('home-top').click());
+    await page.waitForSelector('#view-drop:not([hidden])', { timeout: 15000 });
+    const foot = await page.evaluate(() => {
+      const row = document.querySelector('.foot');
+      if (!row) return null;
+      const link = row.querySelector('a.footlink');
+      return {
+        says: row.textContent.replace(/\s+/g, ' ').trim(),
+        source: link ? link.getAttribute('href') : null,
+        // The source link leaves the tab, so it must not hand the new page a
+        // handle back to this one.
+        safe: link ? (link.getAttribute('rel') || '').includes('noopener') : false,
+      };
+    });
+    check('the page ends with its name, the questions and the source',
+      foot && /Blinded · FAQ · Source code on GitHub/.test(foot.says),
+      JSON.stringify(foot));
+    check('and the source link points at the repository',
+      foot && /github\.com\/.+\/blinded/.test(foot.source) && foot.safe === true,
+      JSON.stringify(foot));
+
+    await page.click('#foot-faq');
+    await page.waitForSelector('#view-faq:not([hidden])', { timeout: 15000 });
+    check('the FAQ link opens the questions',
+      (await page.isVisible('#view-faq')) === true);
+    await page.click('#faq-open');
+    // Waited for by what becomes visible, not by what becomes hidden: a
+    // selector that matches a hidden element still waits for it to be seen,
+    // which it never will be.
+    await page.waitForSelector('#view-drop:not([hidden])', { timeout: 15000 });
   }
 
   check('nothing threw in the page', consoleErrors.length === 0, consoleErrors.join(' | '));
