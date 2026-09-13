@@ -4034,6 +4034,30 @@ try {
     check('and every icon still says what it does',
       bar.titled === true && bar.named === true, JSON.stringify(bar));
 
+    // A joined bar has to look joined. This is measured rather than eyeballed
+    // because of how it broke: #page-add kept a `margin-top: 8px` from when it
+    // was a wide button on a row of its own, and as the last cell of the bar
+    // that dropped it eight pixels below the other four. The id still existed,
+    // so the guard that catches a rule pointing at nothing had nothing to say,
+    // and every computed style read correctly on its own.
+    const joined = await page.evaluate(() => {
+      const cells = [...document.querySelectorAll('#organisesect .sheettools .tool')]
+        .map(el => el.getBoundingClientRect());
+      return {
+        tops: cells.map(c => Math.round(c.top)),
+        heights: cells.map(c => Math.round(c.height)),
+        // Each cell starts where the one before it ended, give or take a
+        // rounded pixel: no gaps, no overlaps.
+        seams: cells.slice(1).map((c, i) => Math.round(c.left - cells[i].right)),
+      };
+    });
+    check('every cell of the bar sits on the same line',
+      new Set(joined.tops).size === 1, JSON.stringify(joined));
+    check('and is the same height as the rest',
+      new Set(joined.heights).size === 1, JSON.stringify(joined));
+    check('and butts against its neighbour',
+      joined.seams.every(gap => Math.abs(gap) <= 1), JSON.stringify(joined));
+
     // One scrollbar, not two. A 320-pixel column with a scrolling panel around
     // a scrolling sheet is a maze: the reviewer scrolls the outer one looking
     // for pages and arrives at the foot of the panel.
