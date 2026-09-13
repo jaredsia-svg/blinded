@@ -665,6 +665,11 @@
   let sheetAnchor = null;
 
   function selectPage(page, event) {
+    // The sheet and the document are two views of one thing, so touching a
+    // page in one should be looking at it in the other. Without this, finding
+    // page 47 in the thumbnails and then wanting to read it means scrolling
+    // the document to it by hand, having just pointed straight at it.
+    goToPage(page.index, { stay: true });
     const spread = event && event.shiftKey;
     const add = event && (event.metaKey || event.ctrlKey);
     if (spread && sheetAnchor && state.pages.includes(sheetAnchor)) {
@@ -738,14 +743,20 @@
 
       const ghost = liftGhost(page, moving.length, event);
       let target = gapOf(event);
-      showDropAt(target);
+      // Where the pointer last was, so the sheet scrolling underneath a still
+      // finger can still answer "which gap is this now" — the tiles move even
+      // when the pointer does not.
+      let last = event;
+      const mark = () => {
+        target = gapOf(last);
+        showDropAt(target, host);
+      };
       const move = ev => {
         if (ev.pointerId !== held) return;
+        last = ev;
         carryGhost(ghost, ev);
-        const gap = gapOf(ev);
-        if (gap === target) return;
-        target = gap;
-        showDropAt(gap);
+        edgeScroll(host, ev, mark);
+        mark();
       };
       const done = ev => {
         // A second finger landing on the sheet must not end the drag the
@@ -759,6 +770,7 @@
         window.removeEventListener('pointermove', move);
         window.removeEventListener('pointerup', done);
         window.removeEventListener('pointercancel', done);
+        stopEdgeScroll();
         item.classList.remove('dragging');
         document.body.classList.remove('dragging-page');
         clearDropMark();
@@ -772,6 +784,7 @@
         dropGhost(ghost, tiles[Math.min(gap, tiles.length - 1)]);
         moveTo(moving, gap);
       };
+      mark();
       // On the window rather than on the grip, so the drag survives both a
       // capture that was refused and a pointer let go somewhere off the sheet
       // entirely — over the document, over the header, outside the tab.
@@ -779,6 +792,52 @@
       window.addEventListener('pointerup', done);
       window.addEventListener('pointercancel', done);
     });
+  }
+
+  // Dragging towards a page you cannot see.
+  //
+  // The sheet is a few rows tall with the rest scrolled away, so moving a page
+  // to the end of a long document meant dropping it as far down as the window
+  // went, scrolling, picking it up again, and repeating. Holding the pointer
+  // near an edge scrolls the sheet under it instead, the way a file manager
+  // does — and when the sheet has no more to give, the panel behind it takes
+  // over, so the last row is reachable even when the sheet itself is short.
+  const CREEP_EDGE = 44;    // how close to an edge starts it
+  const CREEP_STEP = 14;    // pixels per frame at the very edge
+  let edgeTimer = null;
+
+  function edgeScroll(host, event, onScroll) {
+    stopEdgeScroll();
+    const box = host.getBoundingClientRect();
+    const above = event.clientY - box.top;
+    const below = box.bottom - event.clientY;
+    let way = 0;
+    if (above < CREEP_EDGE) way = -(1 - Math.max(0, above) / CREEP_EDGE);
+    else if (below < CREEP_EDGE) way = 1 - Math.max(0, below) / CREEP_EDGE;
+    if (!way) return;
+
+    const step = () => {
+      const by = Math.round(way * CREEP_STEP);
+      const before = host.scrollTop;
+      host.scrollTop += by;
+      // Nothing left in the sheet: push the panel instead, so the tail of a
+      // long document is reachable rather than merely nearly reachable.
+      if (host.scrollTop === before) {
+        const panel = host.closest('.panel') || scrollerFor(host);
+        if (panel && panel !== host) {
+          if (panel === window) window.scrollBy(0, by);
+          else panel.scrollTop += by;
+        }
+      }
+      if (onScroll) onScroll();
+      edgeTimer = requestAnimationFrame(step);
+    };
+    edgeTimer = requestAnimationFrame(step);
+  }
+
+  function stopEdgeScroll() {
+    if (edgeTimer !== null) cancelAnimationFrame(edgeTimer);
+    edgeTimer = null;
   }
 
   // The thing in the hand. A copy of the page, tilted a little and lifted off
@@ -835,8 +894,8 @@
   // Fixed to the viewport, like the copy in the hand, so that a sheet which
   // has scrolled needs no arithmetic to stay lined up: the tile is measured
   // where it actually is on screen and the line is put there.
-  function showDropAt(gap) {
-    const tiles = [...el('sheet').querySelectorAll('.sheetpage')];
+  function showDropAt(gap, host) {
+    const tiles = [...(host || el('sheet')).querySelectorAll('.sheetpage')];
     if (!tiles.length) return;
     let line = document.querySelector('.dropline');
     if (!line) {
@@ -3066,6 +3125,31 @@
         try { view.setPointerCapture(event.pointerId); } catch { /* not vital */ }
       };
 
+      // Which corner the pointer is on, or -1 for none. The corners are drawn
+      // on the canvas rather than being elements of their own, so nothing can
+      // carry a cursor: what the pointer is over has to be worked out and the
+      // cursor set to match.
+      const cornerUnder = event => {
+        const p = where(event);
+        const list = corners(toView(rect), rect.w * zoom, rect.h * zoom);
+        for (let i = 0; i < list.length; i++) {
+          if (Math.hypot(p.x - list[i].x, p.y - list[i].y) <= CROP_GRAB) return i;
+        }
+        return -1;
+      };
+
+      // A crosshair says "draw a box", which is right over the picture and
+      // wrong over a corner — the corners are for picking up and moving, and
+      // an open hand is what says so. Nothing about it was discoverable
+      // before: the corners were draggable and looked identical to the rest.
+      const showCursor = event => {
+        if (holding) {
+          view.style.cursor = holding.fresh ? 'crosshair' : 'grabbing';
+          return;
+        }
+        view.style.cursor = cornerUnder(event) >= 0 ? 'grab' : 'crosshair';
+      };
+
       const down = event => {
         const p = where(event);
         const at = toView(rect);
@@ -3074,6 +3158,7 @@
           if (Math.hypot(p.x - list[i].x, p.y - list[i].y) <= CROP_GRAB) {
             holding = { corner: i };
             hold(event);
+            showCursor(event);
             event.preventDefault();
             return;
           }
@@ -3086,6 +3171,9 @@
       };
 
       const move = event => {
+        // The cursor answers on every move, held or not: hovering a corner has
+        // to show that it can be taken before it is taken.
+        showCursor(event);
         if (!holding) return;
         const p = where(event);
         const onPage = {
@@ -3104,7 +3192,10 @@
         draw();
       };
 
-      const up = () => { holding = null; };
+      const up = event => {
+        holding = null;
+        if (event) showCursor(event);
+      };
 
       const done = value => {
         box.hidden = true;
@@ -3522,12 +3613,18 @@
 
   // Brings a page into view in the document column. The panel scrolls
   // separately, so this has to move the right one.
-  function goToPage(pageIndex) {
+  function goToPage(pageIndex, options) {
     const page = state.pages[pageIndex];
     if (!page || !page.canvas) return;
     // On a phone the page being named is behind the toggle, so following a
     // page number has to bring the document forward or the tap does nothing.
-    if (state.pane === 'edit' && window.matchMedia('(max-width: 900px)').matches) {
+    //
+    // `stay` is for the Organise sheet, where the tap is part of a longer job.
+    // Throwing the reviewer out of the panel every time they select a
+    // thumbnail would make the sheet unusable on a phone: they are choosing
+    // pages, not going to read one.
+    if (!(options && options.stay)
+      && state.pane === 'edit' && window.matchMedia('(max-width: 900px)').matches) {
       setPane('doc');
     }
     page.canvas.parentElement.scrollIntoView({ block: 'start', behavior: 'smooth' });
@@ -4412,6 +4509,43 @@
       if (tip.isOpen(button)) tip.close(); else tip.open(button);
     });
   }
+  // The toolbar icons explain themselves through `title`, which is a hover,
+  // and a phone has no hover: on a touch screen those six buttons were six
+  // unlabelled glyphs with no way at all to find out what they did. Holding
+  // one shows the same bubble the "?" hints use, and the press that revealed
+  // it does not also fire the button — finding out what a control does must
+  // not be the same gesture as using it.
+  const HOLD = 420;
+  for (const button of document.querySelectorAll('.tool, .tool .half')) {
+    let timer = null;
+    let shown = false;
+    const say = () => {
+      const text = button.getAttribute('title') || button.getAttribute('data-tip');
+      if (!text) return;
+      button.setAttribute('data-tip', text);
+      shown = true;
+      tip.open(button);
+    };
+    const drop = () => { if (timer) clearTimeout(timer); timer = null; };
+    button.addEventListener('pointerdown', event => {
+      if (event.pointerType === 'mouse') return;   // hover already answers this
+      drop();
+      shown = false;
+      timer = setTimeout(say, HOLD);
+    });
+    for (const end of ['pointerup', 'pointercancel', 'pointerleave', 'pointermove']) {
+      button.addEventListener(end, drop);
+    }
+    // Capture, so the button's own handler never sees a click that was only
+    // ever a question.
+    button.addEventListener('click', event => {
+      if (!shown) return;
+      shown = false;
+      event.preventDefault();
+      event.stopPropagation();
+    }, true);
+  }
+
   window.addEventListener('keydown', event => { if (event.key === 'Escape') tip.close(); });
   document.addEventListener('pointerdown', event => {
     if (!event.target.closest('.why')) tip.close();
@@ -4532,10 +4666,12 @@
     event.target.value = '';
     await addDocument(file);
   });
-  // The modifier is named on the page, and it is a different key on a Mac.
+  // The modifier is named in the hint, and it is a different key on a Mac.
   if (/Mac|iPhone|iPad/.test(navigator.platform || '')) {
-    const key = el('metakey');
-    if (key) key.textContent = 'Cmd';
+    for (const why of document.querySelectorAll('[data-tip*="Ctrl-click"]')) {
+      why.setAttribute('data-tip',
+        why.getAttribute('data-tip').replace('Ctrl-click', 'Cmd-click'));
+    }
   }
 
   // The box and the state start from the same value, rather than each
@@ -5069,6 +5205,7 @@
     runSearch, applyRedaction: runSearch, coverMarks, uncoverMarks, applyButton,
     activeBoxes,
     renderSheet, setOrder, moveTo, nudge, keepOnlyPicked, dropPicked,
+    edgeScroll, stopEdgeScroll, CREEP_EDGE,
     addDocument, pickedInOrder, selectPage, thumbFor, organiseStamp,
     markPending, needsSearch, markDuplicates, onePerPlace, plannedCount,
     pendingTemplates,

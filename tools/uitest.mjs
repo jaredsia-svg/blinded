@@ -1395,6 +1395,41 @@ try {
   check('dragging a corner changes the box', dragged.before !== dragged.after,
     JSON.stringify(dragged));
 
+  // The corners are painted on the canvas rather than being elements, so
+  // nothing carries a cursor of its own: over the picture a crosshair says
+  // "draw a box", and over a corner that is wrong — the corner is for picking
+  // up. Without this the handles were draggable and looked exactly like the
+  // rest of the canvas, which is the whole reason they were missed.
+  const cursors = await page.evaluate(async () => {
+    const view = document.getElementById('cropview');
+    const r = view.getBoundingClientRect();
+    const send = (type, cx, cy) => view.dispatchEvent(new PointerEvent(type, {
+      clientX: cx, clientY: cy, bubbles: true, pointerId: 78,
+    }));
+    send('pointermove', r.left + r.width / 2, r.top + r.height / 2);
+    const overPicture = view.style.cursor;
+    send('pointermove', r.left + 1, r.top + 1);
+    const overCorner = view.style.cursor;
+    send('pointerdown', r.left + 1, r.top + 1);
+    const whileHeld = view.style.cursor;
+    send('pointermove', r.left + 6, r.top + 6);
+    const whileDragging = view.style.cursor;
+    send('pointerup', r.left + 6, r.top + 6);
+    await new Promise(done => setTimeout(done, 10));
+    send('pointermove', r.left + r.width / 2, r.top + r.height / 2);
+    const afterwards = view.style.cursor;
+    return { overPicture, overCorner, whileHeld, whileDragging, afterwards };
+  });
+  check('over the picture the cursor draws a box',
+    cursors.overPicture === 'crosshair', JSON.stringify(cursors));
+  check('over a corner it offers to pick it up',
+    cursors.overCorner === 'grab', JSON.stringify(cursors));
+  check('and while the corner is held it is holding it',
+    cursors.whileHeld === 'grabbing' && cursors.whileDragging === 'grabbing',
+    JSON.stringify(cursors));
+  check('then goes back to drawing once the corner is let go',
+    cursors.afterwards === 'crosshair', JSON.stringify(cursors));
+
   // Cancelling leaves nothing behind, which is what makes the dialog safe to
   // open: a look at the pick costs nothing.
   await page.click('#cropcancel');
@@ -3966,6 +4001,62 @@ try {
     check('and takes its copy with it',
       cancelled.ghost === 0, JSON.stringify(cancelled));
 
+    // Selecting a page in the sheet takes the document to it. Two views of one
+    // thing: pointing at a page in one should be looking at it in the other.
+    const followed = await page.evaluate(async () => {
+      const B = window.Blinded;
+      const host = document.getElementById('pages');
+      const sc = B.scrollerFor(host);
+      const topPage = () => {
+        const edge = sc === window ? 0 : sc.getBoundingClientRect().top;
+        const kids = [...host.children];
+        for (let i = 0; i < kids.length; i++) {
+          if (kids[i].getBoundingClientRect().bottom > edge + 1) return i + 1;
+        }
+        return kids.length;
+      };
+      B.goToPage(0);
+      await new Promise(r => setTimeout(r, 900));
+      const before = topPage();
+      document.querySelectorAll('#sheet .sheetface')[8]
+        .dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await new Promise(r => setTimeout(r, 1200));
+      return { before, after: topPage() };
+    });
+    check('clicking a thumbnail takes the document to that page',
+      followed.after === 9, JSON.stringify(followed));
+
+    // Dragging towards a row that is scrolled out of sight brings it up,
+    // rather than making the reviewer drop the page, scroll, and start again.
+    const crept = await page.evaluate(async () => {
+      const host = document.getElementById('sheet');
+      host.scrollTop = 0;
+      const tiles = [...host.querySelectorAll('.sheetpage')];
+      const grip = tiles[0].querySelector('.grip');
+      const from = grip.getBoundingClientRect();
+      const box = host.getBoundingClientRect();
+      const at = (type, x, y) => grip.dispatchEvent(new PointerEvent(type, {
+        clientX: x, clientY: y, bubbles: true, pointerId: 21, isPrimary: true,
+      }));
+      const scrolls = host.scrollHeight > host.clientHeight + 4;
+      at('pointerdown', from.left + 5, from.top + 5);
+      // Held just inside the bottom edge, without moving again.
+      at('pointermove', box.left + box.width / 2, box.bottom - 6);
+      await new Promise(r => setTimeout(r, 400));
+      const moved = host.scrollTop;
+      at('pointercancel', box.left + box.width / 2, box.bottom - 6);
+      await new Promise(r => setTimeout(r, 260));
+      const stopped = host.scrollTop;
+      await new Promise(r => setTimeout(r, 300));
+      return { scrolls, moved, stopped, still: host.scrollTop };
+    });
+    check('the sheet is taller than its window, so there is somewhere to creep to',
+      crept.scrolls === true, JSON.stringify(crept));
+    check('holding a page at the bottom edge scrolls the sheet under it',
+      crept.moved > 0, JSON.stringify(crept));
+    check('and it stops the moment the drag ends',
+      crept.still === crept.stopped, JSON.stringify(crept));
+
     // The page objects are the identity, so this checks the document by what
     // is on each page rather than by where it sits.
     const moved = await page.evaluate(() => {
@@ -5517,13 +5608,15 @@ try {
   // they read as decoration that does nothing. What matters is that the text
   // actually becomes visible, so that is what is asserted, not that a handler
   // is attached.
-  // Two, not four. One explained the "find these words as pictures" checkbox,
-  // which is gone — the tool always does that now. The other explained
-  // "include lower-confidence matches", which is also gone: the detectors it
-  // was propping up were tightened until they could stand on their own, and a
-  // setting nobody could answer sensibly is worse than no setting.
+  // Three. The sensitivity bar, the placeholder switch, and how to organise
+  // pages — that last one is a hint in the Organise heading now rather than a
+  // paragraph above the thumbnails, which was taking the room the sheet needs.
+  //
+  // Two others went earlier: "find these words as pictures", which the tool
+  // always does now, and "include lower-confidence matches", whose detectors
+  // were tightened until they could stand without it.
   const whyCount = await page.evaluate(() => document.querySelectorAll('.why').length);
-  check('the panel still has its hints', whyCount === 2, String(whyCount));
+  check('the panel still has its hints', whyCount === 3, String(whyCount));
   check('every hint carries text to show',
     await page.evaluate(() => [...document.querySelectorAll('.why')]
       .every(b => (b.getAttribute('data-tip') || '').length > 20)));
@@ -5584,6 +5677,35 @@ try {
     document.querySelector('#labelling').closest('label').querySelector('.why').click();
     return { before, after: box.checked };
   });
+  // On a laptop the icon bar explains itself on hover. A phone has no hover,
+  // so those six buttons were six unlabelled glyphs. Holding one answers.
+  const holding = await page.evaluate(async () => {
+    const button = document.getElementById('zoom-in');
+    const before = window.Blinded.state.zoom;
+    const at = type => button.dispatchEvent(new PointerEvent(type, {
+      bubbles: true, pointerId: 31, pointerType: 'touch', isPrimary: true,
+    }));
+    at('pointerdown');
+    await new Promise(r => setTimeout(r, 600));
+    const bubble = document.querySelector('.tipbubble');
+    const said = bubble && !bubble.hidden ? bubble.textContent : '';
+    at('pointerup');
+    button.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    await new Promise(r => setTimeout(r, 120));
+    return { said, before, after: window.Blinded.state.zoom };
+  });
+  // Whatever the button's title says at the moment it is held — the zoom one
+  // carries the current level, and the hint should quote it rather than a
+  // copy of the wording taken once at startup.
+  check('holding a toolbar icon on a touch screen says what it does',
+    holding.said.startsWith('Zoom in'), JSON.stringify(holding));
+  check('and the press that asked does not also work the button',
+    holding.after === holding.before, JSON.stringify(holding));
+  await page.evaluate(() => {
+    const bubble = document.querySelector('.tipbubble');
+    if (bubble) bubble.hidden = true;
+  });
+
   check('asking what a checkbox means does not tick it',
     toggled.before === toggled.after, JSON.stringify(toggled));
   await page.evaluate(() => {

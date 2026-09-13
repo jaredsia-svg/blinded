@@ -37,7 +37,7 @@
 <title>Blinded – Efficient redaction for your most sensitive documents, all done locally</title>
 <meta name="description" content="Redact PDFs, images and text in your browser. The file never leaves your machine.">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="app.css?v=7e78ced0">
+<link rel="stylesheet" href="app.css?v=0340b1be">
 </head>
 <body>
 
@@ -285,12 +285,10 @@
         </details>
 
         <details class="sect" id="organisesect">
-          <summary><span class="s-title">Organise</span><span class="s-note" id="organise-note"></span></summary>
+          <summary><span class="s-title">Organise</span><button type="button"
+              class="why" id="sheet-why" aria-label="How to organise pages"
+              data-tip="Tap a page to select it. Shift-click to select a continuous series, and Ctrl-click to select multiple pages. Drag a page by its grip to move it. Undo if you make a mistake.">?</button><span class="s-note" id="organise-note"></span></summary>
           <div class="s-body">
-            <p class="hint">Tap a page to select it. Shift-click to select a
-              continuous series, and <span class="ph" id="metakey">Ctrl</span>-click
-              to select multiple pages. Drag a page by its grip to move it. Undo
-              if you make a mistake.</p>
             <ol id="sheet" class="sheet"></ol>
             <p class="hint" id="sheet-picked" hidden></p>
             <div class="sheetbar">
@@ -577,7 +575,7 @@
 <script src="lib/pdfwrite.js?v=4b977425"></script>
 <script src="lib/pdfread.js?v=ca229552"></script>
 <script src="lib/render.js?v=7bf6e0a9"></script>
-<script src="app.js?v=997fefd7"></script>
+<script src="app.js?v=f42c0be8"></script>
 <script type="module" src="lib/boot.mjs?v=8b98ed8f"></script>
 </body>
 </html>

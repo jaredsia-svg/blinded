@@ -1220,3 +1220,12 @@ body.dragging-page .grip { cursor: grabbing; }
 }
 .dropline::before { top: 0; }
 .dropline::after { bottom: 0; }
+
+/* Holding an icon asks what it is, so the browser must not offer its own
+   long-press menu or start selecting text on top of the answer. */
+.tool, .tool .half { -webkit-touch-callout: none; touch-action: manipulation; }
+
+/* The hint lives in the section heading now, beside the word it explains,
+   rather than as a paragraph above the thumbnails taking room the sheet
+   needs. Inside a <summary>, so it must not look like part of the title. */
+.sect > summary > .why { margin-left: 6px; }

@@ -1589,6 +1589,31 @@ check('no creation date is carried into the output', !meta.info.CreationDate);
       listed.every(name => declared.has(name)),
       'not defined: ' + listed.filter(name => !declared.has(name)).join(', '));
   }
+
+  // The same mistake one level down: two things at the top of the module
+  // given the same name. app.js is one long IIFE, so a duplicate `const` is
+  // not a local problem — it is a SyntaxError that stops the whole file
+  // parsing, window.Blinded is never assigned, and every control in the
+  // review is dead. Exactly the symptom as the two above, from a third cause.
+  //
+  // Written by adding a CREEP_EDGE for the drag that was called EDGE, next to
+  // a swipe threshold three thousand lines away that was already called EDGE.
+  // Neither name was wrong; they were only both there.
+  //
+  // Module-level declarations are the ones indented by two spaces, which is
+  // everything directly inside the IIFE and nothing nested within a function.
+  {
+    const seen = new Map();
+    const twice = [];
+    for (const line of code.split('\n')) {
+      const found = line.match(/^ {2}(?:const|let) ([A-Za-z_$][\w$]*)\s*=/);
+      if (!found) continue;
+      const name = found[1];
+      if (seen.has(name)) twice.push(name); else seen.set(name, true);
+    }
+    check('nothing at the top of app.js is declared twice',
+      twice.length === 0, 'declared more than once: ' + twice.join(', '));
+  }
 }
 
 // ---------- report ----------
