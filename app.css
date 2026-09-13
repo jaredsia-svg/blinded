@@ -1266,3 +1266,42 @@ body.dragging-page .grip { cursor: grabbing; }
   border-right: 1.6px solid var(--ink-soft); border-bottom: 1.6px solid var(--ink-soft);
   transform: rotate(-45deg);
 }
+
+/* ---------- choosing several pages ---------- */
+/*
+   Entered by holding a thumbnail. A phone has no shift and no ctrl, so
+   without this the sheet could select exactly one page and the Keep and
+   Remove actions were controls for a job that could not be set up.
+*/
+.pickedrow {
+  display: flex; align-items: center; gap: 8px;
+  margin-top: 8px; min-height: 26px;
+}
+.pickedrow .hint { margin: 0; flex: 1; font-weight: 500; color: var(--ink); }
+#choose-done { flex: none; padding: 3px 12px; }
+
+/* The tick sits where the eye already goes for a state — top right, opposite
+   the page number — and it is drawn empty rather than absent when unticked,
+   so a set of pages reads as a set of choices rather than as some pages
+   having sprouted a mark. */
+.tick {
+  position: absolute; top: 5px; left: 5px;
+  width: 17px; height: 17px; border-radius: 50%;
+  border: 1.5px solid var(--ink-soft); background: rgba(255, 255, 255, .92);
+  pointer-events: none;
+}
+.sheetpage.picked .tick {
+  background: var(--accent); border-color: var(--accent);
+}
+.sheetpage.picked .tick::after {
+  content: ''; position: absolute; left: 4.5px; top: 2px;
+  width: 4px; height: 8px; border: solid #fff;
+  border-width: 0 2px 2px 0; transform: rotate(45deg);
+}
+/* While choosing, the grip would be a second thing to aim at in the same
+   corner as the tick and a drag nobody meant to start. */
+body.choosing .grip { display: none; }
+/* Holding a thumbnail must not also offer the browser's own long-press menu
+   or start selecting the page number underneath the finger. */
+.sheetface { -webkit-touch-callout: none; }
+body.choosing { -webkit-user-select: none; user-select: none; }

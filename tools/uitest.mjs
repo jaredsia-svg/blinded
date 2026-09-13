@@ -4183,6 +4183,68 @@ try {
     check('and it stops the moment the drag ends',
       crept.still === crept.stopped, JSON.stringify(crept));
 
+    // ---------- holding a page starts choosing several ----------
+    //
+    // Selecting more than one needed shift or ctrl, which a phone does not
+    // have: the sheet could select exactly one page there, and Keep only
+    // these and Remove these were controls for a job that could not be set up.
+    const chosen = await page.evaluate(async () => {
+      const B = window.Blinded;
+      B.state.picked = new Set();
+      B.state.choosing = false;
+      B.renderSheet();
+      const face = i => document.querySelectorAll('#sheet .sheetface')[i];
+      const at = (el, type, extra) => el.dispatchEvent(new PointerEvent(type, {
+        bubbles: true, pointerId: 41, isPrimary: true, clientX: 10, clientY: 10, ...extra,
+      }));
+
+      at(face(1), 'pointerdown');
+      const early = B.state.choosing;
+      await new Promise(r => setTimeout(r, 700));
+      const after = { choosing: B.state.choosing, picked: B.pickedInOrder().map(p => p.index) };
+      at(face(1), 'pointerup');
+      // The click that ends the hold is not a second instruction.
+      face(1).dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      const kept = B.pickedInOrder().map(p => p.index);
+      const ticks = document.querySelectorAll('#sheet .tick').length;
+
+      // Past the window that swallows the hold's own click.
+      await new Promise(r => setTimeout(r, 700));
+      // Now a plain tap adds rather than replaces — no modifier needed.
+      face(4).dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      face(6).dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      const several = B.pickedInOrder().map(p => p.index);
+      // And tapping a chosen one takes it out again.
+      face(4).dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      const fewer = B.pickedInOrder().map(p => p.index);
+      return { early, after, kept, ticks, several, fewer,
+        tiles: document.querySelectorAll('#sheet .sheetpage').length };
+    });
+    check('a press alone does not start choosing', chosen.early === false,
+      JSON.stringify(chosen));
+    check('holding a page does, and takes that page with it',
+      chosen.after.choosing === true && chosen.after.picked.join(',') === '1',
+      JSON.stringify(chosen));
+    check('and the click that ends the hold does not undo it',
+      chosen.kept.join(',') === '1', JSON.stringify(chosen));
+    check('every page shows a tick box while choosing',
+      chosen.ticks === chosen.tiles, JSON.stringify(chosen));
+    check('then a plain tap adds a page, with no modifier held',
+      chosen.several.join(',') === '1,4,6', JSON.stringify(chosen));
+    check('and tapping a chosen page takes it out again',
+      chosen.fewer.join(',') === '1,6', JSON.stringify(chosen));
+
+    const finished = await page.evaluate(() => {
+      document.getElementById('choose-done').click();
+      return {
+        choosing: window.Blinded.state.choosing,
+        picked: window.Blinded.pickedInOrder().length,
+        ticks: document.querySelectorAll('#sheet .tick').length,
+      };
+    });
+    check('Done leaves the mode and the ticks go with it',
+      finished.choosing === false && finished.ticks === 0, JSON.stringify(finished));
+
     // The page objects are the identity, so this checks the document by what
     // is on each page rather than by where it sits.
     const moved = await page.evaluate(() => {
@@ -6037,6 +6099,66 @@ try {
     await phone.waitForTimeout(300);
     check('following a page number brings the document forward',
       await phone.evaluate(() => document.body.dataset.pane) === 'doc');
+
+    // ---------- dragging a page towards the bottom, on a phone ----------
+    //
+    // This worked on a laptop and did nothing here, and the reason is the
+    // difference between the two. On a laptop the sheet is capped to the
+    // panel, so the bottom of its box is on screen and the creep zone is
+    // reachable. On a phone it is left uncapped — the panel is what scrolls —
+    // so the box runs far below the fold, measured at 1990 in an 844-pixel
+    // window. The code watched an edge no finger could reach.
+    //
+    // The two halves of the fix are checked directly rather than through a
+    // drag. A drag was tried first and was worthless: with the fix deliberately
+    // put back to the old bounding-box edge, the panel still moved a couple of
+    // hundred pixels — something else in the gesture scrolls it — so the check
+    // passed on broken code and guarded nothing. What follows cannot do that,
+    // because each is the mechanism itself.
+    {
+      // A document with enough pages to overrun the screen. The two-page
+      // fixture this page has been using cannot show the bug at all — the
+      // sheet fits, so there is no edge past the fold and nothing to scroll.
+      // Loaded without a catch around it: a load that quietly failed is how a
+      // check ends up measuring a document it is not looking at.
+      await phone.setInputFiles('#file', manyPath);
+      await phone.waitForFunction(() => window.Blinded.state.pages.length > 10,
+        null, { timeout: 60000 });
+      await phone.evaluate(async () => {
+        if (window.Blinded.onPhone()) window.Blinded.setPane('edit');
+        document.getElementById('organisesect').open = true;
+        await new Promise(r => setTimeout(r, 250));
+      });
+      const geometry = await phone.evaluate(() => {
+        const B = window.Blinded;
+        const host = document.getElementById('sheet');
+        const panel = document.querySelector('.panel');
+        const box = host.getBoundingClientRect();
+        const edges = B.creepEdges(host);
+        const was = panel.scrollTop;
+        // The sheet cannot scroll here, so a push has to walk out to whatever
+        // can. That walk is the other half of the fix.
+        const pushed = B.pushScroll(host, 60);
+        const panelMoved = panel.scrollTop - was;
+        panel.scrollTop = was;
+        return {
+          box: Math.round(box.bottom),
+          edge: Math.round(edges.bottom),
+          viewport: window.innerHeight,
+          sheetScrolls: host.scrollHeight > host.clientHeight + 2,
+          pushed, panelMoved,
+        };
+      });
+      check('on a phone the sheet runs past the bottom of the screen',
+        geometry.box > geometry.viewport, JSON.stringify(geometry));
+      check('so its creep edge is the visible one, not the box',
+        geometry.edge <= geometry.viewport && geometry.edge < geometry.box,
+        JSON.stringify(geometry));
+      check('and the sheet itself has no scrolling to give',
+        geometry.sheetScrolls === false, JSON.stringify(geometry));
+      check('so a push walks out to the panel, which has',
+        geometry.pushed === true && geometry.panelMoved > 0, JSON.stringify(geometry));
+    }
 
     await phone.close();
   }

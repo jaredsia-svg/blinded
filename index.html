@@ -37,7 +37,7 @@
 <title>Blinded – Efficient redaction for your most sensitive documents, all done locally</title>
 <meta name="description" content="Redact PDFs, images and text in your browser. The file never leaves your machine.">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="app.css?v=f145ca28">
+<link rel="stylesheet" href="app.css?v=afb140b0">
 </head>
 <body>
 
@@ -331,7 +331,10 @@
               </button>
             </div>
             <input type="file" id="addfile" accept="application/pdf,image/png,image/jpeg,.pdf,.png,.jpg,.jpeg" hidden>
-            <p class="hint" id="sheet-picked" hidden></p>
+            <div class="pickedrow" id="sheet-picked" hidden>
+              <span class="hint" id="picked-note"></span>
+              <button type="button" id="choose-done" class="ghost" hidden>Done</button>
+            </div>
             <ol id="sheet" class="sheet"></ol>
           </div>
         </details>
@@ -607,7 +610,7 @@
 <script src="lib/pdfwrite.js?v=4b977425"></script>
 <script src="lib/pdfread.js?v=ca229552"></script>
 <script src="lib/render.js?v=7bf6e0a9"></script>
-<script src="app.js?v=69f291b9"></script>
+<script src="app.js?v=cb8a266a"></script>
 <script type="module" src="lib/boot.mjs?v=8b98ed8f"></script>
 </body>
 </html>

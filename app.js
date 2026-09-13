@@ -36,6 +36,10 @@
     // moment anything is moved and a selection that quietly retargets is
     // worse than one that is lost.
     picked: new Set(),
+    // Choosing several pages by tapping, entered by holding one. A phone has
+    // no shift and no ctrl, so without a mode of its own there is no way to
+    // select a second page at all.
+    choosing: false,
     // Logos the reviewer has picked. Each holds the greyscale patch it was cut
     // from, so its matches can be recomputed when the sensitivity moves
     // without making them draw the box again.
@@ -604,6 +608,7 @@
 
     const host = el('sheet');
     host.textContent = '';
+    document.body.classList.toggle('choosing', state.choosing);
     for (const page of state.pages) {
       const item = document.createElement('li');
       item.className = 'sheetpage' + (state.picked.has(page) ? ' picked' : '');
@@ -623,6 +628,14 @@
       num.className = 'sheetnum';
       num.textContent = String(page.index + 1);
       button.append(img, num);
+      // A tick box only while choosing. Shown always, it would say every tap
+      // adds to a set, which outside this mode it does not.
+      if (state.choosing) {
+        const tick = document.createElement('span');
+        tick.className = 'tick';
+        tick.setAttribute('aria-hidden', 'true');
+        button.append(tick);
+      }
 
       const grip = document.createElement('span');
       grip.className = 'grip';
@@ -702,11 +715,13 @@
     const picked = pickedInOrder();
     const n = picked.length;
     const only = state.pages.length;
-    const note = el('sheet-picked');
-    note.hidden = n === 0;
-    note.textContent = n === 1
-      ? 'Page ' + (picked[0].index + 1) + ' selected.'
-      : n + ' pages selected.';
+    const row = el('sheet-picked');
+    row.hidden = n === 0 && !state.choosing;
+    el('picked-note').textContent = !n
+      ? 'Tap the pages you want.'
+      : n === 1 ? 'Page ' + (picked[0].index + 1) + ' selected.'
+        : n + ' pages selected.';
+    el('choose-done').hidden = !state.choosing;
     el('page-left').disabled = !n || picked[0].index === 0;
     el('page-right').disabled = !n || picked[n - 1].index === only - 1;
     // Keeping only everything is a no-op, and removing everything leaves no
@@ -727,13 +742,14 @@
   let sheetAnchor = null;
 
   function selectPage(page, event) {
-    // The sheet and the document are two views of one thing, so touching a
-    // page in one should be looking at it in the other. Without this, finding
-    // page 47 in the thumbnails and then wanting to read it means scrolling
-    // the document to it by hand, having just pointed straight at it.
-    goToPage(page.index, { stay: true });
+    // While choosing, a tap is a tick and nothing else. Following the page in
+    // the document as well would send the reviewer somewhere new on every
+    // page they add to a set, which is the opposite of what picking a set is.
+    if (!state.choosing) goToPage(page.index, { stay: true });
     const spread = event && event.shiftKey;
-    const add = event && (event.metaKey || event.ctrlKey);
+    // Ctrl or cmd adds one where there is a keyboard; while choosing, every
+    // tap does, which is the same rule with the modifier held down for you.
+    const add = state.choosing || (event && (event.metaKey || event.ctrlKey));
     if (spread && sheetAnchor && state.pages.includes(sheetAnchor)) {
       const from = Math.min(sheetAnchor.index, page.index);
       const to = Math.max(sheetAnchor.index, page.index);
@@ -752,6 +768,41 @@
     renderSheet();
   }
 
+  // Holding a page starts choosing several.
+  //
+  // Selecting more than one page needed shift or ctrl, which a phone does not
+  // have — so on a phone the sheet could select exactly one page, and Keep
+  // only these and Remove these were controls for a job that could not be
+  // set up. Holding a thumbnail is how every photo roll answers this, and it
+  // costs nothing on a laptop, where it sits alongside the modifiers rather
+  // than replacing them.
+  const CHOOSE_HOLD = 500;
+  const CHOOSE_SLOP = 8;      // a press that wanders this far was a scroll
+
+  // Held at module scope, not on the button, because entering the mode
+  // rebuilds the sheet: the tile that was held no longer exists by the time
+  // its own click arrives, and the fresh one in its place knows nothing about
+  // the hold. Measured — holding a page ticked it and letting go un-ticked it
+  // again, which looked exactly like the hold not working at all.
+  let heldAt = 0;
+  const HOLD_ECHO = 600;
+
+  function startChoosing(page) {
+    state.choosing = true;
+    state.picked.add(page);
+    sheetAnchor = page;
+    heldAt = Date.now();
+    renderSheet();
+  }
+
+  function stopChoosing() {
+    if (!state.choosing) return;
+    state.choosing = false;
+    state.picked.clear();
+    sheetAnchor = null;
+    renderSheet();
+  }
+
   // Dragging happens on the grip rather than on the page, so that a tap on a
   // phone still selects and the panel still scrolls under the finger. Pointer
   // events, so one path serves mouse, pen and touch.
@@ -761,8 +812,43 @@
   // somewhere else, and on a grid of thumbnails that reads as a glitch rather
   // than as carrying something: there is nothing in the hand.
   function wireSheetPage(item, page, button, grip) {
+    // The hold and the tap are the same gesture until they are not, so the
+    // press is timed and the click is swallowed if the timer won.
+    let holdTimer = null;
+    let answered = false;
+    let from = null;
+    const forget = () => {
+      if (holdTimer) clearTimeout(holdTimer);
+      holdTimer = null;
+    };
+    button.addEventListener('pointerdown', event => {
+      forget();
+      answered = false;
+      from = { x: event.clientX, y: event.clientY };
+      if (state.choosing) return;   // already choosing: a tap is enough
+      holdTimer = setTimeout(() => {
+        answered = true;
+        startChoosing(page);
+      }, CHOOSE_HOLD);
+    });
+    button.addEventListener('pointermove', event => {
+      if (!from) return;
+      const away = Math.hypot(event.clientX - from.x, event.clientY - from.y);
+      if (away > CHOOSE_SLOP) forget();
+    });
+    for (const end of ['pointerup', 'pointercancel', 'pointerleave']) {
+      button.addEventListener(end, forget);
+    }
     button.addEventListener('click', event => {
       event.preventDefault();
+      // The hold already did the choosing; the click that ends it is not a
+      // second instruction. Answered by the clock rather than by this
+      // closure, which the hold's own re-render has already thrown away.
+      if (answered || Date.now() - heldAt < HOLD_ECHO) {
+        answered = false;
+        heldAt = 0;
+        return;
+      }
       selectPage(page, event);
     });
 
@@ -868,29 +954,56 @@
   const CREEP_STEP = 14;    // pixels per frame at the very edge
   let edgeTimer = null;
 
+  // Where the sheet's edges actually are on screen.
+  //
+  // Not where its box says they are. On a laptop the sheet is capped to the
+  // panel and the two agree; on a phone it is as tall as its contents and the
+  // bottom of the box is somewhere below the fold — measured on a 20-page
+  // document in a 844-pixel window, the box ended at 1990. So the edge the
+  // code was watching was one no finger could ever reach, and dragging to the
+  // bottom of the screen scrolled nothing at all.
+  //
+  // The edge that matters is where the sheet stops being visible: the box,
+  // clipped by every scrolling ancestor and finally by the window.
+  function creepEdges(host) {
+    const box = host.getBoundingClientRect();
+    let top = box.top;
+    let bottom = box.bottom;
+    for (let node = host.parentElement; node; node = node.parentElement) {
+      if (!/(auto|scroll|hidden)/.test(getComputedStyle(node).overflowY)) continue;
+      const around = node.getBoundingClientRect();
+      top = Math.max(top, around.top);
+      bottom = Math.min(bottom, around.bottom);
+    }
+    return { top: Math.max(top, 0), bottom: Math.min(bottom, window.innerHeight) };
+  }
+
+  // Scrolls whichever thing can actually move. The sheet where it has room,
+  // then out through its ancestors, then the window — on a phone the sheet
+  // does not scroll at all and the panel is what gives.
+  function pushScroll(host, by) {
+    for (let node = host; node; node = node.parentElement) {
+      const before = node.scrollTop;
+      node.scrollTop += by;
+      if (node.scrollTop !== before) return true;
+    }
+    const before = window.scrollY;
+    window.scrollBy(0, by);
+    return window.scrollY !== before;
+  }
+
   function edgeScroll(host, event, onScroll) {
     stopEdgeScroll();
-    const box = host.getBoundingClientRect();
-    const above = event.clientY - box.top;
-    const below = box.bottom - event.clientY;
+    const edges = creepEdges(host);
+    const above = event.clientY - edges.top;
+    const below = edges.bottom - event.clientY;
     let way = 0;
     if (above < CREEP_EDGE) way = -(1 - Math.max(0, above) / CREEP_EDGE);
     else if (below < CREEP_EDGE) way = 1 - Math.max(0, below) / CREEP_EDGE;
     if (!way) return;
 
     const step = () => {
-      const by = Math.round(way * CREEP_STEP);
-      const before = host.scrollTop;
-      host.scrollTop += by;
-      // Nothing left in the sheet: push the panel instead, so the tail of a
-      // long document is reachable rather than merely nearly reachable.
-      if (host.scrollTop === before) {
-        const panel = host.closest('.panel') || scrollerFor(host);
-        if (panel && panel !== host) {
-          if (panel === window) window.scrollBy(0, by);
-          else panel.scrollTop += by;
-        }
-      }
+      pushScroll(host, Math.round(way * CREEP_STEP));
       if (onScroll) onScroll();
       edgeTimer = requestAnimationFrame(step);
     };
@@ -4732,6 +4845,8 @@
     });
   }
 
+  el('choose-done').addEventListener('click', stopChoosing);
+
   el('sectroll').addEventListener('click', () => {
     // Not "open the four" — shut the one. Opening a section here would pick a
     // winner among four the reviewer has not chosen between, and shutting the
@@ -5293,6 +5408,7 @@
     activeBoxes,
     renderSheet, setOrder, moveTo, nudge, keepOnlyPicked, dropPicked,
     edgeScroll, stopEdgeScroll, CREEP_EDGE, fitSheet, rollSections,
+    creepEdges, pushScroll, startChoosing, stopChoosing, CHOOSE_HOLD,
     addDocument, pickedInOrder, selectPage, thumbFor, organiseStamp,
     markPending, needsSearch, markDuplicates, onePerPlace, plannedCount,
     pendingTemplates,
