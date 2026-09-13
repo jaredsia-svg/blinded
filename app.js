@@ -7,6 +7,45 @@
 (function () {
   'use strict';
 
+  // Not inside somebody else's page.
+  //
+  // A meta Content-Security-Policy governs everything the page may reach, but
+  // frame-ancestors is the one directive a meta tag cannot carry: it has to
+  // arrive with the response, because by the time the markup is being parsed
+  // the framing has already happened. The header is sent from render.yaml —
+  // and a header is a promise about one deployment, while this is a promise
+  // about the program. A copy served from anywhere that forgets it still
+  // refuses to run in a frame.
+  //
+  // What framing buys an attacker here is not the document: a file picker
+  // needs a real gesture and the file never leaves the tab either way. It is
+  // the chrome around it. Blinded's whole claim is that the reviewer can see
+  // what is about to be covered and press Redact themselves, and a page that
+  // owns the frame owns everything around that decision — which button the
+  // finger lands on, what the screen says the tool is doing, whether the
+  // "Blinded" the reviewer thinks they are trusting is this program at all.
+  if (window.top !== window.self) {
+    document.addEventListener('DOMContentLoaded', () => {
+      const say = document.createElement('div');
+      say.className = 'framed';
+      const head = document.createElement('h1');
+      head.textContent = 'Blinded does not run inside another page.';
+      const body = document.createElement('p');
+      body.textContent = 'You are looking at it through a frame belonging to '
+        + 'some other site, which could change what this looks like and what '
+        + 'the buttons appear to do. Open it directly instead.';
+      const link = document.createElement('a');
+      link.href = 'https://blinded.onrender.com/';
+      link.target = '_top';
+      link.rel = 'noopener';
+      link.textContent = 'Open blinded.onrender.com';
+      say.append(head, body, link);
+      document.body.textContent = '';
+      document.body.append(say);
+    });
+    return;
+  }
+
   const Detect = window.BlindedDetect;
   const Boxes = window.BlindedBoxes;
   const PdfRead = window.BlindedPdfRead;
@@ -4768,11 +4807,18 @@
   //
   // What a draft holds is the work, not the document: the words, the marks,
   // the boxes drawn by hand, the logos picked out, the settings. Not a single
-  // page of content. That keeps it a few kilobytes instead of the size of the
-  // original, and — the reason that matters — it means the draft carries
-  // nothing confidential. A draft with the document inside it would be a file
-  // that looks like a redaction and is the opposite of one, and sooner or
-  // later somebody sends one on.
+  // page of content. A draft with the document inside it would be a file that
+  // looks like a redaction and is the opposite of one, and sooner or later
+  // somebody sends one on.
+  //
+  // It is not, however, harmless. This used to say the draft "carries nothing
+  // confidential", and that was wrong in the way that matters: the words a
+  // reviewer typed to be covered are the names, the email addresses and the
+  // counterparty, a note written on a page is whatever they wrote, and the
+  // file's own name is often the deal. A draft is a short list of the most
+  // sensitive strings in the document, without the document around them to
+  // dilute it. It is small and it is not the file — it is not safe to leave
+  // lying about, and nothing in this program should imply that it is.
   //
   // The price is that reopening needs the original file again, which is why
   // the draft records enough to be sure it is the right one.
@@ -4847,8 +4893,9 @@
     // Saving a draft is not exporting a redaction, and the flag that decides
     // whether the reviewer is warned about losing work must not be set by it.
     state.exported = false;
-    draftNote('Draft saved. It holds your marks, not the document \u2013 reopen '
-      + 'it and choose ' + state.name + ' again to carry on.');
+    draftNote('Draft saved. It holds your marks and the words you typed \u2013 '
+      + 'not the document \u2013 so keep it as carefully. Reopen it and choose '
+      + state.name + ' again to carry on.');
   }
 
   function draftNote(text) {

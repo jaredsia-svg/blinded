@@ -661,7 +661,23 @@ tools/            the two test suites, a fixture builder, a static server
 
 ## Licence
 
-pdf.js in `vendor/` is Apache-2.0; its licence is alongside it.
+MIT, in `LICENSE`.
+
+pdf.js in `vendor/` is Apache-2.0; its licence is alongside it. Tesseract's
+build in `vendor/tesseract/` carries its own, Apache-2.0 as well.
+
+## Where it is served
+
+`https://blinded.onrender.com` is the canonical copy, and `index.html` says so
+with a `rel="canonical"`. It was also published from GitHub Pages for a while,
+which is one program on two origins with two sets of response headers to keep
+right — and the Pages one sent `Access-Control-Allow-Origin: *` and nothing
+about framing. Pages publishing is off; Render is the one address.
+
+`render.yaml` carries the response headers, including the `frame-ancestors`
+that a meta CSP cannot express. It applies only if Render manages the service
+as a Blueprint — a service made by hand in the dashboard needs the same headers
+set there.
 
 ## Asset stamps
 
@@ -736,11 +752,16 @@ loses it — deliberately, since nothing is stored anywhere. Save draft is the w
 back to it.
 
 A draft holds the work, not the document: the words, the marks, the boxes drawn
-by hand, where each logo was cut from, the settings. Not a page of content. That
-keeps it a few kilobytes rather than the size of the original and, the reason
-that matters, means the draft carries nothing confidential — a draft with the
-document inside it would be a file that looks like a redaction and is the
-opposite of one, and sooner or later somebody sends one on.
+by hand, the notes written on a page, where each logo was cut from, the
+settings. Not a page of content — a draft with the document inside it would be
+a file that looks like a redaction and is the opposite of one, and sooner or
+later somebody sends one on.
+
+That does not make it harmless, and this used to claim it did. The words typed
+to be covered are the names, the addresses and the counterparty; a note is
+whatever was written; the file's own name is often the deal. A draft is a short
+list of the most sensitive strings in the document with the document taken
+away. Treat a `.blinded.json` as confidential.
 
 The price is that reopening needs the original file again. The draft records a
 digest of it, so putting a draft on the wrong document — where the marks would

@@ -4574,6 +4574,45 @@ try {
     });
   }
 
+  // ---------- not inside somebody else's page ----------
+  //
+  // frame-ancestors is sent as a header because a meta policy cannot carry
+  // it, and a header is a promise about one deployment. This is the promise
+  // about the program: a copy served from anywhere that forgets the header
+  // still refuses to run framed. What framing would buy is not the document —
+  // that never leaves the tab either way — it is the chrome around the one
+  // decision this tool exists to make, which button the finger lands on and
+  // what the screen says is happening.
+  {
+    // From a page of its own, because the app's own policy says frame-src
+    // 'none' — it will not frame anything, this included, so the frame has to
+    // be built somewhere that is not Blinded. Driven through Playwright's
+    // frame handle rather than by reaching into contentWindow: the refusal is
+    // about a frame owned by somebody else, and a test that could only look
+    // inside a same-origin one would not be testing the case that matters.
+    const outer = await context.newPage();
+    await outer.setContent('<iframe id="frametest" style="width:600px;height:400px" src="'
+      + base + 'index.html"></iframe>');
+    const inside = outer.frameLocator('#frametest');
+    await inside.locator('.framed').waitFor({ timeout: 20000 });
+    const away = await inside.locator('.framed a').getAttribute('href');
+    const child = outer.frames().find(f => f !== outer.mainFrame()
+      && f.url().includes('index.html'));
+    const wired = child ? await child.evaluate(() => ({
+      blinded: typeof window.Blinded,
+      drop: Boolean(document.querySelector('#view-drop')),
+      said: (document.querySelector('.framed h1') || {}).textContent,
+    })) : null;
+    await outer.close();
+    check('framed, the app refuses to run',
+      Boolean(wired) && /does not run inside another page/.test(wired.said),
+      JSON.stringify(wired));
+    check('and is not wired up at all behind the refusal',
+      wired.blinded === 'undefined' && wired.drop === false, JSON.stringify(wired));
+    check('with a way out to the canonical copy',
+      away === 'https://blinded.onrender.com/', String(away));
+  }
+
   // ---------- one section from the next ----------
   //
   // Five sections divided by a hairline the same colour as the panel's own

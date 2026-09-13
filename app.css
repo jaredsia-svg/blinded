@@ -24,6 +24,17 @@
 
 * { box-sizing: border-box; }
 
+/* The page when it has refused to run in a frame. Plain, because whatever is
+   holding the frame chose how big this is and nothing here should try to be
+   an application inside it. */
+.framed {
+  max-width: 32rem; margin: 12vh auto; padding: 0 20px;
+  font: 15px/1.55 var(--sans); color: var(--ink); text-align: center;
+}
+.framed h1 { font-size: 18px; margin: 0 0 10px; }
+.framed p { color: var(--ink-soft); margin: 0 0 16px; }
+.framed a { color: var(--accent); font-weight: 600; }
+
 /* An author `display` beats the user agent's `[hidden] { display: none }`, so
    any element styled with a display value would ignore its own hidden
    attribute. This keeps `hidden` meaning hidden everywhere. */

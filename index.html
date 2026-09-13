@@ -37,7 +37,11 @@
 <title>Blinded – Efficient redaction for your most sensitive documents, all done locally</title>
 <meta name="description" content="Redact PDFs, images and text in your browser. The file never leaves your machine.">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="app.css?v=2634f2d5">
+<!-- One address. The app was also being served from GitHub Pages, which is two
+     origins for one program and two sets of response headers to keep right;
+     Pages publishing is off and this says which copy is the copy. -->
+<link rel="canonical" href="https://blinded.onrender.com/">
+<link rel="stylesheet" href="app.css?v=ace9e801">
 </head>
 <body>
 
@@ -599,7 +603,9 @@
     <h2 class="namehead">Carry on from your draft</h2>
     <p class="confirmbody" id="draftbody"></p>
     <p class="hint" id="drafthint">A draft holds your marks, not the document –
-      which is why it is a few kilobytes and carries nothing confidential.</p>
+      which is why it is a few kilobytes. Keep it as carefully as the document
+      itself: the words you asked to cover are in it, and so is any note you
+      wrote on a page.</p>
     <div class="namego">
       <button type="button" id="draftcancel" class="ghost">Cancel</button>
       <button type="button" id="draftpick" class="primary">Choose the file</button>
@@ -724,7 +730,7 @@
 <script src="lib/pdfwrite.js?v=4b977425"></script>
 <script src="lib/pdfread.js?v=ca229552"></script>
 <script src="lib/render.js?v=70e96ff0"></script>
-<script src="app.js?v=a00657e7"></script>
+<script src="app.js?v=49e48266"></script>
 <script type="module" src="lib/boot.mjs?v=8b98ed8f"></script>
 </body>
 </html>

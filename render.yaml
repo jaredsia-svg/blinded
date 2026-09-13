@@ -1,0 +1,61 @@
+# How the canonical copy is served.
+#
+# blinded.onrender.com is the one address. GitHub Pages publishing is off:
+# two origins serving the same app meant two sets of response headers, and the
+# Pages one sent Access-Control-Allow-Origin: * and nothing about framing.
+#
+# The headers here are the half of the app's defences that a page cannot state
+# about itself. index.html carries a meta Content-Security-Policy, and a meta
+# policy is honoured for everything except frame-ancestors — the one directive
+# that has to arrive before the document does, because by the time the markup
+# is parsed the framing has already happened. So it is sent here, with the
+# rest of the policy repeated so the two cannot drift into disagreeing about
+# what the page may reach.
+#
+# This file governs the service only if Render is managing it as a Blueprint.
+# A service created by hand in the dashboard ignores it — set the same headers
+# under Settings -> Headers there, or connect the blueprint.
+services:
+  - type: web
+    name: blinded
+    runtime: static
+    staticPublishPath: .
+    buildCommand: ""
+    headers:
+      - path: /*
+        name: Content-Security-Policy
+        value: >-
+          default-src 'self';
+          script-src 'self' 'unsafe-eval';
+          style-src 'self' 'unsafe-inline';
+          img-src 'self' data: blob:;
+          connect-src 'self' blob:;
+          worker-src 'self' blob:;
+          frame-src 'none';
+          frame-ancestors 'none';
+          object-src 'none';
+          base-uri 'none';
+          form-action 'none'
+      # Older browsers that do not read frame-ancestors.
+      - path: /*
+        name: X-Frame-Options
+        value: DENY
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff
+      # The file name a reviewer opens can itself be confidential, and it can
+      # end up in a URL. Nothing here needs a referrer.
+      - path: /*
+        name: Referrer-Policy
+        value: no-referrer
+      # None of these are used by the tool, so none of them are available to
+      # anything that ends up running in the page.
+      - path: /*
+        name: Permissions-Policy
+        value: accelerometer=(), camera=(), geolocation=(), gyroscope=(), microphone=(), payment=(), usb=(), interest-cohort=()
+      - path: /*
+        name: Cross-Origin-Opener-Policy
+        value: same-origin
+      - path: /*
+        name: Cross-Origin-Resource-Policy
+        value: same-origin

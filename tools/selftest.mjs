@@ -1652,6 +1652,92 @@ check('no creation date is carried into the output', !meta.info.CreationDate);
   }
 }
 
+// ---------- how the canonical copy is served ----------
+//
+// The app's promise is about one deployment now. It was served from two —
+// Render and GitHub Pages — which is one program on two origins, each with
+// its own response headers, and the Pages one sent Access-Control-Allow-Origin
+// for everything and said nothing at all about framing. Pages is off; these
+// guards are here so the remaining copy does not quietly lose the headers
+// that a page cannot state about itself.
+{
+  const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const code = readFileSync(new URL('../app.js', import.meta.url), 'utf8');
+  const deploy = existsSync(join(root, 'render.yaml'))
+    ? readFileSync(join(root, 'render.yaml'), 'utf8') : '';
+
+  const canonical = html.match(/<link rel="canonical" href="([^"]+)"/);
+  check('the page says which copy is the canonical one', Boolean(canonical),
+    'no rel="canonical" in index.html');
+  // The refusal page offers a way out, and it has to lead to the same place.
+  if (canonical) {
+    check('and the frame refusal sends people to that same address',
+      code.includes(canonical[1]), canonical[1]);
+  }
+
+  check('the deployment carries its own headers', deploy.length > 0,
+    'render.yaml is missing');
+  // frame-ancestors is the one directive a meta policy cannot carry, so it is
+  // the one that can go missing without anything in the page noticing.
+  check('including frame-ancestors, which a meta policy cannot express',
+    /frame-ancestors 'none'/.test(deploy), 'not in render.yaml');
+  check('and X-Frame-Options for browsers that do not read it',
+    /X-Frame-Options[\s\S]{0,40}DENY/.test(deploy), 'not in render.yaml');
+  check('and a referrer policy, since a file name can be the whole story',
+    /Referrer-Policy[\s\S]{0,40}no-referrer/.test(deploy), 'not in render.yaml');
+
+  // Two copies of one policy drift. The header's job is to add
+  // frame-ancestors, not to disagree about what the page may reach.
+  const meta = html.match(/http-equiv="Content-Security-Policy" content="([^"]+)"/);
+  check('the page still carries a policy of its own', Boolean(meta));
+  if (meta && deploy) {
+    const directives = meta[1].split(';').map(d => d.trim().replace(/\s+/g, ' '))
+      .filter(Boolean);
+    const flat = deploy.replace(/\s+/g, ' ');
+    const adrift = directives.filter(d => !flat.includes(d));
+    check('and the header repeats it rather than contradicting it',
+      adrift.length === 0, 'in the page but not in render.yaml: ' + adrift.join(' | '));
+  }
+
+  // The app refuses to run framed whatever the headers say, because a header
+  // is a promise about a deployment and this is a promise about the program.
+  check('and the program refuses to run in a frame on its own account',
+    /window\.top !== window\.self/.test(code), 'no frame guard in app.js');
+}
+
+// ---------- what a draft is, said accurately ----------
+//
+// A draft holds no page of the document, which is the point of it. It does
+// hold the words typed to be covered, the notes written on a page and the
+// file's own name — which is to say a short list of the most sensitive
+// strings in the document with the document taken away. The copy used to call
+// that "nothing confidential".
+{
+  const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const code = readFileSync(new URL('../app.js', import.meta.url), 'utf8');
+  const readme = readFileSync(join(root, 'README.md'), 'utf8');
+  const overclaims = [['index.html', html], ['app.js', code], ['README.md', readme]]
+    .filter(([, text]) => /carries nothing confidential|nothing confidential/.test(text))
+    .map(([name]) => name);
+  check('nothing claims a draft carries nothing confidential',
+    overclaims.length === 0, 'still claimed in: ' + overclaims.join(', '));
+  check('and the draft prompt says to keep it as carefully as the document',
+    /Keep it as carefully as the document/.test(html));
+}
+
+// ---------- the licence it claims to have ----------
+{
+  const readme = readFileSync(join(root, 'README.md'), 'utf8');
+  const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const licence = existsSync(join(root, 'LICENSE'))
+    ? readFileSync(join(root, 'LICENSE'), 'utf8') : '';
+  // The FAQ calls it free and open source. Without a licence file that is a
+  // claim nobody can act on: the default is all rights reserved.
+  check('the page calls it open source', /free and open source/.test(html));
+  check('so there is a licence to read', licence.length > 0, 'LICENSE is missing');
+  check('and the README names it', /MIT, in `LICENSE`/.test(readme));
+}
+
 // ---------- report ----------
 
 console.log('\nBlinded self-test');
