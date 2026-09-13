@@ -1493,6 +1493,33 @@ check('no creation date is carried into the output', !meta.info.CreationDate);
     strays.join(', '));
 }
 
+// ---------- a name is found through the gaps ----------
+//
+// A PDF often gives every run of text its own line with an empty one between
+// it and the next. Measured on a real contact page, the layer read "Simon
+// Kavanagh", "", "Partner", "", "skavanagh@…" — so looking at the line
+// immediately below a name found the gap, and not one of the six people on
+// that page was found. Every anchor was there, one row further away than the
+// code was looking.
+{
+  const spaced = ['Simon Kavanagh', '', 'Partner', '', 'skavanagh@example.com', '',
+    'T: +852 9383 3500', '', 'Anthony Siu', '', 'Partner', '',
+    'asiu@example.com'].join('\n');
+  const names = Detect.findAll(spaced).filter(f => f.kind === 'person').map(f => f.text);
+  check('a name is found across a blank line',
+    names.includes('Simon Kavanagh') && names.includes('Anthony Siu'),
+    JSON.stringify(names));
+
+  // And the blank lines must not join things that are not next to each other:
+  // a name at the foot of one block and a title at the head of the next are
+  // still two blocks.
+  const apart = ['Simon Kavanagh', '', '', '', 'Some paragraph of prose that runs '
+    + 'on and is plainly not a job title at all', '', 'Partner'].join('\n');
+  check('but not across a paragraph that happens to sit between them',
+    Detect.findAll(apart).filter(f => f.kind === 'person').length === 0,
+    JSON.stringify(Detect.findAll(apart).filter(f => f.kind === 'person').map(f => f.text)));
+}
+
 // ---------- one kind of dash ----------
 //
 // An en dash throughout, on the page and in every message the tool writes.

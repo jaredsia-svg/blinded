@@ -1720,15 +1720,35 @@
       page.imageHits = page.imageHits.filter(m => !m.detector);
       if (!page.ocrText || !page.ocrPlaced) continue;
       const found = Detect.findAll(page.ocrText, { kinds: acceptedKinds() });
+      // What the text layer already gave up, so that reading the page again
+      // does not report it a second time.
+      //
+      // Compared by what it says rather than by where it sits. The geometric
+      // check that catches a duplicate logo needs nine tenths of one box
+      // inside another, and a text-layer box and an OCR box around the same
+      // address never agree that closely — one comes from font metrics and
+      // the other from ink. So every email on a contact page was found twice,
+      // listed twice, and covered twice.
+      const already = new Set((page.findings || [])
+        .map(f => f.kind + '\u0000' + f.text.replace(/\s+/g, ' ').trim().toLowerCase()));
+
       for (const span of found) {
+        const said = span.kind + '\u0000'
+          + span.text.replace(/\s+/g, ' ').trim().toLowerCase();
+        if (already.has(said)) continue;
+        already.add(said);
+        // One finding, however many words it is drawn in. The boxes are per
+        // word because a box is what covers ink, but the thing found is one
+        // thing and the panel counts things.
+        const groupId = 'read:' + span.kind + ':' + page.index + ':' + span.start;
         for (const item of page.ocrPlaced) {
           if (item.start >= span.end || item.end <= span.start) continue;
           // Whole words, for the reason the term matcher covers whole words:
           // OCR reports one box per word, and dividing it by letter count is
           // wrong in the direction that leaves a letter showing.
           page.imageHits.push({
-            id: 'read:' + span.kind + ':' + page.index + ':'
-              + Math.round(item.rect.x) + ':' + Math.round(item.rect.y),
+            id: groupId + ':' + Math.round(item.rect.x) + ':' + Math.round(item.rect.y),
+            group: groupId,
             detector: span.kind,
             text: span.text,
             rect: { ...item.rect },
@@ -3878,8 +3898,15 @@
       }
       // The ones found in what OCR read. Marked as read rather than as text,
       // because that is a different kind of confidence and the list says so.
+      // One row per thing found, not per box drawn. A phone number spread
+      // over four OCR words is four boxes and one phone number, and the list
+      // is answering "where are they", not "how much ink".
+      const seen = new Set();
       for (const match of liveImageHits(page)) {
         if (match.detector !== kind || page.dismissed.has(match.id)) continue;
+        const group = match.group || match.id;
+        if (seen.has(group)) continue;
+        seen.add(group);
         out.push({ pageIndex: page.index, kind: 'read',
                    at: match.rect ? match.rect.y : 0 });
       }
