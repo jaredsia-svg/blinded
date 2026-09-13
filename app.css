@@ -1202,11 +1202,21 @@ body.reviewing .exportbar { position: static; flex: none; margin: 14px 0 18px; }
 body.dragging-page { user-select: none; -webkit-user-select: none; }
 body.dragging-page .grip { cursor: grabbing; }
 
-/* Where it will land. The gap opens up under the pointer rather than the tile
-   merely changing colour, so the sheet shows the move before it happens. */
-.sheetpage.dropping .sheetface {
-  border-color: var(--accent); border-style: dashed;
-  transform: scale(.92);
-  transition: transform .12s ease-out;
+/* Where it will land: a line standing in the gap between the two pages it
+   would go between. A tile that merely changes colour cannot say whether the
+   page lands before it or after it, and while dragging that is the only thing
+   the reviewer wants to know. */
+.dropline {
+  position: fixed; left: 0; top: 0; z-index: 89;
+  width: 3px; border-radius: 2px;
+  background: var(--accent); pointer-events: none;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, .75), 0 1px 4px rgba(31, 111, 235, .5);
 }
-.sheetpage .sheetface { transition: transform .12s ease-out; }
+/* A cap at each end, so it reads as an insertion point rather than as a
+   border that has appeared on one of the pages. */
+.dropline::before, .dropline::after {
+  content: ''; position: absolute; left: 50%; width: 9px; height: 3px;
+  margin-left: -4.5px; border-radius: 2px; background: var(--accent);
+}
+.dropline::before { top: 0; }
+.dropline::after { bottom: 0; }

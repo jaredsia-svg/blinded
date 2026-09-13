@@ -3841,20 +3841,39 @@ try {
     // Opening the sheet makes room for it. A grid of thumbnails opened under
     // four other sections lands below the fold.
     const alone = await page.evaluate(async () => {
-      for (const sect of document.querySelectorAll('details.sect')) sect.open = true;
       const sheet = document.getElementById('organisesect');
-      sheet.open = false;
-      sheet.open = true;
-      // The toggle event is asynchronous — it lands on a later task, so a read
-      // taken straight after setting `open` sees the panel as it was.
-      await new Promise(r => setTimeout(r, 50));
       const others = [...document.querySelectorAll('details.sect')].filter(d => d !== sheet);
-      return { sheet: sheet.open, othersOpen: others.filter(d => d.open).length,
-        others: others.length };
+      // The toggle event is asynchronous, and the sections now answer each
+      // other through it. Opening five of them in one go queues five events
+      // and the answer depends on which lands last, which is a race the
+      // reviewer never runs: they open one section, then another. Waited out
+      // between the two so this tests the behaviour and not the scheduler.
+      sheet.open = false;
+      for (const sect of others) sect.open = true;
+      await new Promise(r => setTimeout(r, 50));
+      const before = others.filter(d => d.open).length;
+      sheet.open = true;
+      await new Promise(r => setTimeout(r, 50));
+      return { before, sheet: sheet.open,
+        othersOpen: others.filter(d => d.open).length, others: others.length };
     });
+    check('the other sections start open', alone.before === alone.others,
+      JSON.stringify(alone));
     check('opening the sheet closes every other section',
       alone.sheet === true && alone.othersOpen === 0 && alone.others >= 3,
       JSON.stringify(alone));
+
+    const yielded = await page.evaluate(async () => {
+      const sheet = document.getElementById('organisesect');
+      sheet.open = true;
+      await new Promise(r => setTimeout(r, 50));
+      const other = [...document.querySelectorAll('details.sect')].find(d => d !== sheet);
+      other.open = true;
+      await new Promise(r => setTimeout(r, 50));
+      return { sheet: sheet.open, other: other.open };
+    });
+    check('and opening another section closes the sheet again',
+      yielded.sheet === false && yielded.other === true, JSON.stringify(yielded));
 
     // A real pointer drag, grip to target, so the ghost and the drop are under
     // test rather than only the array maths underneath them.
@@ -3882,8 +3901,18 @@ try {
         ghost: document.querySelectorAll('.sheetghost').length,
         moved: (document.querySelector('.sheetghost') || {}).style
           ? document.querySelector('.sheetghost').style.transform : '',
-        marked: [...document.querySelectorAll('.sheetpage')]
-          .findIndex(t => t.classList.contains('dropping')),
+        line: document.querySelectorAll('.dropline').length,
+        // The line must stand in the gutter beside the tile the pointer is
+        // over, not on top of it: a marker drawn across a page says "this
+        // one", and the whole reason for a line is to say "between these".
+        beside: (() => {
+          const mark = document.querySelector('.dropline');
+          if (!mark) return null;
+          const bar = mark.getBoundingClientRect();
+          const over = tiles()[3].getBoundingClientRect();
+          return { gap: Math.round(bar.left - over.right),
+            tall: bar.height >= over.height };
+        })(),
       };
       at('pointerup', to.left + to.width / 2, to.top + to.height / 2);
       await new Promise(r => setTimeout(r, 300));
@@ -3891,6 +3920,7 @@ try {
         lifted, midway,
         landed: B.state.pages.findIndex(p => p.uid === uid),
         gone: document.querySelectorAll('.sheetghost').length,
+        noLine: document.querySelectorAll('.dropline').length,
         released: document.body.classList.contains('dragging-page'),
       };
     });
@@ -3901,12 +3931,16 @@ try {
       JSON.stringify(dragged.lifted));
     check('the copy follows the pointer',
       /translate\(/.test(dragged.midway.moved), JSON.stringify(dragged.midway));
-    check('and the tile it is over shows where it will land',
-      dragged.midway.marked === 3, JSON.stringify(dragged.midway));
+    check('a line shows the gap it will land in',
+      dragged.midway.line === 1, JSON.stringify(dragged.midway));
+    check('and the line stands between two pages, not across one',
+      dragged.midway.beside && Math.abs(dragged.midway.beside.gap) <= 8
+        && dragged.midway.beside.tall === true, JSON.stringify(dragged.midway));
     check('letting go drops the page there',
       dragged.landed === 3, JSON.stringify(dragged));
-    check('and the copy is cleared away afterwards',
-      dragged.gone === 0 && dragged.released === false, JSON.stringify(dragged));
+    check('and the copy and the line are cleared away afterwards',
+      dragged.gone === 0 && dragged.noLine === 0 && dragged.released === false,
+      JSON.stringify(dragged));
 
     // A cancelled gesture is not a drop. The system taking the pointer away
     // must not move a page on the strength of where the finger happened to be.
@@ -3938,7 +3972,7 @@ try {
       const B = window.Blinded;
       const was = B.state.pages.map(p => p.uid);
       B.state.picked = new Set([B.state.pages[0]]);
-      B.moveTo([B.state.pages[0]], 3);
+      B.moveTo([B.state.pages[0]], 4);   // into the gap before the fifth page
       const now = B.state.pages.map(p => p.uid);
       return {
         nowAt: now.indexOf(was[0]),
@@ -4058,7 +4092,7 @@ try {
       B.state.ocrRead = true;
       B.state.sweptTerms = ['whatever'];
       B.state.picked = new Set([B.state.pages[0]]);
-      B.moveTo([B.state.pages[0]], 2);
+      B.moveTo([B.state.pages[0]], 3);
       const afterMove = { searched: B.state.searched, swept: B.state.sweptTerms.length,
         read: B.state.ocrRead };
       B.state.picked = new Set([B.state.pages[0]]);

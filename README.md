@@ -122,9 +122,13 @@ detector can do.
 The **Organise** panel is a sheet of thumbnails and a second view of the same
 page list. Click a page to select it, shift-click to select a continuous
 series, ctrl or cmd-click to select several. Drag a page by the grip in its
-corner to move it, or use the Shift back and Shift forward buttons, which are
-the same thing from a keyboard or a phone. Grab a page that is part of the
+corner to move it — a copy follows the pointer and a line stands in the gap it
+will land in — or use the Shift back and Shift forward buttons, which are the
+same thing from a keyboard or a phone. Grab a page that is part of the
 selection and the whole selection travels with it.
+
+Opening the sheet closes the other sections, and opening any of them closes
+the sheet: a grid of thumbnails needs the panel to itself.
 
 **Keep only these** extracts: everything not selected is thrown away.
 **Remove these** does the opposite. Neither is offered when the selection is

@@ -713,37 +713,39 @@
       const moving = state.picked.has(page) ? pickedInOrder() : [page];
       item.classList.add('dragging');
       document.body.classList.add('dragging-page');
-      const ghost = liftGhost(page, moving.length, event);
-      let target = page.index;
-      showDropAt(host, target);
-
-      // Which tile the pointer is over. A grid has gaps and edges the pointer
-      // can sit in, so a miss falls back to the nearest tile by distance
-      // rather than to the end of the document, which is a long way to send a
-      // page that was dropped two pixels outside its neighbour.
-      const overOf = point => {
-        const tiles = [...host.children];
+      // Which gap the page would go into, counted in the layout as it stands:
+      // 0 is before the first page, n is after the last. A gap rather than a
+      // tile, because that is what the line drawn on screen is showing and the
+      // two must not be able to disagree — a tile means "before this one" when
+      // you drag backwards and "after this one" when you drag forwards, which
+      // is a rule nobody should have to know.
+      const gapOf = point => {
+        const tiles = [...host.querySelectorAll('.sheetpage')];
         let best = 0;
         let nearest = Infinity;
         for (let i = 0; i < tiles.length; i++) {
           const box = tiles[i].getBoundingClientRect();
-          if (point.clientX >= box.left && point.clientX <= box.right
-            && point.clientY >= box.top && point.clientY <= box.bottom) return i;
+          const inside = point.clientX >= box.left && point.clientX <= box.right
+            && point.clientY >= box.top && point.clientY <= box.bottom;
           const dx = point.clientX - (box.left + box.width / 2);
           const dy = point.clientY - (box.top + box.height / 2);
-          const away = dx * dx + dy * dy;
-          if (away < nearest) { nearest = away; best = i; }
+          const away = inside ? -1 : dx * dx + dy * dy;
+          if (away < nearest) { nearest = away; best = dx >= 0 ? i + 1 : i; }
+          if (inside) break;
         }
         return best;
       };
 
+      const ghost = liftGhost(page, moving.length, event);
+      let target = gapOf(event);
+      showDropAt(target);
       const move = ev => {
         if (ev.pointerId !== held) return;
         carryGhost(ghost, ev);
-        const to = overOf(ev);
-        if (to === target) return;
-        target = to;
-        showDropAt(host, to);
+        const gap = gapOf(ev);
+        if (gap === target) return;
+        target = gap;
+        showDropAt(gap);
       };
       const done = ev => {
         // A second finger landing on the sheet must not end the drag the
@@ -759,15 +761,16 @@
         window.removeEventListener('pointercancel', done);
         item.classList.remove('dragging');
         document.body.classList.remove('dragging-page');
-        clearDropMark(host);
+        clearDropMark();
         // A cancelled drag is not a drop. A pointercancel is the system taking
         // the gesture away — a call arriving, the browser deciding it was a
         // scroll after all — and moving the page on the strength of wherever
         // the finger happened to be is a change nobody asked for.
         if (ev.type === 'pointercancel') { dropGhost(ghost, null); return; }
-        const to = overOf(ev);
-        dropGhost(ghost, host.children[to]);
-        moveTo(moving, to);
+        const gap = gapOf(ev);
+        const tiles = [...host.querySelectorAll('.sheetpage')];
+        dropGhost(ghost, tiles[Math.min(gap, tiles.length - 1)]);
+        moveTo(moving, gap);
       };
       // On the window rather than on the grip, so the drag survives both a
       // capture that was refused and a pointer let go somewhere off the sheet
@@ -827,29 +830,47 @@
     setTimeout(() => ghost.remove(), 180);
   }
 
-  function showDropAt(host, at) {
-    clearDropMark(host);
-    const tile = host.children[at];
-    if (tile) tile.classList.add('dropping');
-  }
-
-  function clearDropMark(host) {
-    for (const tile of host.children) tile.classList.remove('dropping');
-  }
-
-  // Moves a run of pages so that the first of them ends up at `to` in the list
-  // that results, keeping their order among themselves. A selection that is
-  // not contiguous closes up as it moves, which is what dragging a multiple
-  // selection means everywhere else and is far less surprising than refusing.
+  // Where the page will go, drawn as a line in the gap it will land in.
   //
-  // `to` is a position in the finished list, not in the one being dragged
-  // over. Counting the pages that were already ahead instead lands a page one
-  // slot short of where it was dropped whenever it is dragged forwards, since
-  // lifting it out has already closed the gap behind it.
-  function moveTo(moving, to) {
+  // Fixed to the viewport, like the copy in the hand, so that a sheet which
+  // has scrolled needs no arithmetic to stay lined up: the tile is measured
+  // where it actually is on screen and the line is put there.
+  function showDropAt(gap) {
+    const tiles = [...el('sheet').querySelectorAll('.sheetpage')];
+    if (!tiles.length) return;
+    let line = document.querySelector('.dropline');
+    if (!line) {
+      line = document.createElement('div');
+      line.className = 'dropline';
+      document.body.append(line);
+    }
+    const past = gap >= tiles.length;
+    const box = tiles[past ? tiles.length - 1 : gap].getBoundingClientRect();
+    // Centred in the gutter between two pages rather than against an edge, so
+    // it reads as "between these" and not as "this one is selected".
+    const x = (past ? box.right + 4 : box.left - 4) - 1.5;
+    line.style.transform = 'translate(' + x + 'px, ' + (box.top - 3) + 'px)';
+    line.style.height = (box.height + 6) + 'px';
+  }
+
+  function clearDropMark() {
+    const line = document.querySelector('.dropline');
+    if (line) line.remove();
+  }
+
+  // Moves a run of pages into `gap`, a position in the list as it stands right
+  // now: 0 is before the first page, n is after the last. That is the same
+  // thing the line on screen is pointing at, which is the point — the marker
+  // and the move read the same number, so they cannot come apart.
+  //
+  // Pages that are moving and sit before the gap have to be discounted, since
+  // lifting them out closes the space behind them. Getting this wrong is what
+  // made a page dropped forwards land one slot short.
+  function moveTo(moving, gap) {
     const set = new Set(moving);
     const rest = state.pages.filter(page => !set.has(page));
-    const at = Math.max(0, Math.min(rest.length, to));
+    const ahead = state.pages.filter((page, i) => !set.has(page) && i < gap).length;
+    const at = Math.max(0, Math.min(rest.length, ahead));
     const next = rest.slice(0, at).concat(moving, rest.slice(at));
     if (next.every((page, i) => page === state.pages[i])) return;
     setOrder(next, moving.length === 1 ? 'moving a page' : 'moving pages');
@@ -860,7 +881,12 @@
     if (!moving.length) return;
     if (delta < 0 && moving[0].index === 0) return;
     if (delta > 0 && moving[moving.length - 1].index === state.pages.length - 1) return;
-    moveTo(moving, moving[0].index + (delta < 0 ? -1 : 1));
+    // Back: into the gap in front of the page before this run. On: into the
+    // gap after the page that follows it, which is two along because the gap
+    // immediately after the run is the one it already occupies.
+    moveTo(moving, delta < 0
+      ? moving[0].index - 1
+      : moving[moving.length - 1].index + 2);
   }
 
   function keepOnlyPicked() {
@@ -4469,22 +4495,30 @@
   });
   refreshTermBox();
 
-  // Opening the sheet closes everything else.
+  // The sheet has the panel to itself.
   //
   // A grid of thumbnails is the tallest thing in the panel by a wide margin,
   // and opened underneath four other sections it lands mostly below the fold:
-  // the reviewer opens Organise and sees the bottom of Placeholders. Making
-  // room for it is the difference between a sheet you can work in and one you
-  // have to scroll to find.
-  el('organisesect').addEventListener('toggle', () => {
-    if (!el('organisesect').open) return;
-    for (const other of document.querySelectorAll('details.sect')) {
-      if (other !== el('organisesect')) other.open = false;
-    }
-    // Which page is on screen depends on where the panel has scrolled to, and
-    // four sections have just closed underneath it.
-    el('organisesect').scrollIntoView({ block: 'nearest' });
-  });
+  // the reviewer opens Organise and sees the bottom of Placeholders. So
+  // opening it shuts the rest — and opening any of the rest shuts it, because
+  // half a sheet under an open Terms box is the same problem arrived at from
+  // the other side.
+  for (const section of document.querySelectorAll('details.sect')) {
+    section.addEventListener('toggle', () => {
+      if (!section.open) return;
+      const sheet = el('organisesect');
+      // Closing a section fires this again with open false, which returns
+      // above, so there is no loop to break out of.
+      if (section === sheet) {
+        for (const other of document.querySelectorAll('details.sect')) {
+          if (other !== sheet) other.open = false;
+        }
+        sheet.scrollIntoView({ block: 'nearest' });
+      } else if (sheet.open) {
+        sheet.open = false;
+      }
+    });
+  }
 
   el('page-left').addEventListener('click', () => nudge(-1));
   el('page-right').addEventListener('click', () => nudge(1));
