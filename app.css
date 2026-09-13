@@ -9,8 +9,8 @@
      it is read against the page; between two sections of the same panel it
      is read against white on both sides, and at that contrast the sections
      ran together into one list. */
-  --line-strong: #c4ccd8;
-  --band: #f1f4f9;
+  --line-strong: #c8d2e2;
+  --band: #eef3fb;
   --bg: #f6f7f9;
   --card: #ffffff;
   --accent: #1f6feb;
@@ -335,7 +335,10 @@ a.mark { color: inherit; text-decoration: none; }
 .sect > summary {
   list-style: none; cursor: pointer; user-select: none;
   display: flex; align-items: center; gap: 8px;
-  padding: 11px 14px; font-size: 13px; font-weight: 600;
+  /* Short. A heading bar is a label, and five of them at eleven pixels of
+     air top and bottom spent more of a 320px column on saying where things
+     are than on the things. */
+  padding: 7px 14px; font-size: 13px; font-weight: 600;
   background: var(--band); border-bottom: 1px solid var(--line);
 }
 /* A shut section is a heading and nothing else, so the rule under it would be
@@ -348,7 +351,7 @@ a.mark { color: inherit; text-decoration: none; }
   transform: rotate(-45deg); transition: transform .15s;
 }
 .sect[open] > summary::before { transform: rotate(45deg); }
-.sect > summary:hover { background: #e7edf6; }
+.sect > summary:hover { background: #e2ebf9; }
 .s-title { flex: 1; }
 .s-note {
   font-weight: 500; font-size: 11.5px; color: var(--ink-soft);
@@ -356,7 +359,11 @@ a.mark { color: inherit; text-decoration: none; }
 }
 .s-note:empty { display: none; }
 .s-note.on { background: #e8f0fe; color: var(--accent); }
-.s-body { padding: 2px 14px 14px; }
+/* Even air above and below what a section holds. It was 2px at the top and
+   14 at the bottom, from when the heading had more of its own: the box you
+   type a word into sat tight under the heading and floated well clear of the
+   next one, and the same gap under the last detector read as a missing row. */
+.s-body { padding: 10px 14px 11px; }
 
 /* A hint you ask for rather than one you have to read past. */
 .why {
@@ -615,7 +622,7 @@ button { font: inherit; cursor: pointer; border-radius: 8px; }
    "this is the important one", and it is not: most documents are redacted by
    typing. */
 .pickrow {
-  display: flex; width: 100%; padding: 0; margin-top: 2px;
+  display: flex; width: 100%; padding: 0;
   background: none; border: 0; cursor: pointer; text-align: left;
 }
 .pickfield {
@@ -1409,12 +1416,12 @@ body.dragging-page .grip { cursor: grabbing; }
    rather than as a control that has appeared in the middle of one. */
 .sectroll {
   display: flex; align-items: center; gap: 8px; width: 100%;
-  padding: 11px 14px; font: inherit; font-size: 13px; font-weight: 600;
+  padding: 7px 14px; font: inherit; font-size: 13px; font-weight: 600;
   color: var(--ink-soft); text-align: left; cursor: pointer;
   background: var(--band); border: 0; border-bottom: 1px solid var(--line-strong);
   border-radius: 0;
 }
-.sectroll:hover { background: #e7edf6; color: var(--ink); }
+.sectroll:hover { background: #e2ebf9; color: var(--ink); }
 /* The same chevron the headings carry, pointing the way it points on a shut
    one — because that is what this is: four shut sections in a single row. */
 .sectroll::before {
