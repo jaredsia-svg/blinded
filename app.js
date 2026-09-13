@@ -688,6 +688,11 @@
   // Dragging happens on the grip rather than on the page, so that a tap on a
   // phone still selects and the panel still scrolls under the finger. Pointer
   // events, so one path serves mouse, pen and touch.
+  //
+  // The page being dragged follows the pointer as a picture of itself. Without
+  // it the only sign anything is happening is a faded tile and an outline
+  // somewhere else, and on a grid of thumbnails that reads as a glitch rather
+  // than as carrying something: there is nothing in the hand.
   function wireSheetPage(item, page, button, grip) {
     button.addEventListener('click', event => {
       event.preventDefault();
@@ -696,41 +701,130 @@
 
     grip.addEventListener('pointerdown', event => {
       event.preventDefault();
-      grip.setPointerCapture(event.pointerId);
+      const held = event.pointerId;
+      // Capture keeps the pointer reporting to the grip once it has left it,
+      // which is most of what makes a drag feel attached. It is also allowed
+      // to fail — a pointer the browser no longer considers active throws —
+      // and an exception here used to take the whole gesture with it: no
+      // copy in the hand, no drop, nothing. So it is asked for, not relied
+      // on, and the listeners below sit on the window either way.
+      try { grip.setPointerCapture(held); } catch (error) { /* not essential */ }
       const host = el('sheet');
       const moving = state.picked.has(page) ? pickedInOrder() : [page];
       item.classList.add('dragging');
+      document.body.classList.add('dragging-page');
+      const ghost = liftGhost(page, moving.length, event);
       let target = page.index;
+      showDropAt(host, target);
 
+      // Which tile the pointer is over. A grid has gaps and edges the pointer
+      // can sit in, so a miss falls back to the nearest tile by distance
+      // rather than to the end of the document, which is a long way to send a
+      // page that was dropped two pixels outside its neighbour.
       const overOf = point => {
         const tiles = [...host.children];
+        let best = 0;
+        let nearest = Infinity;
         for (let i = 0; i < tiles.length; i++) {
           const box = tiles[i].getBoundingClientRect();
-          if (point.clientX < box.right && point.clientY < box.bottom) return i;
+          if (point.clientX >= box.left && point.clientX <= box.right
+            && point.clientY >= box.top && point.clientY <= box.bottom) return i;
+          const dx = point.clientX - (box.left + box.width / 2);
+          const dy = point.clientY - (box.top + box.height / 2);
+          const away = dx * dx + dy * dy;
+          if (away < nearest) { nearest = away; best = i; }
         }
-        return tiles.length - 1;
+        return best;
       };
 
       const move = ev => {
+        if (ev.pointerId !== held) return;
+        carryGhost(ghost, ev);
         const to = overOf(ev);
         if (to === target) return;
         target = to;
         showDropAt(host, to);
       };
       const done = ev => {
-        grip.releaseCapture ? grip.releaseCapture() : null;
-        grip.removeEventListener('pointermove', move);
-        grip.removeEventListener('pointerup', done);
-        grip.removeEventListener('pointercancel', done);
+        // A second finger landing on the sheet must not end the drag the
+        // first one is in the middle of.
+        if (ev.pointerId !== held) return;
+        try {
+          if (grip.hasPointerCapture && grip.hasPointerCapture(held)) {
+            grip.releasePointerCapture(held);
+          }
+        } catch (error) { /* it was never captured */ }
+        window.removeEventListener('pointermove', move);
+        window.removeEventListener('pointerup', done);
+        window.removeEventListener('pointercancel', done);
         item.classList.remove('dragging');
+        document.body.classList.remove('dragging-page');
         clearDropMark(host);
+        // A cancelled drag is not a drop. A pointercancel is the system taking
+        // the gesture away — a call arriving, the browser deciding it was a
+        // scroll after all — and moving the page on the strength of wherever
+        // the finger happened to be is a change nobody asked for.
+        if (ev.type === 'pointercancel') { dropGhost(ghost, null); return; }
         const to = overOf(ev);
+        dropGhost(ghost, host.children[to]);
         moveTo(moving, to);
       };
-      grip.addEventListener('pointermove', move);
-      grip.addEventListener('pointerup', done);
-      grip.addEventListener('pointercancel', done);
+      // On the window rather than on the grip, so the drag survives both a
+      // capture that was refused and a pointer let go somewhere off the sheet
+      // entirely — over the document, over the header, outside the tab.
+      window.addEventListener('pointermove', move);
+      window.addEventListener('pointerup', done);
+      window.addEventListener('pointercancel', done);
     });
+  }
+
+  // The thing in the hand. A copy of the page, tilted a little and lifted off
+  // the panel, following the pointer.
+  function liftGhost(page, count, event) {
+    const ghost = document.createElement('div');
+    ghost.className = 'sheetghost';
+    const thumb = thumbFor(page);
+    const face = document.createElement('canvas');
+    face.width = thumb.width;
+    face.height = thumb.height;
+    face.getContext('2d').drawImage(thumb, 0, 0);
+    ghost.append(face);
+    // Dragging four pages should look like dragging four pages, not like
+    // dragging the one that happened to be grabbed.
+    if (count > 1) {
+      ghost.classList.add('stacked');
+      const badge = document.createElement('span');
+      badge.className = 'ghostcount';
+      badge.textContent = String(count);
+      ghost.append(badge);
+    }
+    document.body.append(ghost);
+    carryGhost(ghost, event);
+    return ghost;
+  }
+
+  function carryGhost(ghost, event) {
+    if (!ghost) return;
+    const x = event.clientX - ghost.offsetWidth / 2;
+    const y = event.clientY - ghost.offsetHeight / 2;
+    ghost.style.transform = 'translate(' + x + 'px, ' + y + 'px) rotate(-4deg)';
+  }
+
+  // Dropped, rather than switched off. The copy shrinks into the slot it
+  // landed in, so the eye is told where the page went — the sheet is about to
+  // renumber itself and every tile after the drop is about to change what it
+  // says, and without this the page appears to vanish and something else
+  // appears to move.
+  function dropGhost(ghost, into) {
+    if (!ghost) return;
+    const box = into && into.getBoundingClientRect();
+    if (box) {
+      ghost.style.transition = 'transform .16s ease-out, opacity .16s ease-out';
+      ghost.style.transform = 'translate(' + box.left + 'px, ' + box.top + 'px) '
+        + 'rotate(0deg) scale(' + (box.width / Math.max(1, ghost.offsetWidth)) + ')';
+    }
+    ghost.style.opacity = '0';
+    setTimeout(() => ghost.remove(), 180);
   }
 
   function showDropAt(host, at) {
@@ -4374,6 +4468,23 @@
     el('termbox').focus();
   });
   refreshTermBox();
+
+  // Opening the sheet closes everything else.
+  //
+  // A grid of thumbnails is the tallest thing in the panel by a wide margin,
+  // and opened underneath four other sections it lands mostly below the fold:
+  // the reviewer opens Organise and sees the bottom of Placeholders. Making
+  // room for it is the difference between a sheet you can work in and one you
+  // have to scroll to find.
+  el('organisesect').addEventListener('toggle', () => {
+    if (!el('organisesect').open) return;
+    for (const other of document.querySelectorAll('details.sect')) {
+      if (other !== el('organisesect')) other.open = false;
+    }
+    // Which page is on screen depends on where the panel has scrolled to, and
+    // four sections have just closed underneath it.
+    el('organisesect').scrollIntoView({ block: 'nearest' });
+  });
 
   el('page-left').addEventListener('click', () => nudge(-1));
   el('page-right').addEventListener('click', () => nudge(1));

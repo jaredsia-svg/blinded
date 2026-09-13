@@ -92,6 +92,11 @@ async function reveal(page, id) {
 // the tests put them in the same way a reviewer would rather than writing the
 // list into the state.
 async function setTerms(page, words) {
+  // The box lives inside a section that can be shut, and a reviewer opens the
+  // section before typing into it. Without this the fill waits on a control
+  // that is not on screen and the whole suite dies where it stands, several
+  // hundred checks after whatever closed the section.
+  await reveal(page, 'termbox');
   await page.evaluate(() => {
     const B = window.Blinded;
     for (const word of B.state.terms.slice()) B.dropTerm(word);
@@ -3833,6 +3838,100 @@ try {
     check('and ctrl-clicking adds one on its own',
       picked.plus.join(',') === '2,3,4,5,6,10', JSON.stringify(picked));
 
+    // Opening the sheet makes room for it. A grid of thumbnails opened under
+    // four other sections lands below the fold.
+    const alone = await page.evaluate(async () => {
+      for (const sect of document.querySelectorAll('details.sect')) sect.open = true;
+      const sheet = document.getElementById('organisesect');
+      sheet.open = false;
+      sheet.open = true;
+      // The toggle event is asynchronous — it lands on a later task, so a read
+      // taken straight after setting `open` sees the panel as it was.
+      await new Promise(r => setTimeout(r, 50));
+      const others = [...document.querySelectorAll('details.sect')].filter(d => d !== sheet);
+      return { sheet: sheet.open, othersOpen: others.filter(d => d.open).length,
+        others: others.length };
+    });
+    check('opening the sheet closes every other section',
+      alone.sheet === true && alone.othersOpen === 0 && alone.others >= 3,
+      JSON.stringify(alone));
+
+    // A real pointer drag, grip to target, so the ghost and the drop are under
+    // test rather than only the array maths underneath them.
+    const dragged = await page.evaluate(async () => {
+      const B = window.Blinded;
+      const tiles = () => [...document.querySelectorAll('#sheet .sheetpage')];
+      const carried = tiles()[0];
+      const onto = tiles()[3];
+      const uid = B.state.pages[0].uid;
+      const grip = carried.querySelector('.grip');
+      const from = grip.getBoundingClientRect();
+      const to = onto.getBoundingClientRect();
+      const at = (type, x, y) => grip.dispatchEvent(new PointerEvent(type, {
+        clientX: x, clientY: y, bubbles: true, pointerId: 7, isPrimary: true,
+      }));
+
+      at('pointerdown', from.left + 5, from.top + 5);
+      const lifted = {
+        ghost: document.querySelectorAll('.sheetghost').length,
+        held: document.body.classList.contains('dragging-page'),
+        faded: carried.classList.contains('dragging'),
+      };
+      at('pointermove', to.left + to.width / 2, to.top + to.height / 2);
+      const midway = {
+        ghost: document.querySelectorAll('.sheetghost').length,
+        moved: (document.querySelector('.sheetghost') || {}).style
+          ? document.querySelector('.sheetghost').style.transform : '',
+        marked: [...document.querySelectorAll('.sheetpage')]
+          .findIndex(t => t.classList.contains('dropping')),
+      };
+      at('pointerup', to.left + to.width / 2, to.top + to.height / 2);
+      await new Promise(r => setTimeout(r, 300));
+      return {
+        lifted, midway,
+        landed: B.state.pages.findIndex(p => p.uid === uid),
+        gone: document.querySelectorAll('.sheetghost').length,
+        released: document.body.classList.contains('dragging-page'),
+      };
+    });
+    check('pressing the grip lifts a copy of the page',
+      dragged.lifted.ghost === 1, JSON.stringify(dragged.lifted));
+    check('and marks the page as being carried',
+      dragged.lifted.held === true && dragged.lifted.faded === true,
+      JSON.stringify(dragged.lifted));
+    check('the copy follows the pointer',
+      /translate\(/.test(dragged.midway.moved), JSON.stringify(dragged.midway));
+    check('and the tile it is over shows where it will land',
+      dragged.midway.marked === 3, JSON.stringify(dragged.midway));
+    check('letting go drops the page there',
+      dragged.landed === 3, JSON.stringify(dragged));
+    check('and the copy is cleared away afterwards',
+      dragged.gone === 0 && dragged.released === false, JSON.stringify(dragged));
+
+    // A cancelled gesture is not a drop. The system taking the pointer away
+    // must not move a page on the strength of where the finger happened to be.
+    const cancelled = await page.evaluate(async () => {
+      const B = window.Blinded;
+      const tiles = [...document.querySelectorAll('#sheet .sheetpage')];
+      const uid = B.state.pages[0].uid;
+      const grip = tiles[0].querySelector('.grip');
+      const from = grip.getBoundingClientRect();
+      const to = tiles[5].getBoundingClientRect();
+      const at = (type, x, y) => grip.dispatchEvent(new PointerEvent(type, {
+        clientX: x, clientY: y, bubbles: true, pointerId: 8, isPrimary: true,
+      }));
+      at('pointerdown', from.left + 5, from.top + 5);
+      at('pointermove', to.left + to.width / 2, to.top + to.height / 2);
+      at('pointercancel', to.left + to.width / 2, to.top + to.height / 2);
+      await new Promise(r => setTimeout(r, 300));
+      return { still: B.state.pages[0].uid === uid,
+        ghost: document.querySelectorAll('.sheetghost').length };
+    });
+    check('a cancelled drag leaves the page where it was',
+      cancelled.still === true, JSON.stringify(cancelled));
+    check('and takes its copy with it',
+      cancelled.ghost === 0, JSON.stringify(cancelled));
+
     // The page objects are the identity, so this checks the document by what
     // is on each page rather than by where it sits.
     const moved = await page.evaluate(() => {
@@ -3988,6 +4087,15 @@ try {
     const stamped = await page.evaluate(() => window.Blinded.state.sourceDigest);
     check('an organised document no longer answers to the original digest',
       typeof stamped === 'string' && stamped.includes('+p'), String(stamped));
+
+    // Put the panel back. Opening the sheet shuts every other section, and a
+    // test that leaves it that way hands the next three hundred checks a panel
+    // they did not ask for.
+    await page.evaluate(() => {
+      document.getElementById('organisesect').open = false;
+      for (const sect of document.querySelectorAll('details.sect')) sect.open = true;
+      document.getElementById('organisesect').open = false;
+    });
   }
 
   // ---------- zooming keeps you where you were ----------
