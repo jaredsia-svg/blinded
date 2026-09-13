@@ -3791,6 +3791,205 @@ try {
       !/Parkway/i.test(plain), plain.slice(0, 200));
   }
 
+  // ---------- organising the pages ----------
+  //
+  // The sheet is a second view of state.pages, and every operation on it is a
+  // new order for that one array. What these check is that the array and the
+  // document agree afterwards — a sheet that reorders itself while the pages
+  // underneath stay put is the failure that would ship silently, because the
+  // thumbnails would look right either way.
+  {
+    if (await page.isVisible('#view-review')) await newFile();
+    await page.waitForSelector('#view-drop:not([hidden])', { timeout: 15000 });
+    await page.setInputFiles('#file', manyPath);
+    await page.waitForSelector('#view-review:not([hidden])', { timeout: 60000 });
+    await page.evaluate(() => { document.getElementById('organisesect').open = true; });
+
+    const started = await page.evaluate(() => ({
+      tiles: document.querySelectorAll('#sheet .sheetpage').length,
+      pages: window.Blinded.state.pages.length,
+      note: document.getElementById('organise-note').textContent,
+      numbers: [...document.querySelectorAll('.sheetnum')].map(n => n.textContent).slice(0, 3),
+    }));
+    check('the sheet shows a thumbnail for every page',
+      started.tiles === 14 && started.pages === 14, JSON.stringify(started));
+    check('and says how many there are', started.note === '14 pages', started.note);
+    check('numbered from one', started.numbers.join(',') === '1,2,3', JSON.stringify(started));
+
+    const picked = await page.evaluate(() => {
+      const B = window.Blinded;
+      const face = i => document.querySelectorAll('.sheetface')[i];
+      face(2).dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      const one = B.pickedInOrder().map(p => p.index);
+      face(6).dispatchEvent(new MouseEvent('click', { bubbles: true, shiftKey: true }));
+      const run = B.pickedInOrder().map(p => p.index);
+      face(10).dispatchEvent(new MouseEvent('click', { bubbles: true, ctrlKey: true }));
+      const plus = B.pickedInOrder().map(p => p.index);
+      return { one, run, plus };
+    });
+    check('clicking a page selects it', picked.one.join(',') === '2', JSON.stringify(picked));
+    check('shift-clicking takes the whole run, both ends included',
+      picked.run.join(',') === '2,3,4,5,6', JSON.stringify(picked));
+    check('and ctrl-clicking adds one on its own',
+      picked.plus.join(',') === '2,3,4,5,6,10', JSON.stringify(picked));
+
+    // The page objects are the identity, so this checks the document by what
+    // is on each page rather than by where it sits.
+    const moved = await page.evaluate(() => {
+      const B = window.Blinded;
+      const was = B.state.pages.map(p => p.uid);
+      B.state.picked = new Set([B.state.pages[0]]);
+      B.moveTo([B.state.pages[0]], 3);
+      const now = B.state.pages.map(p => p.uid);
+      return {
+        nowAt: now.indexOf(was[0]),
+        renumbered: B.state.pages.every((p, i) => p.index === i),
+        inDom: document.getElementById('pages').children.length,
+        label: (B.undoStack[B.undoStack.length - 1] || {}).label,
+      };
+    });
+    check('a page dragged along lands where it was dropped',
+      moved.nowAt === 3, JSON.stringify(moved));
+    check('and every page is renumbered to its new position',
+      moved.renumbered === true, JSON.stringify(moved));
+    check('the document itself was rebuilt, not just the sheet',
+      moved.inDom === 14, JSON.stringify(moved));
+    check('moving a page is undoable', moved.label === 'moving a page', JSON.stringify(moved));
+
+    const undone = await page.evaluate(() => {
+      const B = window.Blinded;
+      const first = B.state.pages[3].uid;
+      B.undoLast();
+      return { back: B.state.pages[0].uid === first,
+        renumbered: B.state.pages.every((p, i) => p.index === i) };
+    });
+    check('undo puts it back where it was', undone.back === true, JSON.stringify(undone));
+    check('and renumbers on the way back', undone.renumbered === true, JSON.stringify(undone));
+
+    const kept = await page.evaluate(() => {
+      const B = window.Blinded;
+      const face = i => document.querySelectorAll('.sheetface')[i];
+      face(4).dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      face(6).dispatchEvent(new MouseEvent('click', { bubbles: true, shiftKey: true }));
+      const wanted = B.pickedInOrder().map(p => p.uid);
+      document.getElementById('page-keep').click();
+      return {
+        left: B.state.pages.length,
+        same: B.state.pages.map(p => p.uid).join(',') === wanted.join(','),
+        inDom: document.getElementById('pages').children.length,
+        tiles: document.querySelectorAll('#sheet .sheetpage').length,
+      };
+    });
+    check('keeping only the selection leaves only the selection',
+      kept.left === 3 && kept.same === true, JSON.stringify(kept));
+    check('and the document, the sheet and the array agree',
+      kept.inDom === 3 && kept.tiles === 3, JSON.stringify(kept));
+
+    const dropped = await page.evaluate(() => {
+      const B = window.Blinded;
+      const survivor = B.state.pages[2].uid;
+      // Selected by clicking the thumbnail, not by writing to state: a button
+      // left disabled by a stale render swallows the click in silence, and
+      // poking state directly is exactly how that goes unnoticed.
+      document.querySelectorAll('.sheetface')[0]
+        .dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      document.getElementById('page-drop').click();
+      return { left: B.state.pages.length, has: B.state.pages.some(p => p.uid === survivor),
+        cleared: B.state.picked.size };
+    });
+    check('removing a page removes exactly that page',
+      dropped.left === 2 && dropped.has === true, JSON.stringify(dropped));
+    check('and the selection does not survive the page it pointed at',
+      dropped.cleared === 0, JSON.stringify(dropped));
+
+    // Neither button is offered when it would leave no document at all.
+    const guarded = await page.evaluate(() => {
+      const B = window.Blinded;
+      B.state.picked = new Set(B.state.pages);
+      B.renderSheet();
+      return {
+        keep: document.getElementById('page-keep').disabled,
+        drop: document.getElementById('page-drop').disabled,
+      };
+    });
+    check('selecting every page offers neither keep nor remove',
+      guarded.keep === true && guarded.drop === true, JSON.stringify(guarded));
+
+    const before = await page.evaluate(() => {
+      window.Blinded.state.picked = new Set();
+      window.Blinded.renderSheet();
+      return window.Blinded.state.pages.length;
+    });
+    await page.setInputFiles('#addfile', fixturePath);
+    await page.waitForFunction(n => window.Blinded.state.pages.length > n, before,
+      { timeout: 60000 });
+    const after = await page.evaluate(() => ({
+      pages: window.Blinded.state.pages.length,
+      inDom: document.getElementById('pages').children.length,
+      tiles: document.querySelectorAll('#sheet .sheetpage').length,
+      renumbered: window.Blinded.state.pages.every((p, i) => p.index === i),
+      drawable: window.Blinded.state.pages.every(p => p.source && p.source.width > 0),
+      unique: new Set(window.Blinded.state.pages.map(p => p.uid)).size,
+    }));
+    check('a second document adds its pages to the first',
+      after.pages === before + 1, JSON.stringify(after));
+    check('the added page is a real page, not a hole',
+      after.drawable === true && after.renumbered === true, JSON.stringify(after));
+    check('and carries an identity of its own',
+      after.unique === after.pages, JSON.stringify(after));
+    check('the document and the sheet both grew with it',
+      after.inDom === after.pages && after.tiles === after.pages, JSON.stringify(after));
+    const unknown = await page.evaluate(() => ({
+      searched: window.Blinded.state.searched,
+      swept: window.Blinded.state.sweptTerms.length,
+      read: window.Blinded.state.ocrRead,
+    }));
+    check('and a page nothing has read un-reads the document',
+      unknown.searched === false && unknown.swept === 0 && unknown.read === false,
+      JSON.stringify(unknown));
+
+    // What the search knows is a claim about a set of pages, and changing
+    // which pages there are has to withdraw it. This is the quiet one: the
+    // panel would go on saying the thorough check had been done, over pages it
+    // had never seen, which does not look like a failure — it looks like an
+    // answer.
+    const knowledge = await page.evaluate(() => {
+      const B = window.Blinded;
+      B.state.searched = true;
+      B.state.ocrRead = true;
+      B.state.sweptTerms = ['whatever'];
+      B.state.picked = new Set([B.state.pages[0]]);
+      B.moveTo([B.state.pages[0]], 2);
+      const afterMove = { searched: B.state.searched, swept: B.state.sweptTerms.length,
+        read: B.state.ocrRead };
+      B.state.picked = new Set([B.state.pages[0]]);
+      B.dropPicked();
+      const afterDrop = { searched: B.state.searched, swept: B.state.sweptTerms.length,
+        read: B.state.ocrRead };
+      B.undoLast();
+      const afterUndo = { searched: B.state.searched, swept: B.state.sweptTerms.length,
+        read: B.state.ocrRead };
+      return { afterMove, afterDrop, afterUndo };
+    });
+    check('moving a page leaves what the search knows alone',
+      knowledge.afterMove.searched === true && knowledge.afterMove.swept === 1,
+      JSON.stringify(knowledge));
+    check('but removing one withdraws the thorough check',
+      knowledge.afterDrop.searched === false && knowledge.afterDrop.swept === 0,
+      JSON.stringify(knowledge));
+    check('and what is left is still read, because losing a page un-reads nothing',
+      knowledge.afterDrop.read === true, JSON.stringify(knowledge));
+    check('undo restores what the search knew as well as the pages',
+      knowledge.afterUndo.searched === true && knowledge.afterUndo.swept === 1,
+      JSON.stringify(knowledge));
+
+    // A reorganised document is not the file it came from, and a draft saved
+    // for that file must not silently reapply to these pages.
+    const stamped = await page.evaluate(() => window.Blinded.state.sourceDigest);
+    check('an organised document no longer answers to the original digest',
+      typeof stamped === 'string' && stamped.includes('+p'), String(stamped));
+  }
+
   // ---------- zooming keeps you where you were ----------
   //
   // Every page changes height when the zoom does, so a scroll position measured

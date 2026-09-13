@@ -1102,3 +1102,67 @@ body.reviewing .exportbar { position: static; flex: none; margin: 14px 0 18px; }
   .termadd input, .termadd button { min-height: 44px; }
   .termdrop { width: 32px; height: 32px; }
 }
+
+/* ---------- the Organise sheet ---------- */
+
+/* Thumbnails wide enough that a page is recognisable at a glance — which is
+   the whole job, since the reviewer is looking for "the one with the chart"
+   rather than reading it — and small enough that a deck fits in the panel
+   without becoming a second document to scroll. */
+.sheet {
+  list-style: none; margin: 10px 0 0; padding: 0;
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(76px, 1fr));
+  gap: 8px;
+  max-height: 340px; overflow-y: auto;
+}
+.sheetpage { position: relative; }
+.sheetface {
+  display: block; width: 100%; padding: 0; cursor: pointer;
+  background: #fff; border: 1px solid var(--line); border-radius: 6px;
+  overflow: hidden; line-height: 0;
+}
+.sheetface canvas { width: 100%; height: auto; display: block; }
+.sheetface:hover { border-color: var(--ink-soft); }
+.sheetpage.picked .sheetface {
+  border-color: var(--accent); box-shadow: 0 0 0 2px rgba(31, 111, 235, .25);
+}
+/* The number sits on the page rather than under it: under it, a grid of
+   thumbnails becomes a grid of thumbnails and a grid of numbers. */
+.sheetnum {
+  position: absolute; left: 4px; bottom: 4px;
+  background: rgba(20, 22, 26, .78); color: #fff;
+  font-size: 11px; font-weight: 600; line-height: 1;
+  padding: 3px 5px; border-radius: 4px; pointer-events: none;
+}
+.sheetpage.picked .sheetnum { background: var(--accent); }
+
+/* Dragging lives on the grip, not on the page, so that a tap still selects
+   and a finger dragged across the sheet still scrolls the panel. */
+.grip {
+  position: absolute; top: 3px; right: 3px; width: 20px; height: 20px;
+  border-radius: 4px; cursor: grab; touch-action: none;
+  background: rgba(255, 255, 255, .9); border: 1px solid var(--line);
+  background-image: radial-gradient(currentColor 1px, transparent 1px);
+  background-size: 5px 5px; background-position: 4px 4px;
+  background-repeat: repeat; color: var(--ink-soft);
+}
+.grip:hover { color: var(--ink); border-color: var(--ink-soft); }
+.sheetpage.dragging { opacity: .4; }
+.sheetpage.dragging .grip { cursor: grabbing; }
+.sheetpage.dropping .sheetface { border-color: var(--accent); border-style: dashed; }
+
+.sheetbar { display: flex; gap: 6px; margin-top: 8px; }
+.sheetbar .ghost { flex: 1; }
+.ghost.danger { color: var(--danger); border-color: #e6c9c6; }
+.ghost.danger:hover:not(:disabled) { border-color: var(--danger); color: var(--danger); }
+.sheetbar .ghost:disabled { opacity: .45; cursor: default; }
+.sheetbar .ghost:disabled:hover { border-color: var(--line); color: var(--ink-soft); }
+#page-add { margin-top: 8px; }
+#sheet-picked { margin-top: 8px; font-weight: 500; color: var(--ink); }
+
+/* On a phone the panel is the whole screen when it is showing, so the sheet
+   can take more of it and the thumbnails can be bigger than a fingertip. */
+@media (max-width: 860px) {
+  .sheet { grid-template-columns: repeat(auto-fill, minmax(88px, 1fr)); max-height: none; }
+  .grip { width: 26px; height: 26px; background-size: 6px 6px; }
+}

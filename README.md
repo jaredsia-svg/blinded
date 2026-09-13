@@ -117,6 +117,30 @@ Anything it misses, type into the terms box — a name typed once is then found
 in the text, in the lettering of a screenshot, and inside a logo, which no
 detector can do.
 
+## Organising the pages
+
+The **Organise** panel is a sheet of thumbnails and a second view of the same
+page list. Click a page to select it, shift-click for a run, ctrl or cmd-click
+to add one on its own. Drag a page by the grip in its corner to move it, or use
+the Move buttons, which is the same thing from a keyboard or a phone. Grab a
+page that is part of the selection and the whole selection travels with it.
+
+**Keep only these** extracts: everything not selected is thrown away.
+**Remove these** does the opposite. Neither is offered when the selection is
+every page, so neither can leave you with no document. **Add another
+document…** merges a PDF or an image in after the last selected page, or on the
+end when nothing is selected. Everything here is undoable.
+
+Two things are worth knowing. A page thrown away is gone from the export, and
+undo is the only way back. And changing which pages there are withdraws what
+the search knows: the thorough check records the terms it swept, not the pages
+it swept them over, so adding a document sends you back to Search rather than
+going on reporting a check that never saw the new pages. Moving pages around
+changes nothing — the marks live on the pages and travel with them.
+
+A reorganised document is no longer the file it came from, so it stops
+answering to that file's drafts.
+
 ## Typing what to redact
 
 The **Text to redact** box takes anything you want covered, one per line —

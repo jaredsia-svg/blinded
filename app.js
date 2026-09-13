@@ -31,6 +31,11 @@
     text: '',
     enabled: new Set(Detect.KINDS.map(k => k.kind).concat('term')),
     terms: [],
+    // The pages the reviewer has selected in the Organise sheet. Page objects
+    // rather than numbers, because a number stops meaning the same page the
+    // moment anything is moved and a selection that quietly retargets is
+    // worse than one that is lost.
+    picked: new Set(),
     // Logos the reviewer has picked. Each holds the greyscale patch it was cut
     // from, so its matches can be recomputed when the sensitivity moves
     // without making them draw the box again.
@@ -433,8 +438,10 @@
     state.searched = false;
     state.countedTerms = [];
     state.openTally = null;
+    state.picked = new Set();
     state.pages = pages.map(p => ({
       ...p,
+      uid: nextPageUid++,
       source: p.canvas,          // pristine; never drawn on
       canvas: null,              // the on-screen copy, created below
       findings: [],
@@ -456,10 +463,371 @@
 
     state.applied = false;
     if (kind !== 'text') buildPageElements();
+    renderSheet();
     show('review');
     rescan();
     refreshApply();
     refreshPaging();
+  }
+
+  // ---------- organising the pages ----------
+  //
+  // The sheet is a second view of the same array. Everything it does — moving
+  // a page, throwing one away, merging another document in — is a new order
+  // for state.pages, applied in one place, so there is exactly one function
+  // that has to get the bookkeeping right rather than four that each half do.
+  //
+  // Two things are keyed to a page's position and have to move with it. The
+  // page's own index, which is what every "Page 7" in the panel is read from;
+  // and a picked logo's pageIndex, which is where it gets re-cut from when the
+  // sensitivity moves. Everything else — findings, marks, dismissals, the
+  // reading — lives on the page object itself and travels with it for free.
+
+  let nextPageUid = 1;
+
+  const THUMB_W = 96;
+
+  function thumbFor(page) {
+    if (page.thumb && page.thumbFrom === page.source) return page.thumb;
+    const scale = THUMB_W / page.source.width;
+    const canvas = document.createElement('canvas');
+    canvas.width = THUMB_W;
+    canvas.height = Math.max(1, Math.round(page.source.height * scale));
+    const ctx = canvas.getContext('2d', { alpha: false });
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(page.source, 0, 0, canvas.width, canvas.height);
+    page.thumb = canvas;
+    page.thumbFrom = page.source;
+    return canvas;
+  }
+
+  // A document that has been reorganised is no longer the file it came from,
+  // so it must not answer to that file's drafts. The stamp is derived from the
+  // order itself, so doing the same thing twice still agrees with itself and a
+  // draft saved after organising reopens on a document organised the same way.
+  function organiseStamp() {
+    let hash = 0;
+    for (const page of state.pages) hash = (hash * 31 + page.uid) % 2147483647;
+    return 'p' + state.pages.length + '.' + hash.toString(36);
+  }
+
+  function restamp() {
+    if (!state.baseDigest) state.baseDigest = state.sourceDigest;
+    state.sourceDigest = state.baseDigest
+      ? state.baseDigest + '+' + organiseStamp() : null;
+  }
+
+  // The one place the page list changes.
+  function setOrder(pages, label, before) {
+    const was = before || state.pages.slice();
+    const wasPicked = new Set(state.picked);
+    const knew = { searched: state.searched, swept: state.sweptTerms.slice(),
+      read: state.ocrRead };
+    state.pages = pages;
+    state.pages.forEach((page, i) => { page.index = i; });
+    // A logo remembers the page it was cut from by number. Re-point it at the
+    // page object it actually came from, or drop it if that page has gone —
+    // leaving it pointing at whatever is now in that slot would re-cut the
+    // logo from the wrong picture the next time the bar moved.
+    const at = new Map(state.pages.map((page, i) => [page, i]));
+    state.templates = state.templates.filter(template => {
+      const home = was[template.pageIndex];
+      if (!home || !at.has(home)) return false;
+      template.pageIndex = at.get(home);
+      return true;
+    });
+    for (const page of [...state.picked]) if (!at.has(page)) state.picked.delete(page);
+
+    // What the search knows is a claim about a set of pages. Moving them
+    // around does not touch it — the marks live on the page objects and travel
+    // with them — but changing which pages there are does, and quietly.
+    //
+    // The thorough check records the terms it has swept, not the pages it
+    // swept them over. Add a document after a sweep and the panel goes on
+    // saying the check has been done, over pages it has never seen. That is
+    // the worst shape a bug can take here: it does not look like a failure, it
+    // looks like an answer.
+    const had = new Set(was);
+    const added = state.pages.filter(page => !had.has(page));
+    const gone = was.filter(page => !at.has(page));
+    if (added.length || gone.length) {
+      state.sweptTerms = [];
+      state.searched = false;
+    }
+    // Reading is a claim about every page, so a new one un-reads the document.
+    // Losing a page does not: what is left has still been read.
+    if (added.length) state.ocrRead = false;
+
+    restamp();
+    if (label) {
+      pushUndo(label, () => {
+        state.pages = was;
+        state.pages.forEach((page, i) => { page.index = i; });
+        state.picked = wasPicked;
+        state.searched = knew.searched;
+        state.sweptTerms = knew.swept;
+        state.ocrRead = knew.read;
+        restamp();
+        rebuildAfterOrder();
+      });
+    }
+    rebuildAfterOrder();
+  }
+
+  function rebuildAfterOrder() {
+    buildPageElements();
+    renderSheet();
+    // Settled, because a rescan otherwise sends the document back to
+    // un-searched on its own, and here that is not its call to make. Moving a
+    // page changes nothing about what was looked for or what was found, and
+    // where the page set really did change, setOrder has already withdrawn
+    // exactly as much as it should above.
+    rescan({ settled: true });
+    renderSweep();
+    renderTemplates();
+    refreshApply();
+    refreshPaging();
+  }
+
+  function pickedInOrder() {
+    return state.pages.filter(page => state.picked.has(page));
+  }
+
+  function renderSheet() {
+    const section = el('organisesect');
+    if (!section) return;
+    // A text file has no pages to organise, and an empty sheet under a heading
+    // reads as something broken rather than something absent.
+    section.hidden = state.kind === 'text' || !state.pages.length;
+    if (section.hidden) return;
+
+    const host = el('sheet');
+    host.textContent = '';
+    for (const page of state.pages) {
+      const item = document.createElement('li');
+      item.className = 'sheetpage' + (state.picked.has(page) ? ' picked' : '');
+      item.dataset.page = String(page.index);
+
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'sheetface';
+      button.setAttribute('aria-pressed', state.picked.has(page) ? 'true' : 'false');
+      button.title = 'Page ' + (page.index + 1);
+      const thumb = thumbFor(page);
+      const img = document.createElement('canvas');
+      img.width = thumb.width;
+      img.height = thumb.height;
+      img.getContext('2d').drawImage(thumb, 0, 0);
+      const num = document.createElement('span');
+      num.className = 'sheetnum';
+      num.textContent = String(page.index + 1);
+      button.append(img, num);
+
+      const grip = document.createElement('span');
+      grip.className = 'grip';
+      grip.title = 'Drag to move this page';
+      grip.setAttribute('aria-hidden', 'true');
+
+      item.append(button, grip);
+      host.append(item);
+      wireSheetPage(item, page, button, grip);
+    }
+    refreshSheetBar();
+  }
+
+  function refreshSheetBar() {
+    const picked = pickedInOrder();
+    const n = picked.length;
+    const only = state.pages.length;
+    const note = el('sheet-picked');
+    note.hidden = n === 0;
+    note.textContent = n === 1
+      ? 'Page ' + (picked[0].index + 1) + ' selected.'
+      : n + ' pages selected.';
+    el('page-left').disabled = !n || picked[0].index === 0;
+    el('page-right').disabled = !n || picked[n - 1].index === only - 1;
+    // Keeping only everything is a no-op, and removing everything leaves no
+    // document at all — neither is offered rather than refused after the fact.
+    el('page-keep').disabled = !n || n === only;
+    el('page-drop').disabled = !n || n === only;
+    const kinds = state.pages.length;
+    const set = el('organise-note');
+    if (set) {
+      set.textContent = kinds + (kinds === 1 ? ' page' : ' pages');
+      set.classList.toggle('on', Boolean(state.baseDigest));
+    }
+  }
+
+  // Click to select, shift-click for a run, ctrl or cmd-click to add one on
+  // its own. The anchor is the last page clicked without shift, which is what
+  // every file list does and therefore what the hand expects.
+  let sheetAnchor = null;
+
+  function selectPage(page, event) {
+    const spread = event && event.shiftKey;
+    const add = event && (event.metaKey || event.ctrlKey);
+    if (spread && sheetAnchor && state.pages.includes(sheetAnchor)) {
+      const from = Math.min(sheetAnchor.index, page.index);
+      const to = Math.max(sheetAnchor.index, page.index);
+      if (!add) state.picked.clear();
+      for (let i = from; i <= to; i++) state.picked.add(state.pages[i]);
+    } else if (add) {
+      if (state.picked.has(page)) state.picked.delete(page);
+      else state.picked.add(page);
+      sheetAnchor = page;
+    } else {
+      const alone = state.picked.size === 1 && state.picked.has(page);
+      state.picked.clear();
+      if (!alone) state.picked.add(page);
+      sheetAnchor = alone ? null : page;
+    }
+    renderSheet();
+  }
+
+  // Dragging happens on the grip rather than on the page, so that a tap on a
+  // phone still selects and the panel still scrolls under the finger. Pointer
+  // events, so one path serves mouse, pen and touch.
+  function wireSheetPage(item, page, button, grip) {
+    button.addEventListener('click', event => {
+      event.preventDefault();
+      selectPage(page, event);
+    });
+
+    grip.addEventListener('pointerdown', event => {
+      event.preventDefault();
+      grip.setPointerCapture(event.pointerId);
+      const host = el('sheet');
+      const moving = state.picked.has(page) ? pickedInOrder() : [page];
+      item.classList.add('dragging');
+      let target = page.index;
+
+      const overOf = point => {
+        const tiles = [...host.children];
+        for (let i = 0; i < tiles.length; i++) {
+          const box = tiles[i].getBoundingClientRect();
+          if (point.clientX < box.right && point.clientY < box.bottom) return i;
+        }
+        return tiles.length - 1;
+      };
+
+      const move = ev => {
+        const to = overOf(ev);
+        if (to === target) return;
+        target = to;
+        showDropAt(host, to);
+      };
+      const done = ev => {
+        grip.releaseCapture ? grip.releaseCapture() : null;
+        grip.removeEventListener('pointermove', move);
+        grip.removeEventListener('pointerup', done);
+        grip.removeEventListener('pointercancel', done);
+        item.classList.remove('dragging');
+        clearDropMark(host);
+        const to = overOf(ev);
+        moveTo(moving, to);
+      };
+      grip.addEventListener('pointermove', move);
+      grip.addEventListener('pointerup', done);
+      grip.addEventListener('pointercancel', done);
+    });
+  }
+
+  function showDropAt(host, at) {
+    clearDropMark(host);
+    const tile = host.children[at];
+    if (tile) tile.classList.add('dropping');
+  }
+
+  function clearDropMark(host) {
+    for (const tile of host.children) tile.classList.remove('dropping');
+  }
+
+  // Moves a run of pages so that the first of them ends up at `to` in the list
+  // that results, keeping their order among themselves. A selection that is
+  // not contiguous closes up as it moves, which is what dragging a multiple
+  // selection means everywhere else and is far less surprising than refusing.
+  //
+  // `to` is a position in the finished list, not in the one being dragged
+  // over. Counting the pages that were already ahead instead lands a page one
+  // slot short of where it was dropped whenever it is dragged forwards, since
+  // lifting it out has already closed the gap behind it.
+  function moveTo(moving, to) {
+    const set = new Set(moving);
+    const rest = state.pages.filter(page => !set.has(page));
+    const at = Math.max(0, Math.min(rest.length, to));
+    const next = rest.slice(0, at).concat(moving, rest.slice(at));
+    if (next.every((page, i) => page === state.pages[i])) return;
+    setOrder(next, moving.length === 1 ? 'moving a page' : 'moving pages');
+  }
+
+  function nudge(delta) {
+    const moving = pickedInOrder();
+    if (!moving.length) return;
+    if (delta < 0 && moving[0].index === 0) return;
+    if (delta > 0 && moving[moving.length - 1].index === state.pages.length - 1) return;
+    moveTo(moving, moving[0].index + (delta < 0 ? -1 : 1));
+  }
+
+  function keepOnlyPicked() {
+    const keep = pickedInOrder();
+    if (!keep.length || keep.length === state.pages.length) return;
+    const going = state.pages.length - keep.length;
+    setOrder(keep, 'keeping ' + keep.length + ' of ' + (keep.length + going) + ' pages');
+  }
+
+  function dropPicked() {
+    const going = pickedInOrder();
+    if (!going.length || going.length === state.pages.length) return;
+    const keep = state.pages.filter(page => !state.picked.has(page));
+    state.picked = new Set();
+    setOrder(keep, going.length === 1 ? 'removing a page' : 'removing ' + going.length + ' pages');
+  }
+
+  // Merging another document in. The new pages go after the last selected
+  // page, so that "put these in the middle" needs no second step; with nothing
+  // selected they go on the end, which is what appending means.
+  async function addDocument(file) {
+    if (!file) return;
+    let fresh = [];
+    try {
+      if (file.type === 'application/pdf' || /\.pdf$/i.test(file.name)) {
+        busy(true, 'Reading the PDF…');
+        busyNote('Your file is being rendered locally on your device. Nothing is uploaded.');
+        const bytes = new Uint8Array(await file.arrayBuffer());
+        fresh = await renderPdf(bytes, (n, total) =>
+          pageProgress(n - 1, total, 'Rendering pages'));
+      } else if (/^image\//.test(file.type) || /\.(png|jpe?g)$/i.test(file.name)) {
+        busy(true, 'Reading the image…');
+        fresh = [await loadImage(file)];
+      } else {
+        fail('Pages can be added from a PDF or an image. A text file has no pages to add.');
+        return;
+      }
+    } catch (error) {
+      if (error && error.blindedCancelled) return;
+      fail('That file could not be added: '
+        + (error && error.message ? error.message : String(error)));
+      return;
+    } finally {
+      busy(false);
+    }
+
+    const added = fresh.map(p => ({
+      ...p,
+      uid: nextPageUid++,
+      source: p.canvas,
+      canvas: null,
+      findings: [],
+      hits: [],
+      imageHits: [],
+      manual: [],
+      dismissed: new Set(),
+    }));
+    const picked = pickedInOrder();
+    const at = picked.length ? picked[picked.length - 1].index + 1 : state.pages.length;
+    const next = state.pages.slice(0, at).concat(added, state.pages.slice(at));
+    setOrder(next, added.length === 1 ? 'adding a page' : 'adding ' + added.length + ' pages');
   }
 
   // ---------- detection ----------
@@ -1274,6 +1642,8 @@
 
     const kinds = Detect.KINDS.filter(k => state.enabled.has(k.kind)).length;
     set('kind-note', kinds + ' of ' + Detect.KINDS.length, false);
+
+    if (el('organise-note')) refreshSheetBar();
 
     set('label-note', state.labelling
       ? (state.labels.entries.length || 0) + ' labels'
@@ -4005,6 +4375,24 @@
   });
   refreshTermBox();
 
+  el('page-left').addEventListener('click', () => nudge(-1));
+  el('page-right').addEventListener('click', () => nudge(1));
+  el('page-keep').addEventListener('click', keepOnlyPicked);
+  el('page-drop').addEventListener('click', dropPicked);
+  el('page-add').addEventListener('click', () => el('addfile').click());
+  el('addfile').addEventListener('change', async event => {
+    const file = event.target.files && event.target.files[0];
+    // Cleared before the read, so choosing the same file twice in a row still
+    // fires a change event the second time.
+    event.target.value = '';
+    await addDocument(file);
+  });
+  // The modifier is named on the page, and it is a different key on a Mac.
+  if (/Mac|iPhone|iPad/.test(navigator.platform || '')) {
+    const key = el('metakey');
+    if (key) key.textContent = 'Cmd';
+  }
+
   // The box and the state start from the same value, rather than each
   // asserting a default of its own.
   showWordControls();
@@ -4535,6 +4923,8 @@
     scrollerFor, setTool, marking,
     runSearch, applyRedaction: runSearch, coverMarks, uncoverMarks, applyButton,
     activeBoxes,
+    renderSheet, setOrder, moveTo, nudge, keepOnlyPicked, dropPicked,
+    addDocument, pickedInOrder, selectPage, thumbFor, organiseStamp,
     markPending, needsSearch, markDuplicates, onePerPlace, plannedCount,
     pendingTemplates,
     termsNeedingPictures,
