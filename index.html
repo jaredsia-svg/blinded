@@ -37,7 +37,7 @@
 <title>Blinded – Efficient redaction for your most sensitive documents, all done locally</title>
 <meta name="description" content="Redact PDFs, images and text in your browser. The file never leaves your machine.">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="app.css?v=5f191dd6">
+<link rel="stylesheet" href="app.css?v=420d1ccd">
 </head>
 <body>
 
@@ -624,13 +624,18 @@
   </div>
 </div>
 
-<div id="samplebox" class="busy" hidden>
+<!-- The picture, and nothing else. A heading saying what it is and a button
+     saying Close were two rows of chrome around the one thing being looked
+     at, on a dialog whose entire job is to show it larger. -->
+<div id="samplebox" class="busy" hidden role="dialog" aria-modal="true"
+  aria-label="The sample slide, enlarged">
   <div class="busy-inner sampleinner">
-    <h2 class="namehead">A redacted slide</h2>
+    <button type="button" id="sampleclose" class="sample-x" aria-label="Close">
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <path d="M6 6l12 12M18 6L6 18"/>
+      </svg>
+    </button>
     <div class="samplestage"><img id="samplebig" src="sample-slide.jpg" alt="" draggable="false"></div>
-    <div class="namego">
-      <button type="button" id="sampleclose" class="primary">Close</button>
-    </div>
   </div>
 </div>
 
@@ -710,7 +715,7 @@
 <script src="lib/pdfwrite.js?v=4b977425"></script>
 <script src="lib/pdfread.js?v=ca229552"></script>
 <script src="lib/render.js?v=7bf6e0a9"></script>
-<script src="app.js?v=da91c64a"></script>
+<script src="app.js?v=cb38df75"></script>
 <script type="module" src="lib/boot.mjs?v=8b98ed8f"></script>
 </body>
 </html>

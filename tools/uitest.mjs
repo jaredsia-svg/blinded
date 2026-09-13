@@ -3580,6 +3580,39 @@ try {
       JSON.stringify(backdrop));
     check('while a click on the slide itself leaves it open',
       backdrop.stillOpen === true, JSON.stringify(backdrop));
+
+    // The dialog is the picture. A heading naming it and a button saying
+    // Close were two rows of chrome around the one thing being looked at.
+    const bare = await page.evaluate(async () => {
+      const box = document.getElementById('samplebox');
+      document.getElementById('sample-open').click();
+      await new Promise(r => setTimeout(r, 120));
+      const inner = box.querySelector('.busy-inner');
+      const out = {
+        heading: Boolean(box.querySelector('h2')),
+        words: (box.querySelector('#sampleclose').textContent || '').trim(),
+        cross: Boolean(box.querySelector('#sampleclose svg')),
+        // Top right of the picture, over it rather than under it.
+        corner: (() => {
+          const x = box.querySelector('#sampleclose').getBoundingClientRect();
+          const frame = inner.getBoundingClientRect();
+          return x.top - frame.top < 60 && frame.right - x.right < 60;
+        })(),
+      };
+      // The frame around the picture is outside the picture, and a click
+      // there that did nothing would read as a dialog gone deaf.
+      inner.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await new Promise(r => setTimeout(r, 120));
+      out.frameCloses = box.hidden;
+      box.hidden = true;
+      return out;
+    });
+    check('the enlarged slide carries no heading and no worded button',
+      bare.heading === false && bare.words === '', JSON.stringify(bare));
+    check('just a cross, in the top right corner',
+      bare.cross === true && bare.corner === true, JSON.stringify(bare));
+    check('and a click on the frame around it closes it too',
+      bare.frameCloses === true, JSON.stringify(bare));
   }
 
   // ---------- pinching the document, and only the document ----------

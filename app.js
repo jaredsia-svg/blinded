@@ -5520,8 +5520,13 @@
     };
     el('sample-open').addEventListener('click', show);
     el('sampleclose').addEventListener('click', hide);
-    // The backdrop is the other way out, and the one people reach for.
-    box.addEventListener('click', event => { if (event.target === box) hide(); });
+    // Anywhere but the picture is a way out, and the one people reach for.
+    // Not only the backdrop: the frame around the picture is outside it too,
+    // and a click there that did nothing would read as a dialog that has
+    // stopped responding rather than as a miss.
+    box.addEventListener('click', event => {
+      if (!event.target.closest('.samplestage, .sample-x')) hide();
+    });
     document.addEventListener('keydown', event => {
       if (event.key === 'Escape') hide();
     });
