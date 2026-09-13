@@ -723,7 +723,11 @@ body.picking .tools {
 .samplestage {
   margin: 0; background: #eef1f6; border: 1px solid var(--line);
   border-radius: var(--radius); padding: 8px; overflow: auto;
+  /* Every gesture over the picture is handled in app.js — two fingers zoom,
+     one moves it about — so the browser must not claim any of them first. */
+  touch-action: none; cursor: grab;
 }
+.samplestage:active { cursor: grabbing; }
 /* Over the picture rather than under it: the dialog is the picture now, and a
    row of its own for one button would put the thing being looked at further
    from the middle of the screen. */
@@ -741,9 +745,13 @@ body.picking .tools {
   width: 17px; height: 17px; fill: none; stroke: currentColor;
   stroke-width: 2; stroke-linecap: round;
 }
-/* Big enough to read the small print, and scrollable when the screen is not.
-   On a laptop that means it can start wider than the window and be dragged. */
-#samplebig { display: block; width: 100%; min-width: 680px; height: auto; }
+/* The whole slide, fitted, and as large as the fingers ask for after that.
+   It used to open at a 680px minimum so a laptop could read the small print
+   without any way to zoom; now that double-clicking and pinching work
+   everywhere, the picture starts whole — which is what someone opening it
+   wants to see first — and the width the zoom moves is the only thing that
+   changes it. */
+#samplebig { display: block; width: var(--big, 100%); height: auto; }
 
 /* On a phone the picture is the screen.
    
@@ -762,14 +770,8 @@ body.picking .tools {
   .samplestage {
     width: 100%; max-height: 100vh;
     padding: 0; border: 0; border-radius: 0; background: transparent;
-    overflow: auto; -webkit-overflow-scrolling: touch;
-    /* Two fingers are a zoom, not a page scroll. */
-    touch-action: none;
+    overflow: auto;
   }
-  /* The width the pinch moves. A percentage rather than a transform, so the
-     stage's own scrollbars grow with it and panning about a zoomed picture is
-     ordinary scrolling rather than arithmetic. */
-  #samplebig { width: var(--big, 100%); min-width: 0; }
   .sample-x { top: 12px; right: 12px; }
 }
 

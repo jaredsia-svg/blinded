@@ -6240,50 +6240,162 @@
       box.hidden = true;
       el('sample-open').focus();
     };
-    // Pinch to zoom, on a phone, where the picture fills the screen and the
-    // small print is the point. The browser's own pinch is off for the whole
-    // app — it zoomed the panel and the header along with the page and left
-    // nothing more readable — so this is the gesture handled here, as the
-    // document does it.
+    // Zooming the picture: pinch, double tap, drag to move about.
     //
-    // The width is what moves, not a transform: the stage scrolls, so panning
-    // around a zoomed picture is ordinary scrolling instead of arithmetic
-    // about an origin.
+    // The browser's own pinch is off for the whole app — it zoomed the panel
+    // and the header along with the page and left nothing more readable — so
+    // every gesture here is handled by hand, as the document itself does it.
+    //
+    // The width is what moves, not a transform: the stage scrolls, so moving
+    // about a zoomed picture is a scroll position rather than arithmetic about
+    // a transform origin.
+    //
+    // What was wrong with that on its own: growing the width pushes the
+    // picture out to the right, and a scroll position left at zero keeps the
+    // left edge under the fingers. Pinching the middle of the slide enlarged
+    // it and then showed you its left margin. So a zoom now takes the point it
+    // is zooming about — the middle of the pinch, or the tap — and puts the
+    // same point of the picture back under it afterwards.
     {
       const stage = box.querySelector('.samplestage');
       const img = el('samplebig');
       const held = new Map();
+      const FIT = 1;
+      const MOST = 5;
+      const TAP_TO = 2.5;       // what a double tap goes to
+      const TAP_GAP = 320;      // and how quickly the second tap must come
+      const TAP_NEAR = 34;      // and how near the first
       let span = 0;
       let from = 1;
       let big = 1;
-      const spanOf = () => {
-        const [a, b] = [...held.values()];
-        return Math.hypot(a.x - b.x, a.y - b.y);
+      let anchor = null;
+      let panning = null;
+      let wandered = false;
+      let tappedAt = 0;
+      let tappedNear = null;
+
+      const spanOf = list => Math.hypot(list[0].x - list[1].x, list[0].y - list[1].y);
+      const midOf = list => ({ x: (list[0].x + list[1].x) / 2,
+                               y: (list[0].y + list[1].y) / 2 });
+
+      // Where a screen point lands in the picture, measured in units of the
+      // fitted picture so it means the same thing at any zoom.
+      const pointIn = at => {
+        const view = stage.getBoundingClientRect();
+        return { x: (stage.scrollLeft + at.x - view.left) / big,
+                 y: (stage.scrollTop + at.y - view.top) / big };
       };
+
+      // Zoom to `next` and put `point` of the picture back under `at`.
+      //
+      // This is the half that was missing. Growing the width pushes the
+      // picture out to the right, and a scroll position left at zero keeps
+      // the left edge under the fingers: pinching the middle of the slide
+      // enlarged it and then showed you its left margin.
+      const put = (point, at, next) => {
+        const view = stage.getBoundingClientRect();
+        big = Math.max(FIT, Math.min(MOST, next));
+        img.style.setProperty('--big', (big * 100) + '%');
+        // Read a layout property so the new width is in effect before the
+        // scroll is set against it; without this the browser clamps the
+        // scroll to the picture's old size and the zoom lands somewhere else.
+        void stage.scrollWidth;
+        stage.scrollLeft = point.x * big - (at.x - view.left);
+        stage.scrollTop = point.y * big - (at.y - view.top);
+      };
+
+      const zoomTo = (next, at) => {
+        const view = stage.getBoundingClientRect();
+        const about = at || { x: view.left + view.width / 2,
+                              y: view.top + view.height / 2 };
+        put(pointIn(about), about, next);
+      };
+
       stage.addEventListener('pointerdown', event => {
-        if (event.pointerType === 'mouse') return;
         held.set(event.pointerId, { x: event.clientX, y: event.clientY });
-        if (held.size === 2) { span = spanOf(); from = big; }
+        if (held.size === 2) {
+          // A second finger ends the drag the first one was making and starts
+          // a pinch from wherever the picture is now.
+          panning = null;
+          const now = [...held.values()];
+          span = spanOf(now);
+          from = big;
+          // The point of the picture the two fingers started out agreeing on.
+          // Held for the whole gesture rather than recomputed as it goes: a
+          // pinch arrives one finger at a time, so the middle wanders between
+          // events, and re-anchoring on each of them walks the picture out
+          // from under the fingers a little at a time.
+          anchor = pointIn(midOf(now));
+          return;
+        }
+        if (held.size > 2) return;
+        wandered = false;
+        panning = { x: event.clientX, y: event.clientY,
+                    left: stage.scrollLeft, top: stage.scrollTop };
+        try { stage.setPointerCapture(event.pointerId); } catch { /* not fatal */ }
       });
+
       stage.addEventListener('pointermove', event => {
         if (!held.has(event.pointerId)) return;
         held.set(event.pointerId, { x: event.clientX, y: event.clientY });
-        if (held.size !== 2 || !span) return;
+
+        if (held.size === 2 && span && anchor) {
+          event.preventDefault();
+          const now = [...held.values()];
+          // The picture follows the middle of the pinch, so two fingers
+          // moving together carry it about as well as apart.
+          put(anchor, midOf(now), from * (spanOf(now) / span));
+          return;
+        }
+
+        if (!panning) return;
+        const dx = event.clientX - panning.x;
+        const dy = event.clientY - panning.y;
+        if (Math.hypot(dx, dy) > 4) wandered = true;
+        // Moving about is our business too: two fingers being a zoom means
+        // the stage cannot have the browser's own touch scrolling, so one
+        // finger drags the picture under itself.
         event.preventDefault();
-        big = Math.max(1, Math.min(5, from * (spanOf() / span)));
-        img.style.setProperty('--big', (big * 100) + '%');
+        stage.scrollLeft = panning.left - dx;
+        stage.scrollTop = panning.top - dy;
       });
-      const let_go = event => {
+
+      const letGo = event => {
+        const was = held.get(event.pointerId);
         held.delete(event.pointerId);
-        if (held.size < 2) span = 0;
+        if (held.size < 2) { span = 0; anchor = null; }
+        if (held.size === 0) panning = null;
+        if (!was || wandered || held.size) return;
+
+        // Two taps in the same place: in to a readable size about that point,
+        // or back to the whole slide if it is already in.
+        const now = Date.now();
+        const near = tappedNear
+          && Math.hypot(tappedNear.x - was.x, tappedNear.y - was.y) < TAP_NEAR;
+        if (now - tappedAt < TAP_GAP && near) {
+          tappedAt = 0;
+          tappedNear = null;
+          if (big > FIT + 0.01) zoomTo(FIT);
+          else zoomTo(TAP_TO, was);
+          return;
+        }
+        tappedAt = now;
+        tappedNear = was;
       };
-      stage.addEventListener('pointerup', let_go);
-      stage.addEventListener('pointercancel', let_go);
+      stage.addEventListener('pointerup', letGo);
+      stage.addEventListener('pointercancel', event => {
+        held.delete(event.pointerId);
+        if (held.size < 2) { span = 0; anchor = null; }
+        if (held.size === 0) panning = null;
+      });
+
       // Every opening starts at the whole picture, rather than wherever the
       // last one was left.
       box.addEventListener('blinded:sample', () => {
         big = 1;
         img.style.setProperty('--big', '100%');
+        stage.scrollLeft = 0;
+        stage.scrollTop = 0;
       });
     }
 

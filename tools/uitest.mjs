@@ -3647,6 +3647,133 @@ try {
         zoomed.after > zoomed.before, JSON.stringify(zoomed));
       check('and opening it again starts from the whole picture',
         Math.abs(zoomed.reopened - zoomed.before) <= 2, JSON.stringify(zoomed));
+
+      // Where it zooms, which is the half of this that was wrong. Growing the
+      // width pushes the picture out to the right, and a scroll position left
+      // at zero keeps the left edge under the fingers: pinching the middle of
+      // the slide enlarged it and then showed you its left margin.
+      //
+      // Measured as a fraction of the picture, so it does not depend on how
+      // large anything happens to be: the point of the slide under the pinch
+      // before must be the point under it after.
+      const about = await small.evaluate(async () => {
+        const stage = document.querySelector('.samplestage');
+        const img = document.getElementById('samplebig');
+        const at = (type, id, x, y) => stage.dispatchEvent(new PointerEvent(type, {
+          pointerId: id, pointerType: 'touch', clientX: x, clientY: y,
+          bubbles: true, isPrimary: id === 1,
+        }));
+        // Well over to the right, where the old behaviour was most wrong.
+        const focus = { x: Math.round(window.innerWidth * 0.8), y: 380 };
+        const was = img.getBoundingClientRect();
+        const under = {
+          x: (focus.x - was.left) / was.width,
+          y: (focus.y - was.top) / was.height,
+        };
+        at('pointerdown', 1, focus.x - 60, focus.y);
+        at('pointerdown', 2, focus.x + 60, focus.y);
+        at('pointermove', 1, focus.x - 150, focus.y);
+        at('pointermove', 2, focus.x + 150, focus.y);
+        await new Promise(r => setTimeout(r, 60));
+        const now = img.getBoundingClientRect();
+        const after = {
+          x: (focus.x - now.left) / now.width,
+          y: (focus.y - now.top) / now.height,
+        };
+        at('pointerup', 1, focus.x - 150, focus.y);
+        at('pointerup', 2, focus.x + 150, focus.y);
+        return { under, after, grew: now.width > was.width,
+                 scrolled: stage.scrollLeft };
+      });
+      check('the pinch enlarges about the point between the fingers',
+        about.grew === true && Math.abs(about.under.x - about.after.x) < 0.04,
+        JSON.stringify(about));
+      check('which means it has scrolled to keep that point in view',
+        about.scrolled > 0, JSON.stringify(about));
+
+      // One finger moves the picture about. It has to be ours: two fingers
+      // being a zoom means the stage cannot also have the browser's own touch
+      // scrolling, so without this a zoomed picture could not be read past
+      // whatever part of it was on screen.
+      const dragged = await small.evaluate(async () => {
+        const stage = document.querySelector('.samplestage');
+        const at = (type, x, y) => stage.dispatchEvent(new PointerEvent(type, {
+          pointerId: 9, pointerType: 'touch', clientX: x, clientY: y,
+          bubbles: true, isPrimary: true,
+        }));
+        const was = stage.scrollLeft;
+        at('pointerdown', 300, 400);
+        at('pointermove', 200, 400);
+        at('pointermove', 140, 400);
+        await new Promise(r => setTimeout(r, 40));
+        const now = stage.scrollLeft;
+        at('pointerup', 140, 400);
+        return { was, now };
+      });
+      check('and one finger drags it about',
+        dragged.now > dragged.was, JSON.stringify(dragged));
+
+      // Two taps in the same place, which is how everyone zooms a photograph.
+      const tapped = await small.evaluate(async () => {
+        const stage = document.querySelector('.samplestage');
+        const img = document.getElementById('samplebig');
+        const tap = async (x, y) => {
+          for (const type of ['pointerdown', 'pointerup']) {
+            stage.dispatchEvent(new PointerEvent(type, { pointerId: 11,
+              pointerType: 'touch', clientX: x, clientY: y, bubbles: true,
+              isPrimary: true }));
+          }
+        };
+        document.querySelector('#sampleclose').click();
+        await new Promise(r => setTimeout(r, 80));
+        document.getElementById('sample-open').click();
+        await new Promise(r => setTimeout(r, 150));
+        const fit = img.getBoundingClientRect();
+        const focus = { x: Math.round(window.innerWidth * 0.75), y: 360 };
+        const under = (box) => (focus.x - box.left) / box.width;
+        await tap(focus.x, focus.y);
+        await tap(focus.x, focus.y);
+        await new Promise(r => setTimeout(r, 60));
+        const big = img.getBoundingClientRect();
+        // And again to come back out.
+        await tap(focus.x, focus.y);
+        await tap(focus.x, focus.y);
+        await new Promise(r => setTimeout(r, 60));
+        const back = img.getBoundingClientRect();
+        return { fit: Math.round(fit.width), big: Math.round(big.width),
+                 back: Math.round(back.width),
+                 heldPoint: Math.abs(under(fit) - under(big)) };
+      });
+      check('a double tap zooms in', tapped.big > tapped.fit * 1.5,
+        JSON.stringify(tapped));
+      check('about the point tapped', tapped.heldPoint < 0.04,
+        JSON.stringify(tapped));
+      check('and a double tap again shows the whole slide',
+        Math.abs(tapped.back - tapped.fit) <= 2, JSON.stringify(tapped));
+
+      // One slow tap after another is two taps, not a double one: a reviewer
+      // reading a zoomed slide taps it to no effect, and if that counted it
+      // would jump about under them.
+      const slow = await small.evaluate(async () => {
+        const stage = document.querySelector('.samplestage');
+        const img = document.getElementById('samplebig');
+        const was = img.getBoundingClientRect().width;
+        const tap = () => {
+          for (const type of ['pointerdown', 'pointerup']) {
+            stage.dispatchEvent(new PointerEvent(type, { pointerId: 12,
+              pointerType: 'touch', clientX: 200, clientY: 300, bubbles: true,
+              isPrimary: true }));
+          }
+        };
+        tap();
+        await new Promise(r => setTimeout(r, 450));
+        tap();
+        await new Promise(r => setTimeout(r, 60));
+        return { was: Math.round(was),
+                 now: Math.round(img.getBoundingClientRect().width) };
+      });
+      check('two unhurried taps are not a double tap',
+        slow.now === slow.was, JSON.stringify(slow));
       await small.close();
     }
 
