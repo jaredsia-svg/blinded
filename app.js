@@ -4232,15 +4232,23 @@
   // fires and the browser has nothing to offer. The tool has to ask itself,
   // and the thing being lost is a document the reviewer may have spent minutes
   // marking up.
+  // Resolves false to cancel, true to go ahead, and 'save' where the caller
+  // offered a third way and the reviewer took it.
   function confirmAction(options) {
     const opts = options || {};
     return new Promise(resolve => {
       const box = el('confirmbox');
       const yes = el('confirmyes');
       const no = el('confirmno');
+      const save = el('confirmsave');
       el('confirmhead').textContent = opts.title || 'Are you sure?';
       el('confirmbody').textContent = opts.body || '';
       yes.textContent = opts.confirmLabel || 'Discard';
+      // A way to keep the work, offered beside the way to lose it rather than
+      // left for the reviewer to remember on their own. Most confirmations
+      // have nothing to save and do not ask for it.
+      save.hidden = !opts.saveLabel;
+      if (opts.saveLabel) save.textContent = opts.saveLabel;
       box.hidden = false;
       // The cancel button takes focus, not the destructive one: a stray Enter
       // should not be the thing that loses the document.
@@ -4250,16 +4258,26 @@
         box.hidden = true;
         yes.removeEventListener('click', accept);
         no.removeEventListener('click', reject);
+        save.removeEventListener('click', keep);
+        box.removeEventListener('pointerdown', away);
         document.removeEventListener('keydown', key, true);
         resolve(answer);
       };
       const accept = () => done(true);
       const reject = () => done(false);
+      const keep = () => done('save');
+      // A press on the dimmed page behind the box is a way out, the same as
+      // Escape. It cancels rather than confirms, which is the answer that
+      // cannot cost anything — a stray tap must never be what discards a
+      // document.
+      const away = event => { if (event.target === box) reject(); };
       const key = event => {
         if (event.key === 'Escape') { event.preventDefault(); reject(); }
       };
       yes.addEventListener('click', accept);
       no.addEventListener('click', reject);
+      save.addEventListener('click', keep);
+      box.addEventListener('pointerdown', away);
       document.addEventListener('keydown', key, true);
     });
   }
@@ -5357,14 +5375,18 @@
     // the kind of prompt people learn to click through.
     if (state.pages.length || state.text) {
       const exported = state.applied && state.exported;
-      const ok = await confirmAction({
+      const answer = await confirmAction({
         title: 'Open a different file?',
         body: 'The document on screen will be closed, along with every mark on '
           + 'it. Nothing is saved anywhere, so this cannot be undone'
           + (exported ? '.' : ' — and you have not exported it yet.'),
-        confirmLabel: 'Close it and choose a file',
+        saveLabel: 'Save draft & close',
+        confirmLabel: 'Close file',
       });
-      if (!ok) return;
+      if (!answer) return;
+      // The draft is written before anything is thrown away, so a failed save
+      // does not happen after the document it describes has gone.
+      if (answer === 'save') await saveDraft();
     }
     pendingDraft = null;
     dropDraftPrompt();

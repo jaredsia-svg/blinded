@@ -324,7 +324,7 @@
                   <path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>
                 </svg><span class="sr-only">Remove the selected pages</span>
               </button>
-              <button type="button" id="page-add" class="tool" title="Add another document…">
+              <button type="button" id="page-add" class="tool" title="Add another document after the page selected">
                 <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
                   <path d="M13 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-9M17 3v6M14 6h6"/>
                 </svg><span class="sr-only">Add another document</span>
@@ -519,6 +519,10 @@
     <p class="confirmbody" id="confirmbody"></p>
     <div class="namego">
       <button type="button" id="confirmno" class="ghost">Cancel</button>
+      <!-- Only where losing the work is the thing being confirmed. Hidden
+           unless the caller asks for it, since most confirmations have no
+           work to save. -->
+      <button type="button" id="confirmsave" class="primary" hidden>Save draft &amp; close</button>
       <button type="button" id="confirmyes" class="primary danger">Discard</button>
     </div>
   </div>
@@ -610,7 +614,7 @@
 <script src="lib/pdfwrite.js?v=4b977425"></script>
 <script src="lib/pdfread.js?v=ca229552"></script>
 <script src="lib/render.js?v=7bf6e0a9"></script>
-<script src="app.js?v=cb8a266a"></script>
+<script src="app.js?v=6d29a682"></script>
 <script type="module" src="lib/boot.mjs?v=8b98ed8f"></script>
 </body>
 </html>

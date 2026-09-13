@@ -1121,6 +1121,64 @@ try {
     await page.keyboard.press('Escape');
     check('escape cancels too', (await pagesOpen()) === opened);
 
+    // So is a press on the dimmed page behind the box. It has to cancel and
+    // not confirm: a stray tap must never be the thing that loses a document.
+    await page.click('#reset-top');
+    await page.waitForSelector('#confirmbox:not([hidden])', { timeout: 15000 });
+    await page.evaluate(() => {
+      const box = document.getElementById('confirmbox');
+      box.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerId: 61 }));
+    });
+    await page.waitForTimeout(80);
+    check('pressing outside the box cancels', (await pagesOpen()) === opened
+      && (await page.isVisible('#confirmbox')) === false,
+      JSON.stringify({ opened, now: await pagesOpen() }));
+
+    // But a press inside it is not outside it.
+    await page.click('#reset-top');
+    await page.waitForSelector('#confirmbox:not([hidden])', { timeout: 15000 });
+    await page.evaluate(() => {
+      document.querySelector('#confirmbox .busy-inner')
+        .dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerId: 62 }));
+    });
+    await page.waitForTimeout(80);
+    check('but a press inside it leaves the question standing',
+      (await page.isVisible('#confirmbox')) === true);
+
+    // The way out that keeps the work, offered beside the way that loses it.
+    const offered = await page.evaluate(() => {
+      const save = document.getElementById('confirmsave');
+      const yes = document.getElementById('confirmyes');
+      return {
+        shown: save.hidden === false,
+        says: save.textContent.trim(),
+        red: yes.textContent.trim(),
+        // Left of the red one, and after Cancel.
+        before: save.compareDocumentPosition(yes) & Node.DOCUMENT_POSITION_FOLLOWING ? true : false,
+      };
+    });
+    check('the reset question offers to save a draft',
+      offered.shown === true && offered.says === 'Save draft & close',
+      JSON.stringify(offered));
+    check('with the closing button beside it, named for what it does',
+      offered.red === 'Close file' && offered.before === true, JSON.stringify(offered));
+
+    // Armed before the click and awaited after it. Waiting for the download
+    // first only blocks until the timeout, because nothing has asked for one
+    // yet — and no catch around it, so a save that never happens fails here
+    // rather than a line later with the reason gone.
+    const saving = page.waitForEvent('download', { timeout: 15000 });
+    await page.click('#confirmsave');
+    const draft = await saving;
+    check('and saving one writes a draft before closing',
+      /\.json$/i.test(draft.suggestedFilename()), draft.suggestedFilename());
+    await page.waitForSelector('#view-drop:not([hidden])', { timeout: 15000 });
+    check('then closes the document', (await pagesOpen()) === 0);
+
+    // Put a document back for what follows.
+    await page.setInputFiles('#file', fixturePath);
+    await page.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
+
     // And confirming actually does it.
     await page.click('#reset-top');
     await page.waitForSelector('#confirmbox:not([hidden])', { timeout: 15000 });
