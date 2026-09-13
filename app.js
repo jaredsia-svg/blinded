@@ -1292,7 +1292,7 @@
     if (!note.hidden) {
       note.textContent = 'The page reader could not be loaded, so these words '
         + 'are being hunted for by shape instead. That is less reliable on '
-        + 'italic and on small lettering — check the marks before exporting.';
+        + 'italic and on small lettering – check the marks before exporting.';
     }
   }
 
@@ -1356,7 +1356,7 @@
       ? state.kind !== 'text' && !state.pages.length
       : !state.applied && marks === 0 && unsearched === 0);
     if (state.sweepRunning) {
-      button.title = 'The comprehensive check is running \u2014 let it finish, '
+      button.title = 'The comprehensive check is running \u2013 let it finish, '
         + 'or stop it in the panel';
     }
 
@@ -1403,7 +1403,7 @@
       // A paused run. Say how much of the document has actually been looked
       // at, because the marks on screen are the answer for part of it only.
       note.textContent = (state.pages.length - unread) + ' of ' + state.pages.length
-        + ' pages read \u2014 press Search to carry on.';
+        + ' pages read \u2013 press Search to carry on.';
     } else if (unsearched) {
       note.textContent = unsearched === 1
         ? '1 search still to run.'
@@ -1411,7 +1411,7 @@
     } else if (marks === 0) {
       note.textContent = 'Nothing marked yet.';
     } else {
-      note.textContent = 'Outlined \u2014 press Redact to cover them.';
+      note.textContent = 'Outlined \u2013 press Redact to cover them.';
     }
   }
 
@@ -1900,7 +1900,7 @@
             ? top.toFixed(2)
             : top.toFixed(2) + ' down to ' + bottom.toFixed(2))
           + ' and ' + (near.length === 1 ? 'was' : 'were')
-          + ' left out — lower the bar past ' + top.toFixed(2) + ' to include '
+          + ' left out – lower the bar past ' + top.toFixed(2) + ' to include '
           + (near.length === 1 ? 'it.' : 'them.');
       }
       // And when it turned nothing away, say so — because the silence looks
@@ -1930,7 +1930,7 @@
     const near = found.best > 0 ? found.best.toFixed(2) : null;
     hint.textContent = near
       ? 'No match at ' + clampSens(bar).toFixed(2) + '. The closest thing scored '
-        + near + ' — lower the sensitivity below that to include it.'
+        + near + ' – lower the sensitivity below that to include it.'
       : 'Nothing resembling that was found anywhere in the document.';
     hint.hidden = false;
     hint.classList.add('warnhint');
@@ -2203,7 +2203,7 @@
       // looking at their own document, so nothing is revealed that they do not
       // already have. It never travels into the export.
       what.textContent = entry.value ? entry.value : entry.description;
-      what.title = entry.description + (entry.value ? ' — "' + entry.value + '"' : '');
+      what.title = entry.description + (entry.value ? ' – "' + entry.value + '"' : '');
 
       const count = document.createElement('span');
       count.className = 'n';
@@ -3619,7 +3619,7 @@
       count.className = template.searched ? 'n dot-green' : 'n unknown';
       count.textContent = template.searched ? String(live) : '?';
       count.disabled = !template.searched || live === 0;
-      if (!template.searched) count.title = 'Not searched for yet \u2014 press Search';
+      if (!template.searched) count.title = 'Not searched for yet \u2013 press Search';
       if (!count.disabled) {
         count.title = 'Where ' + (live === 1 ? 'it is' : 'they are');
         count.setAttribute('aria-expanded', String(state.openTally === template.id));
@@ -3727,7 +3727,7 @@
         count.textContent = '?';
         count.disabled = true;
         count.removeAttribute('aria-expanded');
-        count.title = 'Not searched for yet \u2014 press Search';
+        count.title = 'Not searched for yet \u2013 press Search';
         // needsSearch closes the open tally, but the list it drew is already
         // on screen and only a re-render would take it off.
         const open = row.nextSibling;
@@ -3880,7 +3880,7 @@
           dot.classList.add('unknown');
           dot.textContent = '?';
           dot.disabled = true;
-          dot.title = 'Not searched for yet \u2014 press Search';
+          dot.title = 'Not searched for yet \u2013 press Search';
           return dot;
         }
         dot.textContent = String(places.length);
@@ -3960,11 +3960,11 @@
       view.append(document.createTextNode(state.text.slice(cursor, f.start)));
       const mark = document.createElement('mark');
       mark.textContent = state.text.slice(f.start, f.end);
-      mark.title = f.label + ' — click to keep it';
+      mark.title = f.label + ' – click to keep it';
       // Outlined until applied, so the reviewer can still read what is about
       // to go, exactly as on a page.
       if (!state.applied) mark.classList.add('pending');
-      if (dismissedText.has(f.id)) { mark.className = 'off'; mark.title = f.label + ' — click to cover it'; }
+      if (dismissedText.has(f.id)) { mark.className = 'off'; mark.title = f.label + ' – click to cover it'; }
       mark.addEventListener('click', () => {
         const wasOff = dismissedText.has(f.id);
         if (wasOff) dismissedText.delete(f.id); else dismissedText.add(f.id);
@@ -4083,7 +4083,7 @@
     // Saving a draft is not exporting a redaction, and the flag that decides
     // whether the reviewer is warned about losing work must not be set by it.
     state.exported = false;
-    draftNote('Draft saved. It holds your marks, not the document \u2014 reopen '
+    draftNote('Draft saved. It holds your marks, not the document \u2013 reopen '
       + 'it and choose ' + state.name + ' again to carry on.');
   }
 
@@ -5157,7 +5157,7 @@
     const line = el('sweepprogress');
     if (line) {
       line.textContent = 'Checking page ' + Math.min(done + 1, total) + ' of ' + total
-        + ' \u2014 you can carry on reviewing.';
+        + ' \u2013 you can carry on reviewing.';
     }
   }
 
@@ -5223,7 +5223,7 @@
             ? ', having added ' + state.sweepAdded
               + (state.sweepAdded === 1 ? ' mark' : ' marks') + ' in amber. '
             : ', having found nothing new. ')
-          + 'Start it again to check the whole document \u2014 about '
+          + 'Start it again to check the whole document \u2013 about '
           + describeTime(seconds) + '.';
         return;
       }
@@ -5401,7 +5401,7 @@
         title: 'Open a different file?',
         body: 'The document on screen will be closed, along with every mark on '
           + 'it. Nothing is saved anywhere, so this cannot be undone'
-          + (exported ? '.' : ' — and you have not exported it yet.'),
+          + (exported ? '.' : ' – and you have not exported it yet.'),
         saveLabel: 'Save draft & close',
         confirmLabel: 'Close file',
       });

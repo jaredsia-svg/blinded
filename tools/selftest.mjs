@@ -1493,6 +1493,27 @@ check('no creation date is carried into the output', !meta.info.CreationDate);
     strays.join(', '));
 }
 
+// ---------- one kind of dash ----------
+//
+// An en dash throughout, on the page and in every message the tool writes.
+// Not a matter of taste once it is a rule: two kinds of dash in one interface
+// is the sort of thing a reader notices without being able to say why.
+//
+// Comments are not the website, so the sweep left them alone, and the file
+// name cleaner keeps matching both kinds on purpose — it strips whatever the
+// reviewer's own file happens to carry.
+{
+  const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  check('the page uses one kind of dash', !html.includes('\u2014'),
+    (html.match(/[^\n]{0,60}\u2014[^\n]{0,60}/) || [''])[0]);
+
+  const js = readFileSync(new URL('../app.js', import.meta.url), 'utf8');
+  const shouting = js.split('\n')
+    .filter(line => line.includes('\\u2014') && !line.includes('.replace('));
+  check('and so does everything the tool says', shouting.length === 0,
+    shouting.join(' | '));
+}
+
 // ---------- the mark ----------
 //
 // It is drawn twice — inline in the header, and again in icon.svg for the

@@ -6877,8 +6877,15 @@ try {
         cells: [...tr.querySelectorAll('td')].map(td => td.textContent.trim().length),
         ours: [...tr.querySelectorAll('td')].filter(td => td.classList.contains('us')).length,
       }));
+      const ink = getComputedStyle(document.body).getPropertyValue('color');
+      const heads = [...table.querySelectorAll('thead th')]
+        .slice(1).map(th => getComputedStyle(th).color);
       return {
-        head, rows,
+        head, rows, heads,
+        mark: Boolean(table.querySelector('thead .us .markmark')),
+        // Ours is the one in full ink; the peers are a shade back, which is
+        // the difference the eye reads before it reads a word.
+        inkedHeads: heads.filter(c => c === ink).length,
         // It has to be able to overflow inside its own box rather than taking
         // the whole page sideways with it.
         scrolls: getComputedStyle(document.querySelector('.versus-scroll')).overflowX,
@@ -6889,6 +6896,10 @@ try {
     check('the front page compares Blinded with the tools people already have',
       versus !== null && versus.head.includes('Blinded'),
       JSON.stringify(versus && versus.head));
+    check('the Blinded column carries the mark',
+      versus && versus.mark === true, JSON.stringify(versus && versus.head));
+    check('and is the only column in full ink',
+      versus && versus.inkedHeads === 1, JSON.stringify(versus && versus.heads));
     check('against three named peers', versus && versus.head.length === 5,
       JSON.stringify(versus && versus.head));
     check('every row answers for every one of them',
