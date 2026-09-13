@@ -37,7 +37,7 @@
 <title>Blinded – Efficient redaction for your most sensitive documents, all done locally</title>
 <meta name="description" content="Redact PDFs, images and text in your browser. The file never leaves your machine.">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="app.css?v=afb140b0">
+<link rel="stylesheet" href="app.css?v=de73d700">
 </head>
 <body>
 
@@ -60,6 +60,10 @@
     <div class="top-actions">
       <!-- Only once there is something to start over from. -->
       <button type="button" class="top-link" id="reset-top" hidden>Reset</button>
+      <!-- The front page, read while a document is open. It is the same page
+           without the place to drop one, since there is already a document and
+           an invitation to replace it is the last thing this should offer. -->
+      <button type="button" class="top-link" id="home-top" hidden>Home</button>
       <button type="button" class="top-link" id="faq-open">Q&amp;A</button>
     </div>
   </div>
@@ -118,22 +122,120 @@
       </li>
     </ul>
 
-    <!-- What the finished thing looks like, before anyone has to try it on a
-         document of their own. Invented from end to end: there is no company
-         here, and no data. -->
+    <!-- A real page, and a hard one: a photograph of a screen, so the whole
+         slide is a picture and there is no text layer to search at all. What
+         is shown is the output — the file this produced holds no recoverable
+         text, which is the claim the picture is here to make. -->
     <section class="sample">
       <h2>Sample slide redaction</h2>
-      <p class="sample-lede">A board slide after a pass through Blinded. The
-        logo, the client, a colleague, an address are gone — and each one
-        leaves a label behind, so the sentence around it still reads.</p>
+      <p class="sample-lede">A scan of a board slide — a photograph of a
+        screen, soft focus and all. There is no text layer in a page like this:
+        every word is part of the picture. Blinded read it anyway, and covered
+        the company, the brands, the logos and the artwork alike. Each bar
+        leaves a label, so the sentence around it still reads, and the key that
+        says what each label stood for is a separate file you keep.</p>
       <button type="button" id="sample-open" class="sample-shot"
         aria-label="See this slide larger">
-        <img src="sample.svg" alt="A corporate slide after redaction: the logo,
-          company name, a person's name and an email address are covered by
-          black bars carrying placeholder labels." width="960"
-          height="540" draggable="false">
+        <img src="sample-slide.jpg" alt="A scanned beverage-sector board slide
+          after redaction: the company name, brand names, several logos and
+          product images are covered by black bars carrying placeholder labels
+          such as [T1], [P1] and [L1], while the charts and figures are left
+          readable." width="1280" height="965" draggable="false" loading="lazy">
         <span class="sample-zoom">Click to enlarge</span>
       </button>
+      <p class="sample-foot">Nothing was typed out by hand. The words came from
+        reading the page, the logos from picking one copy of each, and the
+        exported file fails a text extract: there is no text under those bars
+        to recover.</p>
+    </section>
+
+    <!-- Against the tools people already have. Every claim here is about a
+         published behaviour of the other product, not a guess at one: where a
+         peer is better at something, the row says so. A comparison that only
+         wins is a comparison nobody believes. -->
+    <section class="versus">
+      <h2>How Blinded compares</h2>
+      <p class="sample-lede">Four tools that redact. The differences that
+        matter are where the file goes, and what a black bar actually does to
+        what is underneath it.</p>
+
+      <div class="versus-scroll">
+        <table class="versus-table">
+          <caption class="sr-only">Blinded compared with Adobe Acrobat Pro, Redactable and KeptPDF</caption>
+          <thead>
+            <tr>
+              <th scope="col"><span class="sr-only">What is being compared</span></th>
+              <th scope="col" class="us">Blinded</th>
+              <th scope="col">Acrobat Pro</th>
+              <th scope="col">Redactable</th>
+              <th scope="col">KeptPDF</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <th scope="row">Where the file goes</th>
+              <td class="us">This tab. Pull the cable; it still works.</td>
+              <td>Desktop is local. Acrobat on the web sends the file to Adobe.</td>
+              <td>AWS. That is the product.</td>
+              <td>On-device — then a suite login, and a footer unless you pay.</td>
+            </tr>
+            <tr>
+              <th scope="row">What “redact” means</th>
+              <td class="us">Pages rebuilt from pixels. No text, fonts or metadata left under the bar.</td>
+              <td>Permanent only after Apply <em>and</em> Sanitize. Until then it is a box over a live word.</td>
+              <td>Permanent on their servers; you download the copy.</td>
+              <td>Flatten and rasterise. Solid — one tile in a 26-tool workbench.</td>
+            </tr>
+            <tr>
+              <th scope="row">Logos, stamps, signatures</th>
+              <td class="us">Select once. Every copy, every size, every colour — in the artwork, not just the text.</td>
+              <td>Draw a rectangle. Again. And again.</td>
+              <td>Finds logos and signatures — after the deck has left the building.</td>
+              <td>Strong on text. Their own security page says a face or baked-in lettering still needs a human.</td>
+            </tr>
+            <tr>
+              <th scope="row">Words inside a screenshot</th>
+              <td class="us">Reads the page in-tab, plus a shape pass for type the reader misses. No model, no API.</td>
+              <td>Reads them. Will not hunt a logo, or match the mark you just boxed.</td>
+              <td>Reads them in the cloud, with the rest of the file.</td>
+              <td>Reads them on-device. No “this stamp, everywhere” picker.</td>
+            </tr>
+            <tr>
+              <th scope="row">Names and counterparties</th>
+              <td class="us">Type the word once; taken in the text and in the pictures.</td>
+              <td>Find. Hope you thought of every spelling.</td>
+              <td>Cloud name-matching. Convenient; the document is the price.</td>
+              <td>On-device names and ~45 kinds of detail. Broader list, weaker on visual marks.</td>
+            </tr>
+            <tr>
+              <th scope="row">Proof for a partner</th>
+              <td class="us">Read the source. A policy the browser enforces. Output that fails a text extract.</td>
+              <td>None for redaction. The audit trail is “trust the operator”.</td>
+              <td>A certificate — from the company that held your original.</td>
+              <td>A checksum receipt. Good, but it certifies an export, not a visual pass.</td>
+            </tr>
+            <tr>
+              <th scope="row">Cost</th>
+              <td class="us">Free, and no account.</td>
+              <td>A paid seat. The standard edition cannot redact at all.</td>
+              <td>A handful of free documents, then a monthly fee and a cap.</td>
+              <td>Free with their name on your file; a one-off fee to remove it.</td>
+            </tr>
+            <tr>
+              <th scope="row">Readable afterwards</th>
+              <td class="us">Optional <span class="ph">[P1]</span> labels and a key file you keep offline. Send the PDF, lock the key.</td>
+              <td>Black boxes. The sentence dies.</td>
+              <td>Tokens where offered; the mapping lives in their project.</td>
+              <td>Tokenise inside their toolset.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p class="versus-foot">Blinded is for the file that must not be
+        uploaded — a CIM, a board slide, a stamped contract, a diligence
+        screenshot. If your documents are allowed in a vendor cloud, the others
+        do more than this one does.</p>
     </section>
   </section>
 
@@ -531,7 +633,7 @@
 <div id="samplebox" class="busy" hidden>
   <div class="busy-inner sampleinner">
     <h2 class="namehead">A redacted slide</h2>
-    <div class="samplestage"><img id="samplebig" src="sample.svg" alt="" draggable="false"></div>
+    <div class="samplestage"><img id="samplebig" src="sample-slide.jpg" alt="" draggable="false"></div>
     <div class="namego">
       <button type="button" id="sampleclose" class="primary">Close</button>
     </div>
@@ -614,7 +716,7 @@
 <script src="lib/pdfwrite.js?v=4b977425"></script>
 <script src="lib/pdfread.js?v=ca229552"></script>
 <script src="lib/render.js?v=7bf6e0a9"></script>
-<script src="app.js?v=6d29a682"></script>
+<script src="app.js?v=ef9aaedb"></script>
 <script type="module" src="lib/boot.mjs?v=8b98ed8f"></script>
 </body>
 </html>

@@ -3,7 +3,7 @@
 // The browser-side modules are written as classic scripts attached to a global
 // so that they can be loaded here without a bundler, the same way the page
 // loads them. tools/uitest.mjs covers the parts that need a real canvas.
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync, statSync, readdirSync } from 'node:fs';
 import { deflateSync } from 'node:zlib';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -1448,38 +1448,49 @@ check('no creation date is carried into the output', !meta.info.CreationDate);
 
 // ---------- the sample slide ----------
 //
-// It sits on the front page to show what a finished redaction looks like,
-// which means it is a picture of a confidential document — so it had better
-// not contain one. Everything on it is invented, and the detectors this tool
-// ships are pointed at it here to say so: if a real-looking email, card
-// number, phone number or address ever found its way in, this fails.
+// It used to be a drawing, invented end to end, and the check here pointed
+// this tool's own detectors at it to prove there was nothing real on it. It is
+// a real page now — a scan of a board slide, after a pass through Blinded —
+// which makes it a stronger thing to show and a different thing to guard.
+//
+// What was verified before it was committed, with pdf.js against the source
+// PDF: zero characters of extractable text on the page. That is the claim the
+// picture is on the front page to make, and it is why a real document can be
+// shown at all. What can be held here is the rest: that the file is present,
+// that the page and the enlargement are the same one image, and that the
+// original never came along with it.
 {
-  const svg = readFileSync(new URL('../sample.svg', import.meta.url), 'utf8');
-  const words = svg.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+  const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const shot = new URL('../sample-slide.jpg', import.meta.url);
+  check('the sample slide is in the repository', existsSync(shot),
+    'sample-slide.jpg is missing');
 
-  const found = Detect.findAll(words, { kinds: Detect.KINDS.map(k => k.kind) });
-  check('the sample carries nothing the detectors would want to redact',
-    found.length === 0,
-    found.map(f => f.kind + ': ' + words.slice(f.start, f.end)).join(' | '));
+  if (existsSync(shot)) {
+    const bytes = statSync(shot).size;
+    // A front page that costs half a megabyte before anyone has done anything
+    // is a front page people leave.
+    check('and is small enough to sit on a front page', bytes < 340 * 1024,
+      Math.round(bytes / 1024) + 'KB');
+  }
 
-  // The point of the picture is the labels, not the bars: a bar alone says
-  // "something was here", and this tool's argument is that you can still read
-  // the sentence around it.
-  const labels = [...svg.matchAll(/\[[A-Z]+\d\]/g)].map(m => m[0]);
-  check('and it shows a redaction of more than one kind',
-    new Set(labels.map(l => l.replace(/\d/, ''))).size >= 4,
-    labels.join(' '));
-  check('with every bar labelled rather than left blank',
-    labels.length >= 6, labels.join(' '));
-  // Same thing, same name — which is what makes a placeholder worth reading.
-  check('and no two different things sharing a label',
-    labels.length === new Set(labels).size, labels.join(' '));
+  const shown = [...html.matchAll(/src="(sample[^"]*)"/g)].map(m => m[1]);
+  check('the page and its enlargement show the same picture',
+    shown.length >= 2 && new Set(shown).size === 1, shown.join(', '));
+  check('and it is the slide, not the drawing it replaced',
+    shown.every(name => name.startsWith('sample-slide.')), shown.join(', '));
 
-  // It is drawn, not photographed, so it stays sharp when it is enlarged and
-  // costs a few kilobytes rather than a few hundred.
-  check('the sample is a drawing rather than a photograph',
-    svg.trim().startsWith('<svg') && svg.length < 20000,
-    svg.length + ' bytes');
+  // A picture of a document says nothing to a reader who cannot see it.
+  const alt = html.match(/<img src="sample-slide[^>]*alt="([^"]*)"/);
+  check('the sample is described for a reader who cannot see it',
+    Boolean(alt) && alt[1].replace(/\s+/g, ' ').trim().length > 80,
+    alt ? alt[1].length + ' characters' : 'no alt text');
+
+  // The source was a real confidential deck. Only the redacted render belongs
+  // here, and a stray PDF at the root is how the other thing gets published.
+  const strays = readdirSync(new URL('../', import.meta.url))
+    .filter(name => /\.pdf$/i.test(name));
+  check('and no PDF was left behind beside it', strays.length === 0,
+    strays.join(', '));
 }
 
 // ---------- the mark ----------

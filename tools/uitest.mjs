@@ -6861,6 +6861,124 @@ try {
     await shot.close();
   }
 
+  // ---------- how it compares ----------
+  //
+  // Four columns of claims about other people's products, so the table has to
+  // stay honest as it is edited. Every peer column keeps a real answer in
+  // every row: a blank cell in a comparison reads as "cannot do it", which
+  // would be a claim nobody checked.
+  {
+    const versus = await page.evaluate(() => {
+      const table = document.querySelector('.versus-table');
+      if (!table) return null;
+      const head = [...table.querySelectorAll('thead th')].map(th => th.textContent.trim());
+      const rows = [...table.querySelectorAll('tbody tr')].map(tr => ({
+        label: (tr.querySelector('th') || {}).textContent || '',
+        cells: [...tr.querySelectorAll('td')].map(td => td.textContent.trim().length),
+        ours: [...tr.querySelectorAll('td')].filter(td => td.classList.contains('us')).length,
+      }));
+      return {
+        head, rows,
+        // It has to be able to overflow inside its own box rather than taking
+        // the whole page sideways with it.
+        scrolls: getComputedStyle(document.querySelector('.versus-scroll')).overflowX,
+        pageWide: document.documentElement.scrollWidth
+          - document.documentElement.clientWidth,
+      };
+    });
+    check('the front page compares Blinded with the tools people already have',
+      versus !== null && versus.head.includes('Blinded'),
+      JSON.stringify(versus && versus.head));
+    check('against three named peers', versus && versus.head.length === 5,
+      JSON.stringify(versus && versus.head));
+    check('every row answers for every one of them',
+      versus && versus.rows.length >= 6
+        && versus.rows.every(r => r.cells.length === 4 && r.cells.every(n => n > 0)),
+      JSON.stringify(versus && versus.rows.filter(r => r.cells.some(n => !n))));
+    check('and exactly one column in each row is ours',
+      versus && versus.rows.every(r => r.ours === 1),
+      JSON.stringify(versus && versus.rows.map(r => r.ours)));
+    check('the table scrolls inside its own box',
+      versus && versus.scrolls === 'auto', JSON.stringify(versus && versus.scrolls));
+    check('and does not push the page sideways',
+      versus && versus.pageWide <= 0, JSON.stringify(versus && versus.pageWide));
+  }
+
+  // ---------- the front page, read alongside an open document ----------
+  //
+  // The same page, minus the one thing it must not offer: somewhere to drop a
+  // file. An invitation to open a document, shown to someone who has one open,
+  // is an invitation to throw their work away.
+  {
+    if (!(await page.isVisible('#view-review'))) {
+      await page.setInputFiles('#file', fixturePath);
+      await page.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
+    }
+    const link = sel => page.evaluate(s2 => {
+      const node = document.querySelector(s2);
+      return node ? { hidden: node.hidden, says: node.textContent.trim() } : null;
+    }, sel);
+
+    const reviewing = {
+      home: await link('#home-top'), reset: await link('#reset-top'),
+      faq: await link('#faq-open'),
+    };
+    check('with a document open the header offers Home',
+      reviewing.home.hidden === false && reviewing.home.says === 'Home',
+      JSON.stringify(reviewing));
+    check('beside Reset and the questions',
+      reviewing.reset.hidden === false && reviewing.faq.says === 'Q&A',
+      JSON.stringify(reviewing));
+
+    await page.click('#home-top');
+    await page.waitForSelector('#view-drop:not([hidden])', { timeout: 15000 });
+    const home = {
+      drop: await page.isVisible('#drop'),
+      pages: await page.evaluate(() => window.Blinded.state.pages.length),
+      home: await link('#home-top'), reset: await link('#reset-top'),
+      faq: await link('#faq-open'),
+      // The page itself is still there to read.
+      versus: await page.isVisible('.versus'),
+    };
+    check('Home shows the front page without closing the document',
+      home.pages > 0 && home.versus === true, JSON.stringify(home));
+    check('and without a place to drop another one',
+      home.drop === false, JSON.stringify(home));
+    check('the only thing offered there is the way back',
+      home.faq.says === 'Back to the tool' && home.faq.hidden === false,
+      JSON.stringify(home));
+    check('with no Reset and no Home beside it',
+      home.reset.hidden === true && home.home.hidden === true,
+      JSON.stringify(home));
+
+    await page.click('#faq-open');
+    await page.waitForSelector('#view-review:not([hidden])', { timeout: 15000 });
+    check('and it goes back to the document',
+      (await page.isVisible('#view-review')) === true);
+
+    // The questions page answers the same way.
+    await page.click('#faq-open');
+    await page.waitForSelector('#view-faq:not([hidden])', { timeout: 15000 });
+    const asking = {
+      home: await link('#home-top'), reset: await link('#reset-top'),
+      faq: await link('#faq-open'),
+    };
+    check('the questions page offers only the way back too',
+      asking.faq.says === 'Back to the tool' && asking.reset.hidden === true
+        && asking.home.hidden === true, JSON.stringify(asking));
+    await page.click('#faq-open');
+    await page.waitForSelector('#view-review:not([hidden])', { timeout: 15000 });
+
+    // And with no document at all, the front page is the way in again.
+    await page.click('#reset-top');
+    await page.waitForSelector('#confirmbox:not([hidden])', { timeout: 15000 });
+    await page.click('#confirmyes');
+    await page.waitForSelector('#view-drop:not([hidden])', { timeout: 15000 });
+    const fresh = { drop: await page.isVisible('#drop'), faq: await link('#faq-open') };
+    check('with nothing open the drop zone is back',
+      fresh.drop === true && fresh.faq.says === 'Q&A', JSON.stringify(fresh));
+  }
+
   check('nothing threw in the page', consoleErrors.length === 0, consoleErrors.join(' | '));
 } finally {
   await browser.close();

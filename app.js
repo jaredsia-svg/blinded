@@ -271,22 +271,38 @@
   // puts them back.
   let viewBefore = 'drop';
 
+  // Whether there is a document open. It decides what the front page is: the
+  // way in when there is none, and something to read when there is one.
+  function hasDocument() {
+    return Boolean(state.pages.length || state.text);
+  }
+
   function show(name) {
     if (name !== 'faq') viewBefore = name;
     for (const key of Object.keys(views)) views[key].hidden = key !== name;
-    // The one button both opens and closes them, so it says which.
-    el('faq-open').textContent = name === 'faq' ? 'Back to the tool' : 'Q\u0026A';
+
+    // The front page, visited from an open document, is the same page with the
+    // drop zone taken out. Offering somewhere to drop a file to someone who
+    // has one open is offering to throw their work away, in the shape of an
+    // invitation.
+    const reading = name === 'drop' && hasDocument();
+    el('drop').hidden = reading;
+    if (reading) el('drop-error').hidden = true;
+
+    // Away from the tool — on the questions page or on the front page while a
+    // document waits — there is one thing worth offering, which is the way
+    // back. Reset and Home belong beside the document, not on the pages you
+    // read instead of it: Reset would offer to throw away work the reviewer is
+    // not even looking at, and Home is where they already are.
+    const away = name === 'faq' || reading;
+    el('faq-open').textContent = away ? 'Back to the tool' : 'Q\u0026A';
+    el('home-top').hidden = name !== 'review';
+    el('reset-top').hidden = name !== 'review';
     // Reviewing is a fixed-height layout: the header and the export bar stay
     // put and the panel and the document each scroll on their own. The front
     // page is an ordinary scrolling page, so the class comes and goes with the
     // view rather than living on the body for good.
     document.body.classList.toggle('reviewing', name === 'review');
-    // Starting over only means something once there is something to start
-    // over from, and the questions page is not that: leaving it puts the
-    // document back, so the button would be offering to throw away work the
-    // reviewer is not even looking at.
-    el('reset-top').hidden = !(name === 'review'
-      || (name === 'faq' && viewBefore === 'review'));
   }
 
   function fail(message) {
@@ -5364,9 +5380,15 @@
   // there is nothing to warn about.
   const closeFaq = () => show(viewBefore);
   el('faq-open').addEventListener('click', () => {
-    if (views.faq.hidden) show('faq'); else closeFaq();
+    // Three jobs, one button, and the label always says which one it is doing:
+    // open the questions, close them, or leave the front page for the document
+    // it was being read alongside.
+    if (!views.faq.hidden) closeFaq();
+    else if (views.drop.hidden === false && hasDocument()) show('review');
+    else show('faq');
   });
   el('faq-back-bottom').addEventListener('click', closeFaq);
+  el('home-top').addEventListener('click', () => show('drop'));
 
   el('page-prev').addEventListener('click', () => stepPage(-1));
   el('page-next').addEventListener('click', () => stepPage(1));
@@ -5424,7 +5446,7 @@
     saveDraft, draftData, restoreDraft, looksLikeDraft, fingerprint, takeDraft,
     occurrencesFor, placesFor, renderTermCounts, renderTemplates, goToPage,
     updateLivePages, fitCanvas, releaseCanvas, isLive, displayWidthFor, NEAR_PAGES,
-    setPane, placeToolbar, onPhone,
+    setPane, placeToolbar, onPhone, hasDocument,
     scrollerFor, setTool, marking,
     runSearch, applyRedaction: runSearch, coverMarks, uncoverMarks, applyButton,
     activeBoxes,
