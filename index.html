@@ -37,7 +37,7 @@
 <title>Blinded – Efficient redaction for your most sensitive documents, all done locally</title>
 <meta name="description" content="Redact PDFs, images and text in your browser. The file never leaves your machine.">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="app.css?v=0340b1be">
+<link rel="stylesheet" href="app.css?v=db39ecd9">
 </head>
 <body>
 
@@ -209,8 +209,16 @@
           <p class="tip" id="tip" hidden></p>
         </div>
 
+        <!-- Stands in for the four sections while the sheet has the panel.
+             Filled from their own headings in script, so renaming one does
+             not leave this saying something that is no longer true. -->
+        <button type="button" id="sectroll" class="sectroll" hidden
+          aria-controls="organisesect"></button>
+
         <details class="sect" open>
-          <summary><span class="s-title">Text</span><span class="s-note" id="term-note"></span></summary>
+          <summary><span class="s-title">Text</span><button type="button"
+              class="why" aria-label="What does this section do?"
+              data-tip="Type a name, a number or a word and every copy of it is covered — in the text, in the lettering of a screenshot, and inside a logo. Case does not matter, and the longest match wins, so &quot;Jane Doe&quot; beats &quot;Jane&quot;.">?</button><span class="s-note" id="term-note"></span></summary>
           <div class="s-body">
             <div class="termadd">
               <input type="text" id="termbox" autocomplete="off" spellcheck="false"
@@ -222,8 +230,6 @@
               </button>
             </div>
             <ul id="termcounts" class="termcounts"></ul>
-            <p class="hint termempty" id="termempty">Words you add are covered
-              wherever they appear — in the text and inside pictures alike.</p>
             <p class="hint warnhint" id="ocrnote" hidden></p>
             <div id="sweepbox" hidden>
               <button type="button" id="sweep" class="ghost wide">Comprehensive Check</button>
@@ -238,7 +244,9 @@
         </details>
 
         <details class="sect" id="imagesect" open>
-          <summary><span class="s-title">Images</span><span class="s-note" id="image-note"></span></summary>
+          <summary><span class="s-title">Images</span><button type="button"
+              class="why" aria-label="What does this section do?"
+              data-tip="Draw a box around a logo, a signature, a stamp or a face, and every other copy of it in the document is found and covered — at any size, and whatever colour it has been recast in. Use it for marks no search can reach.">?</button><span class="s-note" id="image-note"></span></summary>
           <div class="s-body">
             <button type="button" id="pick" class="pickrow">
               <span class="pickfield" id="picklabel">Select an image to redact</span>
@@ -289,18 +297,42 @@
               class="why" id="sheet-why" aria-label="How to organise pages"
               data-tip="Tap a page to select it. Shift-click to select a continuous series, and Ctrl-click to select multiple pages. Drag a page by its grip to move it. Undo if you make a mistake.">?</button><span class="s-note" id="organise-note"></span></summary>
           <div class="s-body">
-            <ol id="sheet" class="sheet"></ol>
-            <p class="hint" id="sheet-picked" hidden></p>
-            <div class="sheetbar">
-              <button type="button" id="page-left" class="ghost" disabled title="Shift the selected pages earlier">Shift back</button>
-              <button type="button" id="page-right" class="ghost" disabled title="Shift the selected pages later">Shift forward</button>
+            <!-- The same five actions the words used to spell out. As icons
+                 they fit one row instead of three, which is the difference
+                 between the thumbnails starting on screen and starting below
+                 it. Every one keeps its words for a screen reader and its
+                 title for a pointer, and a held icon says the same on a
+                 phone. -->
+            <div class="tools sheettools" role="group" aria-label="Organise pages">
+              <button type="button" id="page-left" class="tool" disabled title="Shift back">
+                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                  <path d="M19 12H5M11 6l-6 6 6 6"/>
+                </svg><span class="sr-only">Shift back</span>
+              </button>
+              <button type="button" id="page-right" class="tool" disabled title="Shift forward">
+                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                  <path d="M5 12h14M13 6l6 6-6 6"/>
+                </svg><span class="sr-only">Shift forward</span>
+              </button>
+              <button type="button" id="page-keep" class="tool" disabled title="Keep only these — throw away every page that is not selected">
+                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                  <path d="M3 5h18l-7 8v6l-4 2v-8z"/>
+                </svg><span class="sr-only">Keep only the selected pages</span>
+              </button>
+              <button type="button" id="page-drop" class="tool toolred" disabled title="Remove these — throw away the selected pages">
+                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                  <path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>
+                </svg><span class="sr-only">Remove the selected pages</span>
+              </button>
+              <button type="button" id="page-add" class="tool" title="Add another document…">
+                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                  <path d="M13 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-9M17 3v6M14 6h6"/>
+                </svg><span class="sr-only">Add another document</span>
+              </button>
             </div>
-            <div class="sheetbar">
-              <button type="button" id="page-keep" class="ghost" disabled title="Throw away every page that is not selected">Keep only these</button>
-              <button type="button" id="page-drop" class="ghost danger" disabled title="Throw away the selected pages">Remove these</button>
-            </div>
-            <button type="button" id="page-add" class="ghost wide">Add another document…</button>
             <input type="file" id="addfile" accept="application/pdf,image/png,image/jpeg,.pdf,.png,.jpg,.jpeg" hidden>
+            <p class="hint" id="sheet-picked" hidden></p>
+            <ol id="sheet" class="sheet"></ol>
           </div>
         </details>
 
@@ -575,7 +607,7 @@
 <script src="lib/pdfwrite.js?v=4b977425"></script>
 <script src="lib/pdfread.js?v=ca229552"></script>
 <script src="lib/render.js?v=7bf6e0a9"></script>
-<script src="app.js?v=f42c0be8"></script>
+<script src="app.js?v=69f291b9"></script>
 <script type="module" src="lib/boot.mjs?v=8b98ed8f"></script>
 </body>
 </html>

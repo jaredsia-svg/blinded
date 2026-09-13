@@ -503,7 +503,6 @@ button { font: inherit; cursor: pointer; border-radius: 8px; }
   width: 18px; height: 18px; fill: none; stroke: currentColor;
   stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;
 }
-.termempty { margin: 8px 0 0; font-size: 12.5px; color: var(--ink-soft); }
 
 /* The same shape as the box you type a word into, because it asks the same
    kind of question — name a thing to redact. A full-width slab of blue said
@@ -1229,3 +1228,48 @@ body.dragging-page .grip { cursor: grabbing; }
    rather than as a paragraph above the thumbnails taking room the sheet
    needs. Inside a <summary>, so it must not look like part of the title. */
 .sect > summary > .why { margin-left: 6px; }
+
+/* ---------- the Organise section holds the panel still ---------- */
+/*
+   Opening the sheet used to give a 320-pixel column two scrollbars, one
+   inside the other: the reviewer scrolls the outer one looking for more pages
+   and arrives at the foot of the panel instead. So while the sheet is open
+   the panel stops scrolling and the thumbnails take whatever height is spare,
+   which makes them the only thing that can need a scrollbar.
+
+   How much that is, is measured in script rather than declared here. The
+   obvious version — a flex column down through the panel — does not survive
+   contact with <details>: everything inside one that is not the <summary>
+   sits in an anonymous box of the browser's own, so `flex: 1` on the section
+   body never makes it a flex item of the section. Measured on a 14-page
+   document: the section was 404 pixels tall and its body 697, hanging out of
+   the bottom and taking the panel's scrollbar with it.
+*/
+@media (min-width: 901px) {
+  body.organising .panel { overflow: hidden; }
+}
+
+/* The five actions as a joined bar, like the one above the document. */
+.sheettools { margin-bottom: 10px; }
+.sheettools .tool { flex: 1; }
+.toolred { color: var(--danger); }
+.toolred:hover:not(:disabled) { background: #fdf2f1; color: var(--danger); }
+
+/* The four sections, standing as one line while the sheet has the panel.
+   Shaped like the headings it replaces, so it reads as a row of the panel
+   rather than as a control that has appeared in the middle of one. */
+.sectroll {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  padding: 11px 14px; font: inherit; font-size: 13px; font-weight: 600;
+  color: var(--ink-soft); text-align: left; cursor: pointer;
+  background: transparent; border: 0; border-bottom: 1px solid var(--line);
+  border-radius: 0;
+}
+.sectroll:hover { background: #f7f9fc; color: var(--ink); }
+/* The same chevron the headings carry, pointing the way it points on a shut
+   one — because that is what this is: four shut sections in a single row. */
+.sectroll::before {
+  content: ''; flex: none; width: 7px; height: 7px; margin-right: 1px;
+  border-right: 1.6px solid var(--ink-soft); border-bottom: 1.6px solid var(--ink-soft);
+  transform: rotate(-45deg);
+}

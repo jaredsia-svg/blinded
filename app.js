@@ -634,6 +634,68 @@
       wireSheetPage(item, page, button, grip);
     }
     refreshSheetBar();
+    fitSheet();
+  }
+
+  // The four other sections, rolled into one line while the sheet is open.
+  //
+  // Shutting them was already the rule; this takes the four headings they
+  // leave behind and makes them one, which is four rows of the panel handed
+  // to the thumbnails. The line says what it is standing in for, so nothing
+  // has gone missing — it is a door back, and it says so by naming what is
+  // behind it. Clicking it shuts the sheet, which brings all five back.
+  function rollSections(rolled) {
+    const roll = el('sectroll');
+    if (!roll) return;
+    const others = [...document.querySelectorAll('details.sect')]
+      .filter(sect => sect !== el('organisesect'));
+    // Read off the headings themselves rather than written out here, so that
+    // renaming a section cannot leave this line describing the old panel.
+    const names = others
+      .map(sect => (sect.querySelector('.s-title') || {}).textContent || '')
+      .filter(Boolean);
+    roll.textContent = names.join(', ');
+    roll.hidden = !rolled;
+    roll.setAttribute('aria-expanded', rolled ? 'false' : 'true');
+    roll.title = rolled ? 'Show ' + names.join(', ') + ' again' : '';
+    for (const sect of others) sect.hidden = rolled;
+  }
+
+  // How tall the thumbnails may be: everything the panel has left below them.
+  //
+  // Measured rather than declared, because the CSS that would say this cannot
+  // reach through a <details> — see the note in the stylesheet. The sheet is
+  // the last thing in the panel, so where it starts does not depend on how
+  // tall it is, and there is no loop to settle.
+  function fitSheet() {
+    const sheet = el('sheet');
+    const panel = document.querySelector('.panel');
+    if (!sheet || !panel) return;
+    // On a phone the panel is the whole page and the page's own scroll is the
+    // right one to use; capping the sheet there would put a small scrolling
+    // box inside a screen that already scrolls.
+    if (!el('organisesect').open || onPhone()) {
+      sheet.style.maxHeight = '';
+      return;
+    }
+    // A floor, so a short window leaves a sheet that can still be worked in
+    // rather than a two-row slot; below that the panel scrolls again, which is
+    // the lesser of the two problems.
+    const FLOOR = 150;
+    const room = panel.getBoundingClientRect();
+    const from = sheet.getBoundingClientRect().top;
+    let space = Math.max(FLOOR, room.bottom - from - 14);
+    sheet.style.maxHeight = Math.round(space) + 'px';
+
+    // Then check, rather than trust the arithmetic. Padding, borders and the
+    // rounding of a sub-pixel layout each cost a little, and a panel left over
+    // by two pixels has a scrollbar just as surely as one left over by fifty —
+    // which is the whole thing this was meant to prevent. Measured: the first
+    // pass came out a few pixels long every time.
+    const over = panel.scrollHeight - panel.clientHeight;
+    if (over > 0 && space - over >= FLOOR) {
+      sheet.style.maxHeight = Math.round(space - over) + 'px';
+    }
   }
 
   function refreshSheetBar() {
@@ -3633,8 +3695,6 @@
   function renderTermCounts() {
     const host = el('termcounts');
     host.textContent = '';
-    const empty = el('termempty');
-    if (empty) empty.hidden = state.terms.length > 0;
     if (!state.terms.length) return;
 
     for (const term of state.terms) {
@@ -4639,20 +4699,47 @@
   // the other side.
   for (const section of document.querySelectorAll('details.sect')) {
     section.addEventListener('toggle', () => {
-      if (!section.open) return;
       const sheet = el('organisesect');
-      // Closing a section fires this again with open false, which returns
-      // above, so there is no loop to break out of.
+
+      // The sheet's own toggle owns the panel's shape, in both directions.
+      //
+      // It used to be answered only when a section opened, which meant
+      // shutting the sheet from the rolled-up line left the four sections
+      // hidden and the line standing: the one way back out of that state did
+      // not take. Closing is as much of an event as opening.
       if (section === sheet) {
-        for (const other of document.querySelectorAll('details.sect')) {
-          if (other !== sheet) other.open = false;
+        if (sheet.open) {
+          for (const other of document.querySelectorAll('details.sect')) {
+            if (other !== sheet) other.open = false;
+          }
+          sheet.scrollIntoView({ block: 'nearest' });
         }
-        sheet.scrollIntoView({ block: 'nearest' });
-      } else if (sheet.open) {
-        sheet.open = false;
+        // The panel stops scrolling and hands its spare height to the
+        // thumbnails, so they are the only thing with a scrollbar. Two nested
+        // scrollbars in a 320-pixel column is a maze: the reviewer scrolls the
+        // outer one looking for pages and finds the foot of the panel.
+        document.body.classList.toggle('organising', sheet.open);
+        rollSections(sheet.open);
+        // After, not before: four headings have just left the panel or come
+        // back to it, and where the sheet starts has moved with them.
+        fitSheet();
+        return;
       }
+
+      // Any other section opening shuts the sheet, which comes back through
+      // here as the sheet's own toggle and puts the panel right.
+      if (section.open && sheet.open) sheet.open = false;
     });
   }
+
+  el('sectroll').addEventListener('click', () => {
+    // Not "open the four" — shut the one. Opening a section here would pick a
+    // winner among four the reviewer has not chosen between, and shutting the
+    // sheet is what puts the panel back exactly as they left it.
+    el('organisesect').open = false;
+  });
+
+  window.addEventListener('resize', fitSheet);
 
   el('page-left').addEventListener('click', () => nudge(-1));
   el('page-right').addEventListener('click', () => nudge(1));
@@ -5205,7 +5292,7 @@
     runSearch, applyRedaction: runSearch, coverMarks, uncoverMarks, applyButton,
     activeBoxes,
     renderSheet, setOrder, moveTo, nudge, keepOnlyPicked, dropPicked,
-    edgeScroll, stopEdgeScroll, CREEP_EDGE,
+    edgeScroll, stopEdgeScroll, CREEP_EDGE, fitSheet, rollSections,
     addDocument, pickedInOrder, selectPage, thumbFor, organiseStamp,
     markPending, needsSearch, markDuplicates, onePerPlace, plannedCount,
     pendingTemplates,

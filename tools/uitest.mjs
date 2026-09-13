@@ -728,13 +728,15 @@ try {
   // last controls could only be reached by scrolling sideways, which is how
   // this was reported. Sizes are asserted rather than eyeballed.
   const bar = await page.evaluate(() => {
-    const tools = document.querySelector('.tools').getBoundingClientRect();
+    // Scoped to the head: the Organise section has a joined icon bar of its
+    // own now, and a bare .tools query counts both.
+    const tools = document.querySelector('.panel-head .tools').getBoundingClientRect();
     const panel = document.querySelector('.panel').getBoundingClientRect();
     const ids = ['tool-pan', 'tool-mark', 'zoom-out', 'zoom-in', 'undo',
                  'savedraft'];
     const buttons = ids.map(id => document.getElementById(id));
     return {
-      count: document.querySelectorAll('.tools .tool').length,
+      count: document.querySelectorAll('.panel-head .tools .tool').length,
       fits: tools.right <= panel.right + 0.5 && tools.left >= panel.left - 0.5,
       pageOverflow: document.documentElement.scrollWidth
         - document.documentElement.clientWidth,
@@ -4001,6 +4003,106 @@ try {
     check('and takes its copy with it',
       cancelled.ghost === 0, JSON.stringify(cancelled));
 
+    // An earlier check opened another section, which closes the sheet — so it
+    // is opened again here rather than assumed still open.
+    await page.evaluate(async () => {
+      document.getElementById('organisesect').open = true;
+      await new Promise(r => setTimeout(r, 80));
+    });
+
+    // The five actions are a joined icon bar at the top now, not three rows of
+    // words below the thumbnails.
+    const bar = await page.evaluate(() => {
+      const tools = document.querySelector('#organisesect .sheettools');
+      const body = document.querySelector('#organisesect > .s-body');
+      const sheet = document.getElementById('sheet');
+      return {
+        icons: tools ? tools.querySelectorAll('button').length : 0,
+        // Above the thumbnails, which is the point of shrinking them.
+        first: body.firstElementChild === tools,
+        aboveSheet: tools && sheet
+          ? tools.getBoundingClientRect().top < sheet.getBoundingClientRect().top : false,
+        // Still says what it is, for a pointer and for a screen reader.
+        titled: tools ? [...tools.querySelectorAll('button')].every(b => b.title) : false,
+        named: tools ? [...tools.querySelectorAll('button')].every(b =>
+          b.querySelector('.sr-only')) : false,
+      };
+    });
+    check('the five actions are one icon bar', bar.icons === 5, JSON.stringify(bar));
+    check('sitting above the thumbnails',
+      bar.first === true && bar.aboveSheet === true, JSON.stringify(bar));
+    check('and every icon still says what it does',
+      bar.titled === true && bar.named === true, JSON.stringify(bar));
+
+    // One scrollbar, not two. A 320-pixel column with a scrolling panel around
+    // a scrolling sheet is a maze: the reviewer scrolls the outer one looking
+    // for pages and arrives at the foot of the panel.
+    const scrolling = await page.evaluate(async () => {
+      await new Promise(r => setTimeout(r, 80));
+      const panel = document.querySelector('.panel');
+      const sheet = document.getElementById('sheet');
+      const wide = window.innerWidth > 900;
+      return {
+        wide,
+        organising: document.body.classList.contains('organising'),
+        panelScrolls: panel.scrollHeight > panel.clientHeight + 2,
+        sheetScrolls: sheet.scrollHeight > sheet.clientHeight + 2,
+        pages: window.Blinded.state.pages.length,
+      };
+    });
+    // And the four sections it is not are one line, which is four rows of the
+    // panel handed to the thumbnails. It says what it stands for, so nothing
+    // has gone missing: it is a door back, named after what is behind it.
+    const rolled = await page.evaluate(() => {
+      const roll = document.getElementById('sectroll');
+      const others = [...document.querySelectorAll('details.sect')]
+        .filter(d => d.id !== 'organisesect');
+      return {
+        shown: roll.hidden === false,
+        says: roll.textContent,
+        hidden: others.filter(d => d.hidden).length,
+        of: others.length,
+      };
+    });
+    check('the other sections roll into one line', rolled.shown === true
+      && rolled.hidden === rolled.of, JSON.stringify(rolled));
+    check('and that line names every one of them',
+      ['Text', 'Images', 'Detectors', 'Placeholders']
+        .every(name => rolled.says.includes(name)), JSON.stringify(rolled));
+
+    const unrolled = await page.evaluate(async () => {
+      document.getElementById('sectroll').click();
+      await new Promise(r => setTimeout(r, 80));
+      const others = [...document.querySelectorAll('details.sect')]
+        .filter(d => d.id !== 'organisesect');
+      return {
+        roll: document.getElementById('sectroll').hidden,
+        back: others.filter(d => !d.hidden).length,
+        of: others.length,
+        sheet: document.getElementById('organisesect').open,
+        sheetShown: document.getElementById('organisesect').hidden === false,
+      };
+    });
+    check('clicking it brings all five sections back',
+      unrolled.back === unrolled.of && unrolled.sheetShown === true,
+      JSON.stringify(unrolled));
+    check('with the sheet shut again and the line gone',
+      unrolled.sheet === false && unrolled.roll === true, JSON.stringify(unrolled));
+
+    await page.evaluate(async () => {
+      document.getElementById('organisesect').open = true;
+      await new Promise(r => setTimeout(r, 80));
+    });
+
+    if (scrolling.wide) {
+      check('opening the sheet marks the panel as holding still',
+        scrolling.organising === true, JSON.stringify(scrolling));
+      check('the panel itself does not scroll',
+        scrolling.panelScrolls === false, JSON.stringify(scrolling));
+      check('and the thumbnails do, because there are more than fit',
+        scrolling.sheetScrolls === true, JSON.stringify(scrolling));
+    }
+
     // Selecting a page in the sheet takes the document to it. Two views of one
     // thing: pointing at a page in one should be looking at it in the other.
     const followed = await page.evaluate(async () => {
@@ -5608,15 +5710,16 @@ try {
   // they read as decoration that does nothing. What matters is that the text
   // actually becomes visible, so that is what is asserted, not that a handler
   // is attached.
-  // Three. The sensitivity bar, the placeholder switch, and how to organise
-  // pages — that last one is a hint in the Organise heading now rather than a
-  // paragraph above the thumbnails, which was taking the room the sheet needs.
+  // Five. The sensitivity bar and the placeholder switch, plus one on each of
+  // the three section headings saying what that section is for. Those three
+  // were standing paragraphs, which cost room every time the section was open
+  // and said the same thing to someone reading it for the hundredth time.
   //
   // Two others went earlier: "find these words as pictures", which the tool
   // always does now, and "include lower-confidence matches", whose detectors
   // were tightened until they could stand without it.
   const whyCount = await page.evaluate(() => document.querySelectorAll('.why').length);
-  check('the panel still has its hints', whyCount === 3, String(whyCount));
+  check('the panel still has its hints', whyCount === 5, String(whyCount));
   check('every hint carries text to show',
     await page.evaluate(() => [...document.querySelectorAll('.why')]
       .every(b => (b.getAttribute('data-tip') || '').length > 20)));
@@ -5744,7 +5847,7 @@ try {
         peekEdit: seen('#peek-edit'), peekDoc: seen('#peek-doc'),
         bar: seen('.exportbar'), search: seen('#apply'),
         tools: seen('.tools'),
-        toolCount: document.querySelectorAll('.tools .tool').length,
+        toolCount: document.querySelectorAll('.panel-head .tools .tool').length,
         headOutside: head ? !head.closest('.panel') : null,
         pane: document.body.dataset.pane,
         pageScrolls: document.documentElement.scrollHeight
