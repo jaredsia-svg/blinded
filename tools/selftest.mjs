@@ -673,12 +673,15 @@ check('the scale ladder reaches well below half size', Match.SCALES[0] <= 0.3,
   String(Match.SCALES[0]));
 check('and well above double size',
   Match.SCALES[Match.SCALES.length - 1] >= 3, String(Match.SCALES[Match.SCALES.length - 1]));
-check('the ladder is geometric, so its steps stay proportional', (() => {
+// Geometric, but at two rates: close together where the copies are, wider out
+// on the tails where finding a thing at all beats scoring it precisely. Every
+// step is still proportional — a fixed step that suits 0.3x is far too coarse
+// at 3x — and none of them is wide enough for refinement, which probes ±12%,
+// to be unable to bridge.
+check('every step is proportional, and none too coarse for refinement', (() => {
   const ratios = Match.SCALES.slice(1).map((s, i) => s / Match.SCALES[i]);
-  return ratios.every(r => Math.abs(r - ratios[0]) < 0.02);
+  return ratios.every(r => r > 1.02 && r < 1.3);
 })(), JSON.stringify(Match.SCALES));
-check('no step is coarse enough for refinement to miss',
-  Match.SCALES[1] / Match.SCALES[0] < 1.3);
 check('the coarse pass is more permissive than the reported threshold',
   Match.COARSE_THRESHOLD < Match.THRESHOLD);
 check('the fine pass scores at a higher resolution than the coarse pass',
@@ -1650,6 +1653,40 @@ check('no creation date is carried into the output', !meta.info.CreationDate);
     check('nothing at the top of app.js is declared twice',
       twice.length === 0, 'declared more than once: ' + twice.join(', '));
   }
+}
+
+// ---------- the scale ladder ----------
+//
+// Measured on a real deck: the same lockup on two pages at 142x24 and 163x27,
+// a scale of 1.12 that fell between the old rungs at 1.0 and 1.25. The
+// nominating pass scored the true position 0.29 and 0.35 there, under the 0.4
+// it takes to be proposed at all, so the copy was never offered for
+// refinement and the search reported one match where there were two. These
+// guard the shape of the ladder rather than the matcher's arithmetic, which
+// is what broke.
+{
+  const scales = Match.SCALES;
+  check('the ladder is built outwards from exactly 1', scales.includes(1));
+  check('and rises', scales.every((s, i) => i === 0 || s > scales[i - 1]));
+  check('reaching a fifth of the picked size and four times it',
+    scales[0] <= 0.25 && scales[scales.length - 1] >= 3.8,
+    scales[0] + ' to ' + scales[scales.length - 1]);
+
+  // Where the copies are: same-size, or one step of a designer's hand away.
+  // A step of s misplaces the far end of the template by s of its width, so a
+  // wide wordmark is punished hardest — and a wordmark is the commonest logo
+  // there is.
+  const inBand = scales.filter(s => s >= 0.7 && s <= 1.6);
+  const steps = inBand.slice(1).map((s, i) => s / inBand[i]);
+  check('with rungs close together around it',
+    steps.every(step => step <= 1.09), JSON.stringify(steps.map(s => s.toFixed(3))));
+  check('and eight or more of them', inBand.length >= 8, String(inBand.length));
+
+  // Out on the tails the old spacing stands: a logo at a fifth or triple the
+  // size it was picked at is rare, and finding it at all matters more than
+  // scoring it precisely. Without this the ladder would grow without limit.
+  check('but not out on the tails, which would cost without buying anything',
+    scales.length <= 26, String(scales.length));
 }
 
 // ---------- how the canonical copy is served ----------
