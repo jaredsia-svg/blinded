@@ -1924,7 +1924,7 @@
     for (const page of state.pages) {
       page.imageHits = page.imageHits.filter(m => !m.detector);
       if (!page.ocrText || !page.ocrPlaced) continue;
-      const found = Detect.findAll(page.ocrText, { kinds: acceptedKinds() });
+      const found = Detect.findAll(page.ocrText, { kinds: acceptedKinds(), fromOcr: true });
       // What the text layer already gave up, so that reading the page again
       // does not report it a second time.
       //

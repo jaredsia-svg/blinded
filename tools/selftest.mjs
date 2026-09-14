@@ -226,7 +226,7 @@ check('while a typed term still covers one for anyone who wants it',
 // The detector never looks at the name itself, which is the whole point: it
 // reads the anchor beside it. So these check the three layouts a name appears
 // in, and then check the things that look like names and are not.
-const who = text => textsOf(text, 'person');
+const who = (text, options) => textsOf(text, 'person', options);
 
 check('a name over a job title is found',
   who('Jane Doe\nChief Executive Officer').includes('Jane Doe'),
@@ -283,6 +283,29 @@ check('and a job title on its own is not the person holding it',
 check('a name with no anchor anywhere near it is not proposed',
   who('Jane Doe\nNothing else on this line at all').length === 0,
   JSON.stringify(who('Jane Doe\nNothing else on this line at all')));
+
+// Brand names on a logo collage. OCR reads the lettering; without these
+// guards the person detector treats "Yum China" over a junk title line as a
+// contact block. fromOcr is what detectOcr passes.
+check('a brand ending in China is not a person',
+  who('Yum China\nFounder & Chairman').length === 0,
+  JSON.stringify(who('Yum China\nFounder & Chairman')));
+check('Love Bonito over a short Advisor line is not a person from OCR',
+  who('Love Bonito\nAdvisor since', { fromOcr: true }).length === 0,
+  JSON.stringify(who('Love Bonito\nAdvisor since', { fromOcr: true })));
+check('a long OCR junk line containing Director is not a title anchor',
+  who('Mead Johnson\nAccutar Biotech Tillasesece Director Avistone Oasis', { fromOcr: true }).length === 0,
+  JSON.stringify(who('Mead Johnson\nAccutar Biotech Tillasesece Director Avistone Oasis', { fromOcr: true })));
+// OCR of a real contact block must still work: short title under the name.
+check('OCR still finds a name over a short job title',
+  who('Jane Doe\nChief Executive Officer', { fromOcr: true }).includes('Jane Doe'),
+  JSON.stringify(who('Jane Doe\nChief Executive Officer', { fromOcr: true })));
+check('and OCR still finds a name over a contact line',
+  who('Jane Doe\nT: +84 28 3821 9930', { fromOcr: true }).includes('Jane Doe'),
+  JSON.stringify(who('Jane Doe\nT: +84 28 3821 9930', { fromOcr: true })));
+check('OCR still finds a name over a weak title when a phone follows',
+  who('Jane Doe\nAssociate\nT: +84 28 3821 9930', { fromOcr: true }).includes('Jane Doe'),
+  JSON.stringify(who('Jane Doe\nAssociate\nT: +84 28 3821 9930', { fromOcr: true })));
 
 // The whole contact slide, which is what this was built for.
 {
