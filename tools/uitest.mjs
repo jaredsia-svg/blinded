@@ -557,6 +557,32 @@ try {
     check('the export stays shut until it is redacted',
       found.exportOff === true, JSON.stringify(found));
 
+    // After a search has read the pages, ticking detectors is answered from
+    // what is already in hand — not another red ? waiting on Search.
+    const afterAll = await page.evaluate(async () => {
+      const box = document.getElementById('kinds-all');
+      box.checked = true;
+      box.dispatchEvent(new Event('change', { bubbles: true }));
+      await new Promise(r => setTimeout(r, 80));
+      const unknowns = [...document.querySelectorAll('.kind .n.unknown')]
+        .map(n => n.textContent.trim());
+      const greens = [...document.querySelectorAll('.kind .n.dot-green')]
+        .filter(n => n.textContent.trim() !== '');
+      return {
+        unknowns,
+        greenCount: greens.length,
+        unknownKinds: window.Blinded.unknownKinds(),
+        counted: window.Blinded.state.countedKinds.slice(),
+        ocrRead: window.Blinded.state.ocrRead,
+      };
+    });
+    check('ticking all detectors after a search does not leave red ? tallies',
+      afterAll.unknowns.length === 0 && afterAll.unknownKinds === 0,
+      JSON.stringify(afterAll));
+    check('and shows green match counts instead',
+      afterAll.greenCount > 0 && afterAll.counted.length > 0,
+      JSON.stringify(afterAll));
+
     await page.click('#apply');
     const covered = await state();
     check('redacting covers them', covered.applied === true, JSON.stringify(covered));
