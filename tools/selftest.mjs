@@ -22,7 +22,7 @@ const check = (label, ok, detail) => {
 };
 
 for (const file of ['schedule.js', 'detect.js', 'boxes.js', 'pdfwrite.js', 'match.js',
-  'textimage.js', 'imagesearch.js', 'labels.js', 'ocr.js']) {
+  'textimage.js', 'pageprep.js', 'imagesearch.js', 'labels.js', 'ocr.js']) {
   runInThisContext(readFileSync(join(root, 'lib', file), 'utf8'), { filename: file });
 }
 const Detect = globalThis.BlindedDetect;
@@ -34,6 +34,7 @@ const Labels = globalThis.BlindedLabels;
 const TextImage = globalThis.BlindedTextImage;
 const Ocr = globalThis.BlindedOcr;
 const Schedule = globalThis.BlindedSchedule;
+const PagePrep = globalThis.BlindedPagePrep;
 
 // ---------- detectors ----------
 
@@ -881,6 +882,67 @@ check('leading and trailing space does not make a word a phrase',
   TextImage.shapeRelief('  proprietary  ') === TextImage.shapeRelief('proprietary'));
 check('an empty term is harmless', TextImage.shapeRelief('') === 0
   && TextImage.shapeRelief(null) === 0);
+
+// Page preparation: working-res cap, text regions, pyramid, OCR prep.
+(() => {
+  check('pageprep is loaded', !!PagePrep && typeof PagePrep.workSize === 'function');
+
+  const big = PagePrep.workSize(4032, 3024);
+  check('a 12MP page is capped on its long edge',
+    big.width === 1800 && big.height === Math.round(3024 * (1800 / 4032)),
+    big.width + 'x' + big.height);
+  check('and reports the scale used', Math.abs(big.scale - 1800 / 4032) < 1e-9);
+
+  const small = PagePrep.workSize(800, 600);
+  check('a modest page is left alone',
+    small.width === 800 && small.height === 600 && small.scale === 1);
+
+  // A page with a dark text block on white and a flat map-like area.
+  const w = 256, h = 256;
+  const gray = new Float32Array(w * h);
+  gray.fill(240);
+  for (let y = 40; y < 100; y++) {
+    for (let x = 20; x < 200; x++) {
+      // Vertical strokes so local variance is high.
+      gray[y * w + x] = (x % 3 === 0) ? 20 : 240;
+    }
+  }
+  const regions = PagePrep.textRegions(gray, w, h);
+  check('textRegions finds the ink block', regions.length >= 1,
+    'regions=' + regions.length);
+  if (regions.length) {
+    const r = regions[0];
+    check('and the region covers the stroke area',
+      r.x <= 20 && r.y <= 40 && r.x + r.w >= 200 && r.y + r.h >= 100,
+      JSON.stringify(r));
+  }
+
+  const masked = PagePrep.maskGray(gray, w, h, regions);
+  check('maskGray keeps the ink and fills the rest with a mean',
+    masked.length === gray.length
+      && Math.abs(masked[40 * w + 20] - gray[40 * w + 20]) < 1e-6
+      && Math.abs(masked[200 * w + 200] - gray[200 * w + 200]) > 1);
+
+  const assets = PagePrep.pageAssets(gray, w, h);
+  check('pageAssets builds a pyramid', assets.pyramid.length >= 2);
+  check('and caches on the same grey buffer',
+    PagePrep.pageAssets(gray, w, h) === assets);
+  check('smallText is allowed on a modest page', assets.allowSmallText === true);
+
+  const huge = new Float32Array(2000 * 1500);
+  huge.fill(128);
+  const hugeAssets = PagePrep.pageAssets(huge, 2000, 1500);
+  check('a long-edge over the smallText cap disables the 1.5x pass',
+    hugeAssets.allowSmallText === false);
+  check('and the working grey is capped',
+    Math.max(hugeAssets.work.width, hugeAssets.work.height) === PagePrep.WORK_LONG_EDGE,
+    hugeAssets.work.width + 'x' + hugeAssets.work.height);
+
+  const level = PagePrep.pyramidLevel(assets.pyramid, Math.round(assets.work.width / 2));
+  check('pyramidLevel picks a level near the target width',
+    Math.abs(level.width - assets.work.width / 2) <= assets.work.width / 4,
+    level.width + ' vs ' + (assets.work.width / 2));
+})();
 
 // The resampled copy a small-lettering sweep works on is shared between every
 // template in the sweep, or four typefaces for each of several words would
