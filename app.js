@@ -329,10 +329,6 @@
     leg(key, done);
   }
 
-  // Which view the reviewer was on before opening the answers, so closing them
-  // puts them back.
-  let viewBefore = 'drop';
-
   // Whether there is a document open. It decides what the front page is: the
   // way in when there is none, and something to read when there is one.
   function hasDocument() {
@@ -340,7 +336,6 @@
   }
 
   function show(name) {
-    if (name !== 'faq') viewBefore = name;
     for (const key of Object.keys(views)) views[key].hidden = key !== name;
 
     // The front page, visited from an open document, is the same page with the
@@ -2590,6 +2585,14 @@
     const section = el('kindsect');
     if (section) section.hidden = rows.length === 0 || state.kind === 'text';
 
+    // One switch for all of them, above the list.
+    //
+    // Five taps to ask for everything is four too many, and "look for the lot
+    // and let me untick the noise" is how most reviewers work a document they
+    // do not know yet. Half-ticked when only some are on, so the row reports
+    // the state of the list as well as setting it.
+    if (rows.length) host.append(allKindsRow(rows));
+
     for (const row of rows) {
       const n = tally[row.kind] || 0;
       const label = document.createElement('label');
@@ -2692,6 +2695,38 @@
   // they scroll away, but the pages themselves cannot be: measured, a sixty
   // page document sits at 456 MB. Past a few hundred pages a tab will die, and
   // dying halfway through a review is worse than being told first.
+  function allKindsRow(rows) {
+    const label = document.createElement('label');
+    label.className = 'kindall';
+    const box = document.createElement('input');
+    box.type = 'checkbox';
+    box.id = 'kinds-all';
+    const on = rows.filter(row => state.enabled.has(row.kind)).length;
+    box.checked = on === rows.length;
+    // Neither on nor off, because the list is neither.
+    box.indeterminate = on > 0 && on < rows.length;
+    box.addEventListener('change', () => {
+      for (const row of rows) {
+        if (box.checked) state.enabled.add(row.kind);
+        else state.enabled.delete(row.kind);
+      }
+      detectOcr();
+      rescan({ settled: true });
+      renderKinds();
+      refreshApply();
+    });
+    const name = document.createElement('span');
+    name.className = 'name';
+    // The same words whatever state it is in. A label that changes to name
+    // the action — "None of them" once everything is on — reads as a report
+    // about the list, and the reviewer has to work out which of the two it is
+    // doing before they dare press it.
+    name.textContent = 'All of them';
+    label.title = 'Tick every detector, or clear them all';
+    label.append(box, name);
+    return label;
+  }
+
   const MANY_PAGES = 250;
 
   async function warnIfHuge(pages) {
@@ -6532,15 +6567,33 @@
   // to whatever they were looking at before.
   let pushed = 0;
 
+  // One entry, however many pages are read while away.
+  //
+  // It used to push one per visit, and the pages link to each other: open the
+  // front page from a document, then the questions from the foot of it, and
+  // there were two. Back to the tool then went back one — to the front page,
+  // where the button still says Back to the tool — so the first press looked
+  // like a button that did nothing, and it took two to reach the document
+  // that was open all along.
+  //
+  // Away is one place. Going somewhere else while away replaces the entry
+  // rather than stacking on it, so the way back is always a single step and
+  // the browser's own Back agrees with the button.
   function goAway(name) {
     show(name);
-    pushed += 1;
+    if (pushed > 0) {
+      history.replaceState({ view: name }, '');
+      return;
+    }
+    pushed = 1;
     history.pushState({ view: name }, '');
   }
 
   function comeBack() {
     if (pushed > 0) history.back();
-    else show(viewBefore === 'faq' ? 'drop' : viewBefore);
+    // Nothing of ours on the stack: put the reviewer where the tool is,
+    // rather than wherever the browser would have gone.
+    else show(hasDocument() ? 'review' : 'drop');
   }
 
   window.addEventListener('popstate', event => {

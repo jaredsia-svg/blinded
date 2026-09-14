@@ -7908,6 +7908,56 @@ try {
     });
 
     await noDetectors(page);
+
+    // One switch for all of them, above the list. Five taps to ask for
+    // everything is four too many.
+    const all = await page.evaluate(async () => {
+      const row = document.querySelector('#kinds .kindall');
+      const box = row && row.querySelector('input');
+      if (!box) return { missing: true };
+      const first = document.querySelector('#kinds .kindall + .kind');
+      box.checked = true;
+      box.dispatchEvent(new Event('change', { bubbles: true }));
+      await new Promise(r => setTimeout(r, 80));
+      const on = {
+        ticked: [...document.querySelectorAll('#kinds .kind input')]
+          .every(b => b.checked),
+        enabled: window.Blinded.state.enabled.size,
+        red: document.getElementById('apply').classList.contains('hunt'),
+        above: Boolean(first),
+      };
+      const again = document.querySelector('#kinds .kindall input');
+      again.checked = false;
+      again.dispatchEvent(new Event('change', { bubbles: true }));
+      await new Promise(r => setTimeout(r, 80));
+      const off = {
+        ticked: [...document.querySelectorAll('#kinds .kind input')]
+          .some(b => b.checked),
+        red: document.getElementById('apply').classList.contains('hunt'),
+      };
+      // Half on, half off: the switch says so rather than picking a side.
+      const one = document.querySelector('#kinds .kind input');
+      one.checked = true;
+      one.dispatchEvent(new Event('change', { bubbles: true }));
+      await new Promise(r => setTimeout(r, 80));
+      const middle = document.querySelector('#kinds .kindall input');
+      const partly = { mixed: middle.indeterminate, checked: middle.checked };
+      one.checked = false;
+      one.dispatchEvent(new Event('change', { bubbles: true }));
+      await new Promise(r => setTimeout(r, 80));
+      return { missing: false, on, off, partly };
+    });
+    check('the detectors have one switch for all of them, above the list',
+      all.missing === false && all.on.above === true, JSON.stringify(all));
+    check('which ticks every one of them, and asks the search for them',
+      all.on.ticked === true && all.on.red === true, JSON.stringify(all));
+    check('and clears them again', all.off.ticked === false
+      && all.off.red === false, JSON.stringify(all));
+    check('standing half-ticked while only some are on',
+      all.partly.mixed === true && all.partly.checked === false,
+      JSON.stringify(all));
+
+    await noDetectors(page);
     const quiet = await page.evaluate(() => ({
       rows: [...document.querySelectorAll('#kinds .kind')].map(r => ({
         ticked: r.querySelector('input').checked,
@@ -8106,11 +8156,30 @@ try {
     await page.waitForSelector('#view-faq:not([hidden])', { timeout: 15000 });
     check('the FAQ link opens the questions',
       (await page.isVisible('#view-faq')) === true);
+
+    // The reported bug, which is two pages deep: a document open, Home to the
+    // front page, the FAQ from the foot of it — and then Back to the tool did
+    // nothing visible, because it went back one entry to the front page,
+    // where the button says Back to the tool again. Away is one place now, so
+    // one press lands on the document.
     await page.click('#faq-open');
     // Waited for by what becomes visible, not by what becomes hidden: a
     // selector that matches a hidden element still waits for it to be seen,
     // which it never will be.
+    await page.waitForSelector('#view-review:not([hidden])', { timeout: 15000 });
+    check('two pages away, one press of Back to the tool reaches the document',
+      (await page.isVisible('#view-review')) === true);
+
+    // And the browser's own Back agrees with the button: one entry to unwind,
+    // not two.
+    await page.evaluate(() => document.getElementById('home-top').click());
     await page.waitForSelector('#view-drop:not([hidden])', { timeout: 15000 });
+    await page.click('#foot-faq');
+    await page.waitForSelector('#view-faq:not([hidden])', { timeout: 15000 });
+    await page.goBack();
+    await page.waitForSelector('#view-review:not([hidden])', { timeout: 15000 });
+    check('and so does the browser\u2019s own Back button',
+      (await page.isVisible('#view-review')) === true);
   }
 
   check('nothing threw in the page', consoleErrors.length === 0, consoleErrors.join(' | '));

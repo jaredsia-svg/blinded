@@ -416,6 +416,15 @@ textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; border-
 .kinds { display: flex; flex-direction: column; gap: 0; }
 .kind { display: flex; align-items: center; gap: 8px; padding: 2px 6px; border-radius: 7px; cursor: pointer; }
 .kind:hover { background: #f2f4f8; }
+/* The switch for all of them, reading as the heading of the list rather than
+   as another row of it. */
+.kindall {
+  display: flex; align-items: center; gap: 8px; cursor: pointer;
+  padding: 2px 6px 5px; margin-bottom: 3px; border-bottom: 1px solid var(--line);
+  font-size: 12px; color: var(--ink-soft);
+}
+.kindall input { flex: none; margin: 0; }
+.kindall:hover { color: var(--ink); }
 .kind input { flex: none; margin: 0; }
 .kind .name { flex: 1; font-size: 13px; }
 /* The same circle the words and the pictures carry: it answers the same
