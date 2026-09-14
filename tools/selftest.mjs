@@ -1655,6 +1655,37 @@ check('no creation date is carried into the output', !meta.info.CreationDate);
   }
 }
 
+// ---------- how much of a page a search is allowed to look at ----------
+//
+// Measured on a page of a real CIM carrying 51 near-identical badges: the
+// same teal circle, most of them with a different letter in the middle. The
+// copies sitting on white filled both budgets — the candidates that reach
+// refinement, and the shortlist that reaches verification — and the one copy
+// sitting on a purple hexagon refined slightly lower, fell off the end, and
+// was never scored at all. Pointed at it directly, it verifies at 0.93.
+//
+// Neither budget alone recovered it: with more candidates and the old
+// shortlist it was refined and then dropped; with a longer shortlist and the
+// old candidate budget it never reached refinement.
+{
+  check('a page may nominate enough candidates for a crowd of copies',
+    Match.MAX_CANDIDATES >= 200, String(Match.MAX_CANDIDATES));
+  check('and verify more than a handful of them',
+    Match.VERIFY_LIMIT >= 48, String(Match.VERIFY_LIMIT));
+  // The ceiling is not the whole rule: the shortlist keeps everything within
+  // a band of the best, so a page of junk still verifies almost nothing while
+  // a page of copies verifies them all.
+  check('with a band below the best that decides what is worth verifying',
+    Match.VERIFY_NEAR > 0 && Match.VERIFY_NEAR < 0.4, String(Match.VERIFY_NEAR));
+  check('and a handful looked at whatever they score',
+    Match.VERIFY_ALWAYS > 0 && Match.VERIFY_ALWAYS < Match.VERIFY_LIMIT,
+    String(Match.VERIFY_ALWAYS));
+  // Verification is the expensive stage, so the ceiling has to stay a
+  // ceiling: this is what stops a pathological page from taking minutes.
+  check('but not so many that a bad page could take for ever',
+    Match.VERIFY_LIMIT <= 96, String(Match.VERIFY_LIMIT));
+}
+
 // ---------- the scale ladder ----------
 //
 // Measured on a real deck: the same lockup on two pages at 142x24 and 163x27,
