@@ -2,7 +2,726 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<!-- PLACEHOLDER_WILL_REPLACE -->
+<!-- The browser's own pinch zooms the whole app: the panel, the toolbar and
+     the header all swell together and the document is no easier to read for
+     it. The document has a zoom of its own, which is what a pinch on it should
+     drive, so the browser's is turned off and the gesture handled where it
+     means something. -->
+<meta name="viewport"
+  content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<!--
+  The promise this tool makes is that the document never leaves the machine.
+  That is true of the code, but a promise kept by inspection is only as good as
+  the next change to it; this asks the browser to enforce it.
+
+  connect-src 'self' rather than 'none' because the page reader fetches its own
+  WebAssembly and language data from this origin. Everything else is shut:
+  nothing may be posted anywhere, no form may submit, no plugin may load, and
+  no <base> may redirect a relative URL somewhere else.
+
+  'unsafe-eval' is required by the WebAssembly the reader runs; 'wasm-unsafe-eval'
+  alone is not honoured by every browser that matters yet. It permits code
+  execution, not exfiltration – connect-src is what holds the promise.
+-->
+<meta http-equiv="Content-Security-Policy" content="
+  default-src 'self';
+  script-src 'self' 'unsafe-eval';
+  style-src 'self' 'unsafe-inline';
+  img-src 'self' data: blob:;
+  connect-src 'self' blob:;
+  worker-src 'self' blob:;
+  frame-src 'none';
+  object-src 'none';
+  base-uri 'none';
+  form-action 'none'">
+<title>Blinded – Efficient redaction for your most sensitive documents, all done locally</title>
+<meta name="description" content="Redact PDFs, images and text in your browser. The file never leaves your machine.">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<!-- One address. The app was also being served from GitHub Pages, which is two
+     origins for one program and two sets of response headers to keep right;
+     Pages publishing is off and this says which copy is the copy. -->
+<link rel="canonical" href="https://blinded.onrender.com/">
+<link rel="stylesheet" href="app.css?v=dd513418">
 </head>
-<body>test</body>
+<body>
+
+<header class="top">
+  <div class="wrap top-inner">
+    <div class="mark">
+      <!-- Two lines of a redacted paragraph, the second coming apart at its
+           end: what a bar covers here is taken away rather than hidden, so the
+           line does not end in a neat block. Solid shapes only – a fade made
+           of opacity disappears wherever a mark is drawn flat. -->
+      <svg class="markmark" viewBox="0 0 26 15" aria-hidden="true" focusable="false">
+        <g fill="currentColor">
+          <rect width="26" height="6.4" rx="2"/>
+          <rect y="8.6" width="14" height="6.4" rx="2"/>
+          <rect x="16.6" y="8.6" width="3.6" height="6.4" rx="1.5"/>
+          <rect x="22.2" y="8.6" width="2" height="6.4" rx="1"/>
+        </g>
+      </svg> Blinded</div>
+    <p class="claim" id="claim">Efficient redaction for your most sensitive documents, all done locally.</p>
+    <div class="top-actions">
+      <!-- Only once there is something to start over from. -->
+      <button type="button" class="top-link" id="reset-top" hidden>Reset</button>
+      <!-- The front page, read while a document is open. It is the same page
+           without the place to drop one, since there is already a document and
+           an invitation to replace it is the last thing this should offer. -->
+      <button type="button" class="top-link" id="home-top" hidden>Home</button>
+      <button type="button" class="top-link" id="faq-open">Q&amp;A</button>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <!-- ---------- 1. pick a file ---------- -->
+  <section id="view-drop" class="view">
+
+    <div class="hero">
+      <h1>Redaction for deal documents.</h1>
+      <p class="lede">Select a name, a logo or a signature <em>once</em> – every
+        copy goes, at any size or colour, even inside a screenshot. CIMs, board
+        decks, contracts, diligence packs – in under a minute.</p>
+    </div>
+
+    <div id="drop" class="drop" tabindex="0" role="button" aria-label="Choose a document to redact">
+      <svg class="drop-icon" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5" fill="none" stroke="currentColor"
+          stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3" fill="none" stroke="currentColor"
+          stroke-width="1.6" stroke-linecap="round"/>
+      </svg>
+      <p class="drop-lead">Drop a document here</p>
+      <p class="drop-sub">PDF, PNG, JPEG or plain text – or <span class="link">browse</span></p>
+      <p class="drop-faint">or a saved draft, to carry on where you left off</p>
+      <input type="file" id="file" accept=".pdf,.png,.jpg,.jpeg,.txt,.md,.markdown,.csv,.log,.json,application/pdf,image/png,image/jpeg,text/plain,application/json" hidden>
+    </div>
+    <p id="drop-error" class="error" hidden></p>
+
+    <ul class="features">
+      <li>
+        <h3><svg class="ico" viewBox="0 0 20 20" aria-hidden="true"><path d="M10 3l6 2.5v4.2c0 3.4-2.4 6.3-6 7.3-3.6-1-6-3.9-6-7.3V5.5L10 3z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg> Nothing is uploaded</h3>
+        <p>No server, no account, no analytics. The document is opened, read and
+          rewritten inside this tab. No LLM is used. Close it and nothing
+          remains.</p>
+      </li>
+      <li>
+        <h3><svg class="ico" viewBox="0 0 20 20" aria-hidden="true"><rect x="3" y="4" width="14" height="12" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="7.5" cy="8" r="1.4" fill="currentColor"/><path d="M4 14l4-4 3.5 3.5L14 11l2.5 3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg> Text, logos and pictures</h3>
+        <p>Type any word and every occurrence is redacted, even if the word is
+          an image and not in text format. Pick out a logo, signature, or image
+          and every other copy is redacted, regardless of size or colour.</p>
+      </li>
+      <li>
+        <h3><svg class="ico" viewBox="0 0 20 20" aria-hidden="true"><path d="M7.5 4H5v12h2.5M12.5 4H15v12h-2.5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg> Placeholders, not blanks</h3>
+        <p>Optionally label each redaction <code>[P1]</code>, <code>[E2]</code>,
+          so a later reader – or a model – can still follow the sentence. The
+          same thing always gets the same label.</p>
+      </li>
+      <li>
+        <h3><svg class="ico" viewBox="0 0 20 20" aria-hidden="true"><rect x="3" y="7" width="14" height="6" rx="1" fill="currentColor"/></svg> Gone, not covered</h3>
+        <p>Each page is rebuilt from pixels, so there is nothing underneath the
+          bars. No text, no fonts, no annotations – and none of the original
+          author, title or history either.</p>
+      </li>
+    </ul>
+
+    <!-- A real page, and a hard one: a photograph of a screen, so the whole
+         slide is a picture and there is no text layer to search at all. What
+         is shown is the output – the file this produced holds no recoverable
+         text, which is the claim the picture is here to make. -->
+    <section class="sample">
+      <h2>Sample slide redaction</h2>
+      <p class="sample-lede">This is a scan of a corporate slide with low
+        resolution and no text layer. Blinded is still able to redact it
+        anyway, covering the company, some brands, the logos and the artwork
+        alike. Each redaction is labelled, so the sentence around it still
+        reads coherently, with the private key file only accessible by you.</p>
+      <button type="button" id="sample-open" class="sample-shot"
+        aria-label="See this slide larger">
+        <img src="sample-slide.jpg" alt="A scanned beverage-sector board slide
+          after redaction: the company name, brand names, several logos and
+          product images are covered by black bars carrying placeholder labels
+          such as [T1], [P1] and [L1], while the charts and figures are left
+          readable." width="1280" height="965" draggable="false" loading="lazy">
+        <span class="sample-zoom">Click to enlarge</span>
+      </button>
+    </section>
+
+    <!-- Against the tools people already have. Every claim here is about a
+         published behaviour of the other product, not a guess at one: where a
+         peer is better at something, the row says so. A comparison that only
+         wins is a comparison nobody believes. -->
+    <section class="versus">
+      <h2>How Blinded compares</h2>
+      <p class="sample-lede">Blinded is the only redaction tool that never takes
+        the file to the cloud, never uses a model, and still automatically finds
+        repeated text, logos and images by sight and removes them completely.</p>
+
+      <div class="versus-scroll">
+        <table class="versus-table">
+          <caption class="sr-only">Blinded compared with Adobe Acrobat Pro, Redactable and KeptPDF</caption>
+          <thead>
+            <tr>
+              <th scope="col"><span class="sr-only">What is being compared</span></th>
+              <th scope="col" class="us"><span class="versus-us"><svg class="markmark" viewBox="0 0 26 15" aria-hidden="true" focusable="false"><g fill="currentColor"><rect width="26" height="6.4" rx="2"/><rect y="8.6" width="14" height="6.4" rx="2"/><rect x="16.6" y="8.6" width="3.6" height="6.4" rx="1.5"/><rect x="22.2" y="8.6" width="2" height="6.4" rx="1"/></g></svg>Blinded</span></th>
+              <th scope="col">Acrobat Pro</th>
+              <th scope="col">Redactable</th>
+              <th scope="col">KeptPDF</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <th scope="row">Where the file goes</th>
+              <td class="us">Stays in this tab. Works offline.</td>
+              <td>Desktop, yes. The web version uploads.</td>
+              <td>Their cloud.</td>
+              <td>On device, then a login.</td>
+            </tr>
+            <tr>
+              <th scope="row">What a bar removes</th>
+              <td class="us">Everything. The page is rebuilt from pixels.</td>
+              <td>Nothing, until you Apply <em>and</em> Sanitize.</td>
+              <td>Everything, on their servers.</td>
+              <td>Everything. Flattened.</td>
+            </tr>
+            <tr>
+              <th scope="row">Logos, stamps, faces</th>
+              <td class="us">Pick one; every copy goes, any size or colour.</td>
+              <td>Draw a box. Every time.</td>
+              <td>Found for you – in the cloud.</td>
+              <td>Text only. A face still needs you.</td>
+            </tr>
+            <tr>
+              <th scope="row">Names, and words in a picture</th>
+              <td class="us">Type it once. Caught in the text and the artwork.</td>
+              <td>Find, one spelling at a time.</td>
+              <td>Matched in the cloud.</td>
+              <td>On device, 45 kinds. No visual picker.</td>
+            </tr>
+            <tr>
+              <th scope="row">Proof of privacy</th>
+              <td class="us">Read the source. The browser enforces it.</td>
+              <td>None. Trust the operator.</td>
+              <td>A certificate, from the host.</td>
+              <td>A checksum on the export.</td>
+            </tr>
+            <tr>
+              <th scope="row">Readable afterwards</th>
+              <td class="us"><span class="ph">[P1]</span> labels; the key stays with you.</td>
+              <td>Black boxes.</td>
+              <td>Tokens, mapped in their project.</td>
+              <td>Tokens, inside their suite.</td>
+            </tr>
+            <tr>
+              <th scope="row">Cost</th>
+              <td class="us">Free, no account.</td>
+              <td>A paid seat.</td>
+              <td>Free for a few, then monthly.</td>
+              <td>Free with their branding.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+    </section>
+
+    <p class="foot">
+      <span class="foot-name">Blinded</span>
+      <span class="foot-dot" aria-hidden="true">·</span>
+      <button type="button" class="footlink" id="foot-faq">FAQ</button>
+      <span class="foot-dot" aria-hidden="true">·</span>
+      <a class="footlink" href="https://github.com/jaredsia-svg/blinded" rel="noopener">Source code on GitHub</a>
+    </p>
+  </section>
+
+  <!-- ---------- 2. review ---------- -->
+  <section id="view-review" class="view" hidden>
+    <div class="review">
+      <button type="button" id="peek-edit" class="peek" hidden>Edit</button>
+      <button type="button" id="peek-doc" class="peek" hidden>Document</button>
+      <!-- The way out of picking, over the document where the picking happens.
+           The Cancel in the panel is unreachable on a phone, where the panel
+           is a strip down the side while the box is being drawn. -->
+      <button type="button" id="pickstop" class="pickstop" hidden
+        title="Stop picking" aria-label="Stop picking">
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <path d="M6 6l12 12M18 6L6 18"/>
+        </svg>
+      </button>
+
+      <aside class="panel">
+        <div class="panel-head">
+          <h2 id="doc-name">document</h2>
+          <div class="tools" role="group" aria-label="Tools">
+            <button type="button" id="tool-pan" class="tool" aria-pressed="true"
+              title="Move the pages – drag to scroll. Nothing on a page changes.">
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="M7 12V7.5a1.5 1.5 0 0 1 3 0V12M10 11.5v-6a1.5 1.5 0 0 1 3 0V12M13 11.5v-5a1.5 1.5 0 0 1 3 0V12M16 12V9.5a1.5 1.5 0 0 1 3 0V15a6 6 0 0 1-6 6h-1a6 6 0 0 1-5.196-3L5 15.5a1.5 1.5 0 0 1 2.598-1.5L9 16"/>
+              </svg><span class="sr-only">Move the pages</span>
+            </button>
+            <button type="button" id="tool-mark" class="tool" aria-pressed="false"
+              title="Manually mark or unmark redacted areas">
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="M12 3v18M3 12h18"/>
+              </svg><span class="sr-only">Mark the pages</span>
+            </button>
+            <!-- Two buttons in one icon's worth of room: up on the top half,
+                 down on the bottom. Paging is a different job from scrolling –
+                 it lands on a page rather than somewhere in one. -->
+            <div class="tool toolstack" role="group" aria-label="Pages">
+              <button type="button" id="page-prev" class="half" title="Previous page">
+                <svg viewBox="0 0 24 14" aria-hidden="true" focusable="false">
+                  <path d="M5 10l7-6 7 6"/>
+                </svg><span class="sr-only">Previous page</span>
+              </button>
+              <button type="button" id="page-next" class="half" title="Next page">
+                <svg viewBox="0 0 24 14" aria-hidden="true" focusable="false">
+                  <path d="M5 4l7 6 7-6"/>
+                </svg><span class="sr-only">Next page</span>
+              </button>
+            </div>
+            <button type="button" id="zoom-out" class="tool" title="Zoom out">
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5M8 11h6"/>
+              </svg><span class="sr-only">Zoom out</span>
+            </button>
+            <button type="button" id="zoom-in" class="tool" title="Zoom in">
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5M8 11h6M11 8v6"/>
+              </svg><span class="sr-only">Zoom in</span>
+            </button>
+            <button type="button" id="undo" class="tool" disabled title="Nothing to undo">
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="M4 9h11a5 5 0 0 1 0 10h-6M4 9l4-4M4 9l4 4"/>
+              </svg><span class="sr-only">Undo</span>
+            </button>
+            <button type="button" id="savedraft" class="tool" title="Save a draft – your marks, to carry on later">
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+                <path d="M8 21v-7h8v7M8 3v5h6"/>
+              </svg><span class="sr-only">Save a draft</span>
+            </button>
+          </div>
+          <p class="hint drafthint" id="draftnote" hidden></p>
+          <p class="tip" id="tip" hidden></p>
+        </div>
+
+        <!-- Stands in for the four sections while the sheet has the panel.
+             Filled from their own headings in script, so renaming one does
+             not leave this saying something that is no longer true. -->
+        <button type="button" id="sectroll" class="sectroll" hidden
+          aria-controls="organisesect"></button>
+
+        <details class="sect" open>
+          <summary><span class="s-title">Text</span><button type="button"
+              class="why" aria-label="What does this section do?"
+              data-tip="Type a name, a number or a word and every copy of it is covered – in the text, in the lettering of a screenshot, and inside a logo. Case does not matter, and the longest match wins, so &quot;Jane Doe&quot; beats &quot;Jane&quot;.">?</button><span class="s-note" id="term-note"></span></summary>
+          <div class="s-body">
+            <div class="termadd">
+              <input type="text" id="termbox" autocomplete="off" spellcheck="false"
+                placeholder="A name, a number, a word…">
+              <button type="button" id="termgo" title="Add this word" aria-label="Add this word">
+                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                  <path d="M12 5v14M6 13l6 6 6-6"/>
+                </svg>
+              </button>
+            </div>
+            <ul id="termcounts" class="termcounts"></ul>
+            <p class="hint warnhint" id="ocrnote" hidden></p>
+            <div id="sweepbox" hidden>
+              <button type="button" id="sweep" class="ghost wide">Comprehensive Check</button>
+              <div id="sweeprun" hidden>
+                <div class="sweepbar"><span id="sweepfill"></span></div>
+                <p class="hint" id="sweepprogress"></p>
+                <button type="button" id="sweepstop" class="ghost wide">Stop the check</button>
+              </div>
+              <!-- A div rather than a paragraph: when the check has stood down from
+                   somewhere, the note carries a list of those places, and a list
+                   inside a paragraph is not a list the browser will keep. -->
+              <div class="hint doubthint" id="sweepnote"></div>
+            </div>
+          </div>
+        </details>
+
+        <details class="sect" id="imagesect" open>
+          <summary><span class="s-title">Images</span><button type="button"
+              class="why" aria-label="What does this section do?"
+              data-tip="Draw a box around a logo, a signature, a stamp or a face, and every other copy of it in the document is found and covered – at any size, and whatever colour it has been recast in. Use it for marks no search can reach.">?</button><span class="s-note" id="image-note"></span></summary>
+          <div class="s-body">
+            <button type="button" id="pick" class="pickrow">
+              <span class="pickfield" id="picklabel">Select an image to redact</span>
+              <span class="pickgo" aria-hidden="true">
+                <svg viewBox="0 0 24 24" focusable="false">
+                  <path d="M12 5v14M5 12h14"/>
+                </svg>
+              </span>
+            </button>
+            <p class="hint" id="pickhint" hidden></p>
+            <!-- Heads the column the row sliders sit in. A bare slider between
+                 a thumbnail and a number says nothing about what it does, and
+                 the answer is the same for every row, so it is said once. -->
+            <p class="senshead" id="senshead" hidden>
+              <span>Sensitivity, per image</span>
+              <button type="button" class="why" aria-label="What does this mean?" data-tip="Each picked image has its own bar. Lower finds more, including things that only resemble it. A scanned signature usually needs to come down; two marks that differ by one letter need to go above 0.95. Click the tally to see what each match scored.">?</button>
+            </p>
+            <ul id="templates" class="templates"></ul>
+          </div>
+        </details>
+
+        <details class="sect" id="kindsect" open>
+          <summary><span class="s-title">Detectors</span><button type="button"
+              class="why" aria-label="What does this section do?"
+              data-tip="Things worth covering that nobody had to type: email addresses, phone numbers, web addresses, street addresses, and names read off the layout around them. Only the kinds actually found in this document are listed, with how many of each.">?</button></summary>
+          <div class="s-body">
+            <div id="kinds" class="kinds"></div>
+          </div>
+        </details>
+
+        <details class="sect" open>
+          <summary><span class="s-title">Placeholders</span><span class="s-note" id="label-note">off</span></summary>
+          <div class="s-body">
+            <label class="check"><input type="checkbox" id="labelling">
+              Label each redaction
+              <button type="button" class="why" aria-label="What does this mean?" data-tip="Writes [P1], [E2] into each bar so a later reader, or a model, can follow the sentence. The same thing always gets the same label.">?</button>
+            </label>
+            <div id="legendbox" hidden>
+              <p class="hint" id="legend-empty">Nothing is being covered yet.</p>
+              <ul id="legend" class="legend"></ul>
+              <button type="button" id="downloadkey" class="ghost wide">Download the key…</button>
+              <p class="hint danger">The key undoes the redaction. It is never part of the
+                exported file – keep it separate.</p>
+            </div>
+          </div>
+        </details>
+
+        <details class="sect" id="organisesect">
+          <summary><span class="s-title">Organise</span><button type="button"
+              class="why" id="sheet-why" aria-label="How to organise pages"
+              data-tip="Tap a page to select it. Shift-click to select a continuous series, and Ctrl-click to select multiple pages. Drag a page by its grip to move it. The selected pages can be kept on their own, thrown away, or turned a quarter at a time. Add a note and tap the page where it should go; tap the note again to change it. Undo if you make a mistake.">?</button></summary>
+          <div class="s-body">
+            <!-- The same five actions the words used to spell out. As icons
+                 they fit one row instead of three, which is the difference
+                 between the thumbnails starting on screen and starting below
+                 it. Every one keeps its words for a screen reader and its
+                 title for a pointer, and a held icon says the same on a
+                 phone. -->
+            <div class="tools sheettools" role="group" aria-label="Organise pages">
+              <button type="button" id="page-keep" class="tool" disabled title="Keep only these – throw away every page that is not selected">
+                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                  <path d="M3 5h18l-7 8v6l-4 2v-8z"/>
+                </svg><span class="sr-only">Keep only the selected pages</span>
+              </button>
+              <button type="button" id="page-drop" class="tool toolred" disabled title="Remove these – throw away the selected pages">
+                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                  <path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>
+                </svg><span class="sr-only">Remove the selected pages</span>
+              </button>
+              <!-- A page with a quarter turn over its corner. The arc on its own
+                   was the undo arrow with a different curve, which is the one
+                   icon in this toolbar it must not be mistaken for: the page
+                   says what is being turned, and the right angle says how far. -->
+              <button type="button" id="page-turn" class="tool" disabled title="Turn the selected pages 90° clockwise">
+                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                  <path d="M4 10h9v11H4z"/>
+                  <path d="M11 4h2a7 7 0 0 1 7 7"/>
+                  <path d="M17.6 8.6 20 11l2.4-2.4"/>
+                </svg><span class="sr-only">Turn the selected pages 90 degrees</span>
+              </button>
+              <button type="button" id="page-text" class="tool" title="Add a note – then tap the page where it should go">
+                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                  <path d="M5 7V5h14v2M12 5v14M9 19h6"/>
+                </svg><span class="sr-only">Add a note to the page</span>
+              </button>
+              <button type="button" id="page-add" class="tool" title="Add another document after the page selected">
+                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                  <path d="M13 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-9M17 3v6M14 6h6"/>
+                </svg><span class="sr-only">Add another document</span>
+              </button>
+            </div>
+            <input type="file" id="addfile" accept="application/pdf,image/png,image/jpeg,.pdf,.png,.jpg,.jpeg" hidden>
+            <div class="pickedrow" id="sheet-picked" hidden>
+              <span class="hint" id="picked-note"></span>
+              <button type="button" id="choose-done" class="ghost" hidden>Done</button>
+            </div>
+            <ol id="sheet" class="sheet"></ol>
+          </div>
+        </details>
+
+      </aside>
+
+      <div class="stage">
+        <div id="pages" class="pages"></div>
+        <pre id="textview" class="textview" hidden></pre>
+      </div>
+    </div>
+
+    <div class="exportbar">
+      <div class="exportgo">
+        <span id="exportnote" class="hint"></span>
+        <button type="button" id="apply" class="primary" disabled>Redact</button>
+        <button type="button" id="export" class="primary ghostly" disabled>Export redacted file</button>
+      </div>
+    </div>
+  </section>
+
+<section id="view-faq" class="view faqmain" hidden>
+
+  <h1 class="faqtitle">Q&amp;A</h1>
+
+  <section class="faq">
+    <h2>Does my document get uploaded anywhere?</h2>
+    <p>No. There is no server to upload it to. Everything – opening the file,
+      reading it, covering things up and writing the new file – happens inside
+      this browser tab, on your own machine. You can watch this for yourself:
+      open your browser's network panel, redact a document, and you will see
+      nothing leave.</p>
+    <p>You can also just pull out the network cable. The tool carries on
+      working.</p>
+    <p>You do not have to take that on trust. This page carries a <strong>content
+      security policy</strong> – a set of rules the browser itself enforces, not
+      something the code can decide to ignore. View the source of this page and
+      you will find it in the first few lines. The line that matters is
+      <span class="ph">connect-src 'self'</span>: the browser will block any
+      attempt to send data anywhere but back to where this page came from, and
+      nothing here asks it to. <span class="ph">form-action 'none'</span> means
+      no form can post anywhere at all. If the code were ever changed to try, the
+      browser would refuse the request and log the refusal in the console.</p>
+  </section>
+
+  <section class="faq">
+    <h2>Is a black rectangle really enough?</h2>
+    <p>On its own, no – and that is the reason this tool exists. Drawing a black
+      box over a word in most editors leaves the word underneath it. Anyone can
+      select it, copy it, or pull it back out of the file.</p>
+    <p>Blinded does not draw boxes over your document. It turns every page into
+      a picture, paints the boxes onto the picture, and builds a new file from
+      those pixels. The original text is not hidden in the result – it is not
+      in the result at all. Nothing carried over from the original file is left
+      to dig through – no original text layer, no fonts, no annotations.</p>
+    <p>Two things can put text into the finished file, and neither can bring
+      back what a bar covers. Placeholder labels are written from the list of
+      labels you can see. And if you tick <strong>Searchable text</strong> when
+      saving, the pages are read <em>after</em> the bars are painted on, so the
+      reader is looking at the same picture you are – a covered word is not in
+      those pixels, and cannot come out of them.</p>
+  </section>
+
+  <section class="faq">
+    <h2>What can it find?</h2>
+    <p>Three things. Words you type, wherever they appear in the text. The same
+      words where they appear <em>as part of a picture</em> – a logo, a screenshot,
+      a scanned page – which an ordinary search cannot reach. And anything you
+      pick out with a box: a signature, a stamp, a face, a letterhead. Pick one
+      and every other copy of it in the document is found too, at any size.</p>
+    <p>There are also built-in detectors for the usual things that leak: email
+      addresses, phone numbers, web addresses, dates of birth, and street
+      addresses and postal codes – the last two written the way they are in
+      Britain and America, and the way they are in Singapore, Hong Kong and
+      Vietnam. Tick the ones you want; each shows how many it can see before
+      you commit to it.</p>
+    <p>Names of people are on that list, but not in the way you might expect.
+      Nothing here identifies a name by looking at it: a name is capitalised
+      words, and so is half a deal document. It reads the <em>anchor</em>
+      beside it instead – a job title under it, a "T:" or an email under it, a
+      sign-off or a "Name:" above it, or a title beside it on the same line.
+      That is a signature block, a contact block and a team page, which is
+      where names actually sit, and it works for Vietnamese, Chinese and
+      English names equally because it never reads the name.</p>
+    <p>Anything it misses, type into the box – a name typed once is then found
+      in the text, in the lettering of a screenshot, and inside a logo, which
+      no detector can do.</p>
+  </section>
+
+  <section class="faq">
+    <h2>How does it read words inside pictures?</h2>
+    <p>It reads the lettering on each page the way a scanner does. That happens
+      in your browser too – the reader is about seven megabytes, fetched once
+      from this site and then kept by your browser, and it is not sent your
+      document.</p>
+    <p>No large language model is involved, here or anywhere else in the tool.</p>
+  </section>
+
+  <section class="faq">
+    <h2>Nothing is perfect. What if it misses something?</h2>
+    <p>Then you catch it, which is why nothing is covered until you press
+      Redact and why every mark stays visible until then. You can draw your own
+      boxes anywhere, and click any proposed mark to take it off.</p>
+    <p>There is also a second opinion: once a redaction is done, you can ask it
+      to check every page again by shape rather than by reading. That catches
+      words in unusual type that the reading stumbled over. Anything it finds is
+      added in amber so you can see what is new, and it runs in the background
+      while you carry on.</p>
+  </section>
+
+  <section class="faq">
+    <h2>What are the placeholders for?</h2>
+    <p>Optional labels printed on the bars – <span class="ph">[NAME_1]</span>,
+      <span class="ph">[EMAIL_2]</span> – so a later reader can still follow a
+      sentence that has had something taken out of it. They are off by default,
+      because a plain black bar is the right output for most documents and a
+      label tells the reader a little about what was removed.</p>
+    <p>If you turn them on you can download a key listing what each label stood
+      for. Keep that separate from the redacted file: it undoes the redaction.</p>
+  </section>
+
+  <section class="faq">
+    <h2>What happens if I close the tab?</h2>
+    <p>Everything is gone. Nothing is stored, no account exists, and there is
+      nothing to delete afterwards. The flip side is that a document you have
+      not exported yet is lost too – so the tool warns you before you leave with
+      one open.</p>
+  </section>
+
+  <section class="faq">
+    <h2>Can I see the code?</h2>
+    <p>Yes. It is free and open source: read it, run it yourself, or check what
+      it actually does with your file.</p>
+    <p class="faqlink">
+      <a href="https://github.com/jaredsia-svg/blinded" rel="noopener">
+        <svg class="ghico" viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.4 7.4 0 0 1 2-.27c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
+        Source on GitHub
+      </a>
+    </p>
+  </section>
+
+  <p class="faqback"><button type="button" class="faqbackbtn" id="faq-back-bottom">Back to the tool</button></p>
+
+</section>
+
+  <div id="draftbox" class="busy" hidden>
+  <div class="busy-inner nameinner">
+    <h2 class="namehead">Carry on from your draft</h2>
+    <p class="confirmbody" id="draftbody"></p>
+    <p class="hint" id="drafthint">A draft holds your marks, not the document –
+      which is why it is a few kilobytes. Keep it as carefully as the document
+      itself: the words you asked to cover are in it, and so is any note you
+      wrote on a page.</p>
+    <div class="namego">
+      <button type="button" id="draftcancel" class="ghost">Cancel</button>
+      <button type="button" id="draftpick" class="primary">Choose the file</button>
+    </div>
+  </div>
+</div>
+
+<div id="imagebox" class="busy" hidden>
+  <div class="busy-inner imageinner">
+    <h2 class="namehead">The image you picked</h2>
+    <div class="imageframe"><canvas id="imagefull"></canvas></div>
+    <p class="hint" id="imagenote"></p>
+    <div class="namego">
+      <button type="button" id="imageclose" class="primary">Close</button>
+    </div>
+  </div>
+</div>
+
+<div id="confirmbox" class="busy" hidden>
+  <div class="busy-inner nameinner">
+    <h2 class="namehead" id="confirmhead">Are you sure?</h2>
+    <p class="confirmbody" id="confirmbody"></p>
+    <div class="namego">
+      <button type="button" id="confirmno" class="ghost">Cancel</button>
+      <!-- Only where losing the work is the thing being confirmed. Hidden
+           unless the caller asks for it, since most confirmations have no
+           work to save. -->
+      <button type="button" id="confirmsave" class="primary" hidden>Save draft &amp; close</button>
+      <button type="button" id="confirmyes" class="primary danger">Discard</button>
+    </div>
+  </div>
+</div>
+
+<!-- The picture, and nothing else. A heading saying what it is and a button
+     saying Close were two rows of chrome around the one thing being looked
+     at, on a dialog whose entire job is to show it larger. -->
+<div id="samplebox" class="busy" hidden role="dialog" aria-modal="true"
+  aria-label="The sample slide, enlarged">
+  <div class="busy-inner sampleinner">
+    <button type="button" id="sampleclose" class="sample-x" aria-label="Close">
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <path d="M6 6l12 12M18 6L6 18"/>
+      </svg>
+    </button>
+    <div class="samplestage"><img id="samplebig" src="sample-slide.jpg" alt="" draggable="false"></div>
+  </div>
+</div>
+
+<div id="cropbox" class="busy" hidden>
+  <div class="busy-inner cropinner">
+    <h2 class="namehead">Image redaction selection</h2>
+    <p class="hint" id="cropnote">Drag a corner to fit the box to it. A box drawn
+      tightly around the mark finds it far more reliably than a loose one.</p>
+    <div class="cropstage" id="cropstage">
+      <canvas id="cropview"></canvas>
+    </div>
+    <p class="hint" id="cropsize"></p>
+    <div class="namego">
+      <button type="button" id="cropcancel" class="ghost">Cancel</button>
+      <button type="button" id="cropuse" class="primary">Use this</button>
+    </div>
+  </div>
+</div>
+
+<div id="passbox" class="busy" hidden>
+  <div class="busy-inner nameinner">
+    <h2 class="namehead">This PDF is locked</h2>
+    <label class="namelabel" for="password">Password</label>
+    <input id="password" type="password" class="nameinput" spellcheck="false"
+      autocomplete="off">
+    <p class="hint" id="passnote">The password is used here, in this tab, to
+      open the file. Like the file, it is never sent anywhere.</p>
+    <div class="namego">
+      <button type="button" id="passcancel" class="ghost">Cancel</button>
+      <button type="button" id="passgo" class="primary">Open</button>
+    </div>
+  </div>
+</div>
+
+<div id="namebox" class="busy" hidden>
+  <div class="busy-inner nameinner">
+    <h2 class="namehead">Save as</h2>
+    <label class="namelabel" for="savename">File name</label>
+    <input id="savename" type="text" class="nameinput" spellcheck="false">
+    <p class="hint" id="namenote" hidden></p>
+    <label class="check nameopt" id="losslessrow">
+      <input type="checkbox" id="lossless">
+      Lossless output <span class="namefaint">– larger file, no compression artefacts</span>
+    </label>
+    <label class="check nameopt" id="searchablerow">
+      <input type="checkbox" id="searchable">
+      Searchable text <span class="namefaint">– reads the redacted pages so the text can be found and copied. Slower.</span>
+    </label>
+    <div class="namego">
+      <button type="button" id="namecancel" class="ghost">Cancel</button>
+      <button type="button" id="namesave" class="primary">Save</button>
+    </div>
+  </div>
+</div>
+
+<div id="busy" class="busy" hidden>
+    <div class="busy-inner">
+      <p class="busy-line"><span class="spinner"></span> <span id="busy-text">Working…</span></p>
+      <div id="busy-legs"></div>
+      <p class="busy-note" id="busy-note" hidden></p>
+      <button type="button" id="busy-pause" class="ghost" hidden>Pause</button>
+    </div>
+  </div>
+
+</main>
+
+
+<script src="lib/schedule.js?v=50cdd235"></script>
+<script src="lib/detect.js?v=46e8c75b"></script>
+<script src="lib/labels.js?v=f1bffa91"></script>
+<script src="lib/boxes.js?v=31920d2d"></script>
+<script src="lib/measure.js?v=3e3dc5dc"></script>
+<script src="lib/match.js?v=8033937c"></script>
+<script src="lib/imagesearch.js?v=01f80e87"></script>
+<script src="lib/ocr.js?v=d6ec7f84"></script>
+<script src="lib/textimage.js?v=ba90cd37"></script>
+<script src="lib/pdfwrite.js?v=4b977425"></script>
+<script src="lib/pdfread.js?v=ca229552"></script>
+<script src="lib/render.js?v=70e96ff0"></script>
+<script src="app.js?v=474f1154"></script>
+<script type="module" src="lib/boot.mjs?v=8b98ed8f"></script>
+</body>
 </html>
