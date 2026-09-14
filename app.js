@@ -1471,9 +1471,24 @@
     return want.length !== have.length || want.some(term => !have.includes(term));
   }
 
+  // Is there reading still to do?
+  //
+  // It used to ask only about typed words, which quietly made the detectors
+  // second-class: on a document with a picked logo and nothing typed, the
+  // pages were never read at all, so every detector was answered from the
+  // text layer alone — and on a scan, where there is no text layer, answered
+  // with nothing. The panel then reported no email addresses on a page that
+  // plainly shows one, which is the failure this tool exists to prevent.
+  //
+  // The reading is one job with two customers. A word to find in the pictures
+  // wants it, and so does every detector, since a detector can only read what
+  // the page says once something has read it.
   function ocrPending() {
-    return Boolean(state.useOcr && state.termImages && state.kind !== 'text'
-      && state.terms.length && (!state.ocrRead || ocrMatchStale()));
+    if (state.kind === 'text' || !state.useOcr) return false;
+    const wanted = (state.termImages && state.terms.length > 0)
+      || acceptedKinds().length > 0;
+    if (!wanted) return false;
+    return !state.ocrRead || ocrMatchStale();
   }
 
   function refreshApply() {
@@ -1496,7 +1511,8 @@
     // draw one, and this is the same predicate the circles themselves render
     // from, so the two cannot disagree.
     const unanswered = state.terms.filter(t => !state.countedTerms.includes(t)).length
-      + state.templates.filter(t => !t.searched).length;
+      + state.templates.filter(t => !t.searched).length
+      + unknownKinds();
 
     // The button wears the panel's red only while there is a red ? for it to
     // answer. Red with nothing outstanding is an alarm about nothing: the
@@ -2482,6 +2498,20 @@
   // half the document presented as a count of all of it. A red question mark
   // says the honest thing instead, which is the same thing the term counts and
   // the picked images say while they are waiting.
+  // How many red question marks the detectors are showing.
+  //
+  // Every detector wears one until a search has run — that is the whole point
+  // of them being question marks — and the button that answers them was not
+  // counting them. A freshly opened document put five red marks on the panel
+  // and left the button an ordinary blue, which says "nothing outstanding"
+  // over a panel full of outstanding questions.
+  function unknownKinds() {
+    if (state.kind === 'text' || !state.pages.length) return 0;
+    // Counted the way they are drawn: before a search every kind is listed,
+    // ticked or not, so the number here is the number on screen.
+    return kindsKnown() ? 0 : Detect.KINDS.length;
+  }
+
   function kindsKnown() {
     return state.kind === 'text' || state.searched;
   }
@@ -6545,7 +6575,7 @@
     edgeScroll, stopEdgeScroll, CREEP_EDGE, fitSheet, rollSections,
     creepEdges, pushScroll, startChoosing, stopChoosing, CHOOSE_HOLD,
     addDocument, pickedInOrder, selectPage, thumbFor, organiseStamp,
-    kindsKnown, countsByKind, detectOcr, renderKinds, placesForKind,
+    kindsKnown, unknownKinds, countsByKind, detectOcr, renderKinds, placesForKind,
     markPending, needsSearch, markDuplicates, onePerPlace, plannedCount,
     pendingTemplates,
     termsNeedingPictures,

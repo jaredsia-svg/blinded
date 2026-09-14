@@ -298,6 +298,48 @@ export function buildDoubleFoundPdf() {
 // re-emitted five or six times at identical coordinates — the reader saw one
 // sentence, the text layer held twenty-one copies of the company's name, and
 // the panel reported twenty-three matches over four visible marks.
+// Pages a reader actually has to read, several of them.
+//
+// For the pause: stopping happens between pages, so a document to test it on
+// has to have more pages than the reader has engines — otherwise every page
+// starts at once and there is no "between" for a pause to land in. Each page
+// carries a filled shape as well as its line of text, because a page with
+// nothing but text can hide no lettering and is skipped by the reader
+// entirely, which would leave nothing to pause.
+export function buildPausePdf(n = 8) {
+  const chunks = []; let length = 0; const offsets = [0];
+  const push = s => { const b = Buffer.from(s, 'latin1'); chunks.push(b); length += b.length; };
+  const begin = id => { offsets[id] = length; push(id + ' 0 obj\n'); };
+  const kids = [];
+  for (let i = 0; i < n; i++) kids.push((3 + i * 2) + ' 0 R');
+  const fontId = 3 + n * 2;
+
+  push('%PDF-1.4\n');
+  begin(1); push('<< /Type /Catalog /Pages 2 0 R >>\n'); push('endobj\n');
+  begin(2); push('<< /Type /Pages /Count ' + n + ' /Kids [' + kids.join(' ') + '] >>\n'); push('endobj\n');
+  for (let i = 0; i < n; i++) {
+    const body = 'BT\n/F1 36 Tf\n60 700 Td\n(Jane Doe, page ' + (i + 1) + ') Tj\nET\n'
+      + '0.1 0.1 0.1 rg\n80 300 260 180 re f\n';
+    begin(3 + i * 2);
+    push('<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792]'
+      + ' /Resources << /Font << /F1 ' + fontId + ' 0 R >> >>'
+      + ' /Contents ' + (4 + i * 2) + ' 0 R >>\n');
+    push('endobj\n');
+    begin(4 + i * 2);
+    push('<< /Length ' + Buffer.byteLength(body, 'latin1') + ' >>\nstream\n' + body + 'endstream\n');
+    push('endobj\n');
+  }
+  begin(fontId);
+  push('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\n'); push('endobj\n');
+
+  const xrefAt = length;
+  const count = fontId + 1;
+  push('xref\n0 ' + count + '\n0000000000 65535 f \n');
+  for (let id = 1; id < count; id++) push(String(offsets[id] || 0).padStart(10, '0') + ' 00000 n \n');
+  push('trailer\n<< /Size ' + count + ' /Root 1 0 R >>\nstartxref\n' + xrefAt + '\n%%EOF\n');
+  return Buffer.concat(chunks);
+}
+
 export function buildStackedPdf() {
   const line = 'BT /F1 24 Tf 60 700 Td (On the back-end, KAG supplies parts) Tj ET\n';
   const body = line.repeat(6)

@@ -15,7 +15,8 @@ import { isStale } from './stamp.mjs';
 import { buildTextPdf, buildReadablePdf, buildLogoPdf, buildLockedPdf, buildManyPdf, LOGO_PLACEMENTS,
   buildWordmarkPdf, WORDMARK_PLACEMENTS, WORDMARK_ASPECT,
   buildSmallLogoPdf, SMALL_LOGO_PLACEMENTS, WORDMARK_BOX,
-  buildDoubleFoundPdf, DOUBLE_TERM, buildStackedPdf } from './fixture.mjs';
+  buildDoubleFoundPdf, DOUBLE_TERM, buildStackedPdf,
+  buildPausePdf } from './fixture.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = resolve(join(here, '..'));
@@ -61,6 +62,8 @@ const doublePath = join(tmpdir(), 'blinded-double.pdf');
 writeFileSync(doublePath, buildDoubleFoundPdf());
 const stackedPath = join(tmpdir(), 'blinded-stacked.pdf');
 writeFileSync(stackedPath, buildStackedPdf());
+const pausePath = join(tmpdir(), 'blinded-pause.pdf');
+writeFileSync(pausePath, buildPausePdf(8));
 const smallLogoPath = join(tmpdir(), 'blinded-smalllogo.pdf');
 writeFileSync(smallLogoPath, buildSmallLogoPdf());
 const wordmarkPath = join(tmpdir(), 'blinded-wordmark.pdf');
@@ -392,8 +395,12 @@ try {
       label: document.getElementById('apply').textContent.trim(),
       green: document.getElementById('apply').classList.contains('done'),
       red: document.getElementById('apply').classList.contains('hunt'),
-      // The circles the red is supposed to be answering.
-      marks: document.querySelectorAll('.termcounts .n.unknown, .templates .n.unknown').length,
+      // The circles the red is supposed to be answering — every one of them,
+      // the detectors included: each of those wears a red ? until a search
+      // has run, and the button is what answers them.
+      marks: document.querySelectorAll(
+        '.termcounts .n.unknown, .templates .n.unknown, .kind .n.unknown').length,
+      words: document.querySelectorAll('.termcounts .n.unknown').length,
       searched: window.Blinded.state.searched,
       applied: window.Blinded.state.applied,
       drawn: window.Blinded.state.pages.reduce(
@@ -408,11 +415,13 @@ try {
     const opened = await state();
     check('a document opens asking to be searched, not redacted',
       opened.label === 'Search', JSON.stringify(opened));
-    // Nothing typed yet, so there is no red ? anywhere and nothing for a red
-    // button to be about. An alarm raised over nothing teaches the reviewer to
-    // stop reading it.
-    check('with nothing to look for the button is not red',
-      opened.red === false && opened.marks === 0, JSON.stringify(opened));
+    // Nothing typed yet — but the detectors are all still question marks, and
+    // the button is what answers them. It used to open blue over a panel of
+    // red ?s, which says "nothing outstanding" about a panel full of it.
+    check('a freshly opened document has its detectors still to answer',
+      opened.marks > 0 && opened.words === 0, JSON.stringify(opened));
+    check('so the button wears the red that answers them',
+      opened.red === true, JSON.stringify(opened));
 
     await setTerms(page, ["Jane"]);
     await page.waitForTimeout(400);
@@ -466,7 +475,7 @@ try {
     // Now there is a red ? beside the word, and the button that answers it
     // wears the same red.
     check('a word nothing has looked for puts a red ? on the panel',
-      typed.marks === 1, JSON.stringify(typed));
+      typed.words === 1 && typed.marks === opened.marks + 1, JSON.stringify(typed));
     check('and turns the button red to match it',
       typed.red === true, JSON.stringify(typed));
 
@@ -4829,6 +4838,53 @@ try {
     check('and its list has a row for each', listed.rows === 2, JSON.stringify(listed));
   }
 
+  // ---------- the reading is not only for typed words ----------
+  //
+  // Reported: pick a logo, type nothing, press Search, and the text is
+  // ignored. It was. The reading pass was gated on there being a typed word,
+  // so with none the pages were never read — and every detector was answered
+  // from the text layer alone, which on a scan says nothing at all. The panel
+  // then reported no email addresses on a page that plainly shows one.
+  //
+  // The reading is one job with two customers: a word to find inside the
+  // pictures, and every detector, which can only read what the page says once
+  // something has read it.
+  {
+    if (await page.isVisible('#view-review')) await newFile();
+    await page.waitForSelector('#view-drop:not([hidden])', { timeout: 15000 });
+    await page.setInputFiles('#file', readablePath);
+    await page.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
+
+    const armed = await page.evaluate(() => ({
+      terms: window.Blinded.state.terms.length,
+      pending: window.Blinded.ocrPending(),
+      red: document.getElementById('apply').classList.contains('hunt'),
+      unknown: window.Blinded.unknownKinds(),
+    }));
+    check('with nothing typed there is still reading to do',
+      armed.terms === 0 && armed.pending === true, JSON.stringify(armed));
+    check('and the button is red, because the detectors are all question marks',
+      armed.red === true && armed.unknown > 0, JSON.stringify(armed));
+
+    await redact(page);
+    const read = await page.evaluate(() => ({
+      ocrRead: window.Blinded.state.ocrRead,
+      pages: window.Blinded.state.pages.length,
+      readPages: window.Blinded.state.pages.filter(p => p.ocrItems).length,
+      known: window.Blinded.kindsKnown(),
+      unknown: window.Blinded.unknownKinds(),
+      found: Object.values(window.Blinded.countsByKind()).reduce((n, v) => n + v, 0),
+      red: document.getElementById('apply').classList.contains('hunt'),
+    }));
+    check('a search with nothing typed reads the pages anyway',
+      read.ocrRead === true && read.readPages === read.pages, JSON.stringify(read));
+    check('so the detectors have an answer rather than a question mark',
+      read.known === true && read.unknown === 0 && read.found > 0,
+      JSON.stringify(read));
+    check('and the button stops being red once nothing is outstanding',
+      read.red === false, JSON.stringify(read));
+  }
+
   // ---------- turning a page ----------
   //
   // A scan fed the wrong way is not a cosmetic problem here: the reader
@@ -6290,10 +6346,13 @@ try {
   {
     if (await page.isVisible('#view-review')) await newFile();
     await page.waitForSelector('#view-drop:not([hidden])');
-    // Two pages, because stopping happens between them: on a one-page document
-    // a pause can never arrive in time to prevent that page being read, and
-    // asserting that it does would be asserting the wrong thing.
-    await page.setInputFiles('#file', logoPath);
+    // Eight pages, because stopping happens between them and the reader runs
+    // several at once: on a two-page document both start together, there is
+    // no "between" for the pause to land in, and whether it seemed to work
+    // came down to how warm the reader's workers happened to be. That is a
+    // test that passes by luck, and it did — until something else in the
+    // suite warmed them up first.
+    await page.setInputFiles('#file', pausePath);
     await page.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
     await setTerms(page, ["Jane Doe"]);
     await page.waitForTimeout(300);
@@ -6397,8 +6456,24 @@ try {
       // Pressing Redact clears any earlier pause, so the only way to stop a
       // run is to ask while it is running — which is what the button does.
       const run = B.applyRedaction();
-      await new Promise(done => setTimeout(done, 50));
-      B.requestPause();
+      // Asked as soon as the progress bar says a page has come back, rather
+      // than after a fixed delay: how long a page takes depends on whether
+      // the reader's engines are already running, and a race the suite
+      // happens to win is not a check on anything.
+      //
+      // Watched on the bar rather than on the pages, because a page only
+      // receives its words once the whole reading pass resolves — which is
+      // exactly the moment a pause is meant to come before.
+      await new Promise(done => {
+        const watch = setInterval(() => {
+          const row = document.querySelector('[data-leg="read"] [data-count]');
+          const said = row && /^(\d+) of/.exec(row.textContent.trim());
+          if (!said || Number(said[1]) < 1) return;
+          clearInterval(watch);
+          B.requestPause();
+          done();
+        }, 10);
+      });
       await run;
       return {
         applied: B.state.applied,
