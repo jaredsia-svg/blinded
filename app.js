@@ -2548,6 +2548,18 @@
     return state.kind === 'text' || state.countedKinds.includes(kind);
   }
 
+  // After the pages have been read, enabling a detector is answered from
+  // what is already in hand: rescan covers the text layer, detectOcr covers
+  // what OCR read. countedKinds used to stay as it was at Search time, so
+  // ticking "All of them" afterwards left every row on a red ? over an
+  // answer that had just been computed. Before any reading, a tick is only
+  // a request — the ? stays until Search.
+  function syncCountedKindsAfterToggle() {
+    if (state.kind === 'text' || !state.useOcr || state.ocrRead) {
+      state.countedKinds = acceptedKinds();
+    }
+  }
+
   function kindsKnown() {
     if (state.kind === 'text') return true;
     return acceptedKinds().every(kind => kindAnswered(kind));
@@ -2606,17 +2618,14 @@
       box.addEventListener('change', () => {
         if (box.checked) state.enabled.add(row.kind);
         else state.enabled.delete(row.kind);
-        // Settled, because nothing new needs finding. Both places a detector
-        // looks — the text layer and what OCR read — are already in hand, so
-        // switching one off is a question about what to cover rather than
-        // about what is there. Sending the document back to un-searched would
-        // throw away the answer, put every detector back to a question mark,
-        // and ask for the whole pass again to learn something already known.
+        // Settled when the pages are already read: both places a detector
+        // looks — the text layer and what OCR read — are in hand, so
+        // switching one is a question about what to cover rather than about
+        // what is there. Before that, the tick is only a request and the
+        // row keeps its red ? until Search.
         detectOcr();
         rescan({ settled: true });
-        // Ticking one is asking a question nothing has answered yet, so the
-        // row takes a red ? and the button that answers it turns red too.
-        // Unticking withdraws the question the same way.
+        syncCountedKindsAfterToggle();
         renderKinds();
         refreshApply();
       });
@@ -2712,6 +2721,7 @@
       }
       detectOcr();
       rescan({ settled: true });
+      syncCountedKindsAfterToggle();
       renderKinds();
       refreshApply();
     });
@@ -6683,6 +6693,7 @@
     creepEdges, pushScroll, startChoosing, stopChoosing, CHOOSE_HOLD,
     addDocument, pickedInOrder, selectPage, thumbFor, organiseStamp,
     kindsKnown, unknownKinds, countsByKind, detectOcr, renderKinds, placesForKind,
+    syncCountedKindsAfterToggle,
     markPending, needsSearch, markDuplicates, onePerPlace, plannedCount,
     refreshApply, kindAnswered,
     pendingTemplates,
