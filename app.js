@@ -68,7 +68,19 @@
     name: '',
     pages: [],         // { index, source, canvas, widthPt, heightPt, items, findings, hits, manual, texts, dismissed }
     text: '',
-    enabled: new Set(Detect.KINDS.map(k => k.kind).concat('term')),
+    // Which detectors are on. None of them, to begin with.
+    //
+    // They were all on, which meant a document opened with five red question
+    // marks and a red button before the reviewer had asked for anything —
+    // five questions the tool had put to itself. Typing a word is an
+    // instruction; ticking a detector is the same instruction in a different
+    // form, and both should come from the reviewer. 'term' is not a detector
+    // and is always on: a word in the list is already the decision.
+    enabled: new Set(['term']),
+    // Which detectors this search answered, the same way countedTerms records
+    // which words it answered. A detector ticked afterwards has no number yet
+    // and must not borrow the confidence of the ones that do.
+    countedKinds: [],
     terms: [],
     // The pages the reviewer has selected in the Organise sheet. Page objects
     // rather than numbers, because a number stops meaning the same page the
@@ -509,6 +521,7 @@
     state.exported = false;
     state.searched = false;
     state.countedTerms = [];
+    state.countedKinds = [];
     state.openTally = null;
     state.picked = new Set();
     state.pages = pages.map(p => ({
@@ -536,6 +549,12 @@
     el('losslessrow').hidden = kind === 'text';
 
     state.applied = false;
+    // The panel a document opens into: the four that say what to cover, open;
+    // the sheet of pages, shut. Set here rather than left to the markup,
+    // because the markup is only right the first time — open a second
+    // document after organising the first and the panel would still be in
+    // whatever shape that left it.
+    openSections();
     if (kind !== 'text') buildPageElements();
     renderSheet();
     show('review');
@@ -727,6 +746,15 @@
   // to the thumbnails. The line says what it is standing in for, so nothing
   // has gone missing — it is a door back, and it says so by naming what is
   // behind it. Clicking it shuts the sheet, which brings all five back.
+  // The four sections above the sheet, open, with the sheet shut. This is the
+  // shape the panel opens in and the shape it comes back to when the sheet is
+  // rolled away.
+  function openSections() {
+    for (const sect of document.querySelectorAll('details.sect')) {
+      sect.open = sect !== el('organisesect');
+    }
+  }
+
   function rollSections(rolled) {
     const roll = el('sectroll');
     if (!roll) return;
@@ -1712,6 +1740,9 @@
     // Which words this search answered. A word added afterwards has no number
     // yet, and must not borrow the confidence of the ones that do.
     state.countedTerms = state.terms.slice();
+    // And which detectors. Only the ticked ones were looked for, so only they
+    // have an answer.
+    state.countedKinds = acceptedKinds();
     state.redacting = false;
     // The word list shows a tally only once something has counted, so it has
     // to be redrawn when that becomes true. The detectors are the same now
@@ -2507,43 +2538,57 @@
   // over a panel full of outstanding questions.
   function unknownKinds() {
     if (state.kind === 'text' || !state.pages.length) return 0;
-    // Counted the way they are drawn: before a search every kind is listed,
-    // ticked or not, so the number here is the number on screen.
-    return kindsKnown() ? 0 : Detect.KINDS.length;
+    // Counted the way they are drawn: a detector wears a red ? only if it is
+    // ticked and nothing has looked for it yet, so the number here is the
+    // number on screen.
+    return acceptedKinds().filter(kind => !kindAnswered(kind)).length;
+  }
+
+  // Has this detector been looked for, as things stand?
+  //
+  // Per detector rather than per document, because they are now ticked one at
+  // a time: ticking Names of people after a search is the same act as typing
+  // a new word, and it has the same answer — nothing knows yet, press Search.
+  function kindAnswered(kind) {
+    return state.kind === 'text' || state.countedKinds.includes(kind);
   }
 
   function kindsKnown() {
-    return state.kind === 'text' || state.searched;
+    if (state.kind === 'text') return true;
+    return acceptedKinds().every(kind => kindAnswered(kind));
   }
 
   function renderKinds() {
     const tally = countsByKind();
-    const known = kindsKnown();
     // Only the detectors are listed. Words the reviewer typed were once a
     // tenth row with a tick box of its own, which invited exactly one
     // question – why would I type a word and then ask for it not to be
     // covered? Typing a word is the instruction; there is nothing left to
     // agree to. It is always on, and the terms box above shows its own count.
     //
-    // Once the search has run, only the ones that found something. A list of
-    // seven kinds with a zero against five of them is a list of what this tool
-    // can look for, which is a fact about the tool; what the reviewer is
-    // deciding is what to do about this document. The rest is answered by the
-    // hint on the heading, where a question about the tool belongs.
+    // Which rows to list.
     //
-    // Before it has run, all of them, because none of them has an answer yet
-    // and hiding a detector for finding nothing would be reporting a result
-    // nobody has looked for.
-    const rows = known
-      ? Detect.KINDS.filter(row => (tally[row.kind] || 0) > 0)
-      : Detect.KINDS;
+    // The detectors are ticked one at a time now, so the row is the switch:
+    // hiding it would take away the only way to ask for that kind. Every
+    // ticked detector is listed, answered or not — and so is any unticked one
+    // that turned something up, which is an offer rather than a result: three
+    // email addresses are in this document, tick it and they are covered.
+    //
+    // Before anything has been searched that leaves the whole list, which is
+    // what a reviewer choosing what to look for needs to see.
+    const answeredAnything = state.countedKinds.length > 0;
+    const rows = Detect.KINDS.filter(row => state.enabled.has(row.kind)
+      || !answeredAnything || (tally[row.kind] || 0) > 0);
     const host = el('kinds');
     host.textContent = '';
 
-    // Nothing found means nothing to decide, so the section goes rather than
-    // standing empty. An empty panel section reads as something broken.
+    // The section stands as long as there is anything to decide, which now
+    // includes deciding to look: it holds the switches. It goes only when
+    // every detector has been asked and none of them found anything, where
+    // what is left would be a list of what this tool can do rather than
+    // anything about this document.
     const section = el('kindsect');
-    if (section) section.hidden = rows.length === 0;
+    if (section) section.hidden = rows.length === 0 || state.kind === 'text';
 
     for (const row of rows) {
       const n = tally[row.kind] || 0;
@@ -2566,6 +2611,11 @@
         // and ask for the whole pass again to learn something already known.
         detectOcr();
         rescan({ settled: true });
+        // Ticking one is asking a question nothing has answered yet, so the
+        // row takes a red ? and the button that answers it turns red too.
+        // Unticking withdraws the question the same way.
+        renderKinds();
+        refreshApply();
       });
 
       const name = document.createElement('span');
@@ -2577,13 +2627,28 @@
       // one is only decoration. Grey said "a number"; green says "found, and
       // here is where".
       const key = 'kind::' + row.kind;
+      const ticked = state.enabled.has(row.kind);
+      const answered = kindAnswered(row.kind);
       const count = document.createElement('button');
       count.type = 'button';
-      count.className = known ? 'n dot-green' : 'n unknown';
-      count.textContent = known ? String(n) : '?';
-      if (!known) {
+      // A detector nobody has asked for claims nothing: no question mark, no
+      // number. An untouched panel should be quiet — the reviewer has not
+      // asked it anything yet.
+      //
+      // Except where it has something to offer: a kind left unticked that the
+      // search turned up anyway shows what it found, so the offer is visible
+      // rather than hidden behind a tick nobody knew to make.
+      const offering = !ticked && answeredAnything && n > 0;
+      count.className = ticked && !answered ? 'n unknown' : 'n dot-green';
+      count.textContent = !ticked
+        ? (offering ? String(n) : '')
+        : answered ? String(n) : '?';
+      count.hidden = !ticked && !offering;
+      if (ticked && !answered) {
         count.disabled = true;
         count.title = 'Not searched for yet – press Search';
+      } else if (!ticked && !offering) {
+        count.disabled = true;
       } else {
         const where = placesForKind(row.kind);
         count.disabled = where.length === 0;
@@ -2603,7 +2668,7 @@
 
       label.append(box, name, count);
       host.append(label);
-      if (known && state.openTally === key && !count.disabled) {
+      if (state.openTally === key && !count.disabled) {
         host.append(tallyList(row.label, placesForKind(row.kind)));
       }
     }
@@ -5744,21 +5809,10 @@
   el('choose-done').addEventListener('click', stopChoosing);
 
   el('sectroll').addEventListener('click', () => {
-    // Shutting the sheet is what brings the four back; that much was always
-    // true. What they come back as is a choice, and "however they were before
-    // the sheet swallowed them" turned out to be the wrong one: a reviewer
-    // who had every section open, organised the pages, then came back, was
-    // handed the whole panel again and had to shut most of it.
-    //
-    // So the panel comes back to the state it opens in. The first two — the
-    // words and the images — are where a redaction is actually made, and the
-    // rest are settings to look at once. Taken in document order rather than
-    // by name, so that renaming a section does not quietly change which two
-    // are open.
-    el('organisesect').open = false;
-    const others = [...document.querySelectorAll('details.sect')]
-      .filter(sect => sect !== el('organisesect'));
-    others.forEach((sect, i) => { sect.open = i < 2; });
+    // Shutting the sheet is what brings the four back, and they come back
+    // open — the shape the panel opens in — rather than however they happened
+    // to be when the sheet swallowed them.
+    openSections();
   });
 
   window.addEventListener('resize', fitSheet);
@@ -6568,7 +6622,7 @@
     scrollerFor, setTool, marking,
     runSearch, applyRedaction: runSearch, coverMarks, uncoverMarks, applyButton,
     activeBoxes,
-    renderSheet, setOrder, moveTo, keepOnlyPicked, dropPicked,
+    renderSheet, setOrder, moveTo, keepOnlyPicked, dropPicked, openSections,
     turnPages, turnPage, addNoteAt, dropNote, selectNote, editNote, commitNote,
     notesOf, renderNotes, notesToDraw, startPlacingText, stopPlacingText,
     resizeNote, NOTE_COLOURS, NOTE_SIZE,
@@ -6577,6 +6631,7 @@
     addDocument, pickedInOrder, selectPage, thumbFor, organiseStamp,
     kindsKnown, unknownKinds, countsByKind, detectOcr, renderKinds, placesForKind,
     markPending, needsSearch, markDuplicates, onePerPlace, plannedCount,
+    refreshApply, kindAnswered,
     pendingTemplates,
     termsNeedingPictures,
     readPages, matchOcr, ocrPending, ocrMatchStale, showWordControls,

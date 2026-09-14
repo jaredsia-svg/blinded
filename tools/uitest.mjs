@@ -116,6 +116,34 @@ async function setTerms(page, words) {
 
 // Two presses now, not one: the first searches and proposes, the second
 // covers. Tests that want a redacted document want both.
+// Tick every detector.
+//
+// They are off when a document opens — the reviewer decides what to look for
+// — so any test about what a detector finds has to ask for it first, the way
+// a reviewer would.
+async function useDetectors(page) {
+  await page.evaluate(() => {
+    const B = window.Blinded;
+    for (const row of window.BlindedDetect.KINDS) B.state.enabled.add(row.kind);
+    B.renderKinds();
+    B.rescan({ settled: true });
+    B.refreshApply();
+  });
+}
+
+// And the other way: every detector off, the state a document opens in. The
+// choice is kept across documents in a session, so a test that has ticked
+// them has to put them back before asserting anything about a quiet panel.
+async function noDetectors(page) {
+  await page.evaluate(() => {
+    const B = window.Blinded;
+    for (const row of window.BlindedDetect.KINDS) B.state.enabled.delete(row.kind);
+    B.renderKinds();
+    B.rescan({ settled: true });
+    B.refreshApply();
+  });
+}
+
 async function redact(page) {
   await page.click('#apply');
   await page.waitForFunction(() => window.Blinded.state.searched === true,
@@ -219,6 +247,10 @@ try {
   check('text runs were extracted with positions', rendered.items >= 6, String(rendered.items));
 
   // ---------- detection ----------
+  // Asked for first: the detectors are off when a document opens, so that a
+  // reviewer decides what to look for rather than arriving at five questions
+  // the tool put to itself.
+  await useDetectors(page);
   const kinds = await page.evaluate(() =>
     window.Blinded.state.pages[0].findings.map(f => f.kind));
   for (const kind of ['email', 'phone', 'url']) {
@@ -411,17 +443,48 @@ try {
     await newFile();
     await page.setInputFiles('#file', fixturePath);
     await page.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
+    // What a detector is ticked to is the reviewer's, and it is kept from one
+    // document to the next — so a suite that has ticked them earlier has to
+    // put them back before asking what a fresh panel looks like.
+    await noDetectors(page);
 
     const opened = await state();
     check('a document opens asking to be searched, not redacted',
       opened.label === 'Search', JSON.stringify(opened));
-    // Nothing typed yet — but the detectors are all still question marks, and
-    // the button is what answers them. It used to open blue over a panel of
-    // red ?s, which says "nothing outstanding" about a panel full of it.
-    check('a freshly opened document has its detectors still to answer',
-      opened.marks > 0 && opened.words === 0, JSON.stringify(opened));
-    check('so the button wears the red that answers them',
-      opened.red === true, JSON.stringify(opened));
+    // Nothing typed and no detector ticked, so there is no red ? anywhere and
+    // nothing for a red button to be about. An alarm raised over nothing
+    // teaches the reviewer to stop reading it.
+    check('a freshly opened document asks nothing of its own',
+      opened.marks === 0 && opened.words === 0, JSON.stringify(opened));
+    check('so the button is not red', opened.red === false, JSON.stringify(opened));
+
+    // Ticking a detector is the same act as typing a word: a question nothing
+    // has answered yet, on the row and on the button.
+    const tickedKind = await page.evaluate(async () => {
+      const box = document.querySelector('.kind input[data-kind="email"]');
+      box.checked = true;
+      box.dispatchEvent(new Event('change', { bubbles: true }));
+      await new Promise(r => setTimeout(r, 60));
+      const out = {
+        marks: document.querySelectorAll('.kind .n.unknown').length,
+        red: document.getElementById('apply').classList.contains('hunt'),
+        unknown: window.Blinded.unknownKinds(),
+      };
+      const again = document.querySelector('.kind input[data-kind="email"]');
+      again.checked = false;
+      again.dispatchEvent(new Event('change', { bubbles: true }));
+      await new Promise(r => setTimeout(r, 60));
+      out.afterUntick = document.querySelectorAll('.kind .n.unknown').length;
+      out.redAfter = document.getElementById('apply').classList.contains('hunt');
+      return out;
+    });
+    check('ticking a detector puts a red ? on its row',
+      tickedKind.marks === 1 && tickedKind.unknown === 1, JSON.stringify(tickedKind));
+    check('and turns the button red to answer it',
+      tickedKind.red === true, JSON.stringify(tickedKind));
+    check('unticking it takes the question back',
+      tickedKind.afterUntick === 0 && tickedKind.redAfter === false,
+      JSON.stringify(tickedKind));
 
     await setTerms(page, ["Jane"]);
     await page.waitForTimeout(400);
@@ -553,6 +616,7 @@ try {
   //
   // Searching first, because nothing at all is drawn before that: the marks
   // this checks the colour of do not exist until the reviewer asks for them.
+  await useDetectors(page);
   await page.evaluate(async () => { await window.Blinded.runSearch(); });
   await page.waitForFunction(() => window.Blinded.state.searched === true,
     undefined, { timeout: 240000 });
@@ -4415,11 +4479,9 @@ try {
       JSON.stringify(unrolled));
     check('with the sheet shut again and the line gone',
       unrolled.sheet === false && unrolled.roll === true, JSON.stringify(unrolled));
-    // Open as the panel opens, not as it was left. Handing back four open
-    // sections is handing back the scrolling the sheet was opened to escape.
-    check('the words and the images are open, and the settings are not',
-      JSON.stringify(unrolled.open) === JSON.stringify([true, true, false, false]),
-      JSON.stringify(unrolled.open));
+    // Open as the panel opens, not as they happened to be left.
+    check('all four come back open, the shape the panel opens in',
+      unrolled.open.every(open => open === true), JSON.stringify(unrolled.open));
 
     await page.evaluate(async () => {
       document.getElementById('organisesect').open = true;
@@ -7824,6 +7886,10 @@ try {
   // painted into a screenshot is an email address. OCR happens during the
   // search, so before it a number would be a count of half the document
   // offered as a count of all of it. A question mark says the honest thing.
+  //
+  // And they are off until asked for, so this block asks: every row listed,
+  // every one of them a question, which is the state a reviewer who has just
+  // ticked the lot is looking at.
   {
     const readKinds = () => page.evaluate(() => {
       const section = document.getElementById('kindsect');
@@ -7841,6 +7907,19 @@ try {
       };
     });
 
+    await noDetectors(page);
+    const quiet = await page.evaluate(() => ({
+      rows: [...document.querySelectorAll('#kinds .kind')].map(r => ({
+        ticked: r.querySelector('input').checked,
+        circle: !r.querySelector('.n').hidden,
+      })),
+      hidden: document.getElementById('kindsect').hidden,
+    }));
+    check('a document opens with every detector off and none of them asking',
+      quiet.rows.length > 0 && quiet.rows.every(r => !r.ticked && !r.circle)
+      && quiet.hidden === false, JSON.stringify(quiet));
+
+    await useDetectors(page);
     const before = await readKinds();
     // However many there are, rather than a number that has to be edited every
     // time one is added or taken away.
@@ -7864,10 +7943,38 @@ try {
     check('after it, numbers rather than questions',
       after.known === true && after.rows.every(r => !r.asking && /^\d+$/.test(r.says)),
       JSON.stringify(after));
-    check('and only the detectors that found something are listed',
-      after.rows.length > 0 && after.rows.every(r => Number(r.says) > 0)
-        && after.rows.length < total,
-      JSON.stringify(after));
+    // Every detector that was asked keeps its row, including one that found
+    // nothing: "we looked, there are none" is an answer, and a row that
+    // vanishes takes the switch with it.
+    check('every detector asked for reports what it found',
+      after.rows.length === total, JSON.stringify(after));
+
+    // An unticked detector that turned something up is still offered, so the
+    // reviewer can see what is there without having guessed in advance.
+    const offered = await page.evaluate(async () => {
+      const B = window.Blinded;
+      const found = window.BlindedDetect.KINDS
+        .map(row => row.kind)
+        .find(kind => (B.countsByKind()[kind] || 0) > 0);
+      B.state.enabled.delete(found);
+      B.renderKinds();
+      const row = [...document.querySelectorAll('#kinds .kind')]
+        .find(r => r.querySelector('input').dataset.kind === found);
+      const out = {
+        found,
+        listed: Boolean(row),
+        ticked: row ? row.querySelector('input').checked : null,
+        says: row ? row.querySelector('.n').textContent : null,
+        asking: row ? row.querySelector('.n').classList.contains('unknown') : null,
+      };
+      B.state.enabled.add(found);
+      B.renderKinds();
+      return out;
+    });
+    check('a detector left unticked still shows what it would cover',
+      offered.listed === true && offered.ticked === false
+      && Number(offered.says) > 0 && offered.asking === false,
+      JSON.stringify(offered));
 
     // The tally is the same control the words and the pictures carry: green,
     // and it opens where they are. A grey number that does nothing teaches the
@@ -7945,8 +8052,14 @@ try {
         unticked.asking === false, JSON.stringify(unticked));
     }
 
-    // Nothing found takes the section off the panel, rather than leaving a
-    // row of zeroes where a decision used to be.
+    // The section stays even when there is nothing to report.
+    //
+    // It used to go, on the reasoning that a row of zeroes is a fact about
+    // the tool rather than about the document. That was right when every
+    // detector was on: the list was a result. Now it is the switchboard —
+    // the only place a detector can be asked for at all — and a panel that
+    // takes the switches away because they have not found anything yet is a
+    // panel that cannot be asked a second question.
     const bare = await page.evaluate(async () => {
       const B = window.Blinded;
       const was = B.state.pages.map(p => p.text);
@@ -7959,9 +8072,9 @@ try {
       await new Promise(r => setTimeout(r, 60));
       return { hidden, backAgain: document.getElementById('kindsect').hidden };
     });
-    check('a document with nothing to find has no Detectors section',
-      bare.hidden === true, JSON.stringify(bare));
-    check('and it comes back when there is something again',
+    check('the Detectors section stays even with nothing found, since it holds the switches',
+      bare.hidden === false, JSON.stringify(bare));
+    check('and is still there when there is something again',
       bare.backAgain === false, JSON.stringify(bare));
   }
 
