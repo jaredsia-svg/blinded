@@ -1,1 +1,1 @@
-@/tmp/real_file_1_content.txt
+FILE:///tmp/real_file_1_content.txt
