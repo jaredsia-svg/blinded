@@ -6505,28 +6505,14 @@
   function hideSweepOffer() {
     const box = el('sweepoffer');
     if (box) box.hidden = true;
-    const more = el('sweepoffermore');
-    if (more) more.open = false;
   }
 
   function offerSweepAfterSearch() {
+    // Only when a second check would actually do work (same gate as the
+    // panel button). Reading already settled → no popout.
     if (!shouldOfferSweep()) return;
     state.sweepOfferShown = true;
-    const box = el('sweepoffer');
-    const work = sweepWorkload();
-    const first = state.pages[0];
-    const megapixels = first ? (first.source.width * first.source.height) / 1e6 : 2;
-    const seconds = Math.round(work.pages * work.terms * megapixels * SWEEP_SECONDS_PER_MP);
-    const cost = el('sweepoffercost');
-    if (cost) {
-      cost.textContent = 'About ' + describeTime(seconds) + ' for '
-        + work.pages + (work.pages === 1 ? ' page' : ' pages')
-        + (work.terms !== state.terms.length
-          ? ' · ' + work.terms + (work.terms === 1 ? ' word' : ' words') + ' still in doubt'
-          : '')
-        + '.';
-    }
-    box.hidden = false;
+    el('sweepoffer').hidden = false;
     el('sweepofferx').focus();
   }
 
@@ -6553,6 +6539,44 @@
         skip();
       }
     }, true);
+  }
+
+
+  // Put long sidebar copy behind "Show more" so the panel stays scannable.
+  // Short notes stay as plain text. Child nodes (e.g. refused-spot lists)
+  // always go in the expanded body.
+  const SIDEBAR_NOTE_COLLAPSE = 140;
+
+  function setSidebarNote(note, summaryText, fullText, extraNodes) {
+    note.textContent = '';
+    const extras = (extraNodes || []).filter(Boolean);
+    const full = fullText == null ? summaryText : fullText;
+    const long = (full && full.length > SIDEBAR_NOTE_COLLAPSE) || extras.length > 0;
+    if (!long) {
+      note.textContent = summaryText || '';
+      for (const node of extras) note.append(node);
+      return;
+    }
+    const details = document.createElement('details');
+    details.className = 'sidebar-note-more';
+    const summary = document.createElement('summary');
+    const short = (summaryText || full).trim();
+    const clipped = short.length > 110 ? short.slice(0, 107).replace(/\s+\S*$/, '') + '…' : short;
+    summary.append(document.createTextNode(clipped + ' '));
+    const toggle = document.createElement('span');
+    toggle.className = 'sidebar-note-toggle';
+    toggle.textContent = 'Show more';
+    summary.append(toggle);
+    details.append(summary);
+    const body = document.createElement('div');
+    body.className = 'sidebar-note-full';
+    body.append(document.createTextNode(full));
+    for (const node of extras) body.append(node);
+    details.append(body);
+    details.addEventListener('toggle', () => {
+      toggle.textContent = details.open ? 'Show less' : 'Show more';
+    });
+    note.append(details);
   }
 
   function renderSweep() {
@@ -6599,8 +6623,8 @@
       // Reading already settled every typed word — nothing for shape to do.
       if (!work.pages || !work.terms) {
         button.hidden = true;
-        note.textContent = 'The reading already covered every typed word on '
-          + 'every page - nothing left for a shape check to do.';
+        setSidebarNote(note,
+          'Nothing left for a second check – reading already covered every typed word.');
         return;
       }
       button.hidden = false;
@@ -6613,7 +6637,7 @@
       const seconds = Math.round(
         work.pages * work.terms * megapixels * SWEEP_SECONDS_PER_MP);
       if (state.sweepStopped && state.sweepReached) {
-        note.textContent = 'Stopped after ' + state.sweepReached
+        const full = 'Stopped after ' + state.sweepReached
           + ' page' + (state.sweepReached === 1 ? '' : 's') + ' still in doubt'
           + (state.sweepAdded
             ? ', having added ' + state.sweepAdded
@@ -6621,60 +6645,64 @@
             : ', having found nothing new. ')
           + 'Start it again to finish the rest - about '
           + describeTime(seconds) + '.';
+        setSidebarNote(note, 'Second check stopped – about '
+          + describeTime(seconds) + ' left to finish.', full);
         return;
       }
-      note.textContent = 'The initial redaction may make mistakes. This check '
-        + 're-inspects by shape only where the reading missed or was unsure ('
+      const offerFull = 'The first search may miss lettering in logos, photos '
+        + 'and coloured headers, and can mark the wrong spot. A second check '
+        + 're-inspects by shape where reading missed or was unsure ('
         + work.pages + (work.pages === 1 ? ' page' : ' pages')
         + (work.terms !== state.terms.length
           ? ', ' + work.terms + (work.terms === 1 ? ' word' : ' words')
           : '')
-        + '), works in the background, and shows new marks in amber. About '
-        + describeTime(seconds) + '.';
+        + '), runs in the background, updates the sidebar, and shows new marks '
+        + 'in amber. About ' + describeTime(seconds) + '.';
+      setSidebarNote(note,
+        'Optional second check – about ' + describeTime(seconds) + '.',
+        offerFull);
       return;
     }
 
     button.hidden = true;
-    note.textContent = state.sweepSkipped
-      ? 'The reading already covered every typed word on every page - '
-        + 'nothing left for a shape check to do.'
-      : state.sweepAdded === 0
-      ? 'The thorough check found nothing the reading had missed.'
-
-      : 'The thorough check added ' + state.sweepAdded
+    let summary;
+    let full;
+    if (state.sweepSkipped) {
+      summary = 'Nothing left for a second check – reading already covered every typed word.';
+      full = summary;
+    } else if (state.sweepAdded === 0) {
+      summary = 'Second check found nothing new.';
+      full = 'The second check found nothing the reading had missed.';
+    } else {
+      summary = 'Second check added ' + state.sweepAdded
+        + (state.sweepAdded === 1 ? ' amber mark' : ' amber marks')
+        + '. Press Redact to cover '
+        + (state.sweepAdded === 1 ? 'it' : 'them') + '.';
+      full = 'The second check added ' + state.sweepAdded
         + (state.sweepAdded === 1 ? ' mark' : ' marks')
         + ', outlined in amber. Press Redact to cover '
         + (state.sweepAdded === 1 ? 'it' : 'them') + '.';
+    }
 
-    // And what it found but stood down from.
-    //
-    // The check refuses a spot the page reader has already read as a different
-    // word, which is right far more often than it is wrong: on a text report
-    // it threw out fifty-four wrong guesses. But when it is wrong — a heading
-    // the reader misread confidently — the mark simply never appears, and
-    // there is no way to tell that from the check having found nothing there.
-    // Saying how many were refused is the difference between "it missed this"
-    // and "it decided against this", which are different problems with
-    // different answers.
+    const extras = [];
     if (state.sweepRefused) {
       const spots = (state.sweepRefusedAt || []).slice()
         .sort((a, b) => a.pageIndex - b.pageIndex || a.at - b.at);
-      note.textContent += ' ' + state.sweepRefused
+      full += ' ' + state.sweepRefused
         + (state.sweepRefused === 1 ? ' other spot was' : ' other spots were')
         + ' left alone because the page reader had already read '
         + (state.sweepRefused === 1 ? 'it' : 'them')
         + ' as something else. If a mark you expected is missing, '
         + (spots.length ? 'look here:' : 'that is where to look.');
-      // Each one, to go and see. Telling a reviewer that two places in a
-      // sixty-page document are worth checking, without saying which two, is
-      // not an answer — it is the same "look everywhere again" they came here
-      // to avoid.
       if (spots.length) {
-        note.append(tallyRows(spots.map(spot => ({
+        extras.push(tallyRows(spots.map(spot => ({
           pageIndex: spot.pageIndex, kind: 'refused', at: spot.at,
         }))));
       }
+      summary = summary.replace(/\.$/, '') + ' · '
+        + state.sweepRefused + ' skipped by the reader.';
     }
+    setSidebarNote(note, summary, full, extras);
   }
 
 
