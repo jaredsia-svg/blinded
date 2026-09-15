@@ -886,6 +886,27 @@ check('an empty term is harmless', TextImage.shapeRelief('') === 0
   && TextImage.shapeRelief(null) === 0);
 
 
+
+// Typed terms: OCR-tolerant connectors and Comprehensive settlement cues.
+(() => {
+  check('F&N matches itself',
+    Detect.findTerms('F&N is leading', ['F&N']).length === 1);
+  check('F&N matches F and N',
+    Detect.findTerms('F and N is leading', ['F&N']).some(h => h.term === 'F&N'));
+  check('F&N matches inside F&N\'s',
+    Detect.findTerms("F&N's Financials", ['F&N']).length === 1);
+  check('OCR may glue FraserandNeave',
+    Detect.findTerms('segment and FraserandNeave', ['Fraser and Neave'], { fromOcr: true })
+      .some(h => h.term === 'Fraser and Neave'));
+  check('but the text layer still demands real spaces between words',
+    Detect.findTerms('FraserandNeave', ['Fraser and Neave']).length === 0);
+  check('Fraser and Neave matches Fraser & Neave under OCR rules',
+    Detect.findTerms('Fraser & Neave, Limited', ['Fraser and Neave'], { fromOcr: true })
+      .length === 1);
+  check('Fan is not silently accepted as F&N',
+    Detect.findTerms('Fan is leading', ['F&N'], { fromOcr: true }).length === 0);
+})();
+
 // Page roles: chart vs contact layout for detector FP suppression.
 (() => {
   check('pagerole is loaded', !!PageRole && typeof PageRole.classify === 'function');

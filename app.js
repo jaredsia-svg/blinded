@@ -1917,7 +1917,7 @@
       done++;
       if (report) report(done);
       if (!page.ocrText) continue;
-      const spans = Detect.resolveOverlaps(Detect.findTerms(page.ocrText, state.terms));
+      const spans = Detect.resolveOverlaps(Detect.findTerms(page.ocrText, state.terms, { fromOcr: true }));
       for (const span of spans) {
         // Every word the match touches is covered whole.
         //
@@ -6045,18 +6045,16 @@
   // uses to let a confident reading veto a shape guess. Unsure OCR is exactly
   // what Comprehensive is for, so those pages stay in the queue.
   function pageHasConfidentTerm(page, term) {
+    // Text-layer hits are exact: the page really contains the term, and
+    // Comprehensive has nothing to second-guess there.
     for (const f of page.findings || []) {
       if (f.kind === 'term' && f.term === term) return true;
     }
-    if (!page.ocrText || !page.ocrPlaced || !page.ocrPlaced.length) return false;
-    const spans = Detect.findTerms(page.ocrText, [term]);
-    for (const span of spans) {
-      const over = page.ocrPlaced.filter(item =>
-        !(item.end <= span.start || item.start >= span.end));
-      if (!over.length) continue;
-      if (over.every(item => typeof item.confidence === 'number'
-        && item.confidence >= READER_SURE)) return true;
-    }
+    // OCR hits do NOT settle the page. Measured on a photographed TCC slide
+    // where "F&N" was typed: OCR boxed four copies confidently and skipped
+    // Comprehensive, while other copies were read as "Fan" / "FEN" / missed
+    // on white-on-blue and in "F&N's Financials". One good OCR hit is not
+    // proof every copy was read. Shape search is the second look for that.
     return false;
   }
 
