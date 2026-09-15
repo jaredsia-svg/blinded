@@ -5316,7 +5316,7 @@
         resolve(answer);
       };
       // Sync hooks run inside the click that chose the answer, so a file
-      // picker opened from Load new file still counts as a user gesture.
+      // picker opened from a confirm action still counts as a user gesture.
       const accept = () => {
         if (typeof opts.onConfirm === 'function') opts.onConfirm();
         done(true);
@@ -7100,11 +7100,15 @@
   }
 
   function closeDocument() {
+    // Back to the front page as if nothing was open — drop zone for a new file.
     pendingDraft = null;
     dropDraftPrompt();
     state.pages = [];
     state.text = '';
     state.findings = [];
+    state.name = '';
+    state.sourceSize = 0;
+    state.sourceDigest = null;
     dismissedText.clear();
     el('termbox').value = '';
     state.terms = [];
@@ -7113,7 +7117,20 @@
     state.labels = { byId: {}, entries: [] };
     state.applied = false;
     state.exported = false;
+    state.searched = false;
     state.searchedTerms = [];
+    state.countedTerms = [];
+    state.countedKinds = [];
+    state.sweptTerms = [];
+    state.sweepAdded = 0;
+    state.sweepStopped = false;
+    state.sweepReached = 0;
+    state.sweepSkipped = false;
+    state.sweepOfferShown = false;
+    state.sweepRefused = 0;
+    state.sweepRefusedAt = [];
+    state.openTally = null;
+    state.picked = new Set();
     state.ocrRead = false;
     state.ocrFailed = false;
     undoStack.length = 0;
@@ -7121,6 +7138,9 @@
     setMode('box');
     renderTemplates();
     renderTermCounts();
+    renderKinds();
+    renderSweep();
+    refreshApply();
     show('drop');
   }
 
@@ -7133,20 +7153,17 @@
     }
     const exported = state.applied && state.exported;
     const answer = await confirmAction({
-      title: 'Reset or load a new file?',
+      title: 'Reset or close this file?',
       body: 'Reset to original clears every mark and keeps this file open. '
-        + 'Loading a new file closes it. Nothing is saved anywhere, so this '
-        + 'cannot be undone'
+        + 'Close file returns to the front page so you can start fresh. '
+        + 'Nothing is saved anywhere, so this cannot be undone'
         + (exported ? '.' : ' – and you have not exported it yet.'),
       resetLabel: 'Reset to original',
-      saveLabel: 'Save draft & load new file',
-      confirmLabel: 'Load new file',
-      // Open the picker in the same click that confirmed, before the await
-      // chain loses the user gesture.
-      onConfirm: () => {
-        closeDocument();
-        browseForFile();
-      },
+      saveLabel: 'Save draft & close file',
+      confirmLabel: 'Close file',
+      // Close only – back to the drop zone. Opening a new file is the front
+      // page's job, not this button's.
+      onConfirm: () => { closeDocument(); },
     });
     if (!answer) return;
     if (answer === 'reset') {
@@ -7158,10 +7175,9 @@
     if (answer === 'save') {
       await saveDraft();
       closeDocument();
-      browseForFile();
       return;
     }
-    // Load new file already closed + opened the picker in onConfirm.
+    // Close file already returned to the front page in onConfirm.
   });
 
   window.Blinded = { state, rescan, loadFile, exportFile, setMode, addTemplate,
