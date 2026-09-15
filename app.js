@@ -578,6 +578,7 @@
   // reading — lives on the page object itself and travels with it for free.
 
   let nextPageUid = 1;
+  let justAddedPages = null;
 
   const THUMB_W = 96;
 
@@ -682,6 +683,9 @@
     renderTemplates();
     refreshApply();
     refreshPaging();
+    // Adding pages re-renders detectors, which would otherwise un-hide that
+    // heading while the four sections are rolled into one line above Organise.
+    if (organising()) rollSections(true);
   }
 
   function pickedInOrder() {
@@ -699,9 +703,12 @@
     const host = el('sheet');
     host.textContent = '';
     document.body.classList.toggle('choosing', state.choosing);
+    const fresh = justAddedPages;
+    justAddedPages = null;
     for (const page of state.pages) {
       const item = document.createElement('li');
-      item.className = 'sheetpage' + (state.picked.has(page) ? ' picked' : '');
+      item.className = 'sheetpage' + (state.picked.has(page) ? ' picked' : '')
+        + (fresh && fresh.has(page) ? ' just-added' : '');
       item.dataset.page = String(page.index);
 
       const button = document.createElement('button');
@@ -756,6 +763,11 @@
     }
   }
 
+  function organising() {
+    const sheet = el('organisesect');
+    return Boolean(sheet && sheet.open);
+  }
+
   function rollSections(rolled) {
     const roll = el('sectroll');
     if (!roll) return;
@@ -771,6 +783,7 @@
     roll.setAttribute('aria-expanded', rolled ? 'false' : 'true');
     roll.title = rolled ? 'Show ' + names.join(', ') + ' again' : '';
     for (const sect of others) sect.hidden = rolled;
+    if (!rolled) renderKinds();
   }
 
   // How tall the thumbnails may be: everything the panel has left below them.
@@ -964,22 +977,7 @@
       // two must not be able to disagree — a tile means "before this one" when
       // you drag backwards and "after this one" when you drag forwards, which
       // is a rule nobody should have to know.
-      const gapOf = point => {
-        const tiles = [...host.querySelectorAll('.sheetpage')];
-        let best = 0;
-        let nearest = Infinity;
-        for (let i = 0; i < tiles.length; i++) {
-          const box = tiles[i].getBoundingClientRect();
-          const inside = point.clientX >= box.left && point.clientX <= box.right
-            && point.clientY >= box.top && point.clientY <= box.bottom;
-          const dx = point.clientX - (box.left + box.width / 2);
-          const dy = point.clientY - (box.top + box.height / 2);
-          const away = inside ? -1 : dx * dx + dy * dy;
-          if (away < nearest) { nearest = away; best = dx >= 0 ? i + 1 : i; }
-          if (inside) break;
-        }
-        return best;
-      };
+      const gapOf = point => sheetGapAt(point, host);
 
       const ghost = liftGhost(page, moving.length, event);
       let target = gapOf(event);
@@ -1106,6 +1104,30 @@
     if (edgeTimer !== null) cancelAnimationFrame(edgeTimer);
     edgeTimer = null;
   }
+
+  // Which gap a pointer is over, counted as the drop line uses it: 0 is
+  // before the first page, n is after the last. Shared by dragging a page
+  // and dropping a file onto the sheet, so the two land in the same place.
+  function sheetGapAt(point, host) {
+    const tiles = [...(host || el('sheet')).querySelectorAll('.sheetpage')];
+    let best = 0;
+    let nearest = Infinity;
+    for (let i = 0; i < tiles.length; i++) {
+      const box = tiles[i].getBoundingClientRect();
+      const inside = point.clientX >= box.left && point.clientX <= box.right
+        && point.clientY >= box.top && point.clientY <= box.bottom;
+      const dx = point.clientX - (box.left + box.width / 2);
+      const dy = point.clientY - (box.top + box.height / 2);
+      const away = inside ? -1 : dx * dx + dy * dy;
+      if (away < nearest) { nearest = away; best = dx >= 0 ? i + 1 : i; }
+      if (inside) break;
+    }
+    return best;
+  }
+
+  // Last gap a file-drag was over, so drop uses the line the reviewer saw
+  // rather than a layout that has already moved.
+  let lastFileGap = -1;
 
   // The thing in the hand. A copy of the page, tilted a little and lifted off
   // the panel, following the pointer.
@@ -1338,36 +1360,18 @@
     setOrder(keep, going.length === 1 ? 'removing a page' : 'removing ' + going.length + ' pages');
   }
 
-  // Merging another document in. The new pages go after the last selected
-  // page, so that "put these in the middle" needs no second step; with nothing
-  // selected they go on the end, which is what appending means.
-  async function addDocument(file) {
-    if (!file) return;
-    let fresh = [];
-    try {
-      if (file.type === 'application/pdf' || /\.pdf$/i.test(file.name)) {
-        busy(true, 'Reading the PDF…');
-        busyNote('Your file is being rendered locally on your device. Nothing is uploaded.');
-        const bytes = new Uint8Array(await file.arrayBuffer());
-        fresh = await renderPdf(bytes, (n, total) =>
-          pageProgress(n - 1, total, 'Rendering pages'));
-      } else if (/^image\//.test(file.type) || /\.(png|jpe?g)$/i.test(file.name)) {
-        busy(true, 'Reading the image…');
-        fresh = [await loadImage(file)];
-      } else {
-        fail('Pages can be added from a PDF or an image. A text file has no pages to add.');
-        return;
-      }
-    } catch (error) {
-      if (error && error.blindedCancelled) return;
-      fail('That file could not be added: '
-        + (error && error.message ? error.message : String(error)));
-      return;
-    } finally {
-      busy(false);
-    }
+  // Merging another document in. Dropped onto the sheet, the new pages go in
+  // the gap under the pointer. From the toolbar button they go after the last
+  // selected page, so that "put these in the middle" needs no second step;
+  // with nothing selected they go on the end, which is what appending means.
+  function isPageFile(file) {
+    if (!file) return false;
+    return file.type === 'application/pdf' || /\.pdf$/i.test(file.name)
+      || /^image\//.test(file.type) || /\.(png|jpe?g)$/i.test(file.name);
+  }
 
-    const added = fresh.map(p => ({
+  function wrapAddedPages(fresh) {
+    return fresh.map(p => ({
       ...p,
       uid: nextPageUid++,
       source: p.canvas,
@@ -1380,10 +1384,58 @@
       turn: 0,
       dismissed: new Set(),
     }));
+  }
+
+  async function pagesFromFile(file) {
+    if (file.type === 'application/pdf' || /\.pdf$/i.test(file.name)) {
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      return renderPdf(bytes, (n, total) =>
+        pageProgress(n - 1, total, 'Rendering pages'));
+    }
+    if (/^image\//.test(file.type) || /\.(png|jpe?g)$/i.test(file.name)) {
+      return [await loadImage(file)];
+    }
+    return null;
+  }
+
+  async function addDocuments(files, at) {
+    const wanted = [...(files || [])].filter(isPageFile);
+    if (!wanted.length) {
+      fail('Pages can be added from a PDF or an image. A text file has no pages to add.');
+      return;
+    }
+    let added = [];
+    try {
+      busy(true, wanted.length === 1
+        ? (/pdf/i.test(wanted[0].type || wanted[0].name) ? 'Reading the PDF…' : 'Reading the image…')
+        : 'Reading the files…');
+      busyNote('Your file is being rendered locally on your device. Nothing is uploaded.');
+      for (const file of wanted) {
+        const fresh = await pagesFromFile(file);
+        if (fresh && fresh.length) added = added.concat(wrapAddedPages(fresh));
+      }
+    } catch (error) {
+      if (error && error.blindedCancelled) return;
+      fail('That file could not be added: '
+        + (error && error.message ? error.message : String(error)));
+      return;
+    } finally {
+      busy(false);
+    }
+    if (!added.length) return;
     const picked = pickedInOrder();
-    const at = picked.length ? picked[picked.length - 1].index + 1 : state.pages.length;
-    const next = state.pages.slice(0, at).concat(added, state.pages.slice(at));
+    let insertAt = typeof at === 'number'
+      ? at
+      : (picked.length ? picked[picked.length - 1].index + 1 : state.pages.length);
+    insertAt = Math.max(0, Math.min(state.pages.length, insertAt));
+    justAddedPages = new Set(added);
+    const next = state.pages.slice(0, insertAt).concat(added, state.pages.slice(insertAt));
     setOrder(next, added.length === 1 ? 'adding a page' : 'adding ' + added.length + ' pages');
+  }
+
+  async function addDocument(file, at) {
+    if (!file) return;
+    return addDocuments([file], at);
   }
 
   // ---------- detection ----------
@@ -1554,6 +1606,17 @@
     return !state.ocrRead || ocrMatchStale();
   }
 
+  // Work Search still has to do, even if an earlier press already set
+  // `searched`. Ticking detectors after a run that never read the pages used
+  // to leave the button on Redact over a row of red ? marks.
+  function searchPending() {
+    if (state.kind === 'text') return !state.searched;
+    const unsearched = state.templates.filter(t => !t.searched).length
+      + termsNeedingPictures().length
+      + (ocrPending() ? 1 : 0);
+    return !state.searched || unsearched > 0 || unknownKinds() > 0;
+  }
+
   function refreshApply() {
     const button = el('apply');
     const marks = plannedCount();
@@ -1563,11 +1626,12 @@
       // without this the button stays dead: OCR has found nothing, so nothing
       // is pending, so there is nothing to press.
       + (ocrPending() ? 1 : 0);
+    const searching = searchPending();
 
     // One button, three states, and it says which one it is in: Search finds
     // things and proposes them, Redact covers what was proposed, and Redacted
     // is a state the reviewer can step back out of rather than a dead end.
-    button.textContent = !state.searched ? 'Search'
+    button.textContent = searching ? 'Search'
       : state.applied ? 'Redacted' : 'Redact';
     // How many red question marks are on the panel right now. A word that no
     // search has counted yet and a picked image nothing has looked for each
@@ -1582,13 +1646,13 @@
     // reviewer who has just deleted their last word does not need the footer
     // shouting at them. With nothing to find it is an ordinary blue button,
     // which is what it will be for the next press anyway.
-    button.classList.toggle('hunt', !state.searched && unanswered > 0);
-    button.classList.toggle('done', state.applied);
-    button.title = state.applied ? 'Press to uncover and look at the marks again' : '';
+    button.classList.toggle('hunt', searching && unanswered > 0);
+    button.classList.toggle('done', !searching && state.applied);
+    button.title = !searching && state.applied ? 'Press to uncover and look at the marks again' : '';
     // Not while the comprehensive check is running: it is a pass over the same
     // pages, and the two cannot both own the document. Stopping it is a button
     // in the panel, not a dialog thrown in front of this one.
-    button.disabled = state.sweepRunning || (!state.searched
+    button.disabled = state.sweepRunning || (searching
       ? state.kind !== 'text' && !state.pages.length
       : !state.applied && marks === 0 && unsearched === 0);
     if (state.sweepRunning) {
@@ -1607,7 +1671,7 @@
     if (state.sweepRunning) {
       note.textContent = 'The comprehensive check is running. Let it finish, or '
         + 'stop it in the panel.';
-    } else if (!state.searched) {
+    } else if (searching) {
       // Named by what the reviewer can see. Every word and every picked image
       // that nothing has looked for yet wears a red question mark in the
       // panel, and this is the button that answers them.
@@ -1832,7 +1896,12 @@
 
   // Which of the three the button means this time.
   async function applyButton() {
-    if (state.applied) { uncoverMarks(); return; }
+    if (state.applied && !searchPending()) { uncoverMarks(); return; }
+    if (searchPending()) {
+      if (state.applied) markPending();
+      await runSearch();
+      return;
+    }
     if (state.searched) { coverMarks(); return; }
     await runSearch();
   }
@@ -2614,6 +2683,24 @@
     }
   }
 
+  // Settled when the pages are already read: both places a detector looks
+  // are in hand, so switching one is a question about what to cover. Before
+  // that, a tick is only a request — the ? stays, and Search has to run.
+  // Ticking "All of them" after a search that never read the pages used to
+  // leave Redact showing over the red marks.
+  function afterDetectorChange() {
+    detectOcr();
+    const waiting = acceptedKinds().some(kind => !kindAnswered(kind));
+    if (waiting && !state.ocrRead) {
+      needsSearch();
+    } else {
+      rescan({ settled: true });
+      syncCountedKindsAfterToggle();
+    }
+    renderKinds();
+    refreshApply();
+  }
+
   function kindsKnown() {
     if (state.kind === 'text') return true;
     return acceptedKinds().every(kind => kindAnswered(kind));
@@ -2649,7 +2736,11 @@
     // what is left would be a list of what this tool can do rather than
     // anything about this document.
     const section = el('kindsect');
-    if (section) section.hidden = rows.length === 0 || state.kind === 'text';
+    if (section) {
+      // While Organise has the panel, the four headings stay in the roll line.
+      // A rescan after adding pages must not pop Detectors back out on its own.
+      section.hidden = organising() || rows.length === 0 || state.kind === 'text';
+    }
 
     // One switch for all of them, above the list.
     //
@@ -2672,16 +2763,7 @@
       box.addEventListener('change', () => {
         if (box.checked) state.enabled.add(row.kind);
         else state.enabled.delete(row.kind);
-        // Settled when the pages are already read: both places a detector
-        // looks — the text layer and what OCR read — are in hand, so
-        // switching one is a question about what to cover rather than about
-        // what is there. Before that, the tick is only a request and the
-        // row keeps its red ? until Search.
-        detectOcr();
-        rescan({ settled: true });
-        syncCountedKindsAfterToggle();
-        renderKinds();
-        refreshApply();
+        afterDetectorChange();
       });
 
       const name = document.createElement('span');
@@ -2773,11 +2855,7 @@
         if (box.checked) state.enabled.add(row.kind);
         else state.enabled.delete(row.kind);
       }
-      detectOcr();
-      rescan({ settled: true });
-      syncCountedKindsAfterToggle();
-      renderKinds();
-      refreshApply();
+      afterDetectorChange();
     });
     const name = document.createElement('span');
     name.className = 'name';
@@ -4067,6 +4145,13 @@
     button.title = picking
       ? 'Stop picking'
       : 'Draw a box around a logo, stamp, signature or face';
+    // Keep Images open on Cancel: collapsing it would hide the only in-panel
+    // way out of a pick. The heading is locked until picking ends.
+    const images = el('imagesect');
+    if (images) {
+      if (picking) images.open = true;
+      images.classList.toggle('pick-locked', picking);
+    }
     // Everything but the document and this section gets out of the way. Drawing
     // a box around a logo is the one thing in this tool that happens on the
     // page rather than in the panel, and dimming says so better than a sentence
@@ -5907,8 +5992,35 @@
   // opening it shuts the rest — and opening any of the rest shuts it, because
   // half a sheet under an open Terms box is the same problem arrived at from
   // the other side.
+  const imagesect = el('imagesect');
+  if (imagesect) {
+    const heading = imagesect.querySelector('summary');
+    if (heading) {
+      heading.addEventListener('click', event => {
+        if (state.mode !== 'pick') return;
+        if (event.target.closest && event.target.closest('.why')) return;
+        event.preventDefault();
+      });
+    }
+  }
+
   for (const section of document.querySelectorAll('details.sect')) {
     section.addEventListener('toggle', () => {
+      // A pick is in progress: Images stays open so Cancel stays reachable,
+      // and Organise must not swallow the panel out from under it.
+      if (state.mode === 'pick') {
+        if (section === imagesect && !section.open) {
+          section.open = true;
+          return;
+        }
+        if (section === el('organisesect') && section.open) {
+          section.open = false;
+          if (imagesect) imagesect.open = true;
+          return;
+        }
+        if (imagesect && !imagesect.open) imagesect.open = true;
+      }
+
       const sheet = el('organisesect');
 
       // The sheet's own toggle owns the panel's shape, in both directions.
@@ -5962,12 +6074,115 @@
   el('page-drop').addEventListener('click', dropPicked);
   el('page-add').addEventListener('click', () => el('addfile').click());
   el('addfile').addEventListener('change', async event => {
-    const file = event.target.files && event.target.files[0];
+    const files = event.target.files;
     // Cleared before the read, so choosing the same file twice in a row still
     // fires a change event the second time.
     event.target.value = '';
-    await addDocument(file);
+    await addDocuments(files);
   });
+
+  // Drop a PDF or image onto the sheet, into a gap between pages. The same
+  // line and slide as dragging a page, so the two gestures read as one.
+  function hasFileDrag(event) {
+    const types = event.dataTransfer && event.dataTransfer.types;
+    if (!types) return false;
+    return Array.prototype.indexOf.call(types, 'Files') >= 0;
+  }
+
+  function liftFileGhost(event) {
+    const ghost = document.createElement('div');
+    ghost.className = 'sheetghost fileghost';
+    const face = document.createElement('canvas');
+    face.width = 96;
+    face.height = 124;
+    const ctx = face.getContext('2d', { alpha: false });
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, face.width, face.height);
+    ctx.strokeStyle = '#1f6feb';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(1.5, 1.5, face.width - 3, face.height - 3);
+    ctx.fillStyle = '#1f6feb';
+    ctx.font = '700 12px system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('Add', 48, 70);
+    ghost.append(face);
+    document.body.append(ghost);
+    carryGhost(ghost, event);
+    return ghost;
+  }
+
+  let fileGhost = null;
+  let fileDragDepth = 0;
+
+  function endFileDrag(landed) {
+    fileDragDepth = 0;
+    document.body.classList.remove('file-dropping', 'dragging-page');
+    const host = el('sheet');
+    const tiles = host ? [...host.querySelectorAll('.sheetpage')] : [];
+    const gap = lastFileGap;
+    const into = landed && tiles.length
+      ? tiles[Math.min(Math.max(0, gap), tiles.length - 1)]
+      : null;
+    if (fileGhost) {
+      dropGhost(fileGhost, into);
+      fileGhost = null;
+    }
+    stopEdgeScroll();
+    clearDropMark();
+    lastFileGap = -1;
+  }
+
+  {
+    const section = el('organisesect');
+    if (section) {
+      section.addEventListener('dragenter', event => {
+        if (!hasFileDrag(event) || state.kind === 'text' || !state.pages.length) return;
+        if (document.body.classList.contains('dragging-page')
+          && !document.body.classList.contains('file-dropping')) return;
+        event.preventDefault();
+        fileDragDepth++;
+        document.body.classList.add('dragging-page', 'file-dropping');
+        if (!section.open) section.open = true;
+      });
+      section.addEventListener('dragover', event => {
+        if (!hasFileDrag(event) || state.kind === 'text' || !state.pages.length) return;
+        if (document.body.classList.contains('dragging-page')
+          && !document.body.classList.contains('file-dropping')) return;
+        event.preventDefault();
+        event.dataTransfer.dropEffect = 'copy';
+        document.body.classList.add('dragging-page', 'file-dropping');
+        if (!section.open) section.open = true;
+        if (!fileGhost) fileGhost = liftFileGhost(event);
+        else carryGhost(fileGhost, event);
+        const host = el('sheet');
+        if (!host) return;
+        lastFileGap = sheetGapAt(event, host);
+        showDropAt(lastFileGap, host);
+        edgeScroll(host, event, () => {
+          lastFileGap = sheetGapAt(event, host);
+          showDropAt(lastFileGap, host);
+        });
+      });
+      section.addEventListener('dragleave', event => {
+        if (!document.body.classList.contains('file-dropping')) return;
+        fileDragDepth = Math.max(0, fileDragDepth - 1);
+        if (fileDragDepth > 0) return;
+        const next = event.relatedTarget;
+        if (next && section.contains(next)) return;
+        endFileDrag(false);
+      });
+      section.addEventListener('drop', async event => {
+        if (!hasFileDrag(event) || state.kind === 'text' || !state.pages.length) return;
+        event.preventDefault();
+        event.stopPropagation();
+        const host = el('sheet');
+        const gap = lastFileGap >= 0 ? lastFileGap : sheetGapAt(event, host);
+        const files = event.dataTransfer && event.dataTransfer.files;
+        endFileDrag(true);
+        await addDocuments(files, gap);
+      });
+    }
+  }
   // A press anywhere that is not a note puts the note down. The pages have
   // their own handler for this, because a press there also means something
   // else; this one catches the panel, the header and the margins.
@@ -7204,7 +7419,7 @@
     resizeNote, NOTE_COLOURS, NOTE_SIZE,
     edgeScroll, stopEdgeScroll, CREEP_EDGE, fitSheet, rollSections,
     creepEdges, pushScroll, startChoosing, stopChoosing, CHOOSE_HOLD,
-    addDocument, pickedInOrder, selectPage, thumbFor, organiseStamp,
+    addDocument, addDocuments, pickedInOrder, selectPage, thumbFor, organiseStamp,
     kindsKnown, unknownKinds, countsByKind, detectOcr, renderKinds, placesForKind,
     syncCountedKindsAfterToggle,
     markPending, needsSearch, markDuplicates, onePerPlace, plannedCount,

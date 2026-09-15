@@ -41,7 +41,7 @@
      origins for one program and two sets of response headers to keep right;
      Pages publishing is off and this says which copy is the copy. -->
 <link rel="canonical" href="https://blinded.onrender.com/">
-<link rel="stylesheet" href="app.css?v=b38c5fb9">
+<link rel="stylesheet" href="app.css?v=7699192b">
 </head>
 <body>
 
@@ -402,7 +402,7 @@
         <details class="sect" id="organisesect">
           <summary><span class="s-title">Organise</span><button type="button"
               class="why" id="sheet-why" aria-label="How to organise pages"
-              data-tip="Tap a page to select it. Shift-click to select a continuous series, and Ctrl-click to select multiple pages. Drag a page by its grip to move it. The selected pages can be kept on their own, thrown away, or turned a quarter at a time. Add a note and tap the page where it should go; tap the note again to change it. Undo if you make a mistake.">?</button></summary>
+              data-tip="Tap a page to select it. Shift-click to select a continuous series, and Ctrl-click to select multiple pages. Drag a page by its grip to move it, or drop a PDF or image onto the sheet to slot it in. The selected pages can be kept on their own, thrown away, or turned a quarter at a time. Add a note and tap the page where it should go; tap the note again to change it. Undo if you make a mistake.">?</button></summary>
           <div class="s-body">
             <!-- The same five actions the words used to spell out. As icons
                  they fit one row instead of three, which is the difference
@@ -437,18 +437,19 @@
                   <path d="M5 7V5h14v2M12 5v14M9 19h6"/>
                 </svg><span class="sr-only">Add a note to the page</span>
               </button>
-              <button type="button" id="page-add" class="tool" title="Add another document after the page selected">
+              <button type="button" id="page-add" class="tool" title="Add another document – or drop a file onto the pages to slot it in">
                 <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
                   <path d="M13 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-9M17 3v6M14 6h6"/>
                 </svg><span class="sr-only">Add another document</span>
               </button>
             </div>
-            <input type="file" id="addfile" accept="application/pdf,image/png,image/jpeg,.pdf,.png,.jpg,.jpeg" hidden>
+            <input type="file" id="addfile" accept="application/pdf,image/png,image/jpeg,.pdf,.png,.jpg,.jpeg" multiple hidden>
             <div class="pickedrow" id="sheet-picked" hidden>
               <span class="hint" id="picked-note"></span>
               <button type="button" id="choose-done" class="ghost" hidden>Done</button>
             </div>
             <ol id="sheet" class="sheet"></ol>
+            <p class="sheethint" id="sheetdrop-hint">Drag and drop additional files.</p>
           </div>
         </details>
 
@@ -633,7 +634,8 @@
     <p class="confirmbody" id="sweepofferbody">
       The first search can miss lettering in logos, photos and coloured
       headers, and can occasionally mark the wrong spot. A second check
-      runs in the background and updates results in the sidebar.
+      by shape-matching can run in the background but would take a couple
+      of minutes. Results will be updated on the left bar in yellow.
     </p>
     <div class="confirmgo">
       <button type="button" id="sweepoffergo" class="primary confirm-action">Run second check</button>
@@ -757,7 +759,7 @@
 <script src="lib/pdfwrite.js?v=4b977425"></script>
 <script src="lib/pdfread.js?v=ca229552"></script>
 <script src="lib/render.js?v=70e96ff0"></script>
-<script src="app.js?v=99773d1c"></script>
+<script src="app.js?v=4226deb0"></script>
 <script type="module" src="lib/boot.mjs?v=8b98ed8f"></script>
 </body>
 </html>
