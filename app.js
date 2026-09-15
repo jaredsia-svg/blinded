@@ -6161,26 +6161,107 @@
   // is exactly what the shape matcher is there to second-guess — so a doubtful
   // word never gets to veto.
   const READER_OVER = 0.25;
+  // Most of the shape hit must sit inside the host word box. overlapFraction
+  // alone treats "small inside large" and "large swallows small" the same;
+  // coveredFraction(hit, host) is the nested fact we care about for mid-word.
+  const HOST_COVERS_HIT = 0.45;
+
+  // Text-layer items use baseline y; match the box geometry boxes.js uses.
+  function textItemRect(item) {
+    const ASCENT = 0.82;
+    const DESCENT = 0.22;
+    return {
+      x: item.x,
+      y: item.y - item.h * ASCENT,
+      w: item.w,
+      h: item.h * (ASCENT + DESCENT),
+    };
+  }
+
+  function hostOverlapsHit(hostRect, hitRect) {
+    if (!hostRect || !hitRect) return false;
+    if (Match.coveredFraction(hitRect, hostRect) >= HOST_COVERS_HIT) return true;
+    return Match.overlapFraction(hostRect, hitRect) > READER_OVER;
+  }
+
+  // Same-line OCR crumbs glued into one host ("TE"+"XAS" → TEXAS) so a short
+  // acronym shape hit inside a longer wordmark can still be vetoed.
+  function mergedOcrLineHosts(page, rect) {
+    const placed = page.ocrPlaced || [];
+    if (!placed.length || !page.ocrText) return [];
+    const cy = rect.y + rect.h / 2;
+    const line = placed.filter(item => item.rect
+      && typeof item.confidence === 'number'
+      && item.confidence >= READER_SURE
+      && Math.abs((item.rect.y + item.rect.h / 2) - cy) <= Math.max(rect.h, item.rect.h) * 0.8)
+      .slice()
+      .sort((a, b) => a.rect.x - b.rect.x);
+    if (!line.length) return [];
+    const runs = [];
+    let run = [line[0]];
+    for (let i = 1; i < line.length; i++) {
+      const prev = run[run.length - 1];
+      const item = line[i];
+      const gap = item.rect.x - (prev.rect.x + prev.rect.w);
+      if (gap <= Math.max(prev.rect.h, item.rect.h) * 0.55) run.push(item);
+      else { runs.push(run); run = [item]; }
+    }
+    runs.push(run);
+    const out = [];
+    for (const parts of runs) {
+      const xs = parts.map(p => p.rect.x);
+      const ys = parts.map(p => p.rect.y);
+      const rights = parts.map(p => p.rect.x + p.rect.w);
+      const bottoms = parts.map(p => p.rect.y + p.rect.h);
+      const union = {
+        x: Math.min(...xs), y: Math.min(...ys),
+        w: Math.max(...rights) - Math.min(...xs),
+        h: Math.max(...bottoms) - Math.min(...ys),
+      };
+      if (!hostOverlapsHit(union, rect)) continue;
+      const text = parts.map(p => page.ocrText.slice(p.start, p.end)).join('');
+      if (text) out.push(text);
+    }
+    return out;
+  }
 
   function readerContradicts(page, rect, term) {
+    const hosts = [];
+
     const placed = page.ocrPlaced;
-    if (!placed || !placed.length || !page.ocrText) return false;
+    if (placed && placed.length && page.ocrText) {
+      for (const item of placed) {
+        if (!item.rect || !hostOverlapsHit(item.rect, rect)) continue;
+        if (!(typeof item.confidence === 'number' && item.confidence >= READER_SURE)) continue;
+        hosts.push(page.ocrText.slice(item.start, item.end));
+      }
+      // Short acronyms: also try same-line merges (TEXAS split across tokens).
+      if (Detect.lettersOf(term).length <= 4) {
+        for (const text of mergedOcrLineHosts(page, rect)) hosts.push(text);
+      }
+    }
 
-    const over = placed.filter(item => item.rect
-      && Match.overlapFraction(item.rect, rect) > READER_OVER);
-    // The reader saw nothing here, so it has no opinion to contradict with.
-    if (!over.length) return false;
+    // Text layer is authoritative when present — logo PDFs often still have
+    // a TEXAS run even when the painted wordmark was what the shape matched.
+    for (const item of page.items || []) {
+      if (!item || !item.str || !String(item.str).trim()) continue;
+      if (item.w <= 0 || item.h <= 0) continue;
+      const hostRect = textItemRect(item);
+      if (!hostOverlapsHit(hostRect, rect)) continue;
+      hosts.push(item.str);
+    }
 
-    // Only a confident reading gets a veto. A word the reader was unsure of
-    // is exactly the kind of word the shape matcher is there to second-guess.
-    if (!over.every(item => typeof item.confidence === 'number'
-      && item.confidence >= READER_SURE)) return false;
+    if (!hosts.length) return false;
 
-    // Asked the same way the reading itself asks, so the two cannot disagree
-    // about what counts as the term appearing in a word.
-    const said = over.map(item => page.ocrText.slice(item.start, item.end)).join(' ');
-    return Detect.findTerms(said, [term]).length === 0;
+    // Prefer longer hosts so a misread "KAS" crumb next to a real "TEXAS"
+    // does not keep the false mark alive.
+    hosts.sort((a, b) => Detect.lettersOf(b).length - Detect.lettersOf(a).length);
+    for (const host of hosts) {
+      if (Detect.hostContradictsShapeTerm(host, term)) return true;
+    }
+    return false;
   }
+
 
   // The running sweep, so that anything which has to come after it can wait
   // for it rather than race it.

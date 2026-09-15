@@ -931,6 +931,23 @@ check('an empty term is harmless', TextImage.shapeRelief('') === 0
     Detect.findTerms('Middle-East', ['Middle East']).length === 0);
 })();
 
+
+// Mid-word short-acronym shape FPs (KAS inside TEXAS).
+(() => {
+  check('TEXAS contradicts a KAS shape hit',
+    Detect.hostContradictsShapeTerm('TEXAS', 'KAS') === true);
+  check('TEXAS INSTRUMENTS host still contradicts KAS',
+    Detect.hostContradictsShapeTerm('TEXAS', 'KAS') === true);
+  check('a real KAS host does not contradict',
+    Detect.hostContradictsShapeTerm('KAS', 'KAS') === false);
+  check("KAS's still counts as the term",
+    Detect.hostContradictsShapeTerm("KAS's", 'KAS') === false);
+  check('offered contradicts jared',
+    Detect.hostContradictsShapeTerm('offered', 'jared') === true);
+  check('empty host is harmless',
+    Detect.hostContradictsShapeTerm('', 'KAS') === false);
+})();
+
 // Comprehensive phrase sweeps: content parts + adjacent pairing.
 (() => {
   check('phraseContentParts drops connectors',
