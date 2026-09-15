@@ -740,6 +740,7 @@ body.picking .tools {
 /* Over the picture rather than under it: the dialog is the picture now, and a
    row of its own for one button would put the thing being looked at further
    from the middle of the screen. */
+.dialog-x,
 .sample-x {
   position: absolute; top: 10px; right: 10px; z-index: 2;
   width: 32px; height: 32px; padding: 0;
@@ -748,8 +749,9 @@ body.picking .tools {
   border: 1px solid var(--line); border-radius: 999px; cursor: pointer;
   box-shadow: 0 1px 4px rgba(16, 22, 32, .18);
 }
-.sample-x:hover { background: #fff; border-color: var(--ink-soft); }
-.sample-x:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.dialog-x:hover, .sample-x:hover { background: #fff; border-color: var(--ink-soft); }
+.dialog-x:focus-visible, .sample-x:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.dialog-x svg,
 .sample-x svg {
   width: 17px; height: 17px; fill: none; stroke: currentColor;
   stroke-width: 2; stroke-linecap: round;
@@ -781,7 +783,7 @@ body.picking .tools {
     padding: 0; border: 0; border-radius: 0; background: transparent;
     overflow: auto;
   }
-  .sample-x { top: 12px; right: 12px; }
+  .dialog-x, .sample-x { top: 12px; right: 12px; }
 }
 
 /* Confirming a pick. The crop is shown big, because the whole point is to see
@@ -1187,6 +1189,44 @@ body.reviewing .exportbar { position: static; flex: none; margin: 14px 0 18px; }
 .confirmbody { margin: 0; color: var(--ink-soft); font-size: 13.5px; line-height: 1.55; }
 .primary.danger { background: #d92d20; border-color: #d92d20; }
 .primary.danger:hover { background: #b42318; }
+
+/* Reset / load-new dialog: actions stacked full-width so three choices stay
+   readable on a phone, with a corner X instead of a Cancel row. */
+.confirminner {
+  position: relative;
+  max-width: 400px;
+  width: min(400px, calc(100vw - 32px));
+  padding: 22px 22px 20px;
+  box-sizing: border-box;
+}
+.confirminner .namehead { padding-right: 36px; margin-bottom: 10px; }
+.confirmgo {
+  display: flex; flex-direction: column; gap: 10px;
+  margin-top: 18px;
+}
+.confirmgo .confirm-action {
+  width: 100%; box-sizing: border-box;
+  min-height: 44px; justify-content: center; text-align: center;
+  font-size: 14px; border-radius: 10px;
+}
+#confirmreset {
+  background: #fff; border: 1px solid var(--line); color: var(--ink);
+  order: 1;
+}
+#confirmreset:hover { border-color: var(--ink-soft); background: #fafbfc; }
+#confirmsave { order: 2; }
+#confirmyes { order: 3; }
+
+@media (max-width: 900px) {
+  .confirminner {
+    width: calc(100vw - 24px);
+    max-width: none;
+    padding: 20px 16px 16px;
+    border-radius: 14px;
+  }
+  .confirmgo { gap: 8px; margin-top: 16px; }
+  .confirmgo .confirm-action { min-height: 48px; font-size: 15px; }
+}
 
 /* A draft is a few kilobytes of marks, not the document, so it is worth
    saying what was and was not saved. */
