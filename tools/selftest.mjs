@@ -962,6 +962,28 @@ check('an empty term is harmless', TextImage.shapeRelief('') === 0
 })();
 
 
+
+// Short acronym shape hits inside logo grids (KAS⊂TEXAS).
+(() => {
+  const logoRoles = {
+    pageHint: 'logo_grid',
+    regions: [{ role: 'logo_grid', score: 0.7, rect: { x: 0, y: 0, w: 400, h: 200 }, n: 8 }],
+  };
+  const bodyRoles = {
+    pageHint: 'body',
+    regions: [{ role: 'body', score: 0.7, rect: { x: 0, y: 0, w: 400, h: 200 }, n: 8 }],
+  };
+  const hit = { x: 40, y: 40, w: 30, h: 14 };
+  check('KAS shape refused in logo_grid region',
+    PageRole.allowShortAcronymShape(logoRoles, 'KAS', hit) === false);
+  check('KAS shape allowed in body text',
+    PageRole.allowShortAcronymShape(bodyRoles, 'KAS', hit) === true);
+  check('longer terms still allowed in logo_grid',
+    PageRole.allowShortAcronymShape(logoRoles, 'TEXAS', hit) === true);
+  check('pageHint logo_grid refuses short shape without a region hit',
+    PageRole.allowShortAcronymShape({ pageHint: 'logo_grid', regions: [] }, 'KNW', hit) === false);
+})();
+
 // Mid-word short-acronym shape FPs (KAS inside TEXAS).
 (() => {
   check('TEXAS contradicts a KAS shape hit',
