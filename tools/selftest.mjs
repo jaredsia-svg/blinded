@@ -908,6 +908,62 @@ check('an empty term is harmless', TextImage.shapeRelief('') === 0
 })();
 
 
+
+
+// OCR phrase recovery: content-word chains + hyphen/bullet glue.
+(() => {
+  check('OCR recovers Middle East across a digit crumb',
+    Detect.findTerms('Middle 12 East region', ['Middle East'], { fromOcr: true })
+      .some(h => h.term === 'Middle East'));
+  check('OCR matches Middle-East as Middle East',
+    Detect.findTerms('sales in Middle-East grew', ['Middle East'], { fromOcr: true })
+      .some(h => h.term === 'Middle East'));
+  check('OCR recovers Fraser and Neave when and is a bullet',
+    Detect.findTerms('Fraser · Neave limited', ['Fraser and Neave'], { fromOcr: true })
+      .some(h => h.term === 'Fraser and Neave'));
+  check('unpaired East is not Middle East',
+    Detect.findTerms('Looking East for growth', ['Middle East'], { fromOcr: true })
+      .filter(h => h.term === 'Middle East').length === 0);
+  check('a foreign word between parts blocks the chain',
+    Detect.findTerms('Middle Kingdom East', ['Middle East'], { fromOcr: true })
+      .filter(h => h.term === 'Middle East').length === 0);
+  check('text layer still rejects hyphen glue for phrases',
+    Detect.findTerms('Middle-East', ['Middle East']).length === 0);
+})();
+
+// Comprehensive phrase sweeps: content parts + adjacent pairing.
+(() => {
+  check('phraseContentParts drops connectors',
+    JSON.stringify(TextImage.phraseContentParts('Fraser and Neave')) === JSON.stringify(['Fraser', 'Neave']));
+  check('Middle East keeps both words',
+    JSON.stringify(TextImage.phraseContentParts('Middle East')) === JSON.stringify(['Middle', 'East']));
+  check('a single word is one part',
+    JSON.stringify(TextImage.phraseContentParts('Singapore')) === JSON.stringify(['Singapore']));
+
+  const left = { x: 10, y: 20, w: 40, h: 12, score: 0.8 };
+  const right = { x: 55, y: 21, w: 35, h: 12, score: 0.75 };
+  const far = { x: 200, y: 21, w: 35, h: 12, score: 0.9 };
+  check('adjacent phrase hits are accepted',
+    Match.phraseHitsAdjacent(left, right, 0) === true);
+  check('distant hits are not',
+    Match.phraseHitsAdjacent(left, far, 0) === false);
+  check('a skipped connector allows a wider gap',
+    Match.phraseHitsAdjacent(left, { x: 120, y: 21, w: 35, h: 12, score: 0.7 }, 1) === true);
+
+  const byPart = new Map([
+    ['Middle', [left, { x: 300, y: 20, w: 40, h: 12, score: 0.7 }]],
+    ['East', [right, far]],
+  ]);
+  const paired = Match.pairPhraseHits(['Middle', 'East'], byPart, [0]);
+  check('pairPhraseHits returns one chained mark', paired.length === 1, JSON.stringify(paired));
+  if (paired.length) {
+    check('and the union spans both words',
+      paired[0].x === 10 && paired[0].w >= 80);
+  }
+  check('skippedConnectorsBetween counts and',
+    Match.skippedConnectorsBetween('Fraser and Neave', 'Fraser', 'Neave') === 1);
+})();
+
 // Dark header bands for inverted OCR (white-on-colour titles).
 (() => {
   check('darkInkRegions is exported',

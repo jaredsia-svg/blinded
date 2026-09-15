@@ -6075,18 +6075,40 @@
     return { terms, pages: pageSet.size, pageIndexes: pageSet };
   }
 
+  // Words of a typed phrase that are worth drawing as shape templates.
+  //
+  // A full phrase template misaligns on the space (see TextImage.shapeRelief).
+  // Sweeping each content word and keeping neighbours that sit in order fixes
+  // that for "Middle East" without correlating every "and"/"of" on the page.
+  function sweepPartsFor(term) {
+    const trimmed = String(term || '').trim();
+    if (!/\s/.test(trimmed)) return trimmed ? [trimmed] : [];
+    const parts = TextImage.phraseContentParts(trimmed);
+    return parts.length >= 2 ? parts : [trimmed];
+  }
+
   function sweepTemplates() {
     const entries = [];
     for (const term of state.terms) {
       const need = pagesNeedingSweep(term);
       if (!need.length) continue;
       const pageIndexes = new Set(need.map(p => p.index));
-      TextImage.templatesFor(term, TextImage.SWEEP_FACES).forEach((template, i) => {
-        entries.push({
-          key: 'sweep:' + term + ':' + i, template, term,
-          threshold: wordBarFor(term),
-          smallText: true,
-          pageIndexes,
+      const isPhrase = /\s/.test(term.trim());
+      const parts = sweepPartsFor(term);
+      const draw = isPhrase ? parts : [term.trim()];
+      draw.forEach((part, partIndex) => {
+        TextImage.templatesFor(part, TextImage.SWEEP_FACES).forEach((template, i) => {
+          entries.push({
+            key: 'sweep:' + term + ':' + part + ':' + i,
+            template,
+            term,
+            part,
+            partIndex,
+            phraseParts: isPhrase ? parts : null,
+            threshold: wordBarFor(part),
+            smallText: true,
+            pageIndexes,
+          });
         });
       });
     }
@@ -6241,8 +6263,56 @@
     const refused = [];
     for (const term of new Set(entries.map(e => e.term))) {
       if (!state.terms.includes(term)) continue;
+      const termEntries = entries.filter(e => e.term === term);
+      const isPhrase = termEntries.some(e => e.phraseParts && e.phraseParts.length >= 2);
+
+      if (isPhrase) {
+        const parts = termEntries[0].phraseParts;
+        const skipped = [];
+        for (let p = 0; p < parts.length - 1; p++) {
+          skipped.push(Match.skippedConnectorsBetween(term, parts[p], parts[p + 1]));
+        }
+        // Collect per-part hits per page, then keep only left-to-right chains.
+        const pageParts = new Map();
+        for (const entry of termEntries) {
+          const found = results.get(entry.key);
+          if (!found) continue;
+          for (const hit of found.matches) {
+            if (!pageParts.has(hit.pageIndex)) pageParts.set(hit.pageIndex, new Map());
+            const byPart = pageParts.get(hit.pageIndex);
+            if (!byPart.has(entry.part)) byPart.set(entry.part, []);
+            byPart.get(entry.part).push(hit);
+          }
+        }
+        for (const [pageIndex, hitsByPart] of pageParts) {
+          const page = state.pages[pageIndex];
+          if (!page) continue;
+          for (const part of parts) {
+            const list = hitsByPart.get(part);
+            if (list) hitsByPart.set(part, Match.suppress(list, 0.3));
+          }
+          for (const hit of Match.pairPhraseHits(parts, hitsByPart, skipped)) {
+            const rect = { x: hit.x, y: hit.y, w: hit.w, h: hit.h };
+            if (alreadyCovered(page, rect)) continue;
+            if (readerContradicts(page, rect, term)) {
+              refused.push({ pageIndex, at: rect.y, term });
+              continue;
+            }
+            page.imageHits.push({
+              id: 'sweep:' + term + ':' + pageIndex + ':'
+                + Math.round(hit.x) + ':' + Math.round(hit.y),
+              term, rect, score: hit.score,
+              inverted: Boolean(hit.inverted),
+              bySweep: true,
+            });
+            added++;
+          }
+        }
+        continue;
+      }
+
       const perPage = new Map();
-      for (const entry of entries.filter(e => e.term === term)) {
+      for (const entry of termEntries) {
         const found = results.get(entry.key);
         if (!found) continue;
         for (const hit of found.matches) {
@@ -6927,7 +6997,7 @@
     pendingTemplates,
     termsNeedingPictures,
     readPages, matchOcr, ocrPending, ocrMatchStale, showWordControls,
-    sweepTemplates, runSweep, renderSweep, alreadyCovered, readerContradicts,
+    sweepTemplates, runSweep, renderSweep, alreadyCovered, readerContradicts, sweepPartsFor,
     pageHasConfidentTerm, pagesNeedingSweep, sweepWorkload,
     READER_SURE, sweepProgress,
     settleSweep,
