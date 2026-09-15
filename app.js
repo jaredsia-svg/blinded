@@ -195,6 +195,9 @@
     sweepReached: 0,
     // True when Comprehensive found nothing left to correlate.
     sweepSkipped: false,
+    // True once the post-Search Comprehensive offer was shown or skipped
+    // for the current search, so it does not pop again on redraw.
+    sweepOfferShown: false,
     // Spots the thorough check proposed and stood down from, so the note can
     // hand the reviewer each one rather than a number.
     sweepRefusedAt: [],
@@ -1675,6 +1678,7 @@
     // why and offers the Stop button that was always there.
     if (state.sweepRunning) return;
 
+    state.sweepOfferShown = false;
     state.redacting = true;
     state.paused = false;
 
@@ -1793,6 +1797,9 @@
     applyLabels();
     redrawAll();
     refreshApply();
+    // Offer Comprehensive once the overlay is down so the choice is not
+    // buried under "Working…". Skip stays available from the panel button.
+    offerSweepAfterSearch();
   }
 
   // One frame, so that something just made visible is actually on screen
@@ -6000,6 +6007,7 @@
   showWordControls();
 
   el('busy-pause').addEventListener('click', requestPause);
+  bindSweepOffer();
   el('sweep').addEventListener('click', runSweep);
   el('sweepstop').addEventListener('click', () => {
     state.sweepStopped = true;
@@ -6479,6 +6487,74 @@
   // Offered only once a redaction has been done, because it is the second
   // opinion on that redaction: there is nothing to be thorough about before
   // there is a result to check.
+
+  // After the first Search finishes, offer Comprehensive once — skippable,
+  // with the longer explanation collapsed. Runs the same background sweep
+  // the panel button uses.
+  function shouldOfferSweep() {
+    if (state.sweepOfferShown || state.sweepRunning) return false;
+    if (!state.searched || !state.terms.length || state.kind === 'text') return false;
+    const swept = state.sweptTerms.length
+      && state.sweptTerms.length === state.terms.length
+      && state.sweptTerms.every((t, i) => t === state.terms[i]);
+    if (swept) return false;
+    const work = sweepWorkload();
+    return !!(work.pages && work.terms);
+  }
+
+  function hideSweepOffer() {
+    const box = el('sweepoffer');
+    if (box) box.hidden = true;
+    const more = el('sweepoffermore');
+    if (more) more.open = false;
+  }
+
+  function offerSweepAfterSearch() {
+    if (!shouldOfferSweep()) return;
+    state.sweepOfferShown = true;
+    const box = el('sweepoffer');
+    const work = sweepWorkload();
+    const first = state.pages[0];
+    const megapixels = first ? (first.source.width * first.source.height) / 1e6 : 2;
+    const seconds = Math.round(work.pages * work.terms * megapixels * SWEEP_SECONDS_PER_MP);
+    const cost = el('sweepoffercost');
+    if (cost) {
+      cost.textContent = 'About ' + describeTime(seconds) + ' for '
+        + work.pages + (work.pages === 1 ? ' page' : ' pages')
+        + (work.terms !== state.terms.length
+          ? ' · ' + work.terms + (work.terms === 1 ? ' word' : ' words') + ' still in doubt'
+          : '')
+        + '.';
+    }
+    box.hidden = false;
+    el('sweepofferx').focus();
+  }
+
+  function bindSweepOffer() {
+    const box = el('sweepoffer');
+    if (!box || box.dataset.bound) return;
+    box.dataset.bound = '1';
+    const close = () => { hideSweepOffer(); };
+    const skip = () => { hideSweepOffer(); };
+    const go = () => {
+      hideSweepOffer();
+      runSweep();
+    };
+    el('sweepofferskip').addEventListener('click', skip);
+    el('sweepofferx').addEventListener('click', close);
+    el('sweepoffergo').addEventListener('click', go);
+    box.addEventListener('pointerdown', event => {
+      if (event.target === box) skip();
+    });
+    document.addEventListener('keydown', event => {
+      if (box.hidden) return;
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        skip();
+      }
+    }, true);
+  }
+
   function renderSweep() {
     const box = el('sweepbox');
     const note = el('sweepnote');
