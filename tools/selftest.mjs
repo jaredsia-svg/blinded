@@ -92,78 +92,68 @@ check('while a typed term still covers one for anyone who wants it',
 check('finds a URL', kindsIn('see https://example.com/a?token=abc for more').includes('url'));
 check('a URL drops the sentence full stop',
   textsOf('see https://example.com/a.', 'url')[0] === 'https://example.com/a');
-check('finds a street address', kindsIn('at 1600 Amphitheatre Parkway today').includes('address'));
+check('finds a street address with a postal code',
+  kindsIn('at 1600 Amphitheatre Parkway, Mountain View, CA 94043 today').includes('address'));
+check('but not a street without a postal code',
+  !kindsIn('at 1600 Amphitheatre Parkway today').includes('address'),
+  JSON.stringify(textsOf('at 1600 Amphitheatre Parkway today', 'address')));
 check('but not a year beside a capitalised noun',
   !kindsIn('revenue in 2020 Park rose').includes('address'),
   JSON.stringify(textsOf('revenue in 2020 Park rose', 'address')));
 
-// ---------- addresses as they are written in Asia ----------
+// ---------- addresses: generic global / Asia, postal required ----------
 //
-// Singapore, Hong Kong and Vietnam each write an address in a shape the
-// anglophone pattern cannot see: the unit before the street, the floor instead
-// of a postcode, the street type in front of the street name.
+// Country-specific seeds (Jalan, Lorong, Đường, ward/district alone) were
+// removed. A hit needs a street-type line and a postal code after it.
 const addr = text => textsOf(text, 'address');
-check('finds a Singapore unit number',
-  addr('1 Raffles Place #44-02, Singapore 048616').some(t => t.includes('#44-02')),
+check('finds a US street with ZIP',
+  addr('1600 Amphitheatre Parkway, Mountain View, CA 94043').some(t => t.includes('94043')),
+  JSON.stringify(addr('1600 Amphitheatre Parkway, Mountain View, CA 94043')));
+check('finds a Singapore street with postcode',
+  addr('1 Raffles Place, Singapore 048616').some(t => t.includes('048616')),
+  JSON.stringify(addr('1 Raffles Place, Singapore 048616')));
+check('and pulls a unit marker before the street when the postcode follows',
+  addr('1 Raffles Place #44-02, Singapore 048616').some(t => t.includes('#44-02') && t.includes('048616')),
   JSON.stringify(addr('1 Raffles Place #44-02, Singapore 048616')));
-check('finds a Singapore block number',
-  addr('Blk 123A Toa Payoh').some(t => t.includes('Blk 123A')),
-  JSON.stringify(addr('Blk 123A Toa Payoh')));
-check('finds a Lorong that leads with its street type',
-  addr('Toa Payoh Lorong 1').some(t => t.includes('Lorong 1')),
-  JSON.stringify(addr('Toa Payoh Lorong 1')));
-check('finds a Jalan the same way',
-  addr('15 Jalan Besar, Singapore').some(t => t.includes('Jalan Besar')),
-  JSON.stringify(addr('15 Jalan Besar, Singapore')));
-check('finds a Singapore street type the anglophone list would have missed',
-  addr('8 Marina Quay').some(t => t.includes('8 Marina Quay')),
+check('finds a UK street with postcode',
+  addr('10 Downing Street, London SW1A 2AA').some(t => /SW1A\s*2AA/.test(t)),
+  JSON.stringify(addr('10 Downing Street, London SW1A 2AA')));
+check('finds an Asian quay form when a postcode follows',
+  addr('8 Marina Quay, Singapore 018960').some(t => t.includes('8 Marina Quay')),
+  JSON.stringify(addr('8 Marina Quay, Singapore 018960')));
+check('a street alone is not enough',
+  addr('8 Marina Quay').length === 0,
   JSON.stringify(addr('8 Marina Quay')));
-check('finds a Hong Kong floor',
-  addr('Suite 2701, 27/F, Two IFC').some(t => t.includes('27/F')),
-  JSON.stringify(addr('Suite 2701, 27/F, Two IFC')));
-check('and a ground floor written G/F',
-  addr("G/F, 88 Queen's Road Central").some(t => t.includes('G/F')),
-  JSON.stringify(addr("G/F, 88 Queen's Road Central")));
-check('finds a Vietnamese street, accents and all',
-  addr('12 Đường Lê Lợi, Quận 1').some(t => t.includes('Đường Lê Lợi')),
-  JSON.stringify(addr('12 Đường Lê Lợi, Quận 1')));
-check('finds a Vietnamese ward and district',
-  addr('Phường Bến Nghé, Quận 1').some(t => t.includes('Quận 1')),
-  JSON.stringify(addr('Phường Bến Nghé, Quận 1')));
-check('finds the unaccented spelling too',
-  addr('So 8 Duong Nguyen Hue, Quan 1').some(t => t.includes('Duong Nguyen Hue')),
-  JSON.stringify(addr('So 8 Duong Nguyen Hue, Quan 1')));
-// ---------- an address is a line, not a word ----------
-//
-// Measured on a real contact slide, where every pattern above found nothing:
-// there is no street type after "Nguyen Hue", and "HCMC" and "Vietnam" are not
-// addresses by themselves. One recognisable piece has to bring the rest of the
-// line with it, or the bar covers the ward and leaves the street in plain
-// sight — which is worse than missing it, because it looks handled.
-{
+check('a Singapore block without street and postcode is not an address',
+  addr('Blk 123A Toa Payoh').length === 0);
+check('Jalan without a postal code is not an address',
+  addr('15 Jalan Besar, Singapore').length === 0);
+check('Vietnamese Duong without a postal code is not an address',
+  addr('12 Đường Lê Lợi, Quận 1').length === 0);
+check('and the brand Chuong Duong is not an address',
+  addr('Water, Crystal, and Chuong Duong Drinks').length === 0);
+check('a floor or building alone is not an address',
+  addr('17th Floor, Sun Wah Tower').length === 0);
+check('a Hong Kong floor line without a postal code is not an address',
+  addr('Suite 2701, 27/F, Two IFC').length === 0);
+check('a contact slide without a postal code yields no street address', (() => {
   const slide = 'KIM-LAN-DANG\nVice President, Principal Investments\n'
     + 'T: +84 28 3821 9930 (Ext. 288)\n17th Floor, Sun Wah Tower,\n'
     + '115 Nguyen Hue, Sai Gon Ward, HCMC, Vietnam\nvinacapital.com';
+  return addr(slide).length === 0;
+})());
+check('the same slide with a postcode covers the street through the code', (() => {
+  const slide = '17th Floor, Sun Wah Tower,\n'
+    + '115 Nguyen Hue Street, Sai Gon Ward, HCMC 700000, Vietnam';
   const lines = addr(slide);
-  check('the whole street line is covered, not just the ward',
-    lines.includes('115 Nguyen Hue, Sai Gon Ward, HCMC, Vietnam'), JSON.stringify(lines));
-  check('and the floor line brings the building with it',
-    lines.includes('17th Floor, Sun Wah Tower'), JSON.stringify(lines));
-  check('the phone numbers on it are still found separately',
-    textsOf(slide, 'phone').length === 1, JSON.stringify(textsOf(slide, 'phone')));
-}
-check('a Singapore address line is taken whole',
-  addr('Level 12, Marina Bay Financial Centre, 10 Marina Boulevard, Singapore 018983')
-    .includes('Level 12, Marina Bay Financial Centre, 10 Marina Boulevard, Singapore 018983'),
-  JSON.stringify(addr('Level 12, Marina Bay Financial Centre, 10 Marina Boulevard, Singapore 018983')));
-check('and a Hong Kong one',
-  addr('Unit 1201, 12/F, Tower 2, Lippo Centre, 89 Queensway, Admiralty, Hong Kong')
-    .includes('Unit 1201, 12/F, Tower 2, Lippo Centre, 89 Queensway, Admiralty, Hong Kong'),
-  JSON.stringify(addr('Unit 1201, 12/F, Tower 2, Lippo Centre, 89 Queensway, Admiralty, Hong Kong')));
+  return lines.some(t => t.includes('115 Nguyen Hue Street') && t.includes('700000'));
+})(), JSON.stringify(addr('17th Floor, Sun Wah Tower,\n115 Nguyen Hue Street, Sai Gon Ward, HCMC 700000, Vietnam')));
+check('a Singapore address line with postcode is taken through the code',
+  addr('10 Marina Boulevard, Singapore 018983')
+    .some(t => t.includes('10 Marina Boulevard') && t.includes('018983')),
+  JSON.stringify(addr('10 Marina Boulevard, Singapore 018983')));
 
-// What stops a line of prose going the same way. A sentence is longer than an
-// address line, its fragments are longer than an address fragment, and a
-// building or a floor in it has other words pressed against it.
+// What must still stay quiet.
 check('a sentence with a floor in it is not an address',
   addr('Revenue, EBITDA and Margin all rose in the 3rd Floor refurbishment programme')
     .length === 0,
@@ -171,11 +161,11 @@ check('a sentence with a floor in it is not an address',
 check('nor is a list of buildings that were bought',
   addr('Acquired Sun Wah Tower, Bitexco, Landmark 81, and other assets in 2023').length === 0,
   JSON.stringify(addr('Acquired Sun Wah Tower, Bitexco, Landmark 81, and other assets in 2023')));
-check('nor a district named in a sentence',
+check('nor a District mentioned in prose',
   addr('The Company, the Purchaser, and the Vendor each agreed District 1 terms').length === 0,
   JSON.stringify(addr('The Company, the Purchaser, and the Vendor each agreed District 1 terms')));
-check('and a street mid-sentence stays the street, not the sentence',
-  addr('at 1600 Amphitheatre Parkway today').includes('1600 Amphitheatre Parkway'),
+check('and a street mid-sentence without a postal code stays uncovered',
+  addr('at 1600 Amphitheatre Parkway today').length === 0,
   JSON.stringify(addr('at 1600 Amphitheatre Parkway today')));
 
 check('but not the soup',
@@ -202,18 +192,24 @@ for (const [gone, sample] of [['postcode', 'Mountain View, CA 94043'],
 check('while a typed term still covers one for anyone who wants it',
   Detect.findAll('DOB: 04/11/1979', { terms: ['04/11/1979'] }).length === 1);
 
-// ---------- a typed word is never swallowed by a guess ----------
+// ---------- overlap: high-confidence detectors keep their identity ----------
 //
-// The address is longer than the word inside it, so it wins the overlap. It
-// must not win the word's identity with it: a reviewer who typed a word and is
-// then told it was found nowhere has been told something false.
+// A medium-confidence span used to hand its identity to a typed word inside
+// it. Addresses are high confidence when they carry a postal code, so they
+// keep their kind — same rule as email.
+{
+  const found = Detect.findAll('Mailing address: 1600 Amphitheatre Parkway, CA 94043.',
+    { terms: ['Amphitheatre'] });
+  check('a high-confidence address keeps its own identity over a typed word inside it',
+    found.length === 1 && found[0].kind === 'address'
+      && found[0].text.includes('1600 Amphitheatre Parkway')
+      && found[0].text.includes('94043'),
+    JSON.stringify(found.map(f => ({ kind: f.kind, text: f.text }))));
+}
 {
   const found = Detect.findAll('Mailing address: 1600 Amphitheatre Parkway.',
     { terms: ['Amphitheatre'] });
-  check('the wider span still wins, so the whole address is covered',
-    found.length === 1 && found[0].text.startsWith('1600 Amphitheatre Parkway'),
-    JSON.stringify(found.map(f => f.text)));
-  check('but it is reported as the typed word',
+  check('without a postal code the typed word is found on its own',
     found.length === 1 && found[0].kind === 'term' && found[0].term === 'Amphitheatre',
     JSON.stringify(found.map(f => f.kind)));
 }
@@ -317,9 +313,11 @@ check('OCR still finds a name over a weak title when a phone follows',
     + 'T: +84 28 3821 9930 (Ext. 288)\nM: +84 902 307 325\n'
     + '17th Floor, Sun Wah Tower,\n115 Nguyen Hue, Sai Gon Ward, HCMC, Vietnam';
   const kinds = kindsIn(slide);
-  for (const want of ['person', 'phone', 'address']) {
+  for (const want of ['person', 'phone']) {
     check('the contact slide gives up its ' + want, kinds.includes(want), kinds.join(','));
   }
+  check('and no street address without a postal code',
+    !kinds.includes('address'), kinds.join(','));
   check('and the building beside the name is not a second person',
     who(slide).length === 1, JSON.stringify(who(slide)));
 }
