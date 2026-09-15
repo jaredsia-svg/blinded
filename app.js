@@ -47,6 +47,7 @@
   }
 
   const Detect = window.BlindedDetect;
+  const PageRole = window.BlindedPageRole;
   const Boxes = window.BlindedBoxes;
   const PdfRead = window.BlindedPdfRead;
   const PdfWrite = window.BlindedPdfWrite;
@@ -1388,6 +1389,33 @@
     return Array.from(state.enabled).filter(k => k !== 'term');
   }
 
+  // Layout roles from OCR (preferred) or text-layer items. Used only to
+  // suppress detector false positives in chart / logo-grid ink — never to
+  // change what OCR reads or how Images search.
+  function rolesForPage(page) {
+    const ocr = page.ocrPlaced;
+    if (ocr && ocr.length) {
+      const w = (page.canvas && page.canvas.width) || page.width || page.widthPt || 1;
+      const h = (page.canvas && page.canvas.height) || page.height || page.heightPt || 1;
+      return PageRole.classify(ocr, w, h);
+    }
+    const items = page.items || [];
+    if (!items.length) return null;
+    const mapped = items.map(it => ({
+      str: it.str,
+      rect: {
+        x: it.x,
+        y: it.y - (it.h || 10),
+        w: it.w,
+        h: it.h || 10,
+      },
+    }));
+    const w = page.width || page.widthPt || 1;
+    const h = page.height || page.heightPt || 1;
+    return PageRole.classify(mapped, w, h);
+  }
+
+
   // Everything an enabled detector proposes is covered.
   //
   // There used to be a second switch here, "include lower-confidence matches",
@@ -1414,7 +1442,14 @@
       drawTextView();
     } else {
       for (const page of state.pages) {
-        page.findings = scanText(page.text);
+        const roles = rolesForPage(page);
+        page.roles = roles;
+        const proposed = scanText(page.text);
+        page.findings = proposed.filter(f => {
+          const rects = Boxes.boxesForSpans(page.items, [f], { advance: measure });
+          const union = PageRole.unionRects(rects);
+          return PageRole.allowDetector(roles, f.kind, union);
+        });
         page.dismissed = new Set(Array.from(page.dismissed));
         page.hits = onePerPlace(page.findings.map(f => ({
           finding: f,
@@ -1926,6 +1961,9 @@
     for (const page of state.pages) {
       page.imageHits = page.imageHits.filter(m => !m.detector);
       if (!page.ocrText || !page.ocrPlaced) continue;
+      // Roles from this page's OCR layout — suppress chart/logo-grid FPs only.
+      const roles = rolesForPage(page);
+      page.roles = roles;
       const found = Detect.findAll(page.ocrText, { kinds: acceptedKinds(), fromOcr: true });
       // What the text layer already gave up, so that reading the page again
       // does not report it a second time.
@@ -1943,6 +1981,13 @@
         const said = span.kind + '\u0000'
           + span.text.replace(/\s+/g, ' ').trim().toLowerCase();
         if (already.has(said)) continue;
+        const wordRects = [];
+        for (const item of page.ocrPlaced) {
+          if (item.start >= span.end || item.end <= span.start) continue;
+          wordRects.push(item.rect);
+        }
+        const union = PageRole.unionRects(wordRects);
+        if (!PageRole.allowDetector(roles, span.kind, union)) continue;
         already.add(said);
         // One finding, however many words it is drawn in. The boxes are per
         // word because a box is what covers ink, but the thing found is one
