@@ -1544,8 +1544,9 @@
     refreshApply();
   }
 
-  // What to look for has changed, so what was found no longer answers it.
-  // Back to the beginning: nothing is drawn until the reviewer asks again.
+  // What to look for has changed, so the current question is unanswered.
+  // Outlines from the last search stay on the page; new work waits behind
+  // a red ? until Search runs again.
   function needsSearch() {
     state.searched = false;
     state.applied = false;
@@ -1719,15 +1720,13 @@
   // applied. Image matches only exist once their search has run.
   function plannedCount() {
     if (state.kind === 'text') {
-      if (!state.searched) return 0;
-      return state.findings.filter(f => !dismissedText.has(f.id)).length;
-    }
-    if (!state.searched) {
-      return state.pages.reduce((sum, page) => sum + page.manual.length, 0);
+      return state.findings.filter(f => !dismissedText.has(f.id) && findingAnswered(f)).length;
     }
     return state.pages.reduce((sum, page) =>
-      sum + page.hits.filter(h => !page.dismissed.has(h.finding.id)).length
-        + liveImageHits(page).filter(m => !page.dismissed.has(m.id)).length
+      sum + page.hits.filter(h => !page.dismissed.has(h.finding.id)
+          && findingAnswered(h.finding)).length
+        + liveImageHits(page).filter(m => !page.dismissed.has(m.id)
+          && imageHitAnswered(m)).length
         + page.manual.length, 0);
   }
 
@@ -2514,14 +2513,14 @@
   function labelItems() {
     if (state.kind === 'text') {
       return state.findings
-        .filter(f => !dismissedText.has(f.id))
+        .filter(f => !dismissedText.has(f.id) && findingAnswered(f))
         .map(f => ({ id: f.id, kind: f.kind, text: f.text, term: f.term }));
     }
 
     const items = [];
     for (const page of state.pages) {
       for (const hit of page.hits) {
-        if (page.dismissed.has(hit.finding.id)) continue;
+        if (page.dismissed.has(hit.finding.id) || !findingAnswered(hit.finding)) continue;
         items.push({
           id: hit.finding.id,
           kind: hit.finding.kind,
@@ -2530,7 +2529,7 @@
         });
       }
       for (const match of liveImageHits(page)) {
-        if (page.dismissed.has(match.id)) continue;
+        if (page.dismissed.has(match.id) || !imageHitAnswered(match)) continue;
         // A picture of a typed word is that word, so it is labelled as one and
         // shares a placeholder with every written occurrence of it. Anything
         // else is a picked logo.
@@ -2669,6 +2668,33 @@
   // a new word, and it has the same answer — nothing knows yet, press Search.
   function kindAnswered(kind) {
     return state.kind === 'text' || state.countedKinds.includes(kind);
+  }
+
+  // A mark from a search that has already run. New terms, detectors and
+  // images wait behind a red ? until Search, but the outlines already on
+  // the page stay put rather than vanishing with the button.
+  function findingAnswered(finding) {
+    if (!finding) return false;
+    if (finding.kind === 'term') {
+      return state.terms.includes(finding.term)
+        && state.countedTerms.includes(finding.term);
+    }
+    return state.enabled.has(finding.kind) && state.countedKinds.includes(finding.kind);
+  }
+
+  function imageHitAnswered(m) {
+    if (!m) return false;
+    if (m.templateId) {
+      const t = state.templates.find(x => x.id === m.templateId);
+      return Boolean(t && t.searched);
+    }
+    if (m.term) {
+      return state.terms.includes(m.term) && state.countedTerms.includes(m.term);
+    }
+    if (m.detector) {
+      return state.enabled.has(m.detector) && state.countedKinds.includes(m.detector);
+    }
+    return false;
   }
 
   // After the pages have been read, enabling a detector is answered from
@@ -3016,21 +3042,15 @@
   }
 
   function activeBoxes(page) {
-    // Before the search has run there is nothing to show but what the reviewer
-    // drew themselves. Everything else would be an answer to a question they
-    // have not asked yet — and while they were still typing a word, an answer
-    // to half of it.
-    //
-    // The comprehensive check's marks are no exception: they answered the
-    // search that has just been set aside, so they come off the page with
-    // everything else. They are not thrown away, though — the next search
-    // keeps them and puts them back, because re-running a check that takes
-    // minutes to say the same thing is not a reasonable price for moving a
-    // slider.
-    if (!state.searched) return page.manual.map(box => ({ ...box }));
-
-    const live = page.hits.filter(h => !page.dismissed.has(h.finding.id));
-    const images = liveImageHits(page).filter(m => !page.dismissed.has(m.id));
+    // Marks from a search that has already answered this term, detector or
+    // image stay on the page when the question changes. New unanswered work
+    // waits behind a red ? until Search; it is not drawn early (that would
+    // outline a word while it is still being typed). Before any search, only
+    // hand-drawn boxes show.
+    const live = page.hits.filter(h => !page.dismissed.has(h.finding.id)
+      && findingAnswered(h.finding));
+    const images = liveImageHits(page).filter(m => !page.dismissed.has(m.id)
+      && imageHitAnswered(m));
 
     if (!state.labelling) {
       // Merged across findings, which closes the gaps between adjacent bars.
@@ -3137,9 +3157,11 @@
     // the page is meant to be what the file will be, and a dashed box round a
     // word that is still there — and still readable — is a mark on a document
     // that has none.
-    const off = state.applied ? [] : page.hits.filter(h => page.dismissed.has(h.finding.id));
+    const off = state.applied ? [] : page.hits.filter(h =>
+      page.dismissed.has(h.finding.id) && findingAnswered(h.finding));
     const offImages = state.applied
-      ? [] : liveImageHits(page).filter(m => page.dismissed.has(m.id));
+      ? [] : liveImageHits(page).filter(m => page.dismissed.has(m.id)
+        && imageHitAnswered(m));
     if (off.length || offImages.length) {
       ctx.save();
       ctx.lineWidth = stroke(Math.max(1.5, page.source.width / 700));
@@ -3323,7 +3345,7 @@
     // dismissed ones so a change of mind is always reversible by clicking the
     // same spot again.
     for (const hit of page.hits) {
-      if (page.dismissed.has(hit.finding.id)) continue;
+      if (page.dismissed.has(hit.finding.id) || !findingAnswered(hit.finding)) continue;
       if (Boxes.rectAt(hit.rects, x, y) !== -1) {
         page.dismissed.add(hit.finding.id);
         pushUndo('keeping that match', () => page.dismissed.delete(hit.finding.id));
@@ -3331,7 +3353,7 @@
       }
     }
     for (const m of liveImageHits(page)) {
-      if (page.dismissed.has(m.id)) continue;
+      if (page.dismissed.has(m.id) || !imageHitAnswered(m)) continue;
       if (Boxes.rectAt([m.rect], x, y) !== -1) {
         page.dismissed.add(m.id);
         pushUndo('keeping that image', () => page.dismissed.delete(m.id));
@@ -3339,7 +3361,7 @@
       }
     }
     for (const hit of page.hits) {
-      if (!page.dismissed.has(hit.finding.id)) continue;
+      if (!page.dismissed.has(hit.finding.id) || !findingAnswered(hit.finding)) continue;
       if (Boxes.rectAt(hit.rects, x, y) !== -1) {
         page.dismissed.delete(hit.finding.id);
         pushUndo('covering that match again', () => page.dismissed.add(hit.finding.id));
@@ -3347,7 +3369,7 @@
       }
     }
     for (const m of liveImageHits(page)) {
-      if (!page.dismissed.has(m.id)) continue;
+      if (!page.dismissed.has(m.id) || !imageHitAnswered(m)) continue;
       if (Boxes.rectAt([m.rect], x, y) !== -1) {
         page.dismissed.delete(m.id);
         pushUndo('covering that image again', () => page.dismissed.add(m.id));
@@ -5037,6 +5059,7 @@
     let cursor = 0;
 
     for (const f of state.findings) {
+      if (!findingAnswered(f)) continue;
       if (f.start < cursor) continue;
       view.append(document.createTextNode(state.text.slice(cursor, f.start)));
       const mark = document.createElement('mark');
@@ -6035,6 +6058,10 @@
             if (other !== sheet) other.open = false;
           }
           sheet.scrollIntoView({ block: 'nearest' });
+        } else {
+          // Closing Organise brings the four back open — the shape the panel
+          // opens in — not as four shut headings under the roll line.
+          openSections();
         }
         // The panel stops scrolling and hands its spare height to the
         // thumbnails, so they are the only thing with a scrollbar. Two nested
@@ -6073,6 +6100,8 @@
   el('page-keep').addEventListener('click', keepOnlyPicked);
   el('page-drop').addEventListener('click', dropPicked);
   el('page-add').addEventListener('click', () => el('addfile').click());
+  const dropHint = el('sheetdrop-hint');
+  if (dropHint) dropHint.addEventListener('click', () => el('addfile').click());
   el('addfile').addEventListener('change', async event => {
     const files = event.target.files;
     // Cleared before the read, so choosing the same file twice in a row still
@@ -6081,50 +6110,54 @@
     await addDocuments(files);
   });
 
-  // Drop a PDF or image onto the sheet, into a gap between pages. The same
-  // line and slide as dragging a page, so the two gestures read as one.
+  // Drop a PDF or image onto the sheet, into a gap between pages. The OS
+  // drag image is the one in the hand — a second, larger ghost sat on top
+  // of it and read as two pages following the pointer.
   function hasFileDrag(event) {
     const types = event.dataTransfer && event.dataTransfer.types;
     if (!types) return false;
     return Array.prototype.indexOf.call(types, 'Files') >= 0;
   }
 
+  let fileDragDepth = 0;
+  let fileGhost = null;
+  const blankDrag = document.createElement('canvas');
+  blankDrag.width = 1;
+  blankDrag.height = 1;
+
   function liftFileGhost(event) {
     const ghost = document.createElement('div');
     ghost.className = 'sheetghost fileghost';
     const face = document.createElement('canvas');
-    face.width = 96;
-    face.height = 124;
-    const ctx = face.getContext('2d', { alpha: false });
-    ctx.fillStyle = '#fff';
+    face.width = 40;
+    face.height = 52;
+    const ctx = face.getContext('2d');
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.55)';
     ctx.fillRect(0, 0, face.width, face.height);
-    ctx.strokeStyle = '#1f6feb';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(1.5, 1.5, face.width - 3, face.height - 3);
-    ctx.fillStyle = '#1f6feb';
-    ctx.font = '700 12px system-ui, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText('Add', 48, 70);
+    ctx.strokeStyle = 'rgba(31, 111, 235, 0.65)';
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(1, 1, face.width - 2, face.height - 2);
     ghost.append(face);
     document.body.append(ghost);
     carryGhost(ghost, event);
     return ghost;
   }
 
-  let fileGhost = null;
-  let fileDragDepth = 0;
+  function hideOsDragImage(event) {
+    // Best effort: inbound file drags from Explorer often ignore this, but
+    // when it takes, only the small ghost remains.
+    try {
+      if (event.dataTransfer && event.dataTransfer.setDragImage) {
+        event.dataTransfer.setDragImage(blankDrag, 0, 0);
+      }
+    } catch (_) { /* not all browsers allow this on dragover */ }
+  }
 
-  function endFileDrag(landed) {
+  function endFileDrag() {
     fileDragDepth = 0;
-    document.body.classList.remove('file-dropping', 'dragging-page');
-    const host = el('sheet');
-    const tiles = host ? [...host.querySelectorAll('.sheetpage')] : [];
-    const gap = lastFileGap;
-    const into = landed && tiles.length
-      ? tiles[Math.min(Math.max(0, gap), tiles.length - 1)]
-      : null;
+    document.body.classList.remove('file-dropping');
     if (fileGhost) {
-      dropGhost(fileGhost, into);
+      fileGhost.remove();
       fileGhost = null;
     }
     stopEdgeScroll();
@@ -6132,34 +6165,41 @@
     lastFileGap = -1;
   }
 
+  function fileDropGap(event, host) {
+    const hint = el('sheetdrop-hint');
+    if (hint && (event.target === hint || hint.contains(event.target))) {
+      return state.pages.length;
+    }
+    return sheetGapAt(event, host);
+  }
+
   {
     const section = el('organisesect');
     if (section) {
       section.addEventListener('dragenter', event => {
         if (!hasFileDrag(event) || state.kind === 'text' || !state.pages.length) return;
-        if (document.body.classList.contains('dragging-page')
-          && !document.body.classList.contains('file-dropping')) return;
+        if (document.body.classList.contains('dragging-page')) return;
         event.preventDefault();
         fileDragDepth++;
-        document.body.classList.add('dragging-page', 'file-dropping');
+        document.body.classList.add('file-dropping');
         if (!section.open) section.open = true;
       });
       section.addEventListener('dragover', event => {
         if (!hasFileDrag(event) || state.kind === 'text' || !state.pages.length) return;
-        if (document.body.classList.contains('dragging-page')
-          && !document.body.classList.contains('file-dropping')) return;
+        if (document.body.classList.contains('dragging-page')) return;
         event.preventDefault();
         event.dataTransfer.dropEffect = 'copy';
-        document.body.classList.add('dragging-page', 'file-dropping');
+        hideOsDragImage(event);
+        document.body.classList.add('file-dropping');
         if (!section.open) section.open = true;
         if (!fileGhost) fileGhost = liftFileGhost(event);
         else carryGhost(fileGhost, event);
         const host = el('sheet');
         if (!host) return;
-        lastFileGap = sheetGapAt(event, host);
+        lastFileGap = fileDropGap(event, host);
         showDropAt(lastFileGap, host);
         edgeScroll(host, event, () => {
-          lastFileGap = sheetGapAt(event, host);
+          lastFileGap = fileDropGap(event, host);
           showDropAt(lastFileGap, host);
         });
       });
@@ -6169,16 +6209,16 @@
         if (fileDragDepth > 0) return;
         const next = event.relatedTarget;
         if (next && section.contains(next)) return;
-        endFileDrag(false);
+        endFileDrag();
       });
       section.addEventListener('drop', async event => {
         if (!hasFileDrag(event) || state.kind === 'text' || !state.pages.length) return;
         event.preventDefault();
         event.stopPropagation();
         const host = el('sheet');
-        const gap = lastFileGap >= 0 ? lastFileGap : sheetGapAt(event, host);
+        const gap = lastFileGap >= 0 ? lastFileGap : fileDropGap(event, host);
         const files = event.dataTransfer && event.dataTransfer.files;
-        endFileDrag(true);
+        endFileDrag();
         await addDocuments(files, gap);
       });
     }
