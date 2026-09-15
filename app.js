@@ -3729,7 +3729,12 @@
   // The bar this particular word has to clear: the slider, less whatever its
   // length earns back. See lib/textimage.js for the measurements behind it.
   function wordBarFor(term) {
-    return Math.max(0.3, Math.round((wordSensitivity() - TextImage.shapeRelief(term)) * 1000) / 1000);
+    let bar = wordSensitivity() - TextImage.shapeRelief(term);
+    // Short acronyms (KAS/KAG/KNW) correlate inside longer wordmarks. Hold the
+    // shape bar higher; green OCR/text hits are unchanged.
+    const letters = String(term || '').replace(/[^A-Za-z]/g, '');
+    if (letters.length > 0 && letters.length <= 3) bar += 0.12;
+    return Math.max(0.3, Math.round(bar * 1000) / 1000);
   }
 
   // ---------- one thing at a time, on a small screen ----------
@@ -6263,6 +6268,15 @@
   }
 
 
+
+  // Refuse ≤3-letter Comprehensive shape hits inside logo-grid regions.
+  function shortAcronymShapeRefused(page, rect, term) {
+    const roles = page.roles || rolesForPage(page);
+    page.roles = roles;
+    return !PageRole.allowShortAcronymShape(roles, term, rect);
+  }
+
+
   // The running sweep, so that anything which has to come after it can wait
   // for it rather than race it.
   let sweepTask = null;
@@ -6375,7 +6389,7 @@
           for (const hit of Match.pairPhraseHits(parts, hitsByPart, skipped)) {
             const rect = { x: hit.x, y: hit.y, w: hit.w, h: hit.h };
             if (alreadyCovered(page, rect)) continue;
-            if (readerContradicts(page, rect, term)) {
+            if (readerContradicts(page, rect, term) || shortAcronymShapeRefused(page, rect, term)) {
               refused.push({ pageIndex, at: rect.y, term });
               continue;
             }
