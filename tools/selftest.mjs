@@ -22,7 +22,7 @@ const check = (label, ok, detail) => {
 };
 
 for (const file of ['schedule.js', 'detect.js', 'boxes.js', 'pdfwrite.js', 'match.js',
-  'textimage.js', 'pageprep.js', 'imagesearch.js', 'labels.js', 'ocr.js']) {
+  'textimage.js', 'pageprep.js', 'pagerole.js', 'imagesearch.js', 'labels.js', 'ocr.js']) {
   runInThisContext(readFileSync(join(root, 'lib', file), 'utf8'), { filename: file });
 }
 const Detect = globalThis.BlindedDetect;
@@ -35,6 +35,7 @@ const TextImage = globalThis.BlindedTextImage;
 const Ocr = globalThis.BlindedOcr;
 const Schedule = globalThis.BlindedSchedule;
 const PagePrep = globalThis.BlindedPagePrep;
+const PageRole = globalThis.BlindedPageRole;
 
 // ---------- detectors ----------
 
@@ -883,6 +884,91 @@ check('leading and trailing space does not make a word a phrase',
   TextImage.shapeRelief('  proprietary  ') === TextImage.shapeRelief('proprietary'));
 check('an empty term is harmless', TextImage.shapeRelief('') === 0
   && TextImage.shapeRelief(null) === 0);
+
+
+// Page roles: chart vs contact layout for detector FP suppression.
+(() => {
+  check('pagerole is loaded', !!PageRole && typeof PageRole.classify === 'function');
+
+  // Digit-heavy cluster like axis / bar labels on a chart.
+  const chartItems = [];
+  let x = 40;
+  for (const label of ['2019', '2020', '2021', '2022', '45%', '52%', '61%', '70%']) {
+    chartItems.push({ str: label, rect: { x: x, y: 80, w: 36, h: 12 } });
+    x += 42;
+  }
+  const chart = PageRole.classify(chartItems, 600, 400);
+  check('a digit cluster is labelled chart',
+    chart.regions.some(r => r.role === 'chart') || chart.pageHint === 'chart',
+    JSON.stringify(chart.regions.map(r => r.role)));
+  const chartRegion = chart.regions.find(r => r.role === 'chart') || chart.regions[0];
+  check('phones are suppressed inside a chart region',
+    PageRole.allowDetector(chart, 'phone', chartRegion.rect) === false);
+  check('addresses are suppressed inside a chart region',
+    PageRole.allowDetector(chart, 'address', chartRegion.rect) === false);
+  check('emails stay allowed in a chart region',
+    PageRole.allowDetector(chart, 'email', chartRegion.rect) === true);
+  check('typed terms are never suppressed',
+    PageRole.allowDetector(chart, 'term', chartRegion.rect) === true);
+
+  // Contact block: tel cue + phone + email.
+  const contactItems = [
+    { str: 'Jane Doe', rect: { x: 40, y: 40, w: 70, h: 12 } },
+    { str: 'Director', rect: { x: 40, y: 56, w: 55, h: 12 } },
+    { str: 'T:', rect: { x: 40, y: 80, w: 16, h: 12 } },
+    { str: '+65 6123 4567', rect: { x: 60, y: 80, w: 90, h: 12 } },
+    { str: 'E:', rect: { x: 40, y: 100, w: 16, h: 12 } },
+    { str: 'jane@example.com', rect: { x: 60, y: 100, w: 110, h: 12 } },
+  ];
+  const contact = PageRole.classify(contactItems, 600, 400);
+  check('a labelled contact block is contact',
+    contact.regions.some(r => r.role === 'contact') || contact.pageHint === 'contact',
+    JSON.stringify(contact.regions.map(r => r.role)));
+  const contactRegion = contact.regions.find(r => r.role === 'contact') || contact.regions[0];
+  check('phones stay allowed in a contact region',
+    PageRole.allowDetector(contact, 'phone', contactRegion.rect) === true);
+  check('person names stay allowed in a contact region',
+    PageRole.allowDetector(contact, 'person', contactRegion.rect) === true);
+
+  // Logo grid: many short fragments, no long prose.
+  const logoItems = [];
+  let ly = 40;
+  for (let row = 0; row < 3; row++) {
+    let lx = 40;
+    for (const word of ['Acme', 'Inc', 'Beta', 'Co', 'Gamma', 'Ltd']) {
+      logoItems.push({ str: word, rect: { x: lx, y: ly, w: 28, h: 10 } });
+      lx += 50;
+    }
+    ly += 28;
+  }
+  const logos = PageRole.classify(logoItems, 600, 400);
+  check('a short-fragment collage is logo_grid',
+    logos.regions.some(r => r.role === 'logo_grid') || logos.pageHint === 'logo_grid',
+    JSON.stringify(logos.regions.map(r => r.role)));
+  const logoRegion = logos.regions.find(r => r.role === 'logo_grid') || logos.regions[0];
+  check('phones are suppressed in a logo grid',
+    PageRole.allowDetector(logos, 'phone', logoRegion.rect) === false);
+  check('person names are suppressed in a logo grid',
+    PageRole.allowDetector(logos, 'person', logoRegion.rect) === false);
+
+  // Body prose should not suppress phones.
+  const bodyItems = [
+    { str: 'The company reported strong growth across the region this year.',
+      rect: { x: 40, y: 40, w: 420, h: 14 } },
+    { str: 'Further detail is available in the appendix.',
+      rect: { x: 40, y: 60, w: 280, h: 14 } },
+    { str: 'Please call +65 6123 4567 for questions.',
+      rect: { x: 40, y: 80, w: 260, h: 14 } },
+  ];
+  const body = PageRole.classify(bodyItems, 600, 400);
+  check('prose is body or other, not chart',
+    !body.regions.some(r => r.role === 'chart'),
+    JSON.stringify(body.regions.map(r => r.role)));
+  const bodyRect = body.regions[0] ? body.regions[0].rect : { x: 40, y: 80, w: 260, h: 14 };
+  check('phones stay allowed in body text',
+    PageRole.allowDetector(body, 'phone', bodyRect) === true);
+})();
+
 
 // Page preparation: working-res cap, text regions, pyramid, OCR prep.
 (() => {

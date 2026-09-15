@@ -47,6 +47,7 @@
   }
 
   const Detect = window.BlindedDetect;
+  const PageRole = window.BlindedPageRole;
   const Boxes = window.BlindedBoxes;
   const PdfRead = window.BlindedPdfRead;
   const PdfWrite = window.BlindedPdfWrite;
@@ -192,6 +193,8 @@
     sweepRunning: false,
     sweepStopped: false,
     sweepReached: 0,
+    // True when Comprehensive found nothing left to correlate.
+    sweepSkipped: false,
     // Spots the thorough check proposed and stood down from, so the note can
     // hand the reviewer each one rather than a number.
     sweepRefusedAt: [],
@@ -1386,6 +1389,33 @@
     return Array.from(state.enabled).filter(k => k !== 'term');
   }
 
+  // Layout roles from OCR (preferred) or text-layer items. Used only to
+  // suppress detector false positives in chart / logo-grid ink — never to
+  // change what OCR reads or how Images search.
+  function rolesForPage(page) {
+    const ocr = page.ocrPlaced;
+    if (ocr && ocr.length) {
+      const w = (page.canvas && page.canvas.width) || page.width || page.widthPt || 1;
+      const h = (page.canvas && page.canvas.height) || page.height || page.heightPt || 1;
+      return PageRole.classify(ocr, w, h);
+    }
+    const items = page.items || [];
+    if (!items.length) return null;
+    const mapped = items.map(it => ({
+      str: it.str,
+      rect: {
+        x: it.x,
+        y: it.y - (it.h || 10),
+        w: it.w,
+        h: it.h || 10,
+      },
+    }));
+    const w = page.width || page.widthPt || 1;
+    const h = page.height || page.heightPt || 1;
+    return PageRole.classify(mapped, w, h);
+  }
+
+
   // Everything an enabled detector proposes is covered.
   //
   // There used to be a second switch here, "include lower-confidence matches",
@@ -1412,7 +1442,14 @@
       drawTextView();
     } else {
       for (const page of state.pages) {
-        page.findings = scanText(page.text);
+        const roles = rolesForPage(page);
+        page.roles = roles;
+        const proposed = scanText(page.text);
+        page.findings = proposed.filter(f => {
+          const rects = Boxes.boxesForSpans(page.items, [f], { advance: measure });
+          const union = PageRole.unionRects(rects);
+          return PageRole.allowDetector(roles, f.kind, union);
+        });
         page.dismissed = new Set(Array.from(page.dismissed));
         page.hits = onePerPlace(page.findings.map(f => ({
           finding: f,
@@ -1552,7 +1589,7 @@
       ? state.kind !== 'text' && !state.pages.length
       : !state.applied && marks === 0 && unsearched === 0);
     if (state.sweepRunning) {
-      button.title = 'The comprehensive check is running \u2013 let it finish, '
+      button.title = 'The comprehensive check is running  - let it finish, '
         + 'or stop it in the panel';
     }
 
@@ -1599,7 +1636,7 @@
       // A paused run. Say how much of the document has actually been looked
       // at, because the marks on screen are the answer for part of it only.
       note.textContent = (state.pages.length - unread) + ' of ' + state.pages.length
-        + ' pages read \u2013 press Search to carry on.';
+        + ' pages read  - press Search to carry on.';
     } else if (unsearched) {
       note.textContent = unsearched === 1
         ? '1 search still to run.'
@@ -1607,7 +1644,7 @@
     } else if (marks === 0) {
       note.textContent = 'Nothing marked yet.';
     } else {
-      note.textContent = 'Outlined \u2013 press Redact to cover them.';
+      note.textContent = 'Outlined  - press Redact to cover them.';
     }
   }
 
@@ -1924,6 +1961,9 @@
     for (const page of state.pages) {
       page.imageHits = page.imageHits.filter(m => !m.detector);
       if (!page.ocrText || !page.ocrPlaced) continue;
+      // Roles from this page's OCR layout — suppress chart/logo-grid FPs only.
+      const roles = rolesForPage(page);
+      page.roles = roles;
       const found = Detect.findAll(page.ocrText, { kinds: acceptedKinds(), fromOcr: true });
       // What the text layer already gave up, so that reading the page again
       // does not report it a second time.
@@ -1941,6 +1981,13 @@
         const said = span.kind + '\u0000'
           + span.text.replace(/\s+/g, ' ').trim().toLowerCase();
         if (already.has(said)) continue;
+        const wordRects = [];
+        for (const item of page.ocrPlaced) {
+          if (item.start >= span.end || item.end <= span.start) continue;
+          wordRects.push(item.rect);
+        }
+        const union = PageRole.unionRects(wordRects);
+        if (!PageRole.allowDetector(roles, span.kind, union)) continue;
         already.add(said);
         // One finding, however many words it is drawn in. The boxes are per
         // word because a box is what covers ink, but the thing found is one
@@ -4496,7 +4543,7 @@
       count.className = template.searched ? 'n dot-green' : 'n unknown';
       count.textContent = template.searched ? String(live) : '?';
       count.disabled = !template.searched || live === 0;
-      if (!template.searched) count.title = 'Not searched for yet \u2013 press Search';
+      if (!template.searched) count.title = 'Not searched for yet  - press Search';
       if (!count.disabled) {
         count.title = 'Where ' + (live === 1 ? 'it is' : 'they are');
         count.setAttribute('aria-expanded', String(state.openTally === template.id));
@@ -4511,7 +4558,7 @@
       // Named, because the row now holds two buttons and "the button in the
       // row" stopped meaning anything.
       remove.className = 'templatedrop';
-      remove.textContent = '\u00d7';
+      remove.textContent = 'x';
       remove.title = 'Stop matching this image';
       remove.addEventListener('click', () => removeTemplate(template.id));
 
@@ -4604,7 +4651,7 @@
         count.textContent = '?';
         count.disabled = true;
         count.removeAttribute('aria-expanded');
-        count.title = 'Not searched for yet \u2013 press Search';
+        count.title = 'Not searched for yet  - press Search';
         // needsSearch closes the open tally, but the list it drew is already
         // on screen and only a re-render would take it off.
         const open = row.nextSibling;
@@ -4772,7 +4819,7 @@
       const drop = document.createElement('button');
       drop.type = 'button';
       drop.className = 'termdrop';
-      drop.textContent = '\u00d7';
+      drop.textContent = 'x';
       drop.title = 'Remove "' + term + '"';
       drop.setAttribute('aria-label', 'Remove "' + term + '"');
       drop.addEventListener('click', () => dropTerm(term));
@@ -4809,7 +4856,7 @@
           dot.classList.add('unknown');
           dot.textContent = '?';
           dot.disabled = true;
-          dot.title = 'Not searched for yet \u2013 press Search';
+          dot.title = 'Not searched for yet  - press Search';
           return dot;
         }
         dot.textContent = String(places.length);
@@ -5033,8 +5080,8 @@
     // Saving a draft is not exporting a redaction, and the flag that decides
     // whether the reviewer is warned about losing work must not be set by it.
     state.exported = false;
-    draftNote('Draft saved. It holds your marks and the words you typed \u2013 '
-      + 'not the document \u2013 so keep it as carefully. Reopen it and choose '
+    draftNote('Draft saved. It holds your marks and the words you typed  - '
+      + 'not the document  - so keep it as carefully. Reopen it and choose '
       + state.name + ' again to carry on.');
   }
 
@@ -5204,10 +5251,10 @@
     }
     // Whatever punctuation the removal left stranded.
     out = out.replace(/[ \t]{2,}/g, ' ')
-      .replace(/[-_\u2013\u2014]{2,}/g, '-')
-      .replace(/\s*[-_\u2013\u2014]\s*(?=[-_\u2013\u2014.]|$)/g, '')
-      .replace(/^[\s\-_\u2013\u2014.]+/, '')
-      .replace(/[\s\-_\u2013\u2014]+$/, '')
+      .replace(/[-_ - -]{2,}/g, '-')
+      .replace(/\s*[-_ - -]\s*(?=[-_ - -.]|$)/g, '')
+      .replace(/^[\s\-_ - -.]+/, '')
+      .replace(/[\s\-_ - -]+$/, '')
       .trim();
     return out;
   }
@@ -5957,14 +6004,59 @@
   // Eight at first, one for every face the tool can draw. That was four times
   // the cost for a second opinion on work the reader has already done well.
   // Which two, and why bold, is measured in lib/textimage.js.
+  const READER_SURE = 60;
+
+  // Has the first pass already settled this term on this page?
+  //
+  // Text-layer hits are exact. OCR hits only count when every word box the
+  // match touches was read at READER_SURE or above — the same bar the sweep
+  // uses to let a confident reading veto a shape guess. Unsure OCR is exactly
+  // what Comprehensive is for, so those pages stay in the queue.
+  function pageHasConfidentTerm(page, term) {
+    for (const f of page.findings || []) {
+      if (f.kind === 'term' && f.term === term) return true;
+    }
+    if (!page.ocrText || !page.ocrPlaced || !page.ocrPlaced.length) return false;
+    const spans = Detect.findTerms(page.ocrText, [term]);
+    for (const span of spans) {
+      const over = page.ocrPlaced.filter(item =>
+        !(item.end <= span.start || item.start >= span.end));
+      if (!over.length) continue;
+      if (over.every(item => typeof item.confidence === 'number'
+        && item.confidence >= READER_SURE)) return true;
+    }
+    return false;
+  }
+
+  function pagesNeedingSweep(term) {
+    return state.pages.filter(page => !pageHasConfidentTerm(page, term));
+  }
+
+  // How much work a Comprehensive run will actually do (for the time note).
+  function sweepWorkload() {
+    let pageSet = new Set();
+    let terms = 0;
+    for (const term of state.terms) {
+      const pages = pagesNeedingSweep(term);
+      if (!pages.length) continue;
+      terms++;
+      for (const p of pages) pageSet.add(p.index);
+    }
+    return { terms, pages: pageSet.size, pageIndexes: pageSet };
+  }
+
   function sweepTemplates() {
     const entries = [];
     for (const term of state.terms) {
+      const need = pagesNeedingSweep(term);
+      if (!need.length) continue;
+      const pageIndexes = new Set(need.map(p => p.index));
       TextImage.templatesFor(term, TextImage.SWEEP_FACES).forEach((template, i) => {
         entries.push({
           key: 'sweep:' + term + ':' + i, template, term,
           threshold: wordBarFor(term),
           smallText: true,
+          pageIndexes,
         });
       });
     }
@@ -6016,7 +6108,6 @@
   // Below this is where Tesseract is genuinely unsure, and an unsure reading
   // is exactly what the shape matcher is there to second-guess — so a doubtful
   // word never gets to veto.
-  const READER_SURE = 60;
   const READER_OVER = 0.25;
 
   function readerContradicts(page, rect, term) {
@@ -6060,12 +6151,30 @@
 
   async function sweepNow() {
     const entries = sweepTemplates();
-    if (!entries.length) return 0;
+    if (!entries.length) {
+      // Everything the reading already settled — nothing left to correlate.
+      state.sweptTerms = state.terms.slice();
+      state.sweepAdded = 0;
+      state.sweepRefused = 0;
+      state.sweepRefusedAt = [];
+      state.sweepReached = state.pages.length;
+      state.sweepSkipped = true;
+      renderSweep();
+      refreshApply();
+      return 0;
+    }
     // Which words this run is answering. The reviewer can edit the list while
     // it runs, and a mark for a word they have since deleted is a mark they
     // never asked for, so the answer is filtered against the list as it stands
     // when the run finishes rather than as it stood when it started.
     const asked = state.terms.slice();
+    // Only decode pages that still need at least one term. Per-template
+    // pageIndexes then skips settled terms on shared pages.
+    const pageIndexSet = new Set();
+    for (const entry of entries) {
+      if (entry.pageIndexes) for (const i of entry.pageIndexes) pageIndexSet.add(i);
+    }
+    const pages = state.pages.filter(p => pageIndexSet.has(p.index));
 
     // No overlay. Every other long pass in this tool blocks the document
     // because nothing useful can be done while it runs; this one is a second
@@ -6073,7 +6182,8 @@
     // document and a bar in the panel says how far it has got.
     state.sweepRunning = true;
     state.sweepStopped = false;
-    sweepProgress(0, state.pages.length);
+    state.sweepSkipped = false;
+    sweepProgress(0, pages.length);
     renderSweep();
     // The Search button greys out for as long as this runs, so it has to be
     // told the moment it starts and not only when it ends.
@@ -6081,9 +6191,9 @@
 
     let results;
     try {
-      results = await ImageSearch.searchAllParallel(state.pages, entries,
+      results = await ImageSearch.searchAllParallel(pages, entries,
         { stop: () => state.sweepStopped },
-        done => sweepProgress(done, state.pages.length));
+        done => sweepProgress(done, pages.length));
     } catch (error) {
       state.sweepRunning = false;
       renderSweep();
@@ -6093,7 +6203,7 @@
     }
 
     const reached = typeof results.stoppedAfter === 'number'
-      ? results.stoppedAfter : state.pages.length;
+      ? results.stoppedAfter : pages.length;
 
     // Several typefaces finding the same word in the same place is one find,
     // so they are pooled per page and suppressed before anything is proposed.
@@ -6165,7 +6275,7 @@
     const line = el('sweepprogress');
     if (line) {
       line.textContent = 'Checking page ' + Math.min(done + 1, total) + ' of ' + total
-        + ' \u2013 you can carry on reviewing.';
+        + '  - you can carry on reviewing.';
     }
   }
 
@@ -6214,37 +6324,52 @@
     }
 
     if (!swept) {
+      const work = sweepWorkload();
+      // Reading already settled every typed word — nothing for shape to do.
+      if (!work.pages || !work.terms) {
+        button.hidden = true;
+        note.textContent = 'The reading already covered every typed word on '
+          + 'every page - nothing left for a shape check to do.';
+        return;
+      }
       button.hidden = false;
       button.textContent = 'Comprehensive Check';
       // Honest about the cost, because it is the whole reason this is a
       // button rather than the default.
-      //
-      // Scaled by the document's own page size rather than assuming one.
       const first = state.pages[0];
       const megapixels = first ? (first.source.width * first.source.height) / 1e6 : 2;
+      // Cost tracks pages times terms that still need a shape pass, not the whole doc.
       const seconds = Math.round(
-        state.pages.length * state.terms.length * megapixels * SWEEP_SECONDS_PER_MP);
+        work.pages * work.terms * megapixels * SWEEP_SECONDS_PER_MP);
       if (state.sweepStopped && state.sweepReached) {
         note.textContent = 'Stopped after ' + state.sweepReached
-          + ' of ' + state.pages.length + ' pages'
+          + ' page' + (state.sweepReached === 1 ? '' : 's') + ' still in doubt'
           + (state.sweepAdded
             ? ', having added ' + state.sweepAdded
               + (state.sweepAdded === 1 ? ' mark' : ' marks') + ' in amber. '
             : ', having found nothing new. ')
-          + 'Start it again to check the whole document \u2013 about '
+          + 'Start it again to finish the rest - about '
           + describeTime(seconds) + '.';
         return;
       }
       note.textContent = 'The initial redaction may make mistakes. This check '
-        + 'inspects every page again by shape and works in the background. It '
-        + 'may take a couple of minutes and suggested redactions will appear '
-        + 'in amber.';
+        + 're-inspects by shape only where the reading missed or was unsure ('
+        + work.pages + (work.pages === 1 ? ' page' : ' pages')
+        + (work.terms !== state.terms.length
+          ? ', ' + work.terms + (work.terms === 1 ? ' word' : ' words')
+          : '')
+        + '), works in the background, and shows new marks in amber. About '
+        + describeTime(seconds) + '.';
       return;
     }
 
     button.hidden = true;
-    note.textContent = state.sweepAdded === 0
+    note.textContent = state.sweepSkipped
+      ? 'The reading already covered every typed word on every page - '
+        + 'nothing left for a shape check to do.'
+      : state.sweepAdded === 0
       ? 'The thorough check found nothing the reading had missed.'
+
       : 'The thorough check added ' + state.sweepAdded
         + (state.sweepAdded === 1 ? ' mark' : ' marks')
         + ', outlined in amber. Press Redact to cover '
@@ -6700,6 +6825,7 @@
     termsNeedingPictures,
     readPages, matchOcr, ocrPending, ocrMatchStale, showWordControls,
     sweepTemplates, runSweep, renderSweep, alreadyCovered, readerContradicts,
+    pageHasConfidentTerm, pagesNeedingSweep, sweepWorkload,
     READER_SURE, sweepProgress,
     settleSweep,
     redrawAll, legs, leg, busyNote,
