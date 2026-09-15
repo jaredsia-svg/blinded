@@ -910,6 +910,36 @@ check('an empty term is harmless', TextImage.shapeRelief('') === 0
 
 
 
+
+// OCR phrase soft-fuzz: longer parts only, ≤1 edit, ≤1 fuzzy, need an exact anchor.
+(() => {
+  check('Widdle East recovers middle east under OCR fuzz',
+    Detect.findTerms('Widdle East (88 stores)', ['middle east'], { fromOcr: true })
+      .some(h => h.term === 'middle east'));
+  check('Midale East recovers middle east',
+    Detect.findTerms('region Midale East table', ['Middle East'], { fromOcr: true })
+      .some(h => h.term === 'Middle East'));
+  check('East alone is still not middle east',
+    Detect.findTerms('East (88 stores)', ['middle east'], { fromOcr: true })
+      .filter(h => h.term === 'middle east').length === 0);
+  check('South East is not middle east',
+    Detect.findTerms('South East region', ['middle east'], { fromOcr: true })
+      .filter(h => h.term === 'middle east').length === 0);
+  check('short parts are not fuzzed (east ≉ cast)',
+    Detect.ocrFuzzyPartMatch('cast', 'east') === false);
+  check('Middle fuzz allows one edit',
+    Detect.ocrFuzzyPartMatch('Widdle', 'Middle') === true
+    && Detect.ocrFuzzyPartMatch('Midale', 'Middle') === true);
+  check('South is too far from Middle',
+    Detect.ocrFuzzyPartMatch('South', 'Middle') === false);
+  check('two fuzzy parts cannot invent Fraser and Neave',
+    Detect.findTerms('Frasor Neavo limited', ['Fraser and Neave'], { fromOcr: true })
+      .filter(h => h.term === 'Fraser and Neave').length === 0);
+  check('one fuzzy + one exact still recovers Fraser and Neave',
+    Detect.findTerms('Frasor and Neave limited', ['Fraser and Neave'], { fromOcr: true })
+      .some(h => h.term === 'Fraser and Neave'));
+})();
+
 // OCR phrase recovery: content-word chains + hyphen/bullet glue.
 (() => {
   check('OCR recovers Middle East across a digit crumb',
