@@ -1,1 +1,1 @@
-PLACEHOLDER_SELFTEST
+@/tmp/real_file_1_content.txt
