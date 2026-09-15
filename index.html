@@ -41,7 +41,7 @@
      origins for one program and two sets of response headers to keep right;
      Pages publishing is off and this says which copy is the copy. -->
 <link rel="canonical" href="https://blinded.onrender.com/">
-<link rel="stylesheet" href="app.css?v=0089f26c">
+<link rel="stylesheet" href="app.css?v=8ad12184">
 </head>
 <body>
 
@@ -620,6 +620,36 @@
   </div>
 </div>
 
+
+<div id="sweepoffer" class="busy" hidden role="dialog" aria-modal="true"
+  aria-labelledby="sweepofferhead">
+  <div class="busy-inner nameinner confirminner sweepoffer-inner">
+    <button type="button" id="sweepofferx" class="dialog-x" aria-label="Close">
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <path d="M6 6l12 12M18 6L6 18"/>
+      </svg>
+    </button>
+    <h2 class="namehead" id="sweepofferhead">Run a thorough check?</h2>
+    <p class="confirmbody" id="sweepofferbody">
+      The first search can miss lettering in logos, photos and coloured
+      headers – and can occasionally mark the wrong spot.
+    </p>
+    <details class="sweepoffer-more" id="sweepoffermore">
+      <summary>More about this check</summary>
+      <div class="sweepoffer-detail" id="sweepofferdetail">
+        <p>Comprehensive re-checks typed words by shape, only where reading
+          missed or was unsure. It runs in the background while you review,
+          and new finds show in amber so you can tell them apart.</p>
+        <p id="sweepoffercost"></p>
+      </div>
+    </details>
+    <div class="confirmgo">
+      <button type="button" id="sweepoffergo" class="primary confirm-action">Run Comprehensive Check</button>
+      <button type="button" id="sweepofferskip" class="ghost confirm-action">Skip for now</button>
+    </div>
+  </div>
+</div>
+
 <div id="confirmbox" class="busy" hidden role="dialog" aria-modal="true"
   aria-labelledby="confirmhead">
   <div class="busy-inner nameinner confirminner">
@@ -735,7 +765,7 @@
 <script src="lib/pdfwrite.js?v=4b977425"></script>
 <script src="lib/pdfread.js?v=ca229552"></script>
 <script src="lib/render.js?v=70e96ff0"></script>
-<script src="app.js?v=9dcec093"></script>
+<script src="app.js?v=95a93858"></script>
 <script type="module" src="lib/boot.mjs?v=8b98ed8f"></script>
 </body>
 </html>
