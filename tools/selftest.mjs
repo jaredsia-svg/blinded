@@ -907,6 +907,36 @@ check('an empty term is harmless', TextImage.shapeRelief('') === 0
     Detect.findTerms('Fan is leading', ['F&N'], { fromOcr: true }).length === 0);
 })();
 
+
+// Dark header bands for inverted OCR (white-on-colour titles).
+(() => {
+  check('darkInkRegions is exported',
+    !!PagePrep && typeof PagePrep.darkInkRegions === 'function');
+
+  const w = 800, h = 400;
+  const gray = new Float32Array(w * h);
+  gray.fill(245);
+  // A dark red-like header bar with bright "text" pixels (~3% of page).
+  for (let y = 240; y < 270; y++) {
+    for (let x = 80; x < 320; x++) {
+      gray[y * w + x] = 40;
+      if ((x + y) % 5 === 0) gray[y * w + x] = 220;
+    }
+  }
+  // A solid dark shadow with no bright ink — should not qualify.
+  for (let y = 40; y < 70; y++) {
+    for (let x = 80; x < 320; x++) gray[y * w + x] = 30;
+  }
+  const dark = PagePrep.darkInkRegions(gray, w, h);
+  check('a dark bar with bright ink is found',
+    dark.some(r => r.y >= 220 && r.y <= 260 && r.w > 100),
+    JSON.stringify(dark));
+  check('a solid shadow without bright ink is ignored',
+    !dark.some(r => r.y < 90 && r.h > 20),
+    JSON.stringify(dark));
+  check('dark regions stay few', dark.length <= 6);
+})();
+
 // Page roles: chart vs contact layout for detector FP suppression.
 (() => {
   check('pagerole is loaded', !!PageRole && typeof PageRole.classify === 'function');
