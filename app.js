@@ -5274,8 +5274,9 @@
     return new Promise(resolve => {
       const box = el('confirmbox');
       const yes = el('confirmyes');
-      const no = el('confirmno');
+      const close = el('confirmx');
       const save = el('confirmsave');
+      const reset = el('confirmreset');
       el('confirmhead').textContent = opts.title || 'Are you sure?';
       el('confirmbody').textContent = opts.body || '';
       yes.textContent = opts.confirmLabel || 'Discard';
@@ -5284,23 +5285,36 @@
       // have nothing to save and do not ask for it.
       save.hidden = !opts.saveLabel;
       if (opts.saveLabel) save.textContent = opts.saveLabel;
+      // Clear marks on this document and keep it open. Only the Reset flow asks.
+      reset.hidden = !opts.resetLabel;
+      if (opts.resetLabel) reset.textContent = opts.resetLabel;
       box.hidden = false;
-      // The cancel button takes focus, not the destructive one: a stray Enter
+      // The close control takes focus, not the destructive one: a stray Enter
       // should not be the thing that loses the document.
-      no.focus();
+      close.focus();
 
       const done = answer => {
         box.hidden = true;
         yes.removeEventListener('click', accept);
-        no.removeEventListener('click', reject);
+        close.removeEventListener('click', reject);
         save.removeEventListener('click', keep);
+        reset.removeEventListener('click', restore);
         box.removeEventListener('pointerdown', away);
         document.removeEventListener('keydown', key, true);
         resolve(answer);
       };
-      const accept = () => done(true);
+      // Sync hooks run inside the click that chose the answer, so a file
+      // picker opened from Load new file still counts as a user gesture.
+      const accept = () => {
+        if (typeof opts.onConfirm === 'function') opts.onConfirm();
+        done(true);
+      };
       const reject = () => done(false);
-      const keep = () => done('save');
+      const keep = () => {
+        if (typeof opts.onSave === 'function') opts.onSave();
+        done('save');
+      };
+      const restore = () => done('reset');
       // A press on the dimmed page behind the box is a way out, the same as
       // Escape. It cancels rather than confirms, which is the answer that
       // cannot cost anything — a stray tap must never be what discards a
@@ -5310,8 +5324,9 @@
         if (event.key === 'Escape') { event.preventDefault(); reject(); }
       };
       yes.addEventListener('click', accept);
-      no.addEventListener('click', reject);
+      close.addEventListener('click', reject);
       save.addEventListener('click', keep);
+      reset.addEventListener('click', restore);
       box.addEventListener('pointerdown', away);
       document.addEventListener('keydown', key, true);
     });
@@ -5611,9 +5626,26 @@
   const drop = el('drop');
   const input = el('file');
 
-  drop.addEventListener('click', () => input.click());
+  // Open the picker from a click on the box, not from a nested <input> — see
+  // the note in index.html. Ignore a second click while the dialog is up.
+  let pickingFile = false;
+  function browseForFile() {
+    if (pickingFile) return;
+    pickingFile = true;
+    const done = () => { pickingFile = false; window.removeEventListener('focus', done); };
+    // focus returns when the picker closes (chosen or cancelled).
+    window.addEventListener('focus', done);
+    try { input.click(); }
+    catch (err) { done(); }
+    // Safety: if focus never fires, unlock after a beat.
+    setTimeout(done, 1500);
+  }
+  drop.addEventListener('click', event => {
+    event.preventDefault();
+    browseForFile();
+  });
   drop.addEventListener('keydown', e => {
-    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); input.click(); }
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); browseForFile(); }
   });
   input.addEventListener('change', () => { loadFile(input.files[0]); input.value = ''; });
 
@@ -6752,24 +6784,55 @@
 
   el('page-prev').addEventListener('click', () => stepPage(-1));
   el('page-next').addEventListener('click', () => stepPage(1));
-  el('reset-top').addEventListener('click', async () => {
-    // Nothing open means nothing to lose, and a confirmation for that would be
-    // the kind of prompt people learn to click through.
-    if (state.pages.length || state.text) {
-      const exported = state.applied && state.exported;
-      const answer = await confirmAction({
-        title: 'Open a different file?',
-        body: 'The document on screen will be closed, along with every mark on '
-          + 'it. Nothing is saved anywhere, so this cannot be undone'
-          + (exported ? '.' : ' – and you have not exported it yet.'),
-        saveLabel: 'Save draft & close',
-        confirmLabel: 'Close file',
-      });
-      if (!answer) return;
-      // The draft is written before anything is thrown away, so a failed save
-      // does not happen after the document it describes has gone.
-      if (answer === 'save') await saveDraft();
+  // Clears every mark on the open document and redraws from the pristine
+  // source canvases. The file stays open; OCR and the text layer stay.
+  function resetToOriginal() {
+    dismissedText.clear();
+    for (const page of state.pages) {
+      page.findings = [];
+      page.hits = [];
+      page.imageHits = [];
+      page.manual = [];
+      page.texts = [];
+      page.dismissed = new Set();
     }
+    state.findings = [];
+    el('termbox').value = '';
+    state.terms = [];
+    state.templates = [];
+    state.labelOverrides = {};
+    state.labels = { byId: {}, entries: [] };
+    state.applied = false;
+    state.exported = false;
+    state.searched = false;
+    state.searchedTerms = [];
+    state.sweptTerms = [];
+    state.sweepAdded = 0;
+    state.sweepStopped = false;
+    state.sweepReached = 0;
+    state.sweepRefused = 0;
+    state.sweepRefusedAt = [];
+    state.countedTerms = [];
+    state.countedKinds = [];
+    state.openTally = null;
+    state.picked = new Set();
+    undoStack.length = 0;
+    refreshUndo();
+    setMode('box');
+    renderTemplates();
+    if (state.kind === 'text') {
+      rescan();
+    } else {
+      rescan();
+      for (const page of state.pages) drawPage(page);
+    }
+    refreshApply();
+    renderTermCounts();
+    renderKinds();
+    draftNote('Reset to the original document. Marks, words and picks are cleared.');
+  }
+
+  function closeDocument() {
     pendingDraft = null;
     dropDraftPrompt();
     state.pages = [];
@@ -6784,12 +6847,54 @@
     state.applied = false;
     state.exported = false;
     state.searchedTerms = [];
+    state.ocrRead = false;
+    state.ocrFailed = false;
     undoStack.length = 0;
     refreshUndo();
     setMode('box');
     renderTemplates();
     renderTermCounts();
     show('drop');
+  }
+
+  el('reset-top').addEventListener('click', async () => {
+    // Nothing open means nothing to lose, and a confirmation for that would be
+    // the kind of prompt people learn to click through.
+    if (!(state.pages.length || state.text)) {
+      show('drop');
+      return;
+    }
+    const exported = state.applied && state.exported;
+    const answer = await confirmAction({
+      title: 'Reset or load a new file?',
+      body: 'Reset to original clears every mark and keeps this file open. '
+        + 'Loading a new file closes it. Nothing is saved anywhere, so this '
+        + 'cannot be undone'
+        + (exported ? '.' : ' – and you have not exported it yet.'),
+      resetLabel: 'Reset to original',
+      saveLabel: 'Save draft & load new file',
+      confirmLabel: 'Load new file',
+      // Open the picker in the same click that confirmed, before the await
+      // chain loses the user gesture.
+      onConfirm: () => {
+        closeDocument();
+        browseForFile();
+      },
+    });
+    if (!answer) return;
+    if (answer === 'reset') {
+      resetToOriginal();
+      return;
+    }
+    // The draft is written before anything is thrown away, so a failed save
+    // does not happen after the document it describes has gone.
+    if (answer === 'save') {
+      await saveDraft();
+      closeDocument();
+      browseForFile();
+      return;
+    }
+    // Load new file already closed + opened the picker in onConfirm.
   });
 
   window.Blinded = { state, rescan, loadFile, exportFile, setMode, addTemplate,

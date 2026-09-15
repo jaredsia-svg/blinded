@@ -1626,7 +1626,29 @@ check('no creation date is carried into the output', !meta.info.CreationDate);
   }
 
   const shown = [...html.matchAll(/src="(sample[^"]*)"/g)].map(m => m[1]);
-  check('the page and its enlargement show the same picture',
+  
+  check('the confirm dialog closes with a corner X, not a Cancel button',
+    html.includes('id="confirmx"') && html.includes('class="dialog-x"')
+      && !html.includes('id="confirmno"'),
+    'confirm close control');
+  check('and offers Reset to original in markup',
+    html.includes('id="confirmreset"') && html.includes('Reset to original'));
+  // File input must not sit inside the drop box — nested inputs make the
+  // picker open-and-close on the first tap.
+  {
+    const dropOpen = html.indexOf('id="drop"');
+    const dropClose = html.indexOf('</div>', html.indexOf('drop-faint', dropOpen));
+    const dropInner = dropOpen >= 0 && dropClose >= 0
+      ? html.slice(dropOpen, dropClose) : '';
+    check('the drop box markup is present for nesting checks', dropInner.includes('drop-lead'));
+    check('the file input is not nested inside the drop box',
+      dropInner.length > 0 && !/id="file"/.test(dropInner),
+      'file input still inside #drop');
+    check('the file input still exists on the front page',
+      /id="file"/.test(html));
+  }
+
+check('the page and its enlargement show the same picture',
     shown.length >= 2 && new Set(shown).size === 1, shown.join(', '));
   check('and it is the slide, not the drawing it replaced',
     shown.every(name => name.startsWith('sample-slide.')), shown.join(', '));

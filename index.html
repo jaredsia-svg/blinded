@@ -41,7 +41,7 @@
      origins for one program and two sets of response headers to keep right;
      Pages publishing is off and this says which copy is the copy. -->
 <link rel="canonical" href="https://blinded.onrender.com/">
-<link rel="stylesheet" href="app.css?v=dd513418">
+<link rel="stylesheet" href="app.css?v=0089f26c">
 </head>
 <body>
 
@@ -95,8 +95,12 @@
       <p class="drop-lead">Drop a document here</p>
       <p class="drop-sub">PDF, PNG, JPEG or plain text – or <span class="link">browse</span></p>
       <p class="drop-faint">or a saved draft, to carry on where you left off</p>
-      <input type="file" id="file" accept=".pdf,.png,.jpg,.jpeg,.txt,.md,.markdown,.csv,.log,.json,application/pdf,image/png,image/jpeg,text/plain,application/json" hidden>
     </div>
+    <!-- Outside the drop box: a file input nested inside a click-to-browse
+         control often opens and immediately closes the picker (the same click
+         "falls through"), which is why the front page sometimes needed two
+         taps. -->
+    <input type="file" id="file" accept=".pdf,.png,.jpg,.jpeg,.txt,.md,.markdown,.csv,.log,.json,application/pdf,image/png,image/jpeg,text/plain,application/json" hidden>
     <p id="drop-error" class="error" hidden></p>
 
     <ul class="features">
@@ -616,17 +620,24 @@
   </div>
 </div>
 
-<div id="confirmbox" class="busy" hidden>
-  <div class="busy-inner nameinner">
+<div id="confirmbox" class="busy" hidden role="dialog" aria-modal="true"
+  aria-labelledby="confirmhead">
+  <div class="busy-inner nameinner confirminner">
+    <button type="button" id="confirmx" class="dialog-x" aria-label="Close">
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <path d="M6 6l12 12M18 6L6 18"/>
+      </svg>
+    </button>
     <h2 class="namehead" id="confirmhead">Are you sure?</h2>
     <p class="confirmbody" id="confirmbody"></p>
-    <div class="namego">
-      <button type="button" id="confirmno" class="ghost">Cancel</button>
+    <div class="confirmgo">
+      <!-- Optional third way: clear marks on this file, keep it open. -->
+      <button type="button" id="confirmreset" class="ghost confirm-action" hidden>Reset to original</button>
       <!-- Only where losing the work is the thing being confirmed. Hidden
            unless the caller asks for it, since most confirmations have no
            work to save. -->
-      <button type="button" id="confirmsave" class="primary" hidden>Save draft &amp; close</button>
-      <button type="button" id="confirmyes" class="primary danger">Discard</button>
+      <button type="button" id="confirmsave" class="primary confirm-action" hidden>Save draft &amp; load new file</button>
+      <button type="button" id="confirmyes" class="primary danger confirm-action">Discard</button>
     </div>
   </div>
 </div>
@@ -724,7 +735,7 @@
 <script src="lib/pdfwrite.js?v=4b977425"></script>
 <script src="lib/pdfread.js?v=ca229552"></script>
 <script src="lib/render.js?v=70e96ff0"></script>
-<script src="app.js?v=b9340689"></script>
+<script src="app.js?v=49cddfa1"></script>
 <script type="module" src="lib/boot.mjs?v=8b98ed8f"></script>
 </body>
 </html>
