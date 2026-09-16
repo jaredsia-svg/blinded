@@ -469,12 +469,12 @@
       // Cancelling the password box is a decision, not a failure. Saying "that
       // file could not be opened" to someone who has just pressed Cancel tells
       // them something they already know, in the voice of a fault.
-      if (error && error.blindedCancelled) { show('drop'); return; }
+      if (error && error.blindedCancelled) { showTool('drop'); return; }
       // A failure here means the document was not fully understood, and a
       // partial review is worse than none: it looks complete.
       fail('That file could not be opened: ' + (error && error.message ? error.message : String(error))
         + '. Nothing was redacted.');
-      show('drop');
+      showTool('drop');
     } finally {
       busy(false);
     }
@@ -558,7 +558,7 @@
     openSections();
     if (kind !== 'text') buildPageElements();
     renderSheet();
-    show('review');
+    showTool('review');
     rescan();
     refreshApply();
     refreshPaging();
@@ -5232,7 +5232,7 @@
       return;
     }
     pendingDraft = data;
-    show('drop');
+    showTool('drop');
     // Asked properly rather than shouted in red. Nothing has gone wrong: the
     // reviewer has handed over the half of the pair that is not the document,
     // and the tool needs the other half.
@@ -7254,42 +7254,50 @@
   // history step. Counted, so that Back is only ever called on an entry this
   // page put there: a page that has pushed nothing must not send the reviewer
   // to whatever they were looking at before.
-  let pushed = 0;
+  // One entry, however many pages are read while away — and whether we are
+  // away is read off the history entry itself, never counted.
+  //
+  // It used to push one entry per visit, and the pages link to each other:
+  // open the front page from a document, then the questions from the foot of
+  // it, and there were two. Back to the tool went back one, to the front page,
+  // where the button says Back to the tool again.
+  //
+  // Then it was one entry and a counter, and the counter drifted. Five places
+  // change the view directly — a file opened, a file closed, a draft asking
+  // for its document — and none of them could know about a number kept beside
+  // them. Once it disagreed with the stack, Back to the tool went back to an
+  // entry that still said "questions", and a reviewer who pressed Home and
+  // then Back to the tool arrived at Q&A.
+  //
+  // So nothing is counted. The browser owns this state, and asking it cannot
+  // drift.
+  const awayNow = () => (history.state && history.state.away) || null;
 
-  // One entry, however many pages are read while away.
-  //
-  // It used to push one per visit, and the pages link to each other: open the
-  // front page from a document, then the questions from the foot of it, and
-  // there were two. Back to the tool then went back one — to the front page,
-  // where the button still says Back to the tool — so the first press looked
-  // like a button that did nothing, and it took two to reach the document
-  // that was open all along.
-  //
-  // Away is one place. Going somewhere else while away replaces the entry
-  // rather than stacking on it, so the way back is always a single step and
-  // the browser's own Back agrees with the button.
   function goAway(name) {
     show(name);
-    if (pushed > 0) {
-      history.replaceState({ view: name }, '');
-      return;
-    }
-    pushed = 1;
-    history.pushState({ view: name }, '');
+    if (awayNow()) history.replaceState({ away: name }, '');
+    else history.pushState({ away: name }, '');
   }
 
   function comeBack() {
-    if (pushed > 0) history.back();
+    if (awayNow()) history.back();
     // Nothing of ours on the stack: put the reviewer where the tool is,
     // rather than wherever the browser would have gone.
     else show(hasDocument() ? 'review' : 'drop');
   }
 
+  // The tool reached by something other than the way back — a file opened, a
+  // file closed, a draft that wants its document. Whatever entry stood for
+  // "away" is not true any more, so it is cleared here rather than left to be
+  // found later by a Back that now means something else.
+  function showTool(name) {
+    show(name);
+    if (awayNow()) history.replaceState({}, '');
+  }
+
   window.addEventListener('popstate', event => {
-    pushed = Math.max(0, pushed - 1);
-    const want = (event.state && event.state.view)
-      || (hasDocument() ? 'review' : 'drop');
-    show(want);
+    const away = event.state && event.state.away;
+    show(away || (hasDocument() ? 'review' : 'drop'));
   });
 
   el('faq-open').addEventListener('click', () => {
@@ -7396,14 +7404,14 @@
     renderKinds();
     renderSweep();
     refreshApply();
-    show('drop');
+    showTool('drop');
   }
 
   el('reset-top').addEventListener('click', async () => {
     // Nothing open means nothing to lose, and a confirmation for that would be
     // the kind of prompt people learn to click through.
     if (!(state.pages.length || state.text)) {
-      show('drop');
+      showTool('drop');
       return;
     }
     const exported = state.applied && state.exported;

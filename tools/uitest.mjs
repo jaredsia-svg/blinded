@@ -144,17 +144,37 @@ async function noDetectors(page) {
   });
 }
 
+// A search now ends by offering the second check, in a dialog over the panel.
+// A reviewer answers it before doing anything else, so the suite does too —
+// otherwise every click after a search lands on the dialog's backdrop, which
+// is exactly how this suite stopped running: the next press of Redact waited
+// for a button that something else was covering.
+async function dismissSweepOffer(page) {
+  // Pressed through the DOM rather than with the mouse: the dialog's own
+  // backdrop is what the pointer would land on, which is the whole reason
+  // this helper exists.
+  await page.evaluate(() => {
+    const box = document.getElementById('sweepoffer');
+    const skip = document.getElementById('sweepofferskip');
+    if (box && !box.hidden && skip) skip.click();
+  });
+  await page.waitForTimeout(60);
+}
+
 async function redact(page) {
+  await dismissSweepOffer(page);
   await page.click('#apply');
   await page.waitForFunction(() => window.Blinded.state.searched === true,
     undefined, { timeout: 240000 });
   await page.waitForFunction(() => document.getElementById('busy').hidden,
     undefined, { timeout: 240000 });
+  await dismissSweepOffer(page);
   // Only if there is something to cover: with nothing found the button is
   // rightly dead, and a test that only wanted the search is finished.
   const canCover = await page.evaluate(() => !window.Blinded.state.applied
     && !document.getElementById('apply').disabled);
   if (canCover) {
+    await dismissSweepOffer(page);
     await page.click('#apply');
     await page.waitForFunction(() => window.Blinded.state.applied === true,
       undefined, { timeout: 60000 });
@@ -1206,10 +1226,13 @@ try {
     // The destructive button must not be the one a stray Enter presses.
     const focused = await page.evaluate(() => document.activeElement
       && document.activeElement.id);
-    check('and the cancel button holds the focus, not the destructive one',
-      focused === 'confirmno', String(focused));
+    // The way out is the cross in the corner now, not a worded Cancel button.
+    // What must not change is which control the keyboard lands on: a stray
+    // Enter must not be the thing that loses the document.
+    check('and the way out holds the focus, not the destructive one',
+      focused === 'confirmx', String(focused));
 
-    await page.click('#confirmno');
+    await page.click('#confirmx');
     const afterCancel = await pagesOpen();
     check('cancelling keeps the document', afterCancel === opened,
       JSON.stringify({ opened, afterCancel }));
@@ -2644,7 +2667,7 @@ try {
     const warned = await page.textContent('#confirmbody');
     check('putting a draft on a different file is questioned',
       /is not it/i.test(warned || ''), warned);
-    await page.click('#confirmno');
+    await page.click('#confirmx');
     const declined = await page.evaluate(() => ({
       manual: window.Blinded.state.pages[0].manual.length,
       terms: window.Blinded.state.terms.length,
