@@ -188,6 +188,8 @@
     sourceDigest: null,
     // Which word's list of places is open, if any.
     openTally: null,
+    // The one mark a tally row is pointing at, while the pointer is on it.
+    spotlight: null,
     exported: false,
     redacting: false,
     sweepRunning: false,
@@ -2171,7 +2173,22 @@
       entry.logo.rawMatches = found.matches.length;
       entry.logo.best = found.best;
       entry.logo.searched = true;
-      reportSearch(found, sensFor(entry.logo), autoBar);
+      // Kept on the image it is about, and rendered on that image's row.
+      // It used to be written into one line under the pick button, which
+      // three picked images shared: the third search overwrote the second,
+      // and what the reviewer read was the last one's story under all of
+      // them, attributed to nothing.
+      entry.logo.report = {
+        scores: found.matches.map(m => m.score),
+        near: (found.near || []).map(hit => hit.score),
+        best: found.best,
+        bar: sensFor(entry.logo),
+        autoBar: autoBar === undefined ? null : autoBar,
+      };
+      // The line under the pick button described whichever image searched
+      // last. It says nothing now: every sentence it carried belongs to one
+      // image, and sits on that image's row.
+      clearPickHint();
     }
 
     // Words: several typefaces per word, pooled and then de-duplicated. One
@@ -2236,88 +2253,62 @@
   // "0 found" on its own reads as a broken feature. Saying what the best score
   // actually was turns it into a decision the reviewer can act on — and the
   // sensitivity named here is the one control that still governs this search.
-  function reportSearch(found, bar, autoBar) {
-    const hint = el('pickhint');
-    // A match that worked needs no commentary: the marks are on the page and
-    // the count is beside the picked image. What is worth saying is what
-    // happened when nothing matched, which is below.
-    if (found.matches.length) {
-      // What the matches scored, worst first in the reviewer's mind: the
-      // weakest one is the number the bar has to clear to drop it.
-      //
-      // Measured on a deck whose footnotes are circular letter badges: the F
-      // badges scored 1.00 down to 0.948 and the E badges beside them 0.927.
-      // Two hundredths apart, and nothing on screen said so — the reviewer
-      // moved the slider, re-ran, counted boxes and guessed again. The numbers
-      // were there the whole time.
-      const scores = found.matches.map(m => m.score);
-      const low = Math.min(...scores), high = Math.max(...scores);
-      let text = found.matches.length === 1
-        ? 'One match, scoring ' + high.toFixed(2) + '.'
-        : found.matches.length + ' matches, scoring ' + high.toFixed(2)
-          + ' down to ' + low.toFixed(2) + '.';
-
-      // And what the bar turned away, which is the half that tells a reviewer
-      // where to put it. Looking at two marks where seven were expected, the
-      // useful fact is not that both scored 0.99 — it is that five more scored
-      // 0.95 down to 0.93 and are one nudge of the slider away.
-      // Only the ones close enough to be worth a nudge. A picked mark turns up
-      // dozens of weak echoes of itself all over a page — 0.67 against a bar
-      // of 0.99 is not a near miss, and counting it in makes the sentence say
-      // "30 more" when five of them are the point.
-      //
-      // Measured from the bar, not from the weakest match that cleared it.
-      // Those are different numbers whenever the matches sit well above the
-      // setting — one copy at 1.00 against a bar of 0.93 left a window that
-      // started at 0.92, so a match at 0.919 that the bar had turned away by
-      // a hundredth was reported as nothing at all.
-      const NEARLY = 0.08;
-      const near = (found.near || [])
-        .map(hit => hit.score)
-        .filter(s => s >= clampSens(bar) - NEARLY)
-        .sort((a, b) => b - a);
-      if (near.length) {
-        const top = near[0], bottom = near[near.length - 1];
-        text += ' ' + near.length + (near.length === 1 ? ' more scored ' : ' more scored ')
-          + (near.length === 1 || top.toFixed(2) === bottom.toFixed(2)
-            ? top.toFixed(2)
-            : top.toFixed(2) + ' down to ' + bottom.toFixed(2))
-          + ' and ' + (near.length === 1 ? 'was' : 'were')
-          + ' left out – lower the bar past ' + top.toFixed(2) + ' to include '
-          + (near.length === 1 ? 'it.' : 'them.');
-      }
-      // And when it turned nothing away, say so — because the silence looks
-      // like an omission.
-      //
-      // "15 matches, scoring 0.99 down to 0.78" beside a slider reading 0.75
-      // invites the obvious question: is 0.78 the real setting, and why is the
-      // control saying something else? It is not. The bar is a floor, 0.78 is
-      // simply where the weakest true match happened to land, and the space
-      // between them is empty — which is worth knowing, because it is room the
-      // bar can move into without losing anything.
-      if (!near.length && low - clampSens(bar) > 0.015) {
-        text += ' Nothing landed between the bar at ' + clampSens(bar).toFixed(2)
-          + ' and the weakest of these, so it has room to move up.';
-      }
-
-      if (autoBar !== null && autoBar !== undefined) {
-        text = 'Nothing matched at the setting it was on, so the bar came down '
-          + 'to ' + autoBar.toFixed(2) + '. ' + text
-          + ' Move the slider if that is not what you wanted.';
-      }
-      hint.textContent = text;
-      hint.hidden = false;
-      hint.classList.remove('warnhint');
-      return;
+  // What one image's search found, as a sentence.
+  //
+  // Built from what was stored on the template rather than written at search
+  // time, so it can be drawn again whenever the row is — when the slider
+  // moves, when another image is picked, when the panel is rebuilt.
+  function reportFor(template) {
+    const report = template && template.report;
+    if (!report) return null;
+    const scores = report.scores || [];
+    if (!scores.length) {
+      const best = report.best > 0 ? report.best.toFixed(2) : null;
+      return {
+        warn: true,
+        text: best
+          ? 'No match at ' + clampSens(report.bar).toFixed(2) + '. The closest '
+            + 'thing scored ' + best + ' \u2013 lower the bar below that to include it.'
+          : 'Nothing resembling this was found anywhere in the document.',
+      };
     }
-    const near = found.best > 0 ? found.best.toFixed(2) : null;
-    hint.textContent = near
-      ? 'No match at ' + clampSens(bar).toFixed(2) + '. The closest thing scored '
-        + near + ' – lower the sensitivity below that to include it.'
-      : 'Nothing resembling that was found anywhere in the document.';
-    hint.hidden = false;
-    hint.classList.add('warnhint');
+
+    const low = Math.min(...scores), high = Math.max(...scores);
+    let text = scores.length === 1
+      ? 'One match, scoring ' + high.toFixed(2) + '.'
+      : scores.length + ' matches, scoring ' + high.toFixed(2)
+        + ' down to ' + low.toFixed(2) + '.';
+
+    // And what the bar turned away, which is the half that says where to put
+    // it. Only the ones close enough to be worth a nudge: a picked mark turns
+    // up dozens of weak echoes of itself, and 0.67 against a bar of 0.99 is
+    // not a near miss.
+    const NEARLY = 0.08;
+    const near = (report.near || [])
+      .filter(score => score >= clampSens(report.bar) - NEARLY)
+      .sort((a, b) => b - a);
+    if (near.length) {
+      const top = near[0], bottom = near[near.length - 1];
+      text += ' ' + near.length + ' more scored '
+        + (near.length === 1 || top.toFixed(2) === bottom.toFixed(2)
+          ? top.toFixed(2)
+          : top.toFixed(2) + ' down to ' + bottom.toFixed(2))
+        + ' and ' + (near.length === 1 ? 'was' : 'were')
+        + ' left out \u2013 lower the bar past ' + top.toFixed(2) + ' to include '
+        + (near.length === 1 ? 'it.' : 'them.');
+    } else if (low - clampSens(report.bar) > 0.015) {
+      text += ' Nothing landed between the bar at ' + clampSens(report.bar).toFixed(2)
+        + ' and the weakest of these, so it has room to move up.';
+    }
+
+    if (report.autoBar !== null && report.autoBar !== undefined) {
+      text = 'Nothing matched at the setting it was on, so the bar came down to '
+        + report.autoBar.toFixed(2) + '. ' + text
+        + ' Move the slider if that is not what you wanted.';
+    }
+    return { warn: false, text };
   }
+
 
   // Where the bar wants to be, read off what the search actually saw.
   //
@@ -3173,6 +3164,27 @@
         ctx.strokeRect(m.rect.x, m.rect.y, m.rect.w, m.rect.h);
       }
       ctx.restore();
+    }
+
+    // The mark the panel is pointing at, filled rather than merely outlined.
+    //
+    // Drawn after the marks and before the notes: it is the same box, said
+    // louder, and it has to be legible against a page that may already be
+    // covered in green.
+    if (state.spotlight && state.spotlight.pageIndex === page.index && !state.applied) {
+      const lit = rectsOfMark(page, state.spotlight.mark);
+      if (lit.length) {
+        ctx.save();
+        const amber = lit.some(rect => rect.sweep);
+        ctx.fillStyle = amber ? 'rgba(217, 139, 31, 0.45)' : 'rgba(17, 138, 78, 0.42)';
+        ctx.strokeStyle = amber ? '#b36f12' : '#0c6b3c';
+        ctx.lineWidth = stroke(Math.max(3, page.source.width / 420));
+        for (const rect of lit) {
+          ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
+          ctx.strokeRect(rect.x, rect.y, rect.w, rect.h);
+        }
+        ctx.restore();
+      }
     }
 
     // The reviewer's own writing, over the bars and through the same function
@@ -4599,6 +4611,14 @@
     return canvas;
   }
 
+  function clearPickHint() {
+    const hint = el('pickhint');
+    if (!hint) return;
+    hint.hidden = true;
+    hint.textContent = '';
+    hint.classList.remove('warnhint');
+  }
+
   function renderTemplates() {
     const host = el('templates');
     host.textContent = '';
@@ -4781,6 +4801,21 @@
       row.append(template.thumbnail, bar, count, remove);
       host.append(row);
 
+      // What this image's search found, under this image's row.
+      //
+      // It used to be one line under the pick button that every picked image
+      // shared, so with three images the third search overwrote the other
+      // two and the sentence the reviewer read belonged to none of them in
+      // particular. Here it sits with the thumbnail, the bar and the tally it
+      // is about.
+      const told = template.searched ? reportFor(template) : null;
+      if (told) {
+        const note = document.createElement('li');
+        note.className = 'imgnote' + (told.warn ? ' warnhint' : '');
+        note.textContent = told.text;
+        host.append(note);
+      }
+
       if (state.openTally === template.id && !count.disabled) {
         host.append(tallyList(template.id, placesFor(template.id)));
       }
@@ -4800,7 +4835,7 @@
     for (const page of state.pages) {
       for (const hit of page.hits) {
         if (hit.finding.kind !== kind || page.dismissed.has(hit.finding.id)) continue;
-        out.push({ pageIndex: page.index, kind: 'text',
+        out.push({ pageIndex: page.index, kind: 'text', mark: hit.finding.id,
                    at: hit.rects && hit.rects[0] ? hit.rects[0].y : 0 });
       }
       // The ones found in what OCR read. Marked as read rather than as text,
@@ -4814,7 +4849,7 @@
         const group = match.group || match.id;
         if (seen.has(group)) continue;
         seen.add(group);
-        out.push({ pageIndex: page.index, kind: 'read',
+        out.push({ pageIndex: page.index, kind: 'read', mark: group,
                    at: match.rect ? match.rect.y : 0 });
       }
     }
@@ -4827,7 +4862,7 @@
     for (const page of state.pages) {
       for (const match of liveImageHits(page)) {
         if (match.templateId !== templateId) continue;
-        out.push({ pageIndex: page.index, kind: 'image',
+        out.push({ pageIndex: page.index, kind: 'image', mark: match.id,
                    // What it actually scored. Without this the slider is a
                    // dial with no reading: the reviewer moves it, re-runs,
                    // counts the marks, and guesses again. With it, the
@@ -4881,14 +4916,20 @@
       // at all, which is the one thing that would let a real miss through.
       for (const hit of page.hits) {
         if (hit.finding.term !== term) continue;
-        out.push({ pageIndex: page.index, kind: 'text',
+        // A mark clicked off is not a place this word is covered, so it is
+        // not a row in the list of places and not part of the count above it.
+        // The detectors' list has always worked this way; the words' list did
+        // not, so saying no to one from the row left the number unchanged.
+        if (page.dismissed.has(hit.finding.id)) continue;
+        out.push({ pageIndex: page.index, kind: 'text', mark: hit.finding.id,
                    at: hit.rects && hit.rects[0] ? hit.rects[0].y : 0 });
       }
       for (const match of liveImageHits(page)) {
-        if (match.term !== term) continue;
+        if (match.term !== term || page.dismissed.has(match.id)) continue;
         out.push({
           pageIndex: page.index,
           kind: match.bySweep ? 'shape' : 'text',
+          mark: match.id,
           at: match.rect ? match.rect.y : 0,
         });
       }
@@ -5043,10 +5084,101 @@
             : 'in the text';
       jump.append(dot, text, how);
       jump.addEventListener('click', () => goToPage(spot.pageIndex));
+
+      // Hovering a row lights up the mark it stands for.
+      //
+      // "Page 34" tells the reviewer where to look and nothing about what to
+      // look at: a page can carry a dozen marks, and the row is about one of
+      // them. Filling that one is the shortest sentence available — the row
+      // and the box on the page are the same thing, and moving between them
+      // costs nothing to learn.
+      if (spot.mark) {
+        const lightUp = () => spotlight(spot.pageIndex, spot.mark);
+        const lightDown = () => spotlight(null, null);
+        jump.addEventListener('pointerenter', lightUp);
+        jump.addEventListener('focus', lightUp);
+        jump.addEventListener('pointerleave', lightDown);
+        jump.addEventListener('blur', lightDown);
+        item.addEventListener('pointerleave', lightDown);
+      }
+
       item.append(jump);
+
+      // And a way to disagree with it, on the row rather than only on the
+      // page. Clicking the mark itself is the other way and stays; this one
+      // is for a reviewer working down the list, who would otherwise have to
+      // travel to each page to say no.
+      if (spot.mark) {
+        const drop = document.createElement('button');
+        drop.type = 'button';
+        drop.className = 'tallydrop';
+        drop.textContent = '\u00d7';
+        drop.title = 'Do not cover this one';
+        drop.setAttribute('aria-label', 'Do not cover the mark on page '
+          + (spot.pageIndex + 1));
+        drop.addEventListener('click', event => {
+          event.preventDefault();
+          event.stopPropagation();
+          dropMark(spot.pageIndex, spot.mark);
+        });
+        item.append(drop);
+      }
+
       list.append(item);
     }
     return list;
+  }
+
+  // Which mark, if any, is being pointed at from the panel. Held in the state
+  // rather than on the element, because what draws it is the page's canvas
+  // and the row that asked for it is somewhere else entirely.
+  function spotlight(pageIndex, mark) {
+    const was = state.spotlight;
+    if (was && was.pageIndex === pageIndex && was.mark === mark) return;
+    state.spotlight = mark ? { pageIndex, mark } : null;
+    // Only the pages that changed: the one that was lit, and the one that is.
+    for (const index of new Set([was && was.pageIndex, pageIndex])) {
+      const page = typeof index === 'number' ? state.pages[index] : null;
+      if (page) drawPage(page);
+    }
+  }
+
+  // Every rectangle a given mark is drawn as, on one page.
+  function rectsOfMark(page, mark) {
+    const out = [];
+    for (const hit of page.hits) {
+      if (hit.finding.id === mark) out.push(...(hit.rects || []));
+    }
+    for (const match of liveImageHits(page)) {
+      if ((match.group || match.id) === mark && match.rect) out.push(match.rect);
+    }
+    for (const box of page.manual) if (box.id === mark) out.push(box);
+    return out;
+  }
+
+  // The reviewer saying no to one mark from the list.
+  function dropMark(pageIndex, mark) {
+    const page = state.pages[pageIndex];
+    if (!page) return;
+    // A detector's find can be several marks in one row — a phone number read
+    // as four words — so everything sharing the row's identity goes together.
+    const ids = [];
+    for (const hit of page.hits) if (hit.finding.id === mark) ids.push(hit.finding.id);
+    for (const match of liveImageHits(page)) {
+      if ((match.group || match.id) === mark) ids.push(match.id);
+    }
+    const going = ids.filter(id => !page.dismissed.has(id));
+    if (!going.length) return;
+    for (const id of going) page.dismissed.add(id);
+    pushUndo(going.length === 1 ? 'keeping that match' : 'keeping those matches',
+      () => { for (const id of going) page.dismissed.delete(id); });
+    spotlight(null, null);
+    markPending();
+    drawPage(page);
+    renderTermCounts();
+    renderKinds();
+    renderTemplates();
+    applyLabels();
   }
 
   // ---------- text documents ----------
@@ -7500,6 +7632,7 @@
     creepEdges, pushScroll, startChoosing, stopChoosing, CHOOSE_HOLD,
     addDocument, addDocuments, pickedInOrder, selectPage, thumbFor, organiseStamp,
     kindsKnown, unknownKinds, countsByKind, detectOcr, renderKinds, placesForKind,
+    spotlight, rectsOfMark, dropMark, reportFor,
     syncCountedKindsAfterToggle,
     markPending, needsSearch, markDuplicates, onePerPlace, plannedCount,
     refreshApply, kindAnswered,

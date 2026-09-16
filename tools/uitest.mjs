@@ -72,6 +72,12 @@ const textPath = join(tmpdir(), 'blinded-fixture.txt');
 // The address line is here so that a typed word can be tested inside a
 // shape-only finding, which is the case that used to lose both.
 writeFileSync(textPath, 'Jane Doe — jane.doe@example.com — (415) 555-0132\n'
+  // A number in the form the detector still proposes. The local one above it
+  // stays: the phone detector now takes only +country-code forms, because OCR
+  // of chart labels and currency blobs invented the local shapes constantly,
+  // and the tests below say so out loud rather than leaving it to be
+  // discovered on somebody's document.
+  + 'Direct line +44 20 7946 0958.\n'
   + 'Mailing address: 1600 Amphitheatre Parkway, 94043.\n'
   + 'nothing sensitive here\n');
 
@@ -183,6 +189,18 @@ async function redact(page) {
     undefined, { timeout: 240000 });
 }
 
+// Every click in this file goes through the second-check offer first.
+//
+// That offer is a modal: while it is up, a click anywhere else lands on its
+// backdrop. A reviewer answers it and carries on, and so must the suite —
+// but saying so at sixty call sites is sixty chances to forget, and forgetting
+// looks like "the button does not work" half an hour into a run.
+const rawClick = page.click.bind(page);
+page.click = async (selector, options) => {
+  await dismissSweepOffer(page);
+  return rawClick(selector, options);
+};
+
 const consoleErrors = [];
 page.on('pageerror', e => consoleErrors.push(String(e)));
 page.on('console', m => { if (m.type() === 'error') consoleErrors.push(m.text()); });
@@ -191,6 +209,9 @@ try {
   // Opening another file now asks before it throws the current one away, so
   // every reset in these tests goes through that step rather than around it.
   const newFile = async () => {
+    // The second-check offer is modal, and a reviewer answers it before doing
+    // anything else. Every route out of a searched document goes through it.
+    await dismissSweepOffer(page);
     await page.click('#reset-top');
     if (await page.isVisible('#confirmbox')) await page.click('#confirmyes');
     await page.waitForSelector('#view-drop:not([hidden])', { timeout: 15000 });
@@ -1282,7 +1303,7 @@ try {
       };
     });
     check('the reset question offers to save a draft',
-      offered.shown === true && offered.says === 'Save draft & close',
+      offered.shown === true && offered.says === 'Save draft & close file',
       JSON.stringify(offered));
     check('with the closing button beside it, named for what it does',
       offered.red === 'Close file' && offered.before === true, JSON.stringify(offered));
@@ -1790,10 +1811,18 @@ try {
   // a dial with no reading: move it, re-run, count the boxes, guess again.
   check('a finished image search says how the matches scored',
     /^(\d+ matches, scoring \d\.\d\d down to \d\.\d\d|One match, scoring \d\.\d\d)/
-      .test((await page.textContent('#pickhint')).trim()),
-    await page.textContent('#pickhint'));
+      .test((await page.textContent('#templates .imgnote')).trim()),
+    await page.textContent('#templates .imgnote'));
   check('and that note is actually on screen',
-    await page.isVisible('#pickhint'));
+    await page.isVisible('#templates .imgnote'));
+  // On the row of the image it is about, under it: with three picked images
+  // the reviewer has to be able to tell which story belongs to which picture.
+  check('sitting under the row of the image it describes', await page.evaluate(() => {
+    const note = document.querySelector('#templates .imgnote');
+    const row = note && note.previousElementSibling;
+    // The thumbnail is a canvas cut from the page, not an <img>.
+    return Boolean(row && (row.querySelector('canvas') || row.querySelector('img')));
+  }));
 
 
   // Opened while picking, which is when a reviewer most wants it: they are
@@ -2020,12 +2049,15 @@ try {
   await page.waitForFunction(() => window.Blinded.state.templates.length > 0,
     undefined, { timeout: 30000 });
   await redact(page);
+  // The report belongs to the image it is about, so it is on that image's
+  // row. It used to be one line under the pick button that every picked
+  // image shared, which meant the third search overwrote the second.
   await page.waitForFunction(
-    () => document.getElementById('pickhint').classList.contains('warnhint'),
+    () => document.querySelector('#templates .imgnote.warnhint') !== null,
     { timeout: 120000 });
-  const hint = await page.textContent('#pickhint');
+  const hint = await page.textContent('#templates .imgnote.warnhint');
   check('picking blank page reports that nothing was found',
-    hint.includes('Nothing resembling that'), hint);
+    hint.includes('Nothing resembling'), hint);
   check('and the empty pick adds no matches',
     await page.evaluate(() => window.Blinded.state.pages
       .reduce((n, p) => n + p.imageHits.filter(m => m.templateId === 'tpl2').length, 0)) === 0);
@@ -3065,7 +3097,7 @@ try {
   // The phone number is no longer among them: the detector proposes only
   // +country-code forms now, and the fixture's "(415) 555-0132" is a local
   // one.
-  check('the text view marks the email, the address and the web address',
+  check('the text view marks the email, the number and the address',
     marks === 3, String(marks));
 
   await setTerms(page, ["Jane Doe"]);
@@ -3094,7 +3126,14 @@ try {
   check('the redacted text file is named correctly',
     textDownload.suggestedFilename().endsWith('-redacted.txt'));
   check('the redacted text no longer holds the email', !redacted.includes('jane.doe@example.com'), redacted);
-  check('the redacted text no longer holds the phone number', !redacted.includes('555-0132'), redacted);
+  check('the redacted text no longer holds the phone number',
+    !redacted.includes('7946 0958'), redacted);
+  // Said plainly, because it is a deliberate trade and the wrong way round
+  // for a redaction tool to make quietly: a local number without a country
+  // code is not proposed, and a reviewer who wants it covered types it into
+  // the words.
+  check('while a local number without a country code is left for the reviewer to type',
+    redacted.includes('555-0132'), redacted);
   check('the redacted text keeps the harmless line', redacted.includes('nothing sensitive here'), redacted);
   check('the redaction is visible as blocks', redacted.includes('█'), redacted);
 
@@ -4157,7 +4196,8 @@ try {
       }
       await B.runSearch();
       const out = { scores: scores.map(s => +s.toFixed(3)),
-                    hint: document.getElementById('pickhint').textContent.trim(),
+                    hint: (document.querySelector('#templates .imgnote') || {}).textContent
+                      ? document.querySelector('#templates .imgnote').textContent.trim() : '',
                     marks: B.state.pages.reduce((n, p) =>
                       n + p.imageHits.filter(m => m.templateId === template.id).length, 0) };
       B.state.termImages = true;
@@ -4193,7 +4233,8 @@ try {
       const scores = B.state.pages
         .flatMap(p => p.imageHits.filter(m => m.templateId === template.id))
         .map(m => m.score);
-      return { hint: document.getElementById('pickhint').textContent.trim(),
+      return { hint: (document.querySelector('#templates .imgnote') || { textContent: '' })
+                 .textContent.trim(),
                bar: B.sensFor(template),
                weakest: scores.length ? Math.min(...scores) : null };
     });
@@ -5041,6 +5082,79 @@ try {
       JSON.stringify(read));
     check('and the button stops being red once nothing is outstanding',
       read.red === false, JSON.stringify(read));
+  }
+
+  // ---------- a tally row is the mark, not just its page number ----------
+  //
+  // "Page 34" says where to look and nothing about what to look at: a page
+  // can carry a dozen marks and the row is about one of them. Hovering the
+  // row fills that one on the page, and a cross on the row says no to it
+  // without travelling there.
+  {
+    if (await page.isVisible('#view-review')) await newFile();
+    await page.waitForSelector('#view-drop:not([hidden])', { timeout: 15000 });
+    await page.setInputFiles('#file', fixturePath);
+    await page.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
+    await setTerms(page, ['Jane']);
+    await useDetectors(page);
+    await redact(page);
+    await page.evaluate(() => window.Blinded.state.applied && window.Blinded.uncoverMarks());
+
+    const opened = await page.evaluate(async () => {
+      const dot = document.querySelector('#termcounts .n.dot-green');
+      if (dot) dot.click();
+      await new Promise(r => setTimeout(r, 120));
+      const rows = [...document.querySelectorAll('#termcounts .tallywhere li')];
+      return {
+        rows: rows.length,
+        hasCross: rows.every(li => Boolean(li.querySelector('.tallydrop'))),
+      };
+    });
+    check('a tally row carries a way to say no to that mark',
+      opened.rows > 0 && opened.hasCross === true, JSON.stringify(opened));
+
+    const lit = await page.evaluate(async () => {
+      const B = window.Blinded;
+      const row = document.querySelector('#termcounts .tallywhere .tallyspot');
+      row.dispatchEvent(new PointerEvent('pointerenter', { bubbles: true }));
+      await new Promise(r => setTimeout(r, 60));
+      const on = B.state.spotlight && { ...B.state.spotlight };
+      // And what it lights is a real box on that page, not an id nothing
+      // draws.
+      const page0 = B.state.pages[on ? on.pageIndex : 0];
+      const rects = on ? B.rectsOfMark(page0, on.mark).length : 0;
+      row.dispatchEvent(new PointerEvent('pointerleave', { bubbles: true }));
+      await new Promise(r => setTimeout(r, 60));
+      return { on, rects, off: B.state.spotlight };
+    });
+    check('hovering a row lights the mark it stands for',
+      Boolean(lit.on) && lit.rects > 0, JSON.stringify(lit));
+    check('and letting go puts it out again', lit.off === null, JSON.stringify(lit));
+
+    const dropped = await page.evaluate(async () => {
+      const B = window.Blinded;
+      const before = B.occurrencesFor('Jane').length;
+      const dismissedBefore = B.state.pages.reduce((n, p) => n + p.dismissed.size, 0);
+      document.querySelector('#termcounts .tallywhere .tallydrop').click();
+      await new Promise(r => setTimeout(r, 150));
+      const after = B.occurrencesFor('Jane').length;
+      const label = (B.undoStack[B.undoStack.length - 1] || {}).label;
+      B.undoLast();
+      await new Promise(r => setTimeout(r, 100));
+      return { before, after, label,
+               dismissedBefore,
+               dismissedAfter: B.state.pages.reduce((n, p) => n + p.dismissed.size, 0),
+               backAgain: B.occurrencesFor('Jane').length };
+    });
+    check('the cross drops that one mark and only that one',
+      dropped.after === dropped.before - 1, JSON.stringify(dropped));
+    check('which is a reviewer decision, so it is undoable',
+      /keeping that match/.test(dropped.label || '')
+      && dropped.backAgain === dropped.before, JSON.stringify(dropped));
+    check('and it leaves the rest of the page alone',
+      dropped.dismissedAfter === dropped.dismissedBefore, JSON.stringify(dropped));
+
+    await page.evaluate(() => { window.Blinded.state.openTally = null; });
   }
 
   // ---------- turning a page ----------
@@ -7970,7 +8084,7 @@ try {
     await page.waitForSelector('#view-review:not([hidden])', { timeout: 15000 });
     const home = await page.evaluate(() => history.state);
     check('going away puts an entry in history',
-      away && away.view === 'faq', JSON.stringify({ depth, away, home }));
+      away && away.away === 'faq', JSON.stringify({ depth, away, home }));
     check('and leaving by the button takes it out again',
       JSON.stringify(home) === JSON.stringify(depth),
       JSON.stringify({ depth, away, home }));
