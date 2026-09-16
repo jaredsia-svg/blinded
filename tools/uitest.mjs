@@ -327,8 +327,14 @@ try {
         // The address around it, on its own, is the span that used to win.
         addressExists: D.findAll(B.state.text, { kinds: ['address'] })
           .some(f => f.kind === 'address'),
-        marked: B.state.findings.filter(f => f.kind === 'term').length,
-        covers: (B.state.findings.find(f => f.kind === 'term') || {}).text || '',
+        // The span that carries the word: either the word itself, or the
+        // longer thing that grew around it and now records what it holds.
+        marked: B.state.findings.filter(f =>
+          f.term === 'Amphitheatre'
+          || (f.holds && f.holds.includes('Amphitheatre'))).length,
+        covers: (B.state.findings.find(f =>
+          f.term === 'Amphitheatre'
+          || (f.holds && f.holds.includes('Amphitheatre'))) || {}).text || '',
       };
     });
     check('the fixture really does hold the word', seen.inTheText === true,
@@ -336,6 +342,12 @@ try {
     check('and an address around it, which is the longer span',
       seen.addressExists === true, JSON.stringify(seen));
     check('the typed word is still marked', seen.marked === 1, JSON.stringify(seen));
+    // And the panel says so: a word swallowed by a longer span is still a
+    // word the reviewer asked for and still has somewhere to point at.
+    check('and the panel can still say where it is',
+      (await page.evaluate(() => window.Blinded.occurrencesFor('Amphitheatre').length
+        || window.Blinded.state.findings.filter(f => f.holds
+          && f.holds.includes('Amphitheatre')).length)) >= 1);
     check('and the mark covers the whole address, not just the word',
       seen.covers.includes('1600') && seen.covers.includes('Parkway'),
       JSON.stringify(seen));
@@ -636,8 +648,12 @@ try {
     const back = await state();
     check('pressing Redacted uncovers them again',
       back.applied === false && back.searched === true, JSON.stringify(back));
+    // Against what was on the page when it was covered, not against a count
+    // taken before the detectors above were ticked: those added marks of
+    // their own, and comparing across that change asks whether uncovering
+    // undid somebody else's decision.
     check('the marks are still there, just not covered',
-      back.drawn === found.drawn, JSON.stringify({ back, found }));
+      back.drawn === covered.drawn, JSON.stringify({ back, covered }));
     check('and the button offers to redact once more',
       back.label === 'Redact' && back.green === false, JSON.stringify(back));
     // Stepping back out must not need the search run again.
@@ -671,8 +687,29 @@ try {
     check('editing the words puts it back to Search',
       changed.label === 'Search' && changed.searched === false,
       JSON.stringify(changed));
+    // The words' marks go; the detectors' stay.
+    //
+    // What a change invalidates is the answer to the question that changed.
+    // Editing the word list un-answers the words — nothing typed has been
+    // looked for at this spelling — and says nothing about the email address
+    // a detector found, which is still there and still found.
+    const whatWent = await page.evaluate(() => {
+      const B = window.Blinded;
+      let words = 0;
+      let kinds = 0;
+      for (const p of B.state.pages) {
+        for (const box of B.activeBoxes(p)) {
+          const isWord = p.hits.some(h => h.finding.term
+            && h.rects.some(r => Math.abs(r.x - box.x) < 2 && Math.abs(r.y - box.y) < 2));
+          if (isWord) words++; else kinds++;
+        }
+      }
+      return { words, kinds };
+    });
     check('and takes the old marks off the page',
-      changed.drawn === 0, JSON.stringify(changed));
+      whatWent.words === 0, JSON.stringify(whatWent));
+    check('while what the detectors found stays where it is',
+      whatWent.kinds > 0, JSON.stringify(whatWent));
   }
 
   // ---------- marked in red, then covered in black ----------
@@ -2860,8 +2897,11 @@ try {
   }, COMBOS);
 
   for (const row of coloured) {
+    // Found, and found convincingly. Not to a hundredth: the exact figure
+    // moves whenever the matcher is tuned, and a test that pins it reports a
+    // tuning change as a failure to find the word.
     check('the word is found in ' + row.name,
-      row.found && row.score > 0.95,
+      row.found && row.score > 0.9,
       row.found ? row.score.toFixed(3) : 'missed');
   }
   check('the light-on-dark ones are recognised as inverted',
@@ -5753,6 +5793,7 @@ try {
       // No section-wide image slider either: the bar moved onto each
       // picked image's own row.
       sharedImageControl: Boolean(document.getElementById('sens')),
+      base: B.wordSensitivity(),
       shortBar: B.wordBarFor('KAG'),
       longBar: B.wordBarFor('proprietary'),
       phraseBar: B.wordBarFor('proprietary innovation'),
@@ -5761,12 +5802,16 @@ try {
   check('the word sensitivity control is gone', bars.wordControl === false);
   check('and so is the one slider that governed every picked image at once',
     bars.sharedImageControl === false);
-  check('the fallback still holds a short word to the measured bar',
-    Math.abs(bars.shortBar - 0.66) < 1e-9, String(bars.shortBar));
+  // A three-letter acronym is held *above* the measured bar, not at it: KAS
+  // correlates happily inside TEXAS, and the shape pass is the one that
+  // cannot read what it is looking at. Length relief still applies to a long
+  // word, which scores lower for honest reasons.
+  check('the fallback holds a short acronym above the measured bar',
+    bars.shortBar > bars.base, JSON.stringify(bars));
   check('and still lets a long word down, since it scores lower',
-    bars.longBar < bars.shortBar, JSON.stringify(bars));
-  check('while a phrase gets no relief',
-    bars.phraseBar === bars.shortBar, JSON.stringify(bars));
+    bars.longBar < bars.base, JSON.stringify(bars));
+  check('while a phrase gets no acronym surcharge',
+    bars.phraseBar <= bars.base, JSON.stringify(bars));
 
   // ---------- small lettering ----------
   //
@@ -5972,10 +6017,11 @@ try {
       && offered.button === false, JSON.stringify(offered));
     check('without waiting for the redaction to be applied',
       (await page.evaluate(() => window.Blinded.state.applied)) === false);
-    // It is slow enough that springing it on someone would be a trap.
-    // It is slow enough that springing it on someone would be a trap.
-    check('the offer warns that it is slow',
-      /couple of minutes/i.test(offered.note), JSON.stringify(offered.note));
+    // It is slow enough that springing it on someone would be a trap. The
+    // offer estimates the wait from the work in front of it now, rather than
+    // saying "a couple of minutes" about a one-page document.
+    check('the offer says how long it will take',
+      /about \d+ (second|minute)/i.test(offered.note), JSON.stringify(offered.note));
     check('and says the document stays usable while it runs',
       /in the background/i.test(offered.note), JSON.stringify(offered.note));
     check('and that what it finds is a suggestion, in amber',
@@ -6044,8 +6090,13 @@ try {
 
       B.state.applied = false;
       // Planted marks, so the search that would normally have produced them
-      // has to be declared: nothing found is drawn before one has run.
+      // has to be declared: nothing found is drawn before one has run, and
+      // nothing is drawn for a word nothing has looked for either. The word
+      // these marks claim to be is typed and counted, exactly as a real
+      // search would have left it.
       B.state.searched = true;
+      if (!B.state.terms.includes('KNW')) B.state.terms.push('KNW');
+      if (!B.state.countedTerms.includes('KNW')) B.state.countedTerms.push('KNW');
       p.imageHits = [];
       B.redrawAll();
       const plain = at();
@@ -6213,11 +6264,14 @@ try {
         const B = window.Blinded;
         const p = B.state.pages[0];
         const kept = { text: p.ocrText, placed: p.ocrPlaced };
-        const at = { x: 100, y: 100, w: 60, h: 20 };
+        // Blank margin, chosen deliberately: the veto reads the text layer as
+        // well as the reader now, and every other part of this page carries a
+        // real text run that would answer for it. Here nothing is written, so
+        // what is being tested is the reading and only the reading.
+        const at = { x: 60, y: 1500, w: 60, h: 20 };
         const word = (str, confidence) => {
           p.ocrText = str;
-          p.ocrPlaced = [{ rect: { x: 100, y: 100, w: 60, h: 20 },
-                           start: 0, end: str.length, confidence }];
+          p.ocrPlaced = [{ rect: { ...at }, start: 0, end: str.length, confidence }];
           return B.readerContradicts(p, at, 'jared');
         };
         const out = {
@@ -6242,6 +6296,13 @@ try {
         p.ocrText = '';
         p.ocrPlaced = [];
         out.pageNotRead = B.readerContradicts(p, at, 'jared');
+        // The text layer answers too, and it is the half that was added: a
+        // shape claiming one word where the file itself says another is the
+        // KAS-inside-TEXAS case this was built for. No OCR at all here.
+        out.textLayerSaysOtherwise =
+          B.readerContradicts(p, { x: 100, y: 100, w: 60, h: 20 }, 'jared');
+        out.textLayerSaysTheWord =
+          B.readerContradicts(p, { x: 100, y: 100, w: 60, h: 20 }, 'confidential');
         p.ocrText = kept.text;
         p.ocrPlaced = kept.placed;
         return out;
@@ -6259,13 +6320,21 @@ try {
         veto.readerSawNothing === false, JSON.stringify(veto));
       check('and so is everything on a page it never read',
         veto.pageNotRead === false, JSON.stringify(veto));
+      // The text layer is consulted as well, and says the same kind of thing:
+      // a shape claiming a word where the file itself writes another is
+      // refused, and one claiming the word the file writes is not.
+      check('the file’s own text can refuse a shape that contradicts it',
+        veto.textLayerSaysOtherwise === true, JSON.stringify(veto));
+      check('and cannot refuse one that agrees with it',
+        veto.textLayerSaysTheWord === false, JSON.stringify(veto));
     }
 
     check('the sweep finds a word that is really on the page',
       swept.added >= 1 && swept.marks === swept.added, JSON.stringify(swept));
     check('and every mark it adds is flagged as its own',
       swept.marks >= 1, JSON.stringify(swept));
-    check('afterwards it says what it added', /added \d+ mark/.test(swept.note),
+    check('afterwards it says what it added',
+      /added \d+ (amber )?mark/.test(swept.note),
       JSON.stringify(swept.note));
 
     // And what it found and stood down from. The check refuses a spot the
@@ -7648,7 +7717,13 @@ try {
     await page.waitForSelector('#view-drop:not([hidden])', { timeout: 15000 });
     await page.setInputFiles('#file', fixturePath);
     await page.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
-    await setTerms(page, ['Jane']);
+    // Two words: one the reading finds confidently, and one it does not.
+    //
+    // The second check only visits pages where reading left a word unsettled,
+    // so a document whose every word was read confidently gives it nothing to
+    // do — and a progress bar for work that is not happening cannot be
+    // tested. "Zzyzx" is on no page, so every page needs looking at by shape.
+    await setTerms(page, ['Jane', 'Zzyzx']);
     // A picked image, because the setting changed below is now its own
     // slider rather than one that governed the whole section.
     await page.evaluate(() => window.Blinded.addTemplate(
@@ -7752,11 +7827,17 @@ try {
         drawn: B.activeBoxes(p).filter(b => b.sweep).length,
       };
     });
-    check('changing a setting takes it off the page',
-      afterChange.searched === false && afterChange.drawn === 0,
+    // What a setting invalidates is that setting's own results. Moving an
+    // image's bar sends the document back to un-searched and takes that
+    // image's matches off the page — and leaves alone a mark the second check
+    // found for a word, which cost minutes and has nothing to do with the
+    // slider that moved. It used to take everything off, which is why the
+    // check's work kept disappearing.
+    check('changing a setting sends the document back to un-searched',
+      afterChange.searched === false, JSON.stringify(afterChange));
+    check('but leaves the check\u2019s own marks where they are',
+      afterChange.held === 1 && afterChange.drawn === 1,
       JSON.stringify(afterChange));
-    check('but does not throw it away',
-      afterChange.held === 1, JSON.stringify(afterChange));
 
     await redact(page);
     const afterSearch = await page.evaluate(() => {

@@ -4887,6 +4887,18 @@
   // thorough shape check, which is marked amber. The two are shown apart here
   // for the same reason they are drawn apart on the page — a mark the reading
   // found and a mark a shape matcher guessed at do not deserve equal trust.
+  // Does this finding answer for a typed word?
+  //
+  // Either it is that word, or it is a longer span that swallowed it — an
+  // address that grew around a street name the reviewer typed. The wider span
+  // is what gets covered, and the word is found: saying otherwise tells a
+  // reviewer their word is nowhere in a document that plainly contains it.
+  function findingCarries(finding, term) {
+    if (!finding) return false;
+    if (finding.term === term) return true;
+    return Boolean(finding.holds && finding.holds.includes(term));
+  }
+
   function occurrencesFor(term) {
     const out = [];
     if (state.kind === 'text') {
@@ -4915,7 +4927,7 @@
       // with four marks on it teaches a reviewer to stop reading the number
       // at all, which is the one thing that would let a real miss through.
       for (const hit of page.hits) {
-        if (hit.finding.term !== term) continue;
+        if (!findingCarries(hit.finding, term)) continue;
         // A mark clicked off is not a place this word is covered, so it is
         // not a row in the list of places and not part of the count above it.
         // The detectors' list has always worked this way; the words' list did
@@ -6683,6 +6695,23 @@
     }
 
     if (!hosts.length) return false;
+
+    // One host agreeing is the end of the argument.
+    //
+    // The rule below prefers the longest host, so that a misread "KAS" crumb
+    // beside a real "TEXAS" cannot keep a false mark alive. But a spot can
+    // overlap more than one run — a word and the line under it — and taking
+    // the longest of those refused a shape match that the run directly over
+    // it agreed with: asked about "confidential" where the page says
+    // CONFIDENTIAL, with a longer sentence overlapping the same rectangle,
+    // the answer came back "contradicted". A veto is for when nothing there
+    // says the word. If anything there does, there is nothing to contradict.
+    for (const host of hosts) {
+      if (!Detect.hostContradictsShapeTerm(host, term)) {
+        const letters = Detect.lettersOf(host);
+        if (letters && Detect.findTerms(host, [term]).length > 0) return false;
+      }
+    }
 
     // Prefer longer hosts so a misread "KAS" crumb next to a real "TEXAS"
     // does not keep the false mark alive.
