@@ -5580,6 +5580,10 @@
     const chosen = await askName(redactedName(extension));
     if (!chosen) return;                 // changed their mind; nothing is built
     state.saveAs = chosen;
+    // Asked for in the Save as box, saved after the file itself: the export
+    // is what the reviewer pressed for, and a draft that failed must not be
+    // the reason they do not get it.
+    const alsoDraft = Boolean(el('withdraft') && el('withdraft').checked);
     busy(true, 'Building the redacted file…');
     try {
       if (state.kind === 'text') {
@@ -5660,8 +5664,29 @@
     } catch (error) {
       alert('The redacted file could not be built: ' + (error && error.message ? error.message : error) +
         '\n\nNothing was saved. Your document is unchanged.');
+      busy(false);
+      return;
     } finally {
       busy(false);
+    }
+    if (alsoDraft) {
+      try {
+        // saveDraft clears the exported flag, because saving a draft on its
+        // own is not exporting a redaction. Here it followed one, and the
+        // reviewer must not be warned about losing work they have just saved
+        // twice over.
+        const exported = state.exported;
+        await saveDraft();
+        state.exported = exported;
+        // saveDraft says "Draft saved", which is the wrong half of the story
+        // when a redacted file has just been built beside it.
+        draftNote('Saved ' + state.saveAs + ', and a draft beside it \u2013 the '
+          + 'draft holds your marks and the words you typed, so keep it as '
+          + 'carefully as the document.');
+      } catch (error) {
+        draftNote('The file was saved. The draft could not be: '
+          + (error && error.message ? error.message : error));
+      }
     }
   }
 
@@ -6103,7 +6128,13 @@
   const dropHint = el('sheetdrop-hint');
   if (dropHint) dropHint.addEventListener('click', () => el('addfile').click());
   el('addfile').addEventListener('change', async event => {
-    const files = event.target.files;
+    // Copied out of the input before it is cleared, not merely referenced.
+    //
+    // event.target.files is live: clearing the input empties the very list
+    // this handler is holding, so `addDocuments` was handed nothing and said
+    // "a text file has no pages to add" about a PDF. Adding a document from
+    // the toolbar did not work at all.
+    const files = [...event.target.files];
     // Cleared before the read, so choosing the same file twice in a row still
     // fires a change event the second time.
     event.target.value = '';

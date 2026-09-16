@@ -790,6 +790,25 @@ body.picking .tools {
   .dialog-x, .sample-x { top: 12px; right: 12px; }
 }
 
+/* ---------- what it is used for ---------- */
+/*
+   Cards rather than a list, because these are alternatives to each other: a
+   reader is looking for the one that describes them, not reading all six.
+   Two columns where there is room, one on a phone.
+*/
+.uses { margin: 40px auto 0; max-width: 980px; padding: 0 20px; }
+.uses h2 { font-size: 20px; margin: 0 0 8px; }
+.usegrid {
+  list-style: none; margin: 18px 0 0; padding: 0;
+  display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+.usecard {
+  background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 16px 18px;
+}
+.usecard h3 { margin: 0 0 6px; font-size: 14.5px; }
+.usecard p { margin: 0; font-size: 13.5px; line-height: 1.55; color: var(--ink-soft); }
+
 /* Confirming a pick. The crop is shown big, because the whole point is to see
    what was actually caught — at the size it sits on the page a logo is a few
    dozen pixels and a box a little too wide looks exactly like a box that

@@ -41,7 +41,7 @@
      origins for one program and two sets of response headers to keep right;
      Pages publishing is off and this says which copy is the copy. -->
 <link rel="canonical" href="https://blinded.onrender.com/">
-<link rel="stylesheet" href="app.css?v=93e057f2">
+<link rel="stylesheet" href="app.css?v=dc94cb48">
 </head>
 <body>
 
@@ -79,10 +79,12 @@
   <section id="view-drop" class="view">
 
     <div class="hero">
-      <h1>Redaction for deal documents.</h1>
-      <p class="lede">Select a name, a logo or a signature <em>once</em> – every
-        copy goes, at any size or colour, even inside a screenshot. CIMs, board
-        decks, contracts, diligence packs – in under a minute.</p>
+      <h1>Redaction for confidential documents.</h1>
+      <p class="lede">Select a name, a logo or an image <em>once</em> – every
+        copy gets deleted, at any size or colour, even inside a scanned
+        document. CIMs, board decks, contracts, diligence packs, discovery
+        productions, FOIA releases, and de-identified medical records – in
+        under a minute.</p>
     </div>
 
     <div id="drop" class="drop" tabindex="0" role="button" aria-label="Choose a document to redact">
@@ -134,6 +136,66 @@
          slide is a picture and there is no text layer to search at all. What
          is shown is the output – the file this produced holds no recoverable
          text, which is the claim the picture is here to make. -->
+    <!-- What people actually open this for.
+         
+         Written as jobs rather than as features: somebody arrives with a
+         document and a deadline, not with an interest in correlation
+         thresholds. The first card is the one that is growing fastest and the
+         one nobody else answers – a file cannot go to a model until the names
+         are out of it, and a tool that uploads the file to do that has not
+         solved the problem it was brought in for. -->
+    <section class="uses">
+      <h2>What it is used for</h2>
+      <p class="sample-lede">One document, a few minutes, and nothing leaves
+        your machine. These are the jobs people bring it.</p>
+
+      <ul class="usegrid">
+        <li class="usecard">
+          <h3>Feeding a document to an AI, safely</h3>
+          <p>Strip the names, logos and client details first, then paste the
+            file into whatever model you like. The analysis still works – the
+            numbers, the charts and the argument are all still there – but the
+            party is no longer in it. Nothing is uploaded to do the stripping,
+            which is the point: a redaction tool that sends your file away has
+            not solved the problem you had.</p>
+        </li>
+        <li class="usecard">
+          <h3>Deal materials</h3>
+          <p>CIMs, board decks, diligence packs and teasers, cleaned for a
+            wider bidder list. Cover the target's name and logo once and every
+            copy goes – the footer on page 2, the wordmark on the cover, the
+            badge inside a chart on page 63.</p>
+        </li>
+        <li class="usecard">
+          <h3>Legal agreements</h3>
+          <p>SPAs, SHAs, employment contracts and side letters. Counterparties,
+            prices and signatures out; the clauses left readable, so the
+            precedent can be shared without the deal behind it.</p>
+        </li>
+        <li class="usecard">
+          <h3>Discovery and FOIA</h3>
+          <p>Productions and public releases where the redaction has to be
+            real, not a black rectangle somebody can select the text out of.
+            What is covered here is gone from the file, and the labels say
+            what was removed and why it was removed there.</p>
+        </li>
+        <li class="usecard">
+          <h3>De-identified medical records</h3>
+          <p>Patient names, dates, record numbers and hospital marks removed
+            before a chart is used for research, teaching or a second opinion.
+            The document never leaves the machine it is opened on, which is
+            usually the condition that makes the rest possible.</p>
+        </li>
+        <li class="usecard">
+          <h3>Anything with a logo on it</h3>
+          <p>An invoice, a letterhead, a screenshot pasted into a report.
+            Draw a box around the mark once and every other copy of it in the
+            document is found by sight, at any size, in any colour, including
+            the ones inside pictures.</p>
+        </li>
+      </ul>
+    </section>
+
     <section class="sample">
       <h2>Sample slide redaction</h2>
       <p class="sample-lede">This is a scan of a corporate slide with low
@@ -726,6 +788,13 @@
       <input type="checkbox" id="searchable">
       Searchable text <span class="namefaint">– reads the redacted pages so the text can be found and copied. Slower.</span>
     </label>
+    <!-- The finished file is not the work. Exporting is the moment somebody
+         discovers they wanted to keep the marks, and the moment they are
+         about to close the tab. -->
+    <label class="check nameopt" id="withdraftrow">
+      <input type="checkbox" id="withdraft">
+      Save a draft too <span class="namefaint">– your marks and the words you typed, to reopen and edit later. Keep it as carefully as the document.</span>
+    </label>
     <div class="namego">
       <button type="button" id="namecancel" class="ghost">Cancel</button>
       <button type="button" id="namesave" class="primary">Save</button>
@@ -759,7 +828,7 @@
 <script src="lib/pdfwrite.js?v=4b977425"></script>
 <script src="lib/pdfread.js?v=ca229552"></script>
 <script src="lib/render.js?v=70e96ff0"></script>
-<script src="app.js?v=17a81d4a"></script>
+<script src="app.js?v=e322ab96"></script>
 <script type="module" src="lib/boot.mjs?v=8b98ed8f"></script>
 </body>
 </html>

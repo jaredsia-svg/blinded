@@ -2051,9 +2051,22 @@ try {
   await page.setInputFiles('#file', fixturePath);
   await page.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
   await setTerms(page, ["Jane Doe"]);
+  // The detectors are off until asked for, and this block is about what they
+  // contribute to the legend.
+  await useDetectors(page);
   await page.waitForTimeout(400);
 
   check('the legend is hidden until labelling is on', await page.isHidden('#legendbox'));
+
+  // A placeholder stands for something a search has actually found. Nothing
+  // is labelled before one has run — a legend built out of unsearched guesses
+  // would be naming things nobody has looked for yet.
+  await page.click('#apply');
+  await page.waitForFunction(() => window.Blinded.state.searched === true,
+    undefined, { timeout: 240000 });
+  await page.waitForFunction(() => document.getElementById('busy').hidden,
+    undefined, { timeout: 240000 });
+  await dismissSweepOffer(page);
   await reveal(page, 'labelling');
   await page.check('#labelling');
   check('turning labelling on reveals the legend', await page.isVisible('#legendbox'));
@@ -2061,14 +2074,19 @@ try {
   const legendRows = await page.evaluate(() =>
     window.Blinded.state.labels.entries.map(e => [e.label, e.count]));
   check('the legend suggests a placeholder for every distinct thing',
-    legendRows.length >= 5, JSON.stringify(legendRows));
+    legendRows.length >= 4, JSON.stringify(legendRows));
   check('the typed name is suggested as a person',
     legendRows.some(([label]) => label === 'P1'), JSON.stringify(legendRows));
   // PC1 was here, for a postal code. That detector is gone: a five-digit
   // number needed a country or a state beside it before it was safe to
   // propose, which is a detector asking the document to introduce it.
+  //
+  // PH1 was here too, for the fixture's "(415) 555-0132". The phone detector
+  // now proposes only +country-code numbers, because OCR of chart labels and
+  // currency blobs invented the local forms constantly. The fixture still
+  // carries that line; nothing marks it.
   check('the detectors get their own kinds',
-    ['E1', 'PH1', 'U1', 'A1'].every(want =>
+    ['E1', 'U1', 'A1'].every(want =>
       legendRows.some(([label]) => label === want)), JSON.stringify(legendRows));
   check('every suggested placeholder is short enough for a narrow bar',
     legendRows.every(([label]) => label.length <= 4), JSON.stringify(legendRows));
@@ -2982,6 +3000,17 @@ try {
     await page.isDisabled('#undo'));
 
   // Dismissing a detection is a reviewer decision too, so it must be undoable.
+  //
+  // A search first: a mark can only be clicked off once something has
+  // proposed it, and an unsearched detector proposes nothing — it is not on
+  // the page to be clicked.
+  await useDetectors(page);
+  await page.click('#apply');
+  await page.waitForFunction(() => window.Blinded.state.searched === true,
+    undefined, { timeout: 240000 });
+  await page.waitForFunction(() => document.getElementById('busy').hidden,
+    undefined, { timeout: 240000 });
+  await dismissSweepOffer(page);
   await page.evaluate(() => {
     // Driving the pointer at a page is about marking, so it asks for the
     // tool that marks: dragging moves the pages until told otherwise.
@@ -3021,12 +3050,30 @@ try {
   await page.setInputFiles('#file', textPath);
   await page.waitForSelector('#view-review:not([hidden])');
   check('a text file shows the text view', await page.isVisible('#textview'));
+  // Nothing is marked before a search, here as everywhere: a detector that
+  // has not been asked for proposes nothing, and a text file is searched in
+  // the same two steps as a document.
+  check('and marks nothing until it has been searched',
+    await page.locator('#textview mark').count() === 0);
+
+  await useDetectors(page);
+  await page.click('#apply');
+  await page.waitForFunction(() => window.Blinded.state.searched === true,
+    undefined, { timeout: 120000 });
+  await dismissSweepOffer(page);
   const marks = await page.locator('#textview mark').count();
-  check('the text view marks the email, the phone number and the address',
+  // The phone number is no longer among them: the detector proposes only
+  // +country-code forms now, and the fixture's "(415) 555-0132" is a local
+  // one.
+  check('the text view marks the email, the address and the web address',
     marks === 3, String(marks));
 
   await setTerms(page, ["Jane Doe"]);
-  await page.waitForTimeout(400);
+  await page.click('#apply');
+  await page.waitForFunction(() => window.Blinded.state.searched === true,
+    undefined, { timeout: 120000 });
+  await dismissSweepOffer(page);
+  await page.waitForTimeout(200);
   check('a listed term adds a mark in the text view',
     await page.locator('#textview mark').count() === 4,
     String(await page.locator('#textview mark').count()));
