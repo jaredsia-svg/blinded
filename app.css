@@ -618,14 +618,16 @@ textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; border-
   flex: 1 1 260px; min-width: 200px;
   display: flex; align-items: center; gap: 12px;
 }
-.runbar .sweepbar { flex: 1; margin: 0; }
 .runlegs { flex: 1; min-width: 0; }
 .runlegs .leg { margin: 0; }
 .runlegs .leg + .leg { margin-top: 4px; }
-.runbar .hint { margin: 0; white-space: nowrap; }
+/* The finished sentence sits at the start of the bar and takes the room it
+   needs: nowrap was right for "Reading 4 of 12" and wrong for a sentence,
+   which was being pushed into the middle and then run under the buttons. */
+.runbar .hint { margin: 0; margin-right: auto; }
 .runbar .ghost { flex: none; padding: 5px 12px; }
 @media (max-width: 640px) {
-  .runbar .hint { white-space: normal; }
+  .runbar { flex-wrap: wrap; }
 }
 .exportgo { display: flex; align-items: center; gap: 14px; }
 
@@ -1354,18 +1356,14 @@ code {
    the false one. A person can tell instantly, but only by looking, so the
    cut-out is the largest thing in the card and the buttons sit under it.
 */
-#sweepoffers { margin-top: 2px; }
-.offerintro {
-  margin: 0 0 8px; font-size: 12px; line-height: 1.45; color: var(--ink-soft);
-}
+/* Under the word it is about, inside that word's row in the term list. */
 .offer {
-  margin: 0 0 10px; padding: 9px 10px 8px;
-  background: #fff; border: 1px solid var(--line); border-radius: var(--radius);
+  margin: 2px 0 4px; padding: 9px 10px 8px;
+  background: var(--warn-bg); border: 1px solid #e6cd9a;
+  border-left: 3px solid #d98b1f; border-radius: var(--radius);
 }
-.offer:last-child { margin-bottom: 0; }
-.offername {
-  margin: 0 0 7px; font-size: 12.5px; font-weight: 600; color: var(--ink);
-  word-break: break-word;
+.offerlead {
+  margin: 0 0 7px; font-size: 11.5px; line-height: 1.45; color: #6b4a10;
 }
 .offershot {
   display: block; width: 100%; height: auto;
@@ -1384,22 +1382,6 @@ code {
   font: inherit; font-size: 11px; color: var(--ink-soft); text-decoration: underline;
 }
 .offerlook:hover { color: var(--ink); }
-
-/* ---------- the thorough check, running in the background ---------- */
-/*
-   Deliberately not the overlay every other long pass uses. Those block the
-   document because nothing sensible can be done while they run; this one is a
-   second opinion on a redaction that already exists, so the reviewer can carry
-   on reading while it works. A bar in the panel says how far it has got.
-*/
-.sweepbar {
-  height: 5px; border-radius: 3px; background: var(--line);
-  overflow: hidden; margin: 10px 0 6px;
-}
-.sweepbar span {
-  display: block; height: 100%; width: 0;
-  background: var(--accent); transition: width .2s linear;
-}
 
 /* ---------- reviewing: a fixed frame, two scrolling columns ---------- */
 /*

@@ -134,9 +134,10 @@ for (const name of readdirSync(bench).sort()) {
       // The near misses the panel is putting to the reviewer, read off the
       // panel itself rather than recomputed here: what they are actually
       // shown is the thing worth reporting.
-      offers: [...document.querySelectorAll('#sweepoffers .offer')].map(card => ({
-        term: card.querySelector('.offername').textContent,
-        why: card.querySelector('.offerwhy').textContent,
+      offers: [...document.querySelectorAll('.termcounts .offer')].map(card => ({
+        term: card.dataset.term,
+        why: (card.querySelector('.offerwhy') || card.querySelector('.offerlead'))
+          .textContent,
         shown: Boolean(card.querySelector('canvas.offershot')),
       })),
       // How coarse the pages are, which decides whether they get a second

@@ -41,7 +41,7 @@
      origins for one program and two sets of response headers to keep right;
      Pages publishing is off and this says which copy is the copy. -->
 <link rel="canonical" href="https://blinded.onrender.com/">
-<link rel="stylesheet" href="app.css?v=844b9f58">
+<link rel="stylesheet" href="app.css?v=68048157">
 </head>
 <body>
 
@@ -489,9 +489,6 @@
                    somewhere, the note carries a list of those places, and a list
                    inside a paragraph is not a list the browser will keep. -->
               <div class="hint doubthint" id="sweepnote"></div>
-              <!-- Where a word the check could not place is offered as a
-                   picture: the closest it came, cut out of the page. -->
-              <div id="sweepoffers" hidden></div>
             </div>
           </div>
         </details>
@@ -627,9 +624,11 @@
         <div id="runfoot-legs" class="runlegs"></div>
         <p class="hint" id="runfoot-text"></p>
       </div>
+      <!-- The check draws the same bars a search does. It used to have a bar
+           of its own and a sentence beside it; two kinds of progress bar for
+           two kinds of waiting is one kind too many. -->
       <div id="sweeprun" class="runbar" hidden>
-        <div class="sweepbar"><span id="sweepfill"></span></div>
-        <p class="hint" id="sweepprogress"></p>
+        <div id="sweeprun-legs" class="runlegs"></div>
         <button type="button" id="sweepstop" class="ghost">Stop the check</button>
       </div>
       <div class="exportgo">
@@ -975,7 +974,7 @@
 <script src="lib/pdfwrite.js?v=4b977425"></script>
 <script src="lib/pdfread.js?v=ca229552"></script>
 <script src="lib/render.js?v=65c3fe76"></script>
-<script src="app.js?v=b0d63ab4"></script>
+<script src="app.js?v=d653e5a1"></script>
 <script type="module" src="lib/boot.mjs?v=8b98ed8f"></script>
 </body>
 </html>

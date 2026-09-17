@@ -4029,7 +4029,7 @@ try {
       JSON.stringify(budgets));
   }
 
-  // ---------- the near miss, offered as a picture ----------
+  // ---------- the near miss, offered as a picture under its word ----------
   //
   // The check cannot tell a true copy its bar turned away from a lookalike
   // the bar was right about: measured, the true miss scored 0.600 and the
@@ -4052,13 +4052,18 @@ try {
       B.state.offersDismissed = new Set();
       B.state.sweepBest = { Ghostword: { score: 0.61, verified: true,
         refined: 0.61, part: 'Ghostword', bar: 0.66, at: near } };
-      B.renderSweep();
+      B.renderTermCounts();
 
-      const host = document.getElementById('sweepoffers');
+      const host = document.getElementById('termcounts');
       const card = host.querySelector('.offer');
       const out = {
-        shown: !host.hidden,
+        shown: Boolean(card),
         cards: host.querySelectorAll('.offer').length,
+        // The word it is about is the row above it: the question and the
+        // nought that raised it have to be next to each other.
+        underWord: Boolean(card && card.closest('li').previousElementSibling
+          && card.closest('li').previousElementSibling
+            .querySelector('.t').textContent === 'Ghostword'),
         hasShot: Boolean(card && card.querySelector('canvas.offershot')),
         why: card ? card.querySelector('.offerwhy').textContent : '',
       };
@@ -4067,30 +4072,31 @@ try {
       out.marks = only();
       out.amber = (B.state.pages[0].imageHits || [])
         .filter(m => m.term === 'Ghostword').every(m => m.bySweep === true);
-      out.goneAfterTake = document.getElementById('sweepoffers').hidden;
+      out.goneAfterTake = !document.querySelector('#termcounts .offer');
 
       B.undoLast();
       out.marksAfterUndo = only();
-      out.backAfterUndo = !document.getElementById('sweepoffers').hidden;
+      out.backAfterUndo = Boolean(document.querySelector('#termcounts .offer'));
 
-      document.querySelector('#sweepoffers .offerdrop').click();
-      out.goneAfterDrop = document.getElementById('sweepoffers').hidden;
+      document.querySelector('#termcounts .offerdrop').click();
+      out.goneAfterDrop = !document.querySelector('#termcounts .offer');
 
       // Nothing verified anywhere is a different answer from a near miss, and
       // has no picture to show.
       B.state.offersDismissed = new Set();
       B.state.sweepBest = { Ghostword: { score: 0, verified: false,
         refined: 0.2, part: 'Ghostword', bar: 0.66, at: null } };
-      B.renderSweep();
-      out.noneText = document.querySelector('#sweepoffers .offerwhy').textContent;
-      out.noneHasShot = Boolean(document.querySelector('#sweepoffers canvas'));
-      out.noneHasTake = Boolean(document.querySelector('#sweepoffers .offertake'));
+      B.renderTermCounts();
+      out.noneText = document.querySelector('#termcounts .offerlead').textContent;
+      out.noneHasShot = Boolean(document.querySelector('#termcounts .offer canvas'));
+      out.noneHasTake = Boolean(document.querySelector('#termcounts .offertake'));
 
       B.state.terms = wasTerms;
       B.state.sweptTerms = wasSwept;
       B.state.sweepBest = wasBest;
       B.state.pages[0].imageHits = wasHits;
       B.state.offersDismissed = new Set();
+      B.renderTermCounts();
       B.renderSweep();
       return out;
     });
@@ -4112,6 +4118,84 @@ try {
       /Nothing resembling it/.test(offer.noneText)
       && offer.noneHasShot === false && offer.noneHasTake === false,
       JSON.stringify(offer));
+  }
+
+  // ---------- what the check looks like while it runs ----------
+  //
+  // It reports itself in the foot of the page, with the same bars a search
+  // draws there. Three things had to stop happening: the amber panel in the
+  // panel column stayed up with nothing in it, because its button goes away
+  // while the check runs and the run itself had moved to the foot; the line
+  // the search left in the foot went on claiming the search was complete
+  // while a second one worked; and the check drew a bar of its own with a
+  // sentence beside it, which is a second kind of progress bar for the same
+  // kind of waiting.
+  {
+    const run = await page.evaluate(async () => {
+      const B = window.Blinded;
+      const was = B.state.terms.slice();
+      // One word the document has and one it does not: the second is placed
+      // nowhere, so the check runs its deeper "looking again" pass, which is
+      // the phase whose progress line used to be left on screen after the run
+      // had finished.
+      B.state.terms = ['Jane', 'Zzyzx'];
+      const seen = { samples: 0, boxEmpty: 0, legs: 0, stale: 0, sentence: 0,
+        deep: 0 };
+      const look = () => {
+        seen.samples++;
+        const box = document.getElementById('sweepbox');
+        if (!box.hidden
+          && document.getElementById('sweep').hidden
+          && !document.getElementById('sweepnote').textContent.trim()
+          ) seen.boxEmpty++;
+        const rows = document.querySelectorAll('#sweeprun-legs .leg');
+        if (rows.length) seen.legs++;
+        if (rows.length > 1) seen.deep++;
+        const foot = document.getElementById('runfoot');
+        const text = document.getElementById('runfoot-text').textContent;
+        if (!foot.hidden && /Search complete/.test(text)) seen.stale++;
+        if (/Checking page|carry on reviewing/.test(document.body.textContent)) {
+          seen.sentence++;
+        }
+      };
+      const running = B.runSweep();
+      const poll = setInterval(look, 10);
+      look();
+      await running;
+      clearInterval(poll);
+      seen.after = document.getElementById('runfoot-text').textContent;
+      seen.afterShown = !document.getElementById('runfoot').hidden;
+      seen.runGone = document.getElementById('sweeprun').hidden;
+      seen.oldBar = Boolean(document.getElementById('sweepprogress')
+        || document.getElementById('sweepfill'));
+      seen.deepened = (B.state.sweepDeepened || []).slice();
+      // Nothing of the run is left anywhere on the page once it is over.
+      seen.leftovers = document.querySelectorAll('#sweeprun-legs .leg').length;
+      seen.stillSaysChecking = /Checking page|Looking again/
+        .test(document.body.textContent);
+      B.state.terms = was;
+      return seen;
+    });
+
+    check('the check draws the same bars a search does, in the foot',
+      run.legs > 0 && run.oldBar === false, JSON.stringify(run));
+    check('and no sentence beside them',
+      run.sentence === 0, JSON.stringify(run));
+    check('the amber panel is never left up empty while it runs',
+      run.boxEmpty === 0 && run.samples > 0, JSON.stringify(run));
+    check('the search stops claiming to be complete while the check works',
+      run.stale === 0, JSON.stringify(run));
+    check('and the foot says what the check itself did when it finishes',
+      run.afterShown && run.runGone
+      && /Comprehensive check (complete|stopped)/.test(run.after),
+      JSON.stringify(run));
+    // The deeper pass is the one that used to leave its line behind: it adds a
+    // second bar part way through, and the run ends from inside it.
+    check('the deeper pass gets a bar of its own while it runs',
+      run.deepened.includes('Zzyzx') && run.deep > 0, JSON.stringify(run));
+    check('and nothing of it is left on the page once the check is over',
+      run.leftovers === 0 && run.stillSaysChecking === false,
+      JSON.stringify(run));
   }
 
   // ---------- what counts as already covered ----------
@@ -7878,7 +7962,7 @@ try {
         { key: 'search', label: 'Searching images', total: 0 },
       ]);
       const out = {
-        rows: [...document.querySelectorAll('[data-leg]')].map(r => r.dataset.leg),
+        rows: [...document.getElementById('busy-legs').querySelectorAll('[data-leg]')].map(r => r.dataset.leg),
       };
       B.busy(false);
       return out;
@@ -7896,7 +7980,7 @@ try {
         { key: 'search', label: 'Searching images', total: 100 },
       ]);
       B.leg('read', 40);
-      const rows = [...document.querySelectorAll('[data-leg]')].map(r => ({
+      const rows = [...document.getElementById('busy-legs').querySelectorAll('[data-leg]')].map(r => ({
         key: r.dataset.leg,
         count: r.querySelector('[data-count]').textContent,
         width: r.querySelector('[data-fill]').style.width,
@@ -8839,6 +8923,10 @@ try {
   // taking the progress bar of a still-running check off the screen with it.
   // The work carried on in the background with nothing to show for it, and no
   // way left to stop it.
+  //
+  // On screen now means the foot of the page, where the bars are. The amber
+  // panel is where the check is offered and where it reports afterwards; while
+  // it runs it has nothing to say, and it used to stay up empty.
   {
     if (await page.isVisible('#view-review')) await newFile();
     await page.waitForSelector('#view-drop:not([hidden])', { timeout: 15000 });
@@ -8888,10 +8976,10 @@ try {
     });
 
     check('the check shows its progress when it starts',
-      during.started.box === true && during.started.bar === true,
+      during.started.bar === true && during.started.box === false,
       JSON.stringify(during));
     check('changing a setting mid-check does not hide it',
-      during.after.box === true && during.after.bar === true
+      during.after.bar === true && during.after.box === false
         && during.after.running === true, JSON.stringify(during));
     check('even though the document went back to un-searched',
       during.after.searched === false, JSON.stringify(during));

@@ -182,6 +182,11 @@
     // what it added when it did.
     sweptTerms: [],
     sweepAdded: 0,
+    // Which run the foot is reporting on, and what it did. The sentence is
+    // composed from these every time anything changes, not written once.
+    footRan: null,
+    footAdded: 0,
+    footStopped: false,
     // Near misses the reviewer has looked at and said no to. Kept by word, so
     // a "not it" stays answered while they work through the rest of the list.
     offersDismissed: new Set(),
@@ -285,23 +290,65 @@
     return runsInFoot && el('runfoot-legs') ? el('runfoot-legs') : el('busy-legs');
   }
 
-  // What the foot says once a search has finished, in place of the bars.
+  // What the foot says once a run has finished, in place of its bars.
   //
   // A bar that fills and disappears answers nothing: the reviewer looks up a
   // moment later and cannot tell whether it finished or they missed it. So the
-  // line stays, and says what was found.
+  // line stays, and says what happened.
+  //
+  // It is composed here rather than written once when the run ends, because
+  // what there is to say keeps changing afterwards — marks get dismissed, the
+  // redaction gets applied — and a sentence written at the end of a run is out
+  // of date by the time anyone acts on it.
   function saidSearched() {
+    state.footRan = 'search';
+    renderFoot();
+  }
+
+  // The same for the comprehensive check, which the reviewer starts from the
+  // same bar and waits for in the same place.
+  function saidChecked(added) {
+    state.footRan = 'check';
+    state.footAdded = added;
+    state.footStopped = Boolean(state.sweepStopped);
+    renderFoot();
+  }
+
+  function renderFoot() {
     const said = el('runfoot-text');
     const foot = el('runfoot');
     if (!said || !foot) return;
-    const marks = state.pages.reduce((sum, page) =>
-      sum + liveImageHits(page).filter(mark => !page.dismissed.has(mark.id)).length
-      + page.hits.filter(hit => !page.dismissed.has(hit.finding.id)).length, 0);
-    said.textContent = marks
-      ? 'Search complete \u2013 ' + marks + (marks === 1 ? ' mark' : ' marks') + ' proposed.'
-      : 'Search complete \u2013 nothing found to redact.';
-    const legs = el('runfoot-legs');
-    if (legs) legs.textContent = '';
+    // Nothing to report, or something still running that is reporting itself.
+    if (!state.footRan || !state.searched) {
+      if (!state.redacting && !state.sweepRunning) {
+        state.footRan = null;
+        said.textContent = '';
+        foot.hidden = true;
+      }
+      return;
+    }
+    if (state.redacting || state.sweepRunning) return;
+
+    const check = state.footRan === 'check';
+    const what = check
+      ? (state.footStopped ? 'Comprehensive check stopped' : 'Comprehensive check complete')
+      : 'Search complete';
+    const marks = plannedCount();
+    // One sentence, not two. The foot used to say that the search was complete
+    // while the line beside the Redact button said the marks were outlined and
+    // to press it — the same sentence cut in half and set a few pixels apart.
+    said.textContent = marks && !state.applied
+      ? what + ' and outlined. Press Redact to cover them.'
+      : marks
+        ? what + ' \u2013 everything found is covered.'
+        : what + (check ? ' \u2013 nothing further found.'
+          : ' \u2013 nothing found to redact.');
+
+    // The bars are gone, and an empty row where they were takes the width the
+    // sentence should be sitting in — which is what pushed it into the middle
+    // of the bar instead of the start of it.
+    const rows = el('runfoot-legs');
+    if (rows) { rows.textContent = ''; rows.hidden = true; }
     foot.hidden = false;
   }
 
@@ -329,8 +376,11 @@
   //
   // A leg that has no work is not drawn at all. An empty bar for a search
   // nobody asked for is a bar that will never move.
-  function legs(list) {
-    const host = legsHost();
+  // `into` is for a run that reports somewhere other than the current host:
+  // the comprehensive check has its own row in the foot and draws the same
+  // bars there, so that waiting for it looks like waiting for a search.
+  function legs(list, into) {
+    const host = into || legsHost();
     host.textContent = '';
     host.hidden = !list.length;
     for (const leg of list) {
@@ -369,8 +419,8 @@
     host.hidden = !host.children.length;
   }
 
-  function leg(key, done) {
-    const row = legsHost().querySelector('[data-leg="' + key + '"]');
+  function leg(key, done, into) {
+    const row = (into || legsHost()).querySelector('[data-leg="' + key + '"]');
     if (!row) return;
     const total = Number(row.dataset.total) || 0;
     const at = Math.max(0, Math.min(total, done));
@@ -597,6 +647,7 @@
     state.useOcr = true;
     state.sweptTerms = [];
     state.sweepAdded = 0;
+    state.footRan = null;
     state.offersDismissed = new Set();
     state.sweepStopped = false;
     state.sweepReached = 0;
@@ -1915,8 +1966,10 @@
     } else if (marks === 0) {
       note.textContent = 'Nothing marked yet.';
     } else {
-      note.textContent = 'Outlined  - press Redact to cover them.';
+      // Said in the foot instead once a run has finished, as one sentence.
+      note.textContent = state.footRan ? '' : 'Outlined  - press Redact to cover them.';
     }
+    renderFoot();
   }
 
   // How many things are currently marked, whether or not they have been
@@ -6070,6 +6123,15 @@
       if (shapeCount && state.openTally === term + '::shape' && !shapeCount.disabled) {
         host.append(tallyList(term, byShape));
       }
+
+      // What the check could not place, under the word that asked for it.
+      const offer = offerFor(term);
+      if (offer) {
+        const holder = document.createElement('li');
+        holder.className = 'tally offerhost';
+        holder.append(offerCard(offer));
+        host.append(holder);
+      }
     }
   }
 
@@ -7530,7 +7592,9 @@
   el('sweep').addEventListener('click', runSweep);
   el('sweepstop').addEventListener('click', () => {
     state.sweepStopped = true;
-    el('sweepprogress').textContent = 'Stopping\u2026';
+    // The sentence beside the bars is gone, so the button says it instead.
+    el('sweepstop').textContent = 'Stopping\u2026';
+    el('sweepstop').disabled = true;
   });
 
   // How long a sweep takes, per megapixel of page, per word.
@@ -8044,6 +8108,16 @@
     // again, because what it found may not be what it found before.
     state.offersDismissed = new Set();
     state.sweepDeepened = [];
+    // The foot is the check's now. The line the search left there — "Search
+    // complete, four marks proposed" — describes a run that finished before
+    // this one started, and leaving it up while the check works reports a
+    // state that is no longer the current one.
+    const said = el('runfoot-text');
+    if (said) said.textContent = '';
+    const foot = el('runfoot');
+    if (foot) foot.hidden = true;
+    const stop = el('sweepstop');
+    if (stop) { stop.textContent = 'Stop the check'; stop.disabled = false; }
     sweepProgress(0, pages.length);
     renderSweep();
     // The Search button greys out for as long as this runs, so it has to be
@@ -8271,6 +8345,7 @@
     markDuplicates();
     renderTermCounts();
     renderSweep();
+    saidChecked(added);
     redrawAll();
     refreshApply();
     return added;
@@ -8282,18 +8357,24 @@
   function sweepProgress(done, total, deep, deepOf) {
     state.sweepDone = done;
     state.sweepTotal = total;
-    const fill = el('sweepfill');
-    if (fill) fill.style.width = (total ? (done / total) * 100 : 0).toFixed(1) + '%';
-    const line = el('sweepprogress');
-    if (!line) return;
+    const host = el('sweeprun-legs');
+    if (!host) return;
+    // The same bars a search draws, in the same place, because it is the same
+    // question: how much longer. The check used to have a bar of its own and a
+    // sentence beside it saying which page it was on and that the reviewer
+    // could carry on reading — which is true of every run reported down here,
+    // and so is not worth a sentence.
+    const want = [{ key: 'sweep', label: 'Comprehensive check', total }];
     if (deepOf) {
-      line.textContent = 'Looking again where nothing was found: '
-        + Math.min(deep + 1, deepOf) + ' of ' + deepOf
-        + '  - you can carry on reviewing.';
-      return;
+      want.push({ key: 'deep', label: 'Looking again where nothing was found',
+        total: deepOf });
     }
-    line.textContent = 'Checking page ' + Math.min(done + 1, total) + ' of ' + total
-      + '  - you can carry on reviewing.';
+    // Only rebuilt when the shape of the run changes: the second look appears
+    // part way through, and redrawing the rows on every page would restart
+    // their transitions and make a filling bar stutter.
+    if (host.querySelectorAll('.leg').length !== want.length) legs(want, host);
+    leg('sweep', done, host);
+    if (deepOf) leg('deep', Math.min(deep + 1, deepOf), host);
   }
 
   // The button, and what it says afterwards.
@@ -8498,84 +8579,100 @@
     goToPage(offer.at.p);
   }
 
-  function renderSweepOffers(offers) {
-    const host = el('sweepoffers');
-    if (!host) return;
-    host.textContent = '';
-    host.hidden = !offers.length;
-    if (!offers.length) return;
+  // One card, drawn under the word it is about.
+  //
+  // It used to be a list at the foot of the amber panel, which put the
+  // question a long way from the word that raised it: the reviewer reads down
+  // the term list, sees a nought beside a name, and the explanation was three
+  // sections further down. Under the word, after its tallies, it is the next
+  // thing they look at.
+  function offerCard(offer) {
+    const card = document.createElement('div');
+    card.className = 'offer';
+    card.dataset.term = offer.term;
 
-    const intro = document.createElement('p');
-    intro.className = 'offerintro';
-    intro.textContent = offers.length === 1
-      ? 'One word was not marked anywhere. This is the closest the check came:'
-      : offers.length + ' words were not marked anywhere. These are the closest'
-        + ' the check came:';
-    host.append(intro);
+    const lead = document.createElement('p');
+    lead.className = 'offerlead';
+    card.append(lead);
 
-    for (const offer of offers) {
-      const card = document.createElement('div');
-      card.className = 'offer';
-
-      const name = document.createElement('p');
-      name.className = 'offername';
-      name.textContent = offer.term;
-      card.append(name);
-
-      const shot = offer.at ? offerCrop(offer.at) : null;
-      if (!shot) {
-        const none = document.createElement('p');
-        none.className = 'offerwhy';
-        // Not the same failure as a near miss, and saying so is the point:
-        // nothing on any page resembled the word enough to be worth checking
-        // properly, which is what the reviewer needs to know before they
-        // decide the document is clean.
-        none.textContent = 'Nothing resembling it was found on any page.';
-        card.append(none);
-        host.append(card);
-        continue;
-      }
-      card.append(shot);
-
-      const why = document.createElement('p');
-      why.className = 'offerwhy';
-      why.textContent = 'Page ' + (offer.at.p + 1) + ' · scored '
-        + offer.score.toFixed(2) + ', needed ' + offer.bar.toFixed(2)
-        + (offer.part && offer.part !== offer.term
-          ? ' · matched on "' + offer.part + '"' : '');
-      card.append(why);
-
-      const row = document.createElement('div');
-      row.className = 'offerrow';
-      const take = document.createElement('button');
-      take.type = 'button';
-      take.className = 'ghost offertake';
-      take.textContent = 'That is it – mark it';
-      take.addEventListener('click', () => takeSweepOffer(offer));
-      const drop = document.createElement('button');
-      drop.type = 'button';
-      drop.className = 'ghost offerdrop';
-      drop.textContent = 'Not it';
-      drop.addEventListener('click', () => {
-        state.offersDismissed = state.offersDismissed || new Set();
-        state.offersDismissed.add(offer.term);
-        renderSweep();
-      });
-      row.append(take, drop);
-      card.append(row);
-
-      const look = document.createElement('button');
-      look.type = 'button';
-      look.className = 'offerlook';
-      look.textContent = 'Show me on the page';
-      look.addEventListener('click', () => goToPage(offer.at.p));
-      card.append(look);
-
-      host.append(card);
+    const shot = offer.at ? offerCrop(offer.at) : null;
+    if (!shot) {
+      // Not the same failure as a near miss, and saying so is the point:
+      // nothing on any page resembled the word enough to be worth checking
+      // properly, which is what the reviewer needs to know before they decide
+      // the document is clean.
+      lead.textContent = 'Not marked anywhere. Nothing resembling it was found'
+        + ' on any page.';
+      return card;
     }
+    lead.textContent = 'Not marked anywhere. This is the closest the check came:';
+    card.append(shot);
+
+    const why = document.createElement('p');
+    why.className = 'offerwhy';
+    why.textContent = 'Page ' + (offer.at.p + 1) + ' \u00b7 scored '
+      + offer.score.toFixed(2) + ', needed ' + offer.bar.toFixed(2)
+      + (offer.part && offer.part !== offer.term
+        ? ' \u00b7 matched on "' + offer.part + '"' : '');
+    card.append(why);
+
+    const row = document.createElement('div');
+    row.className = 'offerrow';
+    const take = document.createElement('button');
+    take.type = 'button';
+    take.className = 'ghost offertake';
+    take.textContent = 'That is it \u2013 mark it';
+    take.addEventListener('click', () => takeSweepOffer(offer));
+    const drop = document.createElement('button');
+    drop.type = 'button';
+    drop.className = 'ghost offerdrop';
+    drop.textContent = 'Not it';
+    drop.addEventListener('click', () => {
+      state.offersDismissed = state.offersDismissed || new Set();
+      state.offersDismissed.add(offer.term);
+      renderTermCounts();
+      renderSweep();
+    });
+    row.append(take, drop);
+    card.append(row);
+
+    const look = document.createElement('button');
+    look.type = 'button';
+    look.className = 'offerlook';
+    look.textContent = 'Show me on the page';
+    look.addEventListener('click', () => goToPage(offer.at.p));
+    card.append(look);
+
+    return card;
   }
 
+  // The offer for one word, if the check left it with nothing and there is
+  // still a question to ask about it.
+  function offerFor(term) {
+    if (!state.searched || state.sweepRunning) return null;
+    const swept = state.sweptTerms.length
+      && state.sweptTerms.length === state.terms.length
+      && state.sweptTerms.every((t, i) => t === state.terms[i]);
+    if (!swept) return null;
+    return sweepOffers().find(offer => offer.term === term) || null;
+  }
+
+  // An amber panel with nothing in it is a panel that says nothing, and this
+  // one had two ways of emptying out: while the check runs its button is gone
+  // and its note is cleared, and once the run moved to the foot there was
+  // nothing left inside it at all. So the panel is drawn and then, if drawing
+  // it produced nothing to read, taken away again.
   function renderSweep() {
+    renderSweepBody();
+    const box = el('sweepbox');
+    const button = el('sweep');
+    const note = el('sweepnote');
+    const empty = (!button || button.hidden)
+      && (!note || !note.textContent.trim());
+    if (!box.hidden && empty) box.hidden = true;
+  }
+
+  function renderSweepBody() {
     const box = el('sweepbox');
     const note = el('sweepnote');
     const button = el('sweep');
@@ -8602,16 +8699,24 @@
     // work carried on in the background with nothing to show for it, which is
     // the same dead-button problem in a different place — and worse here,
     // because the only way to stop it had gone too.
+    // The check reports itself in the foot of the page, which is not inside
+    // this panel and must be right whether the panel is shown or not — it is
+    // now hidden while the check runs, and the row that says the check is
+    // running was being left behind with it.
+    const running = el('sweeprun');
+    running.hidden = !state.sweepRunning;
+    if (!state.sweepRunning) {
+      // Its bars go with it. Left in place they are a finished run's bars
+      // inside a hidden row, which the next run has to notice and rebuild —
+      // and which anything counting bars on the page finds and counts.
+      const rows = el('sweeprun-legs');
+      if (rows) { rows.textContent = ''; rows.hidden = true; }
+    }
+
     box.hidden = !((state.searched || state.sweepRunning)
       && state.terms.length && state.kind !== 'text');
     if (box.hidden) return;
 
-    // Only once a check that answers the current term list has finished. A
-    // run still going has not decided what it could not place.
-    renderSweepOffers(swept && !state.sweepRunning ? sweepOffers() : []);
-
-    const running = el('sweeprun');
-    running.hidden = !state.sweepRunning;
     if (state.sweepRunning) {
       button.hidden = true;
       note.textContent = '';
