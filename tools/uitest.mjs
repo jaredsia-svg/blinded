@@ -4029,6 +4029,91 @@ try {
       JSON.stringify(budgets));
   }
 
+  // ---------- the near miss, offered as a picture ----------
+  //
+  // The check cannot tell a true copy its bar turned away from a lookalike
+  // the bar was right about: measured, the true miss scored 0.600 and the
+  // false one 0.628. A person can tell instantly, but only by looking, so the
+  // closest the check came is cut out of the page and shown.
+  {
+    const offer = await page.evaluate(async () => {
+      const B = window.Blinded;
+      const wasTerms = B.state.terms.slice();
+      const wasSwept = B.state.sweptTerms.slice();
+      const wasBest = B.state.sweepBest;
+      const wasHits = (B.state.pages[0].imageHits || []).slice();
+      const near = { p: 0, x: 40, y: 60, w: 120, h: 20 };
+      const only = n => (B.state.pages[0].imageHits || [])
+        .filter(m => m.term === 'Ghostword').length;
+
+      B.state.terms = ['Ghostword'];
+      B.state.sweptTerms = ['Ghostword'];
+      B.state.searched = true;
+      B.state.offersDismissed = new Set();
+      B.state.sweepBest = { Ghostword: { score: 0.61, verified: true,
+        refined: 0.61, part: 'Ghostword', bar: 0.66, at: near } };
+      B.renderSweep();
+
+      const host = document.getElementById('sweepoffers');
+      const card = host.querySelector('.offer');
+      const out = {
+        shown: !host.hidden,
+        cards: host.querySelectorAll('.offer').length,
+        hasShot: Boolean(card && card.querySelector('canvas.offershot')),
+        why: card ? card.querySelector('.offerwhy').textContent : '',
+      };
+
+      card.querySelector('.offertake').click();
+      out.marks = only();
+      out.amber = (B.state.pages[0].imageHits || [])
+        .filter(m => m.term === 'Ghostword').every(m => m.bySweep === true);
+      out.goneAfterTake = document.getElementById('sweepoffers').hidden;
+
+      B.undoLast();
+      out.marksAfterUndo = only();
+      out.backAfterUndo = !document.getElementById('sweepoffers').hidden;
+
+      document.querySelector('#sweepoffers .offerdrop').click();
+      out.goneAfterDrop = document.getElementById('sweepoffers').hidden;
+
+      // Nothing verified anywhere is a different answer from a near miss, and
+      // has no picture to show.
+      B.state.offersDismissed = new Set();
+      B.state.sweepBest = { Ghostword: { score: 0, verified: false,
+        refined: 0.2, part: 'Ghostword', bar: 0.66, at: null } };
+      B.renderSweep();
+      out.noneText = document.querySelector('#sweepoffers .offerwhy').textContent;
+      out.noneHasShot = Boolean(document.querySelector('#sweepoffers canvas'));
+      out.noneHasTake = Boolean(document.querySelector('#sweepoffers .offertake'));
+
+      B.state.terms = wasTerms;
+      B.state.sweptTerms = wasSwept;
+      B.state.sweepBest = wasBest;
+      B.state.pages[0].imageHits = wasHits;
+      B.state.offersDismissed = new Set();
+      B.renderSweep();
+      return out;
+    });
+
+    check('a word the check placed nowhere is offered as a cut-out',
+      offer.shown && offer.cards === 1 && offer.hasShot, JSON.stringify(offer));
+    check('with the score it reached and the bar it had to clear',
+      /scored 0\.61, needed 0\.66/.test(offer.why), JSON.stringify(offer));
+    check('accepting it marks the page in amber',
+      offer.marks === 1 && offer.amber === true, JSON.stringify(offer));
+    check('and the offer goes once the word has a mark',
+      offer.goneAfterTake === true, JSON.stringify(offer));
+    check('undo takes the mark back off and asks again',
+      offer.marksAfterUndo === 0 && offer.backAfterUndo === true,
+      JSON.stringify(offer));
+    check('turning it down puts the question away',
+      offer.goneAfterDrop === true, JSON.stringify(offer));
+    check('a word nothing resembled says so, with nothing to accept',
+      /Nothing resembling it/.test(offer.noneText)
+      && offer.noneHasShot === false && offer.noneHasTake === false,
+      JSON.stringify(offer));
+  }
+
   // ---------- what counts as already covered ----------
   //
   // Two questions that were being asked as one. The same word found twice in

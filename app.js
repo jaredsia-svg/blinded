@@ -182,6 +182,9 @@
     // what it added when it did.
     sweptTerms: [],
     sweepAdded: 0,
+    // Near misses the reviewer has looked at and said no to. Kept by word, so
+    // a "not it" stays answered while they work through the rest of the list.
+    offersDismissed: new Set(),
     // Three states, in order: nothing looked for yet, looked for and proposed,
     // covered.
     //
@@ -594,6 +597,7 @@
     state.useOcr = true;
     state.sweptTerms = [];
     state.sweepAdded = 0;
+    state.offersDismissed = new Set();
     state.sweepStopped = false;
     state.sweepReached = 0;
     state.sweepRefused = 0;
@@ -7954,6 +7958,54 @@
   const DEEP_PER_SCALE = SWEEP_PER_SCALE;
   const DEEP_VERIFY = SWEEP_VERIFY;
 
+  // Whether the document holds any mark for a word at all — read off the page
+  // or found by shape, on any page. Both the deeper second look and the offer
+  // below turn on this exact question, and they have to agree on it.
+  function hasMarkAnywhere(term) {
+    return state.pages.some(page =>
+      (page.imageHits || []).some(mark => mark.term === term)
+      || (page.hits || []).some(hit => hit.term === term));
+  }
+
+  // The best score each word reached, whether or not it cleared its bar.
+  // A word that was missed because it scored 0.62 against a bar of 0.70 is a
+  // different problem from one that scored 0.21, and without this the two
+  // are indistinguishable from the outside.
+  function recordBest(entries, results) {
+    for (const entry of entries) {
+      const found = results.get(entry.key);
+      if (!found) continue;
+      // The best *verified* score, which is the one the bar is a bar on.
+      //
+      // `found.best` is not that when nothing cleared the bar: the search
+      // falls back to reporting refinement's best, which is measured on a
+      // shrunken copy and runs higher. Read as a verify score it says a word
+      // cleared its bar and was thrown away afterwards, which sent one
+      // investigation off entirely — "Thailand" looked like 0.724 against a
+      // bar of 0.63 and was in fact never verified at all.
+      const seen = (found.matches || []).concat(found.near || [])
+        .sort((a, b) => b.score - a.score);
+      const top = seen[0];
+      const best = {
+        score: top ? top.score : 0,
+        verified: seen.length > 0,
+        refined: found.best || 0,
+        part: entry.part,
+        bar: entry.threshold,
+        // Where that score was, so a near miss can be looked at rather than
+        // argued about: a word that scored 0.62 against a bar of 0.66 is
+        // either a copy the bar is keeping out or a lookalike the bar is
+        // doing its job on, and only the picture says which.
+        at: top ? { p: top.pageIndex, x: top.x, y: top.y, w: top.w, h: top.h } : null,
+      };
+      const was = state.sweepBest[entry.term];
+      if (!was || best.score > was.score
+        || (!was.verified && best.refined > was.refined)) {
+        state.sweepBest[entry.term] = best;
+      }
+    }
+  }
+
   async function sweepNow() {
     const entries = sweepTemplates();
     if (!entries.length) {
@@ -7988,6 +8040,9 @@
     state.sweepRunning = true;
     state.sweepStopped = false;
     state.sweepSkipped = false;
+    // A new run is a new answer: a word turned down last time is asked about
+    // again, because what it found may not be what it found before.
+    state.offersDismissed = new Set();
     state.sweepDeepened = [];
     sweepProgress(0, pages.length);
     renderSweep();
@@ -8157,10 +8212,7 @@
     const missing = new Map();
     for (const term of new Set(entries.map(e => e.term))) {
       if (!state.terms.includes(term)) continue;
-      const anywhere = state.pages.some(page =>
-        (page.imageHits || []).some(mark => mark.term === term)
-        || (page.hits || []).some(hit => hit.term === term));
-      if (anywhere) continue;
+      if (hasMarkAnywhere(term)) continue;
       const need = pagesNeedingSweep(term);
       if (need.length) missing.set(term, new Set(need.map(page => page.index)));
     }
@@ -8168,6 +8220,12 @@
     // What the deeper look was asked to do, so the run can be described
     // afterwards rather than guessed at.
     state.sweepDeepened = [...missing.keys()];
+    // Kept so the second look's near misses count towards what each word best
+    // managed. Without this a word only the deeper pass came close to placing
+    // reports whatever the first pass scored, which is lower and not where it
+    // looked.
+    let deepEntries = null;
+    let deepResults = null;
     if (missing.size && !state.sweepStopped) {
       const deeper = entries
         .filter(entry => missing.has(entry.term))
@@ -8187,6 +8245,8 @@
           verifyLimit: DEEP_VERIFY,
         }, done => sweepProgress(pages.length, pages.length, done, over.length));
         placeResults(deeper, again);
+        deepEntries = deeper;
+        deepResults = again;
       } catch (_) {
         // A deeper look that fails leaves the ordinary one's answer standing.
       }
@@ -8194,43 +8254,9 @@
 
 
     state.sweepRunning = false;
-    // The best score each word reached, whether or not it cleared its bar.
-    // A word that was missed because it scored 0.62 against a bar of 0.70 is a
-    // different problem from one that scored 0.21, and without this the two
-    // are indistinguishable from the outside.
     state.sweepBest = {};
-    for (const entry of entries) {
-      const found = results.get(entry.key);
-      if (!found) continue;
-      // The best *verified* score, which is the one the bar is a bar on.
-      //
-      // `found.best` is not that when nothing cleared the bar: the search
-      // falls back to reporting refinement's best, which is measured on a
-      // shrunken copy and runs higher. Read as a verify score it says a word
-      // cleared its bar and was thrown away afterwards, which sent one
-      // investigation off entirely — "Thailand" looked like 0.724 against a
-      // bar of 0.63 and was in fact never verified at all.
-      const seen = (found.matches || []).concat(found.near || [])
-        .sort((a, b) => b.score - a.score);
-      const top = seen[0];
-      const best = {
-        score: top ? top.score : 0,
-        verified: seen.length > 0,
-        refined: found.best || 0,
-        part: entry.part,
-        bar: entry.threshold,
-        // Where that score was, so a near miss can be looked at rather than
-        // argued about: a word that scored 0.62 against a bar of 0.66 is
-        // either a copy the bar is keeping out or a lookalike the bar is
-        // doing its job on, and only the picture says which.
-        at: top ? { p: top.pageIndex, x: top.x, y: top.y, w: top.w, h: top.h } : null,
-      };
-      const was = state.sweepBest[entry.term];
-      if (!was || best.score > was.score
-        || (!was.verified && best.refined > was.refined)) {
-        state.sweepBest[entry.term] = best;
-      }
-    }
+    recordBest(entries, results);
+    if (deepResults) recordBest(deepEntries, deepResults);
     // A run that was stopped part way has not answered the document, so it
     // does not get to claim it has: the offer stands, and the note says how
     // far it reached.
@@ -8367,6 +8393,188 @@
     note.append(details);
   }
 
+  // ---------- what the bar turned away ----------
+  //
+  // A word the check placed nowhere is not necessarily a word that is not
+  // there. Measured on two benchmark decks: "TDTC" scored 0.600 against a bar
+  // of 0.66 and is genuinely on the page, in lavender lettering over a
+  // photograph; "rolex" scored 0.628 against a bar of 0.652 and is the word
+  // "Revenue". The true miss scores lower than the false one, so no threshold
+  // separates them — and a sensitivity control for this check, whatever it
+  // looked like, could not be set correctly on both documents at once.
+  //
+  // What does separate them is looking. So the closest the check came is cut
+  // out of the page and shown, and the reviewer answers a question they can
+  // answer in a second and the software cannot answer at all.
+  //
+  // It can only ever add a mark for a word that has none anywhere, so it
+  // cannot flood a document the way lowering the bar does: taking the bar to
+  // 0.50 to reach that TDTC put twelve false marks on the other deck.
+
+  // How wide the cut-out is drawn, in CSS pixels. The panel is narrow and the
+  // point is legibility, not fidelity to the page.
+  const OFFER_WIDTH = 250;
+
+  function offerCrop(at) {
+    const page = state.pages[at.p];
+    if (!page || !page.source) return null;
+    // The same framing the bench tool crops with: enough of the surroundings
+    // to tell a word in a sentence from a word in a logo.
+    const pad = Math.max(16, Math.round(Math.max(at.w, at.h) * 0.4));
+    const sw = at.w + pad * 2;
+    const sh = at.h + pad * 2;
+    const scale = Math.min(3, OFFER_WIDTH / sw);
+    const cut = document.createElement('canvas');
+    cut.width = Math.max(1, Math.round(sw * scale));
+    cut.height = Math.max(1, Math.round(sh * scale));
+    const ctx = cut.getContext('2d');
+    // The crop can run off the edge of the page, and an unpainted canvas is
+    // transparent, which reads as a hole rather than as a margin.
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, cut.width, cut.height);
+    // Enlarging small lettering, nearest-neighbour keeps the pixels the
+    // matcher actually scored; smoothing invents edges that were never there,
+    // which is the opposite of what this picture is for. Shrinking a large
+    // one, smoothing is right.
+    ctx.imageSmoothingEnabled = scale < 1;
+    ctx.drawImage(page.source, at.x - pad, at.y - pad, sw, sh,
+      0, 0, cut.width, cut.height);
+    cut.className = 'offershot';
+    return cut;
+  }
+
+  // Which words the check placed nowhere, and the closest it came to each.
+  // Derived rather than stored, so editing the term list or undoing a mark
+  // cannot leave a stale offer behind.
+  function sweepOffers() {
+    const out = [];
+    // A draft restored into a fresh session has no set yet.
+    const dismissed = state.offersDismissed || new Set();
+    for (const term of state.terms) {
+      if (dismissed.has(term)) continue;
+      if (hasMarkAnywhere(term)) continue;
+      const best = state.sweepBest && state.sweepBest[term];
+      if (!best) continue;
+      out.push({
+        term,
+        part: best.part,
+        bar: best.bar,
+        // Only a verified score is comparable with the bar. When nothing was
+        // verified there is no position either, and the offer says so rather
+        // than showing a number that means something else.
+        score: best.verified ? best.score : 0,
+        at: best.verified ? best.at : null,
+      });
+    }
+    return out;
+  }
+
+  // Put the mark the reviewer just accepted on the page, in amber, exactly as
+  // the check itself would have done had the bar let it through.
+  function takeSweepOffer(offer) {
+    const page = state.pages[offer.at.p];
+    if (!page) return;
+    const rect = { x: offer.at.x, y: offer.at.y, w: offer.at.w, h: offer.at.h };
+    const mark = {
+      id: 'offer:' + offer.term + ':' + offer.at.p + ':'
+        + Math.round(rect.x) + ':' + Math.round(rect.y),
+      term: offer.term, rect, score: offer.score, bySweep: true,
+    };
+    page.imageHits = page.imageHits || [];
+    page.imageHits.push(mark);
+    pushUndo('the near miss you accepted', () => {
+      page.imageHits = (page.imageHits || []).filter(m => m !== mark);
+      markDuplicates();
+      renderTermCounts();
+      renderSweep();
+      refreshApply();
+    });
+    markPending();
+    markDuplicates();
+    renderTermCounts();
+    renderSweep();
+    redrawAll();
+    refreshApply();
+    goToPage(offer.at.p);
+  }
+
+  function renderSweepOffers(offers) {
+    const host = el('sweepoffers');
+    if (!host) return;
+    host.textContent = '';
+    host.hidden = !offers.length;
+    if (!offers.length) return;
+
+    const intro = document.createElement('p');
+    intro.className = 'offerintro';
+    intro.textContent = offers.length === 1
+      ? 'One word was not marked anywhere. This is the closest the check came:'
+      : offers.length + ' words were not marked anywhere. These are the closest'
+        + ' the check came:';
+    host.append(intro);
+
+    for (const offer of offers) {
+      const card = document.createElement('div');
+      card.className = 'offer';
+
+      const name = document.createElement('p');
+      name.className = 'offername';
+      name.textContent = offer.term;
+      card.append(name);
+
+      const shot = offer.at ? offerCrop(offer.at) : null;
+      if (!shot) {
+        const none = document.createElement('p');
+        none.className = 'offerwhy';
+        // Not the same failure as a near miss, and saying so is the point:
+        // nothing on any page resembled the word enough to be worth checking
+        // properly, which is what the reviewer needs to know before they
+        // decide the document is clean.
+        none.textContent = 'Nothing resembling it was found on any page.';
+        card.append(none);
+        host.append(card);
+        continue;
+      }
+      card.append(shot);
+
+      const why = document.createElement('p');
+      why.className = 'offerwhy';
+      why.textContent = 'Page ' + (offer.at.p + 1) + ' · scored '
+        + offer.score.toFixed(2) + ', needed ' + offer.bar.toFixed(2)
+        + (offer.part && offer.part !== offer.term
+          ? ' · matched on "' + offer.part + '"' : '');
+      card.append(why);
+
+      const row = document.createElement('div');
+      row.className = 'offerrow';
+      const take = document.createElement('button');
+      take.type = 'button';
+      take.className = 'ghost offertake';
+      take.textContent = 'That is it – mark it';
+      take.addEventListener('click', () => takeSweepOffer(offer));
+      const drop = document.createElement('button');
+      drop.type = 'button';
+      drop.className = 'ghost offerdrop';
+      drop.textContent = 'Not it';
+      drop.addEventListener('click', () => {
+        state.offersDismissed = state.offersDismissed || new Set();
+        state.offersDismissed.add(offer.term);
+        renderSweep();
+      });
+      row.append(take, drop);
+      card.append(row);
+
+      const look = document.createElement('button');
+      look.type = 'button';
+      look.className = 'offerlook';
+      look.textContent = 'Show me on the page';
+      look.addEventListener('click', () => goToPage(offer.at.p));
+      card.append(look);
+
+      host.append(card);
+    }
+  }
+
   function renderSweep() {
     const box = el('sweepbox');
     const note = el('sweepnote');
@@ -8397,6 +8605,10 @@
     box.hidden = !((state.searched || state.sweepRunning)
       && state.terms.length && state.kind !== 'text');
     if (box.hidden) return;
+
+    // Only once a check that answers the current term list has finished. A
+    // run still going has not decided what it could not place.
+    renderSweepOffers(swept && !state.sweepRunning ? sweepOffers() : []);
 
     const running = el('sweeprun');
     running.hidden = !state.sweepRunning;

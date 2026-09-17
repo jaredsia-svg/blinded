@@ -1347,6 +1347,44 @@ code {
 }
 #sweepbox .hint { margin: 0 0 8px; }
 
+/* ---------- a near miss, offered as a picture ---------- */
+/*
+   The check cannot tell a true copy the bar turned away from a lookalike the
+   bar was right about: on the benchmark decks the true miss scored lower than
+   the false one. A person can tell instantly, but only by looking, so the
+   cut-out is the largest thing in the card and the buttons sit under it.
+*/
+#sweepoffers { margin-top: 2px; }
+.offerintro {
+  margin: 0 0 8px; font-size: 12px; line-height: 1.45; color: var(--ink-soft);
+}
+.offer {
+  margin: 0 0 10px; padding: 9px 10px 8px;
+  background: #fff; border: 1px solid var(--line); border-radius: var(--radius);
+}
+.offer:last-child { margin-bottom: 0; }
+.offername {
+  margin: 0 0 7px; font-size: 12.5px; font-weight: 600; color: var(--ink);
+  word-break: break-word;
+}
+.offershot {
+  display: block; width: 100%; height: auto;
+  border: 1px solid var(--line); border-radius: 3px; background: #fff;
+}
+.offerwhy {
+  margin: 6px 0 0; font-size: 11px; line-height: 1.4; color: var(--ink-soft);
+}
+.offerrow { display: flex; gap: 6px; margin-top: 8px; }
+.offerrow .ghost { flex: 1; padding: 5px 6px; font-size: 11.5px; }
+.offertake { border-color: #d98b1f; color: #8a5a10; }
+.offertake:hover { background: var(--warn-bg); }
+.offerlook {
+  display: block; width: 100%; margin-top: 5px; padding: 3px 0;
+  background: none; border: 0; cursor: pointer;
+  font: inherit; font-size: 11px; color: var(--ink-soft); text-decoration: underline;
+}
+.offerlook:hover { color: var(--ink); }
+
 /* ---------- the thorough check, running in the background ---------- */
 /*
    Deliberately not the overlay every other long pass uses. Those block the

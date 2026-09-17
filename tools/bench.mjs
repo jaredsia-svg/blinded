@@ -131,6 +131,14 @@ for (const name of readdirSync(bench).sort()) {
       // that is a different failure from one that never scored well enough.
       refused: (B.state.sweepRefusedAt || []).map(r => ({
         term: r.term, page: r.pageIndex, at: Math.round(r.at), why: r.why || 'reader' })),
+      // The near misses the panel is putting to the reviewer, read off the
+      // panel itself rather than recomputed here: what they are actually
+      // shown is the thing worth reporting.
+      offers: [...document.querySelectorAll('#sweepoffers .offer')].map(card => ({
+        term: card.querySelector('.offername').textContent,
+        why: card.querySelector('.offerwhy').textContent,
+        shown: Boolean(card.querySelector('canvas.offershot')),
+      })),
       // How coarse the pages are, which decides whether they get a second
       // look at twice the size.
       size: [...new Set(B.state.pages.map(p => p.source.width + 'x' + p.source.height))],
@@ -203,6 +211,10 @@ for (const name of readdirSync(bench).sort()) {
     }
     console.log('   refused ' + [...byTerm].map(([t, n]) => JSON.stringify(t) + ' x' + n)
       .join(', '));
+  }
+  for (const offer of out.offers || []) {
+    console.log('   offering "' + offer.term + '" - ' + offer.why
+      + (offer.shown ? '' : ' (no picture)'));
   }
   for (const term of out.terms) {
     // The verified best is the one the bar is a bar on. When nothing was
