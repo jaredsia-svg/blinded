@@ -1358,8 +1358,114 @@
     const going = pickedInOrder();
     if (!going.length || going.length === state.pages.length) return;
     const keep = state.pages.filter(page => !state.picked.has(page));
+    // Where the selection lands afterwards: the page that takes the first
+    // removed one's place, or the last page if the removal ran off the end.
+    //
+    // Nothing selected is a dead end in the middle of a job. Somebody
+    // throwing away pages five, six and seven is working through a document,
+    // and handing them an empty selection asks them to find their place again
+    // before they can throw away the next one.
+    const landing = Math.min(going[0].index, keep.length - 1);
     state.picked = new Set();
     setOrder(keep, going.length === 1 ? 'removing a page' : 'removing ' + going.length + ' pages');
+    const next = state.pages[landing];
+    if (next) {
+      state.picked = new Set([next]);
+      sheetAnchor = next;
+      renderSheet();
+      goToPage(next.index, { stay: true });
+    }
+  }
+
+  // ---------- the sheet under the arrow keys ----------
+  //
+  // A selected page and a keyboard is most of a file browser, and every file
+  // browser moves with the arrows. Left and right walk the document; up and
+  // down move a row at a time, measured off the thumbnails as they are laid
+  // out rather than assumed, because how many fit on a row depends on the
+  // width of the panel and on the size the reviewer chose.
+  function sheetColumns() {
+    const tiles = [...document.querySelectorAll('#sheet .sheetpage')];
+    if (tiles.length < 2) return 1;
+    const top = tiles[0].getBoundingClientRect().top;
+    let columns = 0;
+    for (const tile of tiles) {
+      if (Math.abs(tile.getBoundingClientRect().top - top) > 4) break;
+      columns++;
+    }
+    return Math.max(1, columns);
+  }
+
+  // Which page an arrow key lands on, given where the selection is now.
+  function pageAfterArrow(key, from) {
+    const columns = sheetColumns();
+    const last = state.pages.length - 1;
+    const step = key === 'ArrowLeft' ? -1
+      : key === 'ArrowRight' ? 1
+        : key === 'ArrowUp' ? -columns
+          : key === 'ArrowDown' ? columns : 0;
+    if (!step) return null;
+    const wanted = from + step;
+    // Up from the top row and down from the bottom go to the ends rather than
+    // nowhere: a key that does nothing reads as a key that is not wired up.
+    if (wanted < 0) return key === 'ArrowUp' ? 0 : null;
+    if (wanted > last) return key === 'ArrowDown' ? last : null;
+    return wanted;
+  }
+
+  function arrowThroughSheet(event) {
+    if (!state.pages.length) return false;
+    if (!/^Arrow(Left|Right|Up|Down)$/.test(event.key)) return false;
+    // Not while typing, and not while the caret is in a note.
+    const target = event.target;
+    if (target && (/^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName)
+      || target.isContentEditable)) return false;
+    // Only when the sheet is what the reviewer is working in: a selected page
+    // is the sign of that, and without one the arrows belong to the document.
+    const picked = pickedInOrder();
+    if (!picked.length) return false;
+    const sheet = el('sheet');
+    if (!sheet || sheet.offsetParent === null) return false;
+
+    // From the last page of the selection going forwards, the first going
+    // back, so a run of pages extends and contracts the way a list does.
+    const from = event.key === 'ArrowRight' || event.key === 'ArrowDown'
+      ? picked[picked.length - 1].index : picked[0].index;
+    const wanted = pageAfterArrow(event.key, from);
+    if (wanted === null) return false;
+    const page = state.pages[wanted];
+    if (!page) return false;
+    event.preventDefault();
+
+    // Shift extends the selection, as it does with the mouse. The anchor is
+    // the end the reviewer is not moving: normally the one a click set, but a
+    // selection can also arrive without a click — kept, or landed on after a
+    // delete — and then the far end of what is selected is the anchor. Reading
+    // a stale anchor there would collapse the run to a single page, which is
+    // the opposite of extending it.
+    const anchor = sheetAnchor && state.picked.has(sheetAnchor)
+      && state.pages.includes(sheetAnchor)
+      ? sheetAnchor
+      : (event.key === 'ArrowRight' || event.key === 'ArrowDown'
+        ? picked[0] : picked[picked.length - 1]);
+    if (event.shiftKey && anchor) {
+      const low = Math.min(anchor.index, wanted);
+      const high = Math.max(anchor.index, wanted);
+      state.picked = new Set(state.pages.slice(low, high + 1));
+      sheetAnchor = anchor;
+    } else {
+      state.picked = new Set([page]);
+      sheetAnchor = page;
+    }
+    renderSheet();
+    goToPage(page.index, { stay: true });
+    // Keep the page that was moved to in view inside the sheet, which may be
+    // scrolling independently of the document.
+    const tile = document.querySelector('#sheet .sheetpage[data-page="' + page.index + '"]');
+    if (tile && tile.scrollIntoView) {
+      tile.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    }
+    return true;
   }
 
   // Merging another document in. Dropped onto the sheet, the new pages go in
@@ -5302,6 +5408,23 @@
       },
       sweptTerms: state.sweptTerms,
       sweepAdded: state.sweepAdded,
+      // What the search had answered when the draft was saved.
+      //
+      // Without this a restored draft came back half awake: the picked
+      // logos' marks were on the page, because they are stored as marks, and
+      // every word and detector was back to a question mark — so the reviewer
+      // was asked to run the whole search again to be told what the draft
+      // already knew. The marks for words are rebuilt from the words and the
+      // document, both of which are in hand; what was missing was the record
+      // that they had been looked for.
+      answered: {
+        searched: state.searched,
+        terms: state.countedTerms.slice(),
+        kinds: state.countedKinds.slice(),
+        // Which detectors were ticked, so the panel comes back as it was
+        // rather than with everything off.
+        enabled: Array.from(state.enabled).filter(kind => kind !== 'term'),
+      },
       // A logo is stored as where it was cut from, not as the pixels: the
       // pixels are in the document, and the document is not in the draft.
       templates: state.templates.map(t => ({
@@ -5423,6 +5546,19 @@
     state.sweptTerms = data.sweptTerms || [];
     state.sweepAdded = data.sweepAdded || 0;
 
+    // What the search had already answered, so a restored draft is the
+    // document as it was left rather than one waiting to be searched again.
+    // An older draft carries none of this and still opens: it simply comes
+    // back un-searched, which is what it has always done.
+    const answered = data.answered || null;
+    if (answered) {
+      for (const kind of Detect.KINDS.map(row => row.kind)) state.enabled.delete(kind);
+      for (const kind of answered.enabled || []) state.enabled.add(kind);
+      state.countedTerms = (answered.terms || []).slice();
+      state.countedKinds = (answered.kinds || []).slice();
+      state.searched = Boolean(answered.searched);
+    }
+
     let turned = false;
     for (const saved of data.pages || []) {
       const page = state.pages[saved.index];
@@ -5468,9 +5604,18 @@
     // carry that shape. Rebuilt rather than redrawn, or the document would be
     // drawn correctly into wrappers that are still the old way round.
     if (turned) buildPageElements();
-    rescan();
+    // Settled where the draft knew what had been searched: an unsettled
+    // rescan ends by putting the document back to un-searched, which would
+    // throw away the very thing just restored.
+    rescan(answered ? { settled: true } : undefined);
+    if (answered) {
+      state.searched = Boolean(answered.searched);
+      state.countedTerms = (answered.terms || []).slice();
+      state.countedKinds = (answered.kinds || []).slice();
+    }
     renderTemplates();
     renderTermCounts();
+    renderKinds();
     renderSectionNotes();
     renderAllNotes();
     redrawAll();
@@ -6413,6 +6558,11 @@
       stopPlacingText();
       return;
     }
+    // The arrows walk the sheet whenever a page is selected. Answered before
+    // the note keys below, because a selected page is a more specific claim
+    // on the keyboard than a selected note: picking a page is what the sheet
+    // is for, and nothing else in the panel wants an arrow key.
+    if (arrowThroughSheet(event)) return;
     // A note in hand, with the caret somewhere else: Delete removes it. Not
     // while it is being typed into, where those keys belong to the words.
     const typing = event.target && /^(INPUT|TEXTAREA|SELECT)$/.test(event.target.tagName);
@@ -7654,6 +7804,7 @@
     runSearch, applyRedaction: runSearch, coverMarks, uncoverMarks, applyButton,
     activeBoxes,
     renderSheet, setOrder, moveTo, keepOnlyPicked, dropPicked, openSections,
+    arrowThroughSheet, pageAfterArrow, sheetColumns,
     turnPages, turnPage, addNoteAt, dropNote, selectNote, editNote, commitNote,
     notesOf, renderNotes, notesToDraw, startPlacingText, stopPlacingText,
     resizeNote, NOTE_COLOURS, NOTE_SIZE,

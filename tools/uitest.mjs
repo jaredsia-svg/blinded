@@ -2610,6 +2610,17 @@ try {
     await page.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
     await setTerms(page, ['Jane']);
 
+    // Searched before saving, because that is the state a reviewer saves in:
+    // words typed, search run, marks on the page. A draft that forgets the
+    // search comes back looking empty until the reviewer presses Search again,
+    // which is the thing this block guards against below.
+    await page.click('#apply');
+    await page.waitForFunction(() => window.Blinded.state.searched === true,
+      undefined, { timeout: 240000 });
+    await page.waitForFunction(() => document.getElementById('busy').hidden,
+      undefined, { timeout: 240000 });
+    await dismissSweepOffer(page);
+
     const planted = await page.evaluate(() => {
       const B = window.Blinded;
       const p = B.state.pages[0];
@@ -2683,6 +2694,9 @@ try {
       return { terms: B.state.terms.slice(),
                manual: p.manual.length,
                sweep: p.imageHits.filter(m => m.bySweep).length,
+               searched: B.state.searched,
+               counted: B.state.countedTerms.slice(),
+               hits: (p.hits || []).length,
                listed: [...document.querySelectorAll('#termcounts .t')]
                  .map(n => n.textContent.trim()) };
     });
@@ -2696,6 +2710,17 @@ try {
       (await page.isVisible('#draftbox')) === false);
     check('and the list of words is back in the panel, not just in the state',
       restored.listed.join() === planted.terms.join(), JSON.stringify(restored));
+
+    // The work comes back done, not ready to be done again. A restored draft
+    // that had been searched is searched: the words it had answered are still
+    // answered and their marks are on the page, without a second press of
+    // Search that the reviewer has no reason to expect.
+    check('a restored draft comes back searched',
+      restored.searched === true, JSON.stringify(restored));
+    check('and remembers which words the search had answered',
+      restored.counted.includes(planted.terms[0]), JSON.stringify(restored));
+    check('and its text marks are on the page already',
+      restored.hits > 0, JSON.stringify(restored));
 
     // A picked image has to come back too. It never did: a template did not
     // record which page it was cut from, so restoring one skipped every
@@ -4852,14 +4877,19 @@ try {
       // poking state directly is exactly how that goes unnoticed.
       document.querySelectorAll('.sheetface')[0]
         .dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      const taker = B.state.pages[1].uid;
       document.getElementById('page-drop').click();
       return { left: B.state.pages.length, has: B.state.pages.some(p => p.uid === survivor),
-        cleared: B.state.picked.size };
+        picked: B.state.picked.size, taker,
+        onTaker: [...B.state.picked][0] && [...B.state.picked][0].uid === taker };
     });
     check('removing a page removes exactly that page',
       dropped.left === 2 && dropped.has === true, JSON.stringify(dropped));
-    check('and the selection does not survive the page it pointed at',
-      dropped.cleared === 0, JSON.stringify(dropped));
+    // Not cleared: the selection lands on whichever page took the removed
+    // one's place, so a reviewer working down a document can delete, look,
+    // delete again without reaching for the mouse between each one.
+    check('and the selection moves to the page that took its place',
+      dropped.picked === 1 && dropped.onTaker === true, JSON.stringify(dropped));
 
     // Neither button is offered when it would leave no document at all.
     const guarded = await page.evaluate(() => {
@@ -5195,6 +5225,120 @@ try {
       dropped.dismissedAfter === dropped.dismissedBefore, JSON.stringify(dropped));
 
     await page.evaluate(() => { window.Blinded.state.openTally = null; });
+  }
+
+  // ---------- the sheet under the arrow keys ----------
+  //
+  // A selected page and a keyboard is most of a file browser, and every file
+  // browser moves with the arrows. And a page thrown away must not leave the
+  // reviewer with nothing selected in the middle of a job: they are working
+  // through a document, and an empty selection asks them to find their place
+  // again before they can throw away the next one.
+  {
+    if (await page.isVisible('#view-review')) await newFile();
+    await page.waitForSelector('#view-drop:not([hidden])', { timeout: 15000 });
+    await page.setInputFiles('#file', manyPath);
+    await page.waitForSelector('#view-review:not([hidden])', { timeout: 60000 });
+    await page.evaluate(() => { document.getElementById('organisesect').open = true; });
+    await page.waitForTimeout(120);
+
+    const walked = await page.evaluate(async () => {
+      const B = window.Blinded;
+      const press = key => {
+        window.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
+      };
+      const picked = () => B.pickedInOrder().map(p => p.index);
+      // Nothing selected: the arrows are not the sheet's yet.
+      B.state.picked = new Set();
+      B.renderSheet();
+      press('ArrowRight');
+      const withNothing = picked();
+
+      document.querySelectorAll('.sheetface')[3]
+        .dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await new Promise(r => setTimeout(r, 80));
+      const start = picked();
+      press('ArrowRight');
+      const right = picked();
+      press('ArrowLeft');
+      const back = picked();
+      const columns = B.sheetColumns();
+      press('ArrowDown');
+      const down = picked();
+      press('ArrowUp');
+      const up = picked();
+      return { withNothing, start, right, back, columns, down, up,
+               pages: B.state.pages.length };
+    });
+    check('with no page selected the arrows are not the sheet’s',
+      walked.withNothing.length === 0, JSON.stringify(walked));
+    check('right and left walk the document a page at a time',
+      JSON.stringify(walked.right) === JSON.stringify([walked.start[0] + 1])
+      && JSON.stringify(walked.back) === JSON.stringify(walked.start),
+      JSON.stringify(walked));
+    // Measured off the thumbnails as laid out, not assumed: how many fit on a
+    // row depends on the panel's width.
+    check('down and up move by a row of thumbnails',
+      walked.columns >= 1
+      && JSON.stringify(walked.down) === JSON.stringify([walked.start[0] + walked.columns])
+      && JSON.stringify(walked.up) === JSON.stringify(walked.start),
+      JSON.stringify(walked));
+
+    const held = await page.evaluate(async () => {
+      const B = window.Blinded;
+      const from = B.state.pages[2];
+      B.state.picked = new Set([from]);
+      B.renderSheet();
+      window.dispatchEvent(new KeyboardEvent('keydown',
+        { key: 'ArrowRight', shiftKey: true, bubbles: true, cancelable: true }));
+      await new Promise(r => setTimeout(r, 60));
+      return B.pickedInOrder().map(p => p.index);
+    });
+    check('shift extends the selection the way it does with the mouse',
+      JSON.stringify(held) === JSON.stringify([2, 3]), JSON.stringify(held));
+
+    const afterDrop = await page.evaluate(async () => {
+      const B = window.Blinded;
+      const before = B.state.pages.length;
+      const goingUid = B.state.pages[4].uid;
+      const nextUid = B.state.pages[5].uid;
+      B.state.picked = new Set([B.state.pages[4]]);
+      B.renderSheet();
+      B.dropPicked();
+      await new Promise(r => setTimeout(r, 80));
+      return { before, after: B.state.pages.length,
+               gone: !B.state.pages.some(p => p.uid === goingUid),
+               picked: B.pickedInOrder().map(p => p.uid),
+               wanted: nextUid };
+    });
+    check('removing a page removes it', afterDrop.after === afterDrop.before - 1
+      && afterDrop.gone === true, JSON.stringify(afterDrop));
+    check('and selects the page that took its place',
+      JSON.stringify(afterDrop.picked) === JSON.stringify([afterDrop.wanted]),
+      JSON.stringify(afterDrop));
+
+    // The end of the document is the one case where there is no next page.
+    const atEnd = await page.evaluate(async () => {
+      const B = window.Blinded;
+      const last = B.state.pages[B.state.pages.length - 1];
+      const before = last.uid;
+      B.state.picked = new Set([last]);
+      B.renderSheet();
+      B.dropPicked();
+      await new Promise(r => setTimeout(r, 80));
+      const now = B.pickedInOrder();
+      return { picked: now.map(p => p.index),
+               isLast: now.length === 1 && now[0].index === B.state.pages.length - 1,
+               removed: !B.state.pages.some(p => p.uid === before) };
+    });
+    check('throwing away the last page selects the new last one',
+      atEnd.removed === true && atEnd.isLast === true, JSON.stringify(atEnd));
+
+    await page.evaluate(() => {
+      window.Blinded.state.picked = new Set();
+      window.Blinded.renderSheet();
+      document.getElementById('organisesect').open = false;
+    });
   }
 
   // ---------- turning a page ----------
