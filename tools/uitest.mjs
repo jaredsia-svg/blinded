@@ -3893,6 +3893,44 @@ try {
         canServe: B.answeredAlready(template, lower),
         cannotServeBelow: B.answeredAlready(template, 0.1), after };
     });
+    // And what the panel does about it: the setting pressed becomes the one in
+    // use, the one it came from stays on offer, and the number promised is the
+    // number delivered.
+    const pressed = await page.evaluate(async () => {
+      const read = () => [...document.querySelectorAll('#templates .imgnote')]
+        .flatMap(note => [...note.querySelectorAll('.barpip')].map(pip => ({
+          bar: Number(pip.querySelector('b').textContent),
+          count: parseInt(pip.querySelector('i').textContent, 10),
+          now: pip.classList.contains('now'),
+          canPress: pip.tagName === 'BUTTON',
+        })));
+      const before = read();
+      const target = before.find(pip => !pip.now);
+      if (!target) return null;
+      const wasOn = before.find(pip => pip.now);
+      const button = [...document.querySelectorAll('#templates .imgnote .barpip')]
+        .find(pip => Number(pip.querySelector('b').textContent) === target.bar
+          && pip.tagName === 'BUTTON');
+      button.click();
+      await new Promise(r => setTimeout(r, 300));
+      const after = read();
+      return { target, wasOn, after,
+        nowOn: after.find(pip => pip.now),
+        oldStillThere: after.find(pip => Math.abs(pip.bar - wasOn.bar) < 0.005) };
+    });
+    if (pressed) {
+      check('the setting pressed becomes the one in use',
+        pressed.nowOn && Math.abs(pressed.nowOn.bar - pressed.target.bar) < 0.005,
+        JSON.stringify(pressed));
+      check('and it finds what it said it would',
+        pressed.nowOn && pressed.nowOn.count === pressed.target.count,
+        JSON.stringify(pressed));
+      check('while the one it came from stays on offer, and can be pressed',
+        Boolean(pressed.oldStillThere) && pressed.oldStillThere.canPress === true
+        && pressed.oldStillThere.now === false, JSON.stringify(pressed));
+      await page.evaluate(() => window.Blinded.undoLast());
+    }
+
     if (swapped) {
       check('a setting within what was verified is served from it',
         swapped.canServe === true && swapped.cannotServeBelow === false,
@@ -4705,6 +4743,9 @@ try {
       // Well below everything, so nothing is anywhere near being turned away.
       template.sens = B.AUTO_FLOOR;
       template.chosenBar = true;
+      // Put there rather than arrived at: this is about what the scores offer,
+      // and a "back to where you were" setting is about the journey.
+      template.barWas = null;
       template.searched = false;
       for (const p of B.state.pages) {
         p.imageHits = p.imageHits.filter(m => m.templateId !== template.id);
@@ -4721,9 +4762,9 @@ try {
                        count: parseInt((pip.querySelector('i') || {}).textContent, 10) }));
       return { pips, marks, bar: B.sensFor(template) };
     });
+    const standing = quiet.pips.find(pip => pip.now);
     check('a bar under everything still says where it stands, and counts as the pill does',
-      quiet.pips.length >= 1 && quiet.pips[0].now === true
-      && quiet.pips[0].count === quiet.marks, JSON.stringify(quiet));
+      Boolean(standing) && standing.count === quiet.marks, JSON.stringify(quiet));
     check('and offers nothing below it, because there is nothing down there',
       quiet.pips.every(pip => pip.now || pip.bar > quiet.bar), JSON.stringify(quiet));
   }

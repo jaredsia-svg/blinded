@@ -2457,6 +2457,8 @@
       page.imageHits.filter(mark => mark.templateId === template.id));
     const wasCount = template.matches;
     template.chosenBar = true;
+    // Where it came from, so the way back stays on screen beside where it went.
+    template.barWas = was;
     template.sens = clampSens(bar);
 
     const instant = answeredAlready(template, template.sens);
@@ -2480,6 +2482,7 @@
     pushUndo('that sensitivity change', () => {
       template.sens = was;
       template.chosenBar = false;
+      template.barWas = null;
       template.matches = wasCount;
       template.rawMatches = wasCount;
       template.searched = true;
@@ -2507,7 +2510,10 @@
   function reportFor(template, showing) {
     const report = template && template.report;
     if (!report) return null;
-    const bar = clampSens(report.bar);
+    // Where the bar stands *now*, which after a setting has been pressed is
+    // not where it stood when the search ran. Reading it off the report left
+    // the row saying the old number over the new count.
+    const bar = sensFor(template);
     const scores = report.scores || [];
 
     // Nothing at all, which is the one case with no settings to choose
@@ -2525,14 +2531,66 @@
 
     // Three settings, and no prose. What a reviewer needs is not a paragraph
     // about where the scores fell: it is the two or three places this bar
-    // could sensibly stand and what each would find. The first is where it
-    // stands now; the others are one press away.
+    // could sensibly stand and what each would find. One of them is where it
+    // stands; the others are one press away.
+    //
+    // Every candidate the search verified, above and below the bar alike. The
+    // set does not change when the bar moves — only which side of it each one
+    // falls — which is what lets the settings be recomputed as the reviewer
+    // moves between them rather than fixed at whatever the search first chose.
     const all = scores.concat(report.near || []);
+
+    // What a setting would actually put on the page, which is not the same as
+    // how many candidates clear it. A mark already covered by a text mark, or
+    // by another mark this image made in the same place, is not a second
+    // thing found — the tally beside the slider has always counted that way,
+    // and a circle promising nineteen that delivered eighteen was the panel
+    // contradicting itself one centimetre apart.
+    //
+    // Counted by the same rule markDuplicates uses, against the marks this
+    // image is not responsible for, so the two cannot drift.
+    const countAt = level => {
+      const kept = template.verified
+        ? template.verified.filter(hit => hit.score >= level) : null;
+      if (!kept) return all.filter(score => score >= level).length;
+      let live = 0;
+      for (const page of state.pages) {
+        const others = [];
+        for (const hit of page.hits || []) {
+          for (const rect of hit.rects) others.push(rect);
+        }
+        for (const mark of page.imageHits || []) {
+          if (mark.templateId !== template.id && mark.rect) others.push(mark.rect);
+        }
+        for (const hit of kept) {
+          if (hit.pageIndex !== page.index) continue;
+          const rect = { x: hit.x, y: hit.y, w: hit.w, h: hit.h };
+          if (others.some(other => Match.coveredFraction(rect, other) > SAME_MARK)) continue;
+          others.push(rect);
+          live++;
+        }
+      }
+      return live;
+    };
     const here = { bar, now: true,
-      count: typeof showing === 'number' ? showing : scores.length };
-    const others = (report.steps || [])
+      count: typeof showing === 'number' ? showing : countAt(bar) };
+    // barSteps counts candidates, because that is all it is given. What each
+    // setting would actually leave on the page is counted here, by the rule
+    // the tally uses.
+    const others = barSteps(all, 4)
       .filter(step => Math.abs(step.bar - bar) > 0.005)
-      .map(step => ({ ...step, now: false }));
+      .map(step => ({ bar: step.bar, count: countAt(step.bar), now: false }));
+
+    // Where the bar was before this one was pressed, so the way back is on
+    // screen. A setting that vanishes the moment it is left is a setting the
+    // reviewer cannot change their mind about — and the one they came from is
+    // the likeliest place they want to return to.
+    const cameFrom = template.barWas === undefined || template.barWas === null
+      ? null : clampSens(template.barWas);
+    if (cameFrom !== null && Math.abs(cameFrom - bar) > 0.005
+      && !others.some(step => Math.abs(step.bar - cameFrom) < 0.005)) {
+      others.unshift({ bar: cameFrom, count: countAt(cameFrom), now: false });
+    }
 
     // And one that takes in what this bar turned away, if the gaps did not
     // already offer one.
@@ -2548,10 +2606,7 @@
       .sort((a, b) => b - a);
     if (near.length && !others.some(step => step.bar < bar)) {
       const include = Math.max(AUTO_FLOOR, Math.floor((near[0] - 0.005) * 100) / 100);
-      if (include < bar) {
-        others.push({ bar: include,
-          count: all.filter(score => score >= include).length, now: false });
-      }
+      if (include < bar) others.push({ bar: include, count: countAt(include), now: false });
     }
 
     // Which of them the scores actually point at. Ordinarily that is the one
