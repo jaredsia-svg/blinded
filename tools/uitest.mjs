@@ -5659,6 +5659,147 @@ try {
     });
   }
 
+  // ---------- drawing on the page by hand ----------
+  //
+  // The same bargain as a note: one button arms it, and the choices about how
+  // the thing looks appear beside the thing once it exists. Nothing is offered
+  // before the first stroke, because before the first stroke there is nothing
+  // to offer it about.
+  {
+    const armed = await page.evaluate(() => {
+      document.getElementById('page-draw').click();
+      const tip = document.getElementById('tip');
+      return { inking: window.Blinded.state.inking,
+        said: tip.hidden === false && /draw on the page/i.test(tip.textContent),
+        pressed: document.getElementById('page-draw').getAttribute('aria-pressed') };
+    });
+    check('the pen arms the next press on the page',
+      armed.inking === true && armed.pressed === 'true', JSON.stringify(armed));
+    check('and says how to put it away again', armed.said === true, JSON.stringify(armed));
+
+    // Down, along, up. Released for the same reason the note test releases:
+    // a press left holding makes every gesture after it a pinch.
+    const drawn = await page.evaluate(() => {
+      const B = window.Blinded;
+      const canvas = B.state.pages[0].canvas;
+      const box = canvas.getBoundingClientRect();
+      const at = (fx, fy) => ({ clientX: box.left + box.width * fx,
+                                clientY: box.top + box.height * fy });
+      canvas.dispatchEvent(new PointerEvent('pointerdown',
+        { bubbles: true, pointerId: 81, ...at(0.2, 0.3) }));
+      for (let i = 1; i <= 10; i++) {
+        canvas.dispatchEvent(new PointerEvent('pointermove',
+          { bubbles: true, pointerId: 81, ...at(0.2 + 0.03 * i, 0.3 + 0.02 * i) }));
+      }
+      canvas.dispatchEvent(new PointerEvent('pointerup',
+        { bubbles: true, pointerId: 81, ...at(0.5, 0.5) }));
+      const inks = B.inksOf(B.state.pages[0]);
+      return { count: inks.length,
+        points: inks[0] ? inks[0].points.length : 0,
+        chosen: B.state.inkSel === (inks[0] && inks[0].id),
+        chips: document.querySelectorAll('.inkchip').length,
+        bars: document.querySelectorAll('.inkchip .notebar').length,
+        stillArmed: B.state.inking,
+        label: (B.undoStack[B.undoStack.length - 1] || {}).label };
+    });
+    check('a drag across the page leaves a line', drawn.count === 1 && drawn.points > 2,
+      JSON.stringify(drawn));
+    check('the colours and the thickness arrive with the first stroke, not before',
+      drawn.chosen === true && drawn.chips === 1 && drawn.bars === 1,
+      JSON.stringify(drawn));
+    check('and the pen stays in hand for the next one',
+      drawn.stillArmed === true, JSON.stringify(drawn));
+    check('drawing a line is undoable', drawn.label === 'the line you drew',
+      String(drawn.label));
+
+    const styled = await page.evaluate(() => {
+      const B = window.Blinded;
+      const ink = B.inksOf(B.state.pages[0])[0];
+      const was = { colour: ink.colour, width: ink.width };
+      document.querySelectorAll('.inkchip .notedot')[2].click();
+      const thicker = [...document.querySelectorAll('.inkchip .notestep')]
+        .find(b => b.title === 'Thicker');
+      thicker.click();
+      const now = B.inksOf(B.state.pages[0])[0];
+      return { was, colour: now.colour, width: now.width };
+    });
+    check('a colour can be chosen for the line that was drawn',
+      styled.colour !== styled.was.colour, JSON.stringify(styled));
+    check('and a thickness', styled.width > styled.was.width, JSON.stringify(styled));
+
+    const away = await page.evaluate(() => {
+      const B = window.Blinded;
+      window.dispatchEvent(new KeyboardEvent('keydown',
+        { key: 'Escape', bubbles: true, cancelable: true }));
+      return { inking: B.state.inking,
+        pressed: document.getElementById('page-draw').getAttribute('aria-pressed') };
+    });
+    check('Escape puts the pen away', away.inking === false && away.pressed === 'false',
+      JSON.stringify(away));
+
+    // The point of all of it: what is drawn on screen is drawn into the file,
+    // by the same function, so it cannot be one shape in the preview and
+    // another in the export.
+    const burned = await page.evaluate(() => {
+      const R = window.BlindedRender;
+      const blank = document.createElement('canvas');
+      blank.width = 200; blank.height = 80;
+      const ctx = blank.getContext('2d');
+      ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, 200, 80);
+      const flat = R.flatten(blank, [], [], [{ colour: '#c0392b', width: 6,
+        points: [{ x: 10, y: 10 }, { x: 90, y: 40 }, { x: 180, y: 20 }] }]);
+      const data = flat.getContext('2d').getImageData(0, 0, 200, 80).data;
+      let red = 0;
+      for (let i = 0; i < data.length; i += 4) {
+        if (data[i] > 120 && data[i + 1] < 110 && data[i + 2] < 110) red++;
+      }
+      const dot = R.flatten(blank, [], [], [{ colour: '#111111', width: 10,
+        points: [{ x: 100, y: 40 }] }]);
+      const dots = dot.getContext('2d').getImageData(90, 30, 20, 20).data;
+      let dark = 0;
+      for (let i = 0; i < dots.length; i += 4) if (dots[i] < 90) dark++;
+      const box = R.inkBox({ width: 4, points: [{ x: 10, y: 20 }, { x: 50, y: 60 }] });
+      return { red, dark, box };
+    });
+    check('a line is burned into the exported picture', burned.red > 100,
+      JSON.stringify(burned));
+    check('and a press with no drag leaves a dot rather than nothing',
+      burned.dark > 20, JSON.stringify(burned));
+    check('a line knows the box it occupies, controls included',
+      burned.box.x === 8 && burned.box.w === 44, JSON.stringify(burned));
+
+    // The line is the reviewer's, not the document's, so it belongs in a
+    // draft — and a draft is still a few kilobytes, which is why the samples
+    // are thinned as the hand moves.
+    const kept = await page.evaluate(() => {
+      const B = window.Blinded;
+      const saved = B.draftData();
+      return { inks: saved.pages[0].inks.length,
+        points: saved.pages[0].inks[0] ? saved.pages[0].inks[0].points.length : 0 };
+    });
+    check('a draft carries the lines that were drawn',
+      kept.inks === 1 && kept.points > 2, JSON.stringify(kept));
+
+    const gone = await page.evaluate(() => {
+      const B = window.Blinded;
+      document.querySelector('.inkchip .notebin').click();
+      const after = B.inksOf(B.state.pages[0]).length;
+      B.undoLast();
+      return { after, back: B.inksOf(B.state.pages[0]).length,
+        bars: document.querySelectorAll('.inkchip .notebar').length };
+    });
+    check('the cross removes the line it belongs to', gone.after === 0, JSON.stringify(gone));
+    check('undo brings the line back', gone.back === 1, JSON.stringify(gone));
+    check('and the controls go with the line', gone.bars === 0, JSON.stringify(gone));
+
+    await page.evaluate(() => {
+      const B = window.Blinded;
+      B.state.pages[0].inks = [];
+      B.selectInk(null);
+      B.renderNotes(B.state.pages[0]);
+    });
+  }
+
   // ---------- zooming keeps you where you were ----------
   //
   // Every page changes height when the zoom does, so a scroll position measured

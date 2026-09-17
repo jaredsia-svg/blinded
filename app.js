@@ -100,6 +100,11 @@
     // about" and there is only ever one.
     textSel: null,
     textEdit: null,
+    // Drawing by hand: armed by the pen in the Organise toolbar, and the
+    // stroke currently in hand. Same shape as the two above and for the same
+    // reason — there is only ever one of each.
+    inking: false,
+    inkSel: null,
     // Logos the reviewer has picked. Each holds the greyscale patch it was cut
     // from, so its matches can be recomputed when the sensitivity moves
     // without making them draw the box again.
@@ -537,6 +542,7 @@
       imageHits: [],
       manual: [],
       texts: [],
+      inks: [],
       turn: 0,
       dismissed: new Set(),
     }));
@@ -1309,7 +1315,7 @@
   // reading are thrown away by the first turn and no amount of turning brings
   // them back.
   const PAGE_KEPT = ['source', 'thumb', 'thumbFrom', 'widthPt', 'heightPt', 'turn',
-    'items', 'text', 'findings', 'hits', 'manual', 'imageHits', 'texts',
+    'items', 'text', 'findings', 'hits', 'manual', 'imageHits', 'texts', 'inks',
     'ocrItems', 'ocrText', 'ocrPlaced', 'ocrSkipped'];
 
   function pageSnapshot(page) {
@@ -1489,6 +1495,7 @@
       imageHits: [],
       manual: [],
       texts: [],
+      inks: [],
       turn: 0,
       dismissed: new Set(),
     }));
@@ -3181,7 +3188,7 @@
     return boxes;
   }
 
-  function drawPage(page, preview) {
+  function drawPage(page, preview, drawing) {
     // A page that has given up its bitmap has nothing to draw on. Its marks
     // live in the state, not in the canvas, so it loses nothing by waiting:
     // updateLivePages draws it when it comes back.
@@ -3293,6 +3300,28 @@
       }
     }
 
+    // Drawn by hand, through the same function the export uses, and under the
+    // writing for the same reason it is over the bars.
+    // The line under the hand is passed in rather than stored, so a stroke
+    // that is abandoned — a second finger lands, the hand leaves the page —
+    // takes nothing with it that has to be cleaned up afterwards.
+    Render.drawInks(ctx, drawing
+      ? inksOf(page).concat([{ colour: inkStyle.colour,
+        width: page.source.width * inkStyle.width, points: drawing }])
+      : inksOf(page));
+    if (state.inkSel) {
+      const chosen = inksOf(page).find(ink => ink.id === state.inkSel);
+      if (chosen) {
+        const box = Render.inkBox(chosen);
+        ctx.save();
+        ctx.strokeStyle = 'rgba(31, 111, 235, 0.9)';
+        ctx.setLineDash([stroke(6), stroke(5)]);
+        ctx.lineWidth = stroke(Math.max(1.5, page.source.width / 900));
+        ctx.strokeRect(box.x, box.y, box.w, box.h);
+        ctx.restore();
+      }
+    }
+
     // The reviewer's own writing, over the bars and through the same function
     // the export uses. Anything with a caret in it is left to its textarea,
     // which is drawing it already.
@@ -3339,6 +3368,8 @@
   function attachDrawing(page, canvas) {
     let start = null;
     let panning = null;
+    // The stroke in the reviewer's hand, while the hand is still down.
+    let inking = null;
 
     // Every pointer position is converted to the page's own pixels — the
     // source, not the canvas showing it. Those were the same size once, and
@@ -3364,8 +3395,19 @@
         addNoteAt(page, where.x, where.y);
         return;
       }
+      // With the pen armed, a press on the page starts a line, and outranks
+      // panning and marking the same way placing a note does.
+      if (state.inking) {
+        event.preventDefault();
+        if (state.inkSel) selectInk(null);
+        inking = [at(event)];
+        try { canvas.setPointerCapture(event.pointerId); } catch { /* not fatal */ }
+        return;
+      }
       // A press on the page is a press away from whatever note was in hand.
       if (state.textSel) { commitNote(); selectNote(null); }
+      // And away from whatever line was chosen, so its controls go with it.
+      if (state.inkSel) selectInk(null);
       // A second finger turns whatever was happening into a pinch. Whatever
       // the first one had started — a pan, half a box — is abandoned, because
       // finishing it with the hand that is now zooming is not what anyone
@@ -3387,7 +3429,22 @@
     });
 
     canvas.addEventListener('pointermove', event => {
-      if (pinching()) { panning = null; start = null; return; }
+      if (pinching()) { panning = null; start = null; inking = null; drawPage(page); return; }
+      if (inking) {
+        event.preventDefault();
+        const now = at(event);
+        const last = inking[inking.length - 1];
+        // Samples closer together than a fifth of the line's own width add
+        // nothing to the shape and a great deal to the size of a draft.
+        const near = page.source.width * INK_WIDTH * 0.2;
+        if (Math.abs(now.x - last.x) > near || Math.abs(now.y - last.y) > near) {
+          inking.push(now);
+          // Drawn as it is drawn rather than on release: a line that appears
+          // only once the hand comes up is a line the reviewer cannot aim.
+          drawPage(page, null, inking);
+        }
+        return;
+      }
       if (panning) {
         const dx = panning.x - event.clientX;
         const dy = panning.y - event.clientY;
@@ -3405,7 +3462,17 @@
     canvas.addEventListener('pointerup', event => {
       // Lifting one finger of a pinch is not a click, and must not dismiss a
       // mark or leave a box behind.
-      if (pinching()) { panning = null; start = null; return; }
+      if (pinching()) { panning = null; start = null; inking = null; return; }
+      if (inking) {
+        const points = inking;
+        inking = null;
+        // The pen stays armed: a reviewer ringing three figures draws three
+        // lines, and having to press the button again between each is the
+        // thing that makes a drawing tool tiring. Escape puts it away, and so
+        // does pressing the button again.
+        addInk(page, points);
+        return;
+      }
       // A drag that moved the page leaves nothing behind, and neither does a
       // click while the hand is held: nothing on the page changes unless the
       // reviewer has asked for the tool that changes it.
@@ -3563,6 +3630,7 @@
   function startPlacingText() {
     if (!state.pages.length) return;
     commitNote();
+    stopInking();
     state.placingText = true;
     state.textSel = null;
     document.body.classList.add('placing-text');
@@ -3728,6 +3796,8 @@
       wireNote(page, note, chip);
       layer.append(chip);
     }
+
+    renderInkChips(page, layer);
   }
 
   function noteWriter(page, note) {
@@ -3898,6 +3968,224 @@
       grab.addEventListener('pointerup', done);
       grab.addEventListener('pointercancel', done);
     });
+  }
+
+  // ---------- drawing on the page by hand ----------
+  //
+  // The same shape as a note: armed from the toolbar, placed with the hand,
+  // and the choices about how it looks appear beside the thing itself once it
+  // exists rather than in a bar that is always on screen. Nothing is offered
+  // before the first stroke because there is nothing to offer it about.
+  //
+  // A stroke is points in the page's own pixels and a width in them too, so it
+  // survives zooming, a phone turning on its side, and the export, which is
+  // the same picture drawn by the same function at a different size.
+
+  const INK_COLOURS = [
+    { name: 'Red', value: '#c0392b' },
+    { name: 'Black', value: '#111111' },
+    { name: 'Blue', value: '#1a56db' },
+    { name: 'Green', value: '#128a4e' },
+  ];
+
+  const INK_WIDTH = 1 / 280;      // how thick a fresh stroke is
+  const INK_THINNEST = 1 / 900;
+  const INK_THICKEST = 1 / 70;
+  const INK_STEP = 1.5;
+
+  // What the last stroke was drawn in. A reviewer ringing four figures in red
+  // should not pick red four times.
+  let inkStyle = { colour: INK_COLOURS[0].value, width: INK_WIDTH };
+
+  let nextInkId = 1;
+
+  function inksOf(page) {
+    if (!page.inks) page.inks = [];
+    return page.inks;
+  }
+
+  function inkWith(id) {
+    for (const page of state.pages) {
+      const ink = inksOf(page).find(item => item.id === id);
+      if (ink) return { page, ink };
+    }
+    return null;
+  }
+
+  // As with notes: the whole list is copied, because a stroke is a colour, a
+  // width and a run of points, and an undo that puts the list back cannot be
+  // wrong about which of them changed.
+  function inkUndo(page, label) {
+    const before = inksOf(page).map(ink => ({ ...ink, points: ink.points.map(p => ({ ...p })) }));
+    pushUndo(label, () => {
+      page.inks = before;
+      state.inkSel = null;
+      renderNotes(page);
+      drawPage(page);
+    });
+  }
+
+  function startInking() {
+    if (!state.pages.length) return;
+    commitNote();
+    selectNote(null);
+    stopPlacingText();
+    state.inking = true;
+    state.inkSel = null;
+    document.body.classList.add('inking');
+    el('page-draw').setAttribute('aria-pressed', 'true');
+    // As with a note: on a phone the panel and the document take turns, and
+    // the hand that draws has to be able to reach the page.
+    if (onPhone()) setPane('doc');
+    setTip();
+  }
+
+  function stopInking() {
+    if (!state.inking) return;
+    state.inking = false;
+    document.body.classList.remove('inking');
+    el('page-draw').setAttribute('aria-pressed', 'false');
+    setTip();
+  }
+
+  function selectInk(id) {
+    const was = state.inkSel;
+    state.inkSel = id;
+    if (was === id) return;
+    for (const page of state.pages) {
+      if (inksOf(page).some(ink => ink.id === was || ink.id === id)) {
+        renderNotes(page);
+        drawPage(page);
+      }
+    }
+  }
+
+  function dropInk(id) {
+    const found = inkWith(id);
+    if (!found) return;
+    inkUndo(found.page, 'the line you drew');
+    found.page.inks = inksOf(found.page).filter(ink => ink.id !== id);
+    if (state.inkSel === id) state.inkSel = null;
+    renderNotes(found.page);
+    drawPage(found.page);
+  }
+
+  function restyleInk(id, change, label) {
+    const found = inkWith(id);
+    if (!found) return;
+    inkUndo(found.page, label);
+    change(found.ink, found.page);
+    // Whatever was chosen last is what the next stroke is drawn in.
+    inkStyle = { colour: found.ink.colour, width: found.ink.width / found.page.source.width };
+    renderNotes(found.page);
+    drawPage(found.page);
+  }
+
+  function thickenInk(id, by) {
+    restyleInk(id, (ink, page) => {
+      const width = page.source.width;
+      ink.width = Math.max(width * INK_THINNEST,
+        Math.min(width * INK_THICKEST, ink.width * by));
+    }, 'that thickness');
+  }
+
+  // A stroke finished by the hand. Anything shorter than a hair is thrown
+  // away: a press on the page while the pen is armed, with no movement at all,
+  // is far more often a misplaced tap than a deliberate full stop.
+  function addInk(page, points) {
+    if (!points || !points.length) return null;
+    const ink = {
+      id: 'ink' + (nextInkId++),
+      colour: inkStyle.colour,
+      width: page.source.width * inkStyle.width,
+      points: points.map(point => ({ x: point.x, y: point.y })),
+    };
+    inkUndo(page, 'the line you drew');
+    inksOf(page).push(ink);
+    // Selected as it lands, which is what puts the colours and the thickness
+    // on screen: chosen after the first stroke, beside the stroke, and gone
+    // again when the reviewer presses somewhere else.
+    state.inkSel = ink.id;
+    renderNotes(page);
+    drawPage(page);
+    return ink;
+  }
+
+  // The chips that carry a stroke's controls. They go in the same layer as the
+  // notes and are rebuilt with them, so there is one place that decides what
+  // sits over a page.
+  function renderInkChips(page, layer) {
+    const width = page.source.width;
+    const share = value => (value / width) * 100;
+    for (const ink of inksOf(page)) {
+      const box = Render.inkBox(ink);
+      const chip = document.createElement('div');
+      chip.className = 'inkchip';
+      chip.dataset.ink = ink.id;
+      chip.style.setProperty('--x', share(box.x));
+      chip.style.setProperty('--y', share(box.y));
+      chip.style.setProperty('--w', share(box.w));
+      chip.style.setProperty('--h', share(box.h));
+      const chosen = state.inkSel === ink.id;
+      chip.classList.toggle('on', chosen);
+      // No room above a stroke drawn near the top of the page, and the page
+      // clips what hangs off it.
+      chip.classList.toggle('low', box.y < width * 0.08);
+      if (chosen) chip.append(inkBar(page, ink));
+      chip.addEventListener('pointerdown', event => {
+        // While the pen is armed a press is a new stroke, even over an old
+        // one: drawing over your own work is ordinary, and a chip that
+        // swallowed it would make the second stroke impossible.
+        if (state.inking) return;
+        event.preventDefault();
+        event.stopPropagation();
+        selectInk(ink.id);
+      });
+      layer.append(chip);
+    }
+  }
+
+  function inkBar(page, ink) {
+    const bar = document.createElement('div');
+    bar.className = 'notebar inkbarrow';
+    const stop = event => { event.preventDefault(); event.stopPropagation(); };
+    bar.addEventListener('pointerdown', stop);
+
+    for (const colour of INK_COLOURS) {
+      const dot = document.createElement('button');
+      dot.type = 'button';
+      dot.className = 'notedot' + (ink.colour === colour.value ? ' on' : '');
+      dot.style.background = colour.value;
+      dot.title = colour.name;
+      dot.setAttribute('aria-label', colour.name);
+      dot.addEventListener('click', event => {
+        stop(event);
+        restyleInk(ink.id, item => { item.colour = colour.value; }, 'that colour');
+      });
+      bar.append(dot);
+    }
+
+    for (const step of [{ by: 1 / INK_STEP, sign: '−', say: 'Thinner' },
+      { by: INK_STEP, sign: '+', say: 'Thicker' }]) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'notestep';
+      button.textContent = step.sign;
+      button.title = step.say;
+      button.setAttribute('aria-label', step.say);
+      button.addEventListener('click', event => { stop(event); thickenInk(ink.id, step.by); });
+      bar.append(button);
+    }
+
+    const bin = document.createElement('button');
+    bin.type = 'button';
+    bin.className = 'notestep notebin';
+    bin.textContent = '✕';
+    bin.title = 'Remove this line';
+    bin.setAttribute('aria-label', 'Remove this line');
+    bin.addEventListener('click', event => { stop(event); dropInk(ink.id); });
+    bar.append(bin);
+    return bar;
   }
 
   // ---------- picking a logo, and finding it again ----------
@@ -4266,6 +4554,14 @@
       // waits for a tap on the document, so without a line here the button
       // looks as though it did nothing.
       tip.textContent = 'Tap the page where the note should go.';
+      tip.hidden = false;
+      return;
+    }
+    if (state.inking) {
+      // And the same for the pen, which changes what a press on the page
+      // means until it is put away. Both ways out are named, because a mode
+      // with no visible exit is a mode reviewers get stuck in.
+      tip.textContent = 'Draw on the page. Escape, or the pen again, to stop.';
       tip.hidden = false;
       return;
     }
@@ -5441,6 +5737,7 @@
         // turned page's coordinates, so the turn has to go back first.
         turn: page.turn || 0,
         texts: notesOf(page).map(note => ({ ...note })),
+        inks: inksOf(page).map(ink => ({ ...ink, points: ink.points.map(p => ({ ...p })) })),
         manual: page.manual,
         dismissed: [...page.dismissed],
         // Only marks that came from a word or a logo. Anything the text
@@ -5573,6 +5870,15 @@
         turned = true;
       }
       page.texts = (saved.texts || []).map(note => ({ ...note }));
+      page.inks = (saved.inks || []).map(ink => ({ ...ink,
+        points: (ink.points || []).map(point => ({ ...point })) }));
+      for (const ink of page.inks) {
+        // Same reason the notes below are renumbered: ids from the draft and
+        // ids handed out in this session must not collide, or removing one
+        // line would remove two.
+        const n = Number(String(ink.id).replace(/\D+/g, ''));
+        if (Number.isFinite(n) && n >= nextInkId) nextInkId = n + 1;
+      }
       for (const note of page.texts) {
         // Ids have to stay unique against the ones this session will mint.
         const number = Number(String(note.id).replace(/\D+/g, ''));
@@ -5890,7 +6196,7 @@
         download(new Blob([out], { type: 'text/plain' }), state.saveAs);
       } else if (state.kind === 'image') {
         const page = state.pages[0];
-        const flat = Render.flatten(page.source, activeBoxes(page), notesOf(page));
+        const flat = Render.flatten(page.source, activeBoxes(page), notesOf(page), inksOf(page));
         download(await Render.canvasToBlob(flat, 'image/png'), state.saveAs);
       } else {
         const lossless = el('lossless').checked;
@@ -5909,7 +6215,7 @@
         for (const page of state.pages) {
           pageProgress(page.index, state.pages.length, 'Flattening pages');
           const boxes = activeBoxes(page);
-          flats.push({ page, boxes, flat: Render.flatten(page.source, boxes, notesOf(page)) });
+          flats.push({ page, boxes, flat: Render.flatten(page.source, boxes, notesOf(page), inksOf(page)) });
         }
 
         // Read back what the redacted pages actually say.
@@ -6413,7 +6719,10 @@
   });
   el('page-keep').addEventListener('click', keepOnlyPicked);
   el('page-drop').addEventListener('click', dropPicked);
-  el('page-add').addEventListener('click', () => el('addfile').click());
+  el('page-draw').addEventListener('click', () => {
+    if (state.inking) stopInking();
+    else startInking();
+  });
   const dropHint = el('sheetdrop-hint');
   if (dropHint) dropHint.addEventListener('click', () => el('addfile').click());
   el('addfile').addEventListener('change', async event => {
@@ -6557,6 +6866,21 @@
     if (event.key === 'Escape' && state.placingText) {
       stopPlacingText();
       return;
+    }
+    if (event.key === 'Escape' && state.inking) {
+      stopInking();
+      return;
+    }
+    // A line chosen, with the caret nowhere: Escape lets it go and Delete
+    // removes it, the same two keys that do the same two things to a note.
+    if (state.inkSel && !state.textEdit
+      && !(event.target && /^(INPUT|TEXTAREA|SELECT)$/.test(event.target.tagName))) {
+      if (event.key === 'Escape') { selectInk(null); return; }
+      if (event.key === 'Delete' || event.key === 'Backspace') {
+        event.preventDefault();
+        dropInk(state.inkSel);
+        return;
+      }
     }
     // The arrows walk the sheet whenever a page is selected. Answered before
     // the note keys below, because a selected page is a more specific claim
@@ -7666,6 +7990,7 @@
       page.imageHits = [];
       page.manual = [];
       page.texts = [];
+      page.inks = [];
       page.dismissed = new Set();
     }
     state.findings = [];
@@ -7806,6 +8131,7 @@
     renderSheet, setOrder, moveTo, keepOnlyPicked, dropPicked, openSections,
     arrowThroughSheet, pageAfterArrow, sheetColumns,
     turnPages, turnPage, addNoteAt, dropNote, selectNote, editNote, commitNote,
+    addInk, dropInk, selectInk, startInking, stopInking, inksOf,
     notesOf, renderNotes, notesToDraw, startPlacingText, stopPlacingText,
     resizeNote, NOTE_COLOURS, NOTE_SIZE,
     edgeScroll, stopEdgeScroll, CREEP_EDGE, fitSheet, rollSections,

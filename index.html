@@ -41,7 +41,7 @@
      origins for one program and two sets of response headers to keep right;
      Pages publishing is off and this says which copy is the copy. -->
 <link rel="canonical" href="https://blinded.onrender.com/">
-<link rel="stylesheet" href="app.css?v=f5d25c16">
+<link rel="stylesheet" href="app.css?v=7b90561b">
 </head>
 <body>
 
@@ -499,10 +499,16 @@
                   <path d="M5 7V5h14v2M12 5v14M9 19h6"/>
                 </svg><span class="sr-only">Add a note to the page</span>
               </button>
-              <button type="button" id="page-add" class="tool" title="Add another document – or drop a file onto the pages to slot it in">
+              <!-- A pen, not a pencil: the nib and the barrel read at this
+                   size where a pencil's point and ferrule do not. Adding
+                   another document has not gone anywhere – the button under
+                   the thumbnails does it, and so does dropping a file on
+                   them. -->
+              <button type="button" id="page-draw" class="tool" title="Draw on the page – then pick a colour and a thickness">
                 <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-                  <path d="M13 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-9M17 3v6M14 6h6"/>
-                </svg><span class="sr-only">Add another document</span>
+                  <path d="M4 20h4L20 8l-4-4L4 16z"/>
+                  <path d="M14 6l4 4"/>
+                </svg><span class="sr-only">Draw on the page by hand</span>
               </button>
             </div>
             <input type="file" id="addfile" accept="application/pdf,image/png,image/jpeg,.pdf,.png,.jpg,.jpeg" multiple hidden>
@@ -511,7 +517,7 @@
               <button type="button" id="choose-done" class="ghost" hidden>Done</button>
             </div>
             <ol id="sheet" class="sheet"></ol>
-            <button type="button" class="sheethint" id="sheetdrop-hint">Drop additional files.</button>
+            <button type="button" class="sheethint" id="sheetdrop-hint">Add another document – drop files here, or press.</button>
           </div>
         </details>
 
@@ -827,8 +833,8 @@
 <script src="lib/textimage.js?v=d966e51b"></script>
 <script src="lib/pdfwrite.js?v=4b977425"></script>
 <script src="lib/pdfread.js?v=ca229552"></script>
-<script src="lib/render.js?v=70e96ff0"></script>
-<script src="app.js?v=be0a2321"></script>
+<script src="lib/render.js?v=65c3fe76"></script>
+<script src="app.js?v=81080ab8"></script>
 <script type="module" src="lib/boot.mjs?v=8b98ed8f"></script>
 </body>
 </html>

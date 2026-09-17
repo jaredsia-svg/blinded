@@ -551,6 +551,26 @@ textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; border-
 /* Waiting for the tap that says where a note goes. */
 .placing-text .page canvas { cursor: text; }
 
+/* A line drawn by hand. The chip is only a place to hang the controls and
+   something to press on to choose the line again: the line itself is painted
+   on the canvas, by the function that also paints the exported page, so
+   nothing here decides how it looks. No outline of its own — the canvas draws
+   a dashed box round the chosen one, where it can follow the shape of the
+   stroke rather than a rectangle in the layer above it. */
+.inkchip {
+  position: absolute; pointer-events: auto;
+  left: calc(var(--x) * 1cqw); top: calc(var(--y) * 1cqw);
+  width: calc(var(--w) * 1cqw); height: calc(var(--h) * 1cqw);
+  cursor: pointer; touch-action: none;
+}
+/* While the pen is armed the chips must not swallow the press that starts the
+   next stroke — drawing over your own work is ordinary. */
+.inking .inkchip { pointer-events: none; }
+.inking .page canvas { cursor: crosshair; }
+/* Thinner and thicker, not smaller and bigger, so the two steps read as one
+   control rather than as the note bar's A- and A+. */
+.inkbarrow .notestep { min-width: 22px; font-weight: 600; }
+
 .textview {
   background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
   padding: 18px; margin: 0; font: 13.5px/1.7 var(--mono); white-space: pre-wrap;
