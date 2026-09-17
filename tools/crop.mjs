@@ -4,6 +4,8 @@
 //
 //   node tools/crop.mjs bench/Some-Doc tpl10          the first eight matches
 //   node tools/crop.mjs bench/Some-Doc tpl10 3,4,5    those ones
+//   node tools/crop.mjs bench/Some-Doc Acme  best     the best it scored, even
+//                                                    if the bar turned it away
 import { chromium } from 'playwright';
 import { createServer } from 'node:http';
 import { createReadStream, statSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -12,14 +14,21 @@ import { extname, join, resolve } from 'node:path';
 const root = resolve(new URL('..', import.meta.url).pathname);
 const folder = resolve(process.argv[2]);
 const wanted = process.argv[3];
-const picks = process.argv[4] ? process.argv[4].split(',').map(Number) : null;
+const wantBest = process.argv[4] === 'best';
+const picks = process.argv[4] && !wantBest
+  ? process.argv[4].split(',').map(Number) : null;
 const scores = JSON.parse(readFileSync(join(folder, 'scores.json')));
 // Either a picked image by its id, or a word the comprehensive check found.
 const logo = scores.templates.find(t => t.id === wanted)
   || scores.terms.find(t => t.term === wanted)
   || scores.templates[0];
 if (logo && logo.term) logo.id = logo.term.replace(/[^a-z0-9]+/gi, '-');
-const spots = (picks ? picks.map(i => logo.where[i]) : logo.where.slice(0, 8)).filter(Boolean);
+// `best` cuts out the top score the check reached for a word, whether or not
+// it cleared the bar — the near miss is the thing worth looking at.
+const spots = (wantBest
+  ? [logo.best && logo.best.at && { ...logo.best.at, s: logo.best.score }]
+  : picks ? picks.map(i => logo.where[i])
+  : logo.where.slice(0, 8)).filter(Boolean);
 const doc = readdirSync(folder).find(f => /\.(pdf|jpe?g|png)$/i.test(f) && !/redact/i.test(f));
 
 const server = createServer((req, res) => {

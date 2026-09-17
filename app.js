@@ -8210,14 +8210,20 @@
       // cleared its bar and was thrown away afterwards, which sent one
       // investigation off entirely — "Thailand" looked like 0.724 against a
       // bar of 0.63 and was in fact never verified at all.
-      const seen = (found.matches || []).map(hit => hit.score)
-        .concat((found.near || []).map(hit => hit.score));
+      const seen = (found.matches || []).concat(found.near || [])
+        .sort((a, b) => b.score - a.score);
+      const top = seen[0];
       const best = {
-        score: seen.length ? Math.max(...seen) : 0,
+        score: top ? top.score : 0,
         verified: seen.length > 0,
         refined: found.best || 0,
         part: entry.part,
         bar: entry.threshold,
+        // Where that score was, so a near miss can be looked at rather than
+        // argued about: a word that scored 0.62 against a bar of 0.66 is
+        // either a copy the bar is keeping out or a lookalike the bar is
+        // doing its job on, and only the picture says which.
+        at: top ? { p: top.pageIndex, x: top.x, y: top.y, w: top.w, h: top.h } : null,
       };
       const was = state.sweepBest[entry.term];
       if (!was || best.score > was.score
