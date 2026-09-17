@@ -83,6 +83,33 @@ for (const name of readdirSync(bench).sort()) {
   await page.setInputFiles('#file', join(folder, doc));
   await page.waitForSelector('#view-review:not([hidden])', { timeout: 180000 });
   await page.waitForTimeout(1200);
+  if (process.env.COARSE) {
+    await page.evaluate(n => {
+      window.__searchOpts = { ...(window.__searchOpts || {}), coarseThreshold: n };
+    }, Number(process.env.COARSE));
+  }
+  if (process.env.BUDGET) {
+    await page.evaluate(() => {
+      window.__searchOpts = { ...(window.__searchOpts || {}),
+        maxCandidates: 400, perScale: 24, verifyLimit: 64 };
+    });
+  }
+  if (process.env.NO_MASK) {
+    await page.evaluate(() => {
+      window.__searchOpts = { ...(window.__searchOpts || {}), noMask: true };
+    });
+  }
+  if (process.env.MAX_UPSCALE) {
+    await page.evaluate(n => { window.__searchOpts = { maxUpscale: n }; },
+      Number(process.env.MAX_UPSCALE));
+  }
+  if (process.env.READER_SURE) {
+    await page.evaluate(n => { window.__readerSure = n; }, Number(process.env.READER_SURE));
+  }
+  if (process.env.BAR_NUDGE) {
+    const by = Number(process.env.BAR_NUDGE);
+    await page.evaluate(n => { window.__barNudge = n; }, by);
+  }
 
   const started = Date.now();
   // A restored draft comes back already searched, and its picked images come
@@ -149,7 +176,15 @@ for (const name of readdirSync(bench).sort()) {
         // typed-word image pass is for — and counting only the check's marks
         // reported four copies of a found word as found nowhere, because the
         // check had correctly deduped its own candidates against them.
-        seen: B.state.pages.reduce((n, p) =>
+        // What the reviewer actually sees: marks that are not superseded by
+        // something covering them and not dismissed. Counting every mark in
+        // the array reported words as found that show nothing in the tally and
+        // nothing on the page.
+        seen: B.state.pages.reduce((n, p) => n + B.liveImageHits(p)
+          .filter(hit => hit.term === term && !p.dismissed.has(hit.id)).length, 0),
+        // And every mark the search made, superseded or not, which is what
+        // tells "found and hidden" apart from "never found".
+        made: B.state.pages.reduce((n, p) =>
           n + (p.imageHits || []).filter(hit => hit.term === term).length, 0),
         bySweep: B.state.pages.reduce((n, p) =>
           n + (p.imageHits || []).filter(hit => hit.bySweep && hit.term === term).length, 0),
@@ -209,7 +244,7 @@ for (const name of readdirSync(bench).sort()) {
       : '';
     console.log('   word ' + JSON.stringify(term.term)
       + ' -> read ' + term.read + ', seen ' + term.seen
-      + ' (' + term.bySweep + ' by the check)' + best);
+      + ' of ' + term.made + ' made (' + term.bySweep + ' by the check)' + best);
   }
   for (const logo of out.templates) {
     console.log('   image ' + logo.id + ' p' + (logo.page + 1) + ' ' + logo.size

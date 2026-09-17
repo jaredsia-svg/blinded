@@ -4701,12 +4701,20 @@
 
   // The bar this particular word has to clear: the slider, less whatever its
   // length earns back. See lib/textimage.js for the measurements behind it.
-  function wordBarFor(term) {
+  function wordBarFor(term, inPhrase) {
     let bar = wordSensitivity() - TextImage.shapeRelief(term);
     // Short acronyms (KAS/KAG/KNW) correlate inside longer wordmarks. Hold the
     // shape bar higher; green OCR/text hits are unchanged.
+    //
+    // Not when the short word is one part of a phrase. The penalty buys
+    // evidence that a three-letter shape is really that word rather than a
+    // fragment of a longer one — and a part of a phrase already has that
+    // evidence from somewhere better: it is only marked when its partner sits
+    // beside it or directly above it. Measured on a scanned deck, "Rao" at the
+    // acronym bar blocked two of the three copies of "Srinivas Rao" while
+    // "Srinivas" found all three.
     const letters = String(term || '').replace(/[^A-Za-z]/g, '');
-    if (letters.length > 0 && letters.length <= 3) bar += 0.12;
+    if (!inPhrase && letters.length > 0 && letters.length <= 3) bar += 0.12;
     return Math.max(0.3, Math.round(bar * 1000) / 1000);
   }
 
@@ -7573,7 +7581,7 @@
             part,
             partIndex,
             phraseParts: isPhrase ? parts : null,
-            threshold: wordBarFor(part),
+            threshold: wordBarFor(part, isPhrase),
             smallText: true,
             pageIndexes,
           });
@@ -7615,8 +7623,15 @@
     }
     // Anything else has to actually cover it — or be the same box by another
     // name, which a mark in the same place is however it was found.
+    //
+    // The same box means both ways round. Measured against the smaller of the
+    // two it means "one of these is inside the other", which is how the phrase
+    // "Inderpreet Wadhwa" came to be thrown away as already dealt with by the
+    // one-word mark on "Wadhwa" sitting inside it. A word inside a phrase is
+    // not the phrase; covering half a name is not covering the name.
     return Match.coveredFraction(rect, mark) >= REALLY_COVERED
-      || Match.overlapFraction(mark, rect) >= SAME_SPOT;
+      || (Match.coveredFraction(rect, mark) >= SAME_SPOT
+        && Match.coveredFraction(mark, rect) >= SAME_SPOT);
   }
 
   // Returns what accounts for this spot, or null. A string rather than a flag,
@@ -7820,6 +7835,15 @@
     try { await sweepTask; } catch { /* it reports its own failure */ }
   }
 
+  // What the second look changes. Measured over the benchmark set: at these
+  // numbers a word the first pass placed nowhere is found on two documents
+  // that had been missing it, no document loses a mark it already had, and no
+  // new false positive appeared on the one document that is prone to them.
+  const DEEP_COARSE = 0.22;
+  const DEEP_CANDIDATES = 400;
+  const DEEP_PER_SCALE = 24;
+  const DEEP_VERIFY = 64;
+
   async function sweepNow() {
     const entries = sweepTemplates();
     if (!entries.length) {
@@ -7854,6 +7878,7 @@
     state.sweepRunning = true;
     state.sweepStopped = false;
     state.sweepSkipped = false;
+    state.sweepDeepened = [];
     sweepProgress(0, pages.length);
     renderSweep();
     // The Search button greys out for as long as this runs, so it has to be
@@ -7880,44 +7905,92 @@
     // so they are pooled per page and suppressed before anything is proposed.
     let added = 0;
     const refused = [];
-    for (const term of new Set(entries.map(e => e.term))) {
-      if (!state.terms.includes(term)) continue;
-      const termEntries = entries.filter(e => e.term === term);
-      const isPhrase = termEntries.some(e => e.phraseParts && e.phraseParts.length >= 2);
+    // Placing what a pass found. Run once for the ordinary sweep, and again
+    // for the deeper look below, which is the same work over a much smaller
+    // slice of the document.
+    function placeResults(entries, results) {
+      for (const term of new Set(entries.map(e => e.term))) {
+        if (!state.terms.includes(term)) continue;
+        const termEntries = entries.filter(e => e.term === term);
+        const isPhrase = termEntries.some(e => e.phraseParts && e.phraseParts.length >= 2);
 
-      if (isPhrase) {
-        const parts = termEntries[0].phraseParts;
-        const skipped = [];
-        for (let p = 0; p < parts.length - 1; p++) {
-          skipped.push(Match.skippedConnectorsBetween(term, parts[p], parts[p + 1]));
+        if (isPhrase) {
+          const parts = termEntries[0].phraseParts;
+          const skipped = [];
+          for (let p = 0; p < parts.length - 1; p++) {
+            skipped.push(Match.skippedConnectorsBetween(term, parts[p], parts[p + 1]));
+          }
+          // Collect per-part hits per page, then keep only left-to-right chains.
+          const pageParts = new Map();
+          for (const entry of termEntries) {
+            const found = results.get(entry.key);
+            if (!found) continue;
+            for (const hit of found.matches) {
+              if (!pageParts.has(hit.pageIndex)) pageParts.set(hit.pageIndex, new Map());
+              const byPart = pageParts.get(hit.pageIndex);
+              if (!byPart.has(entry.part)) byPart.set(entry.part, []);
+              byPart.get(entry.part).push(hit);
+            }
+          }
+          for (const [pageIndex, hitsByPart] of pageParts) {
+            const page = state.pages[pageIndex];
+            if (!page) continue;
+            for (const part of parts) {
+              const list = hitsByPart.get(part);
+              if (list) hitsByPart.set(part, Match.suppress(list, 0.3));
+            }
+            for (const hit of Match.pairPhraseHits(parts, hitsByPart, skipped)) {
+              const rect = { x: hit.x, y: hit.y, w: hit.w, h: hit.h };
+              const accounted = alreadyCovered(page, rect, term);
+              if (accounted) {
+                refused.push({ pageIndex, at: rect.y, term, why: 'covered by ' + accounted });
+                continue;
+              }
+              if (readerContradicts(page, rect, term) || shortAcronymShapeRefused(page, rect, term)) {
+                refused.push({ pageIndex, at: rect.y, term, why: 'reader' });
+                continue;
+              }
+              page.imageHits.push({
+                id: 'sweep:' + term + ':' + pageIndex + ':'
+                  + Math.round(hit.x) + ':' + Math.round(hit.y),
+                term, rect, score: hit.score,
+                inverted: Boolean(hit.inverted),
+                bySweep: true,
+              });
+              added++;
+            }
+          }
+          continue;
         }
-        // Collect per-part hits per page, then keep only left-to-right chains.
-        const pageParts = new Map();
+
+        const perPage = new Map();
         for (const entry of termEntries) {
           const found = results.get(entry.key);
           if (!found) continue;
           for (const hit of found.matches) {
-            if (!pageParts.has(hit.pageIndex)) pageParts.set(hit.pageIndex, new Map());
-            const byPart = pageParts.get(hit.pageIndex);
-            if (!byPart.has(entry.part)) byPart.set(entry.part, []);
-            byPart.get(entry.part).push(hit);
+            if (!perPage.has(hit.pageIndex)) perPage.set(hit.pageIndex, []);
+            perPage.get(hit.pageIndex).push(hit);
           }
         }
-        for (const [pageIndex, hitsByPart] of pageParts) {
+        for (const [pageIndex, hits] of perPage) {
           const page = state.pages[pageIndex];
           if (!page) continue;
-          for (const part of parts) {
-            const list = hitsByPart.get(part);
-            if (list) hitsByPart.set(part, Match.suppress(list, 0.3));
-          }
-          for (const hit of Match.pairPhraseHits(parts, hitsByPart, skipped)) {
+          for (const hit of Match.suppress(hits, 0.3)) {
             const rect = { x: hit.x, y: hit.y, w: hit.w, h: hit.h };
+            // Already dealt with is not the same as refused, but it is the same
+            // to anyone looking for a mark that is not there, so it is recorded
+            // too — with its own reason, because "covered" and "the reader says
+            // otherwise" want opposite responses from whoever reads it.
             const accounted = alreadyCovered(page, rect, term);
             if (accounted) {
               refused.push({ pageIndex, at: rect.y, term, why: 'covered by ' + accounted });
               continue;
             }
-            if (readerContradicts(page, rect, term) || shortAcronymShapeRefused(page, rect, term)) {
+            if (readerContradicts(page, rect, term)) {
+              // Where, not just how many. The note tells the reviewer this is
+              // where to look when a mark they expected is missing, and until
+              // now there was nothing to look at: a count of two, over sixty
+              // pages, is not a place.
               refused.push({ pageIndex, at: rect.y, term, why: 'reader' });
               continue;
             }
@@ -7926,57 +7999,86 @@
                 + Math.round(hit.x) + ':' + Math.round(hit.y),
               term, rect, score: hit.score,
               inverted: Boolean(hit.inverted),
+              // What makes it amber on the page and countable in the note.
               bySweep: true,
             });
             added++;
           }
         }
-        continue;
-      }
-
-      const perPage = new Map();
-      for (const entry of termEntries) {
-        const found = results.get(entry.key);
-        if (!found) continue;
-        for (const hit of found.matches) {
-          if (!perPage.has(hit.pageIndex)) perPage.set(hit.pageIndex, []);
-          perPage.get(hit.pageIndex).push(hit);
-        }
-      }
-      for (const [pageIndex, hits] of perPage) {
-        const page = state.pages[pageIndex];
-        if (!page) continue;
-        for (const hit of Match.suppress(hits, 0.3)) {
-          const rect = { x: hit.x, y: hit.y, w: hit.w, h: hit.h };
-          // Already dealt with is not the same as refused, but it is the same
-          // to anyone looking for a mark that is not there, so it is recorded
-          // too — with its own reason, because "covered" and "the reader says
-          // otherwise" want opposite responses from whoever reads it.
-          const accounted = alreadyCovered(page, rect, term);
-          if (accounted) {
-            refused.push({ pageIndex, at: rect.y, term, why: 'covered by ' + accounted });
-            continue;
-          }
-          if (readerContradicts(page, rect, term)) {
-            // Where, not just how many. The note tells the reviewer this is
-            // where to look when a mark they expected is missing, and until
-            // now there was nothing to look at: a count of two, over sixty
-            // pages, is not a place.
-            refused.push({ pageIndex, at: rect.y, term, why: 'reader' });
-            continue;
-          }
-          page.imageHits.push({
-            id: 'sweep:' + term + ':' + pageIndex + ':'
-              + Math.round(hit.x) + ':' + Math.round(hit.y),
-            term, rect, score: hit.score,
-            inverted: Boolean(hit.inverted),
-            // What makes it amber on the page and countable in the note.
-            bySweep: true,
-          });
-          added++;
-        }
       }
     }
+
+    placeResults(entries, results);
+
+    // A second, deeper look — but only where the first found nothing.
+    //
+    // The nominating pass proposes a position only if it scores 0.4 on a
+    // shrunken copy of the page, and then only a few dozen positions per page
+    // survive to be checked properly. Both numbers are right for an ordinary
+    // page and wrong for a hard one: measured on a slide whose wordmark sits
+    // in white over a photograph of a data hall, the true position of
+    // "Tokenomics" scored under 0.4 at nomination and was never offered for
+    // verification at all — the search reported a best of 0.000 for a word
+    // plainly on the page. Dropping the gate alone is not the answer either:
+    // it floods the same fixed budget, and on another document it pushed a
+    // true "Singapore" out of the shortlist. The two have to move together.
+    //
+    // Moving them together everywhere would roughly double the check. So they
+    // move only for a word the first pass could not place at all, over only
+    // the pages where it could not place it. A document whose words are all
+    // found pays nothing for this; the deck above pays it for one word on one
+    // page, and finds it.
+    // Only a word the document holds no mark for at all — not a word found on
+    // page two and not on page nine.
+    //
+    // The difference is the whole cost. Deepening wherever a word was missing
+    // from some page meant deepening nearly everything: on a two-page scan
+    // every word qualified somewhere and the check went from two and a half
+    // minutes to seven. Deepening only for a word found nowhere leaves that
+    // document untouched and costs nothing on four of the five benchmarks,
+    // while still answering the one where a word was invisible.
+    //
+    // Any mark counts, not just this check's: a word the reading found is a
+    // word the tool can plainly see, and looking harder for it is looking
+    // harder for something already in hand.
+    const missing = new Map();
+    for (const term of new Set(entries.map(e => e.term))) {
+      if (!state.terms.includes(term)) continue;
+      const anywhere = state.pages.some(page =>
+        (page.imageHits || []).some(mark => mark.term === term)
+        || (page.hits || []).some(hit => hit.term === term));
+      if (anywhere) continue;
+      const need = pagesNeedingSweep(term);
+      if (need.length) missing.set(term, new Set(need.map(page => page.index)));
+    }
+
+    // What the deeper look was asked to do, so the run can be described
+    // afterwards rather than guessed at.
+    state.sweepDeepened = [...missing.keys()];
+    if (missing.size && !state.sweepStopped) {
+      const deeper = entries
+        .filter(entry => missing.has(entry.term))
+        .map(entry => ({ ...entry,
+          key: 'deep:' + entry.key,
+          pageIndexes: missing.get(entry.term) }));
+      const over = pages.filter(page =>
+        [...missing.values()].some(set => set.has(page.index)));
+      try {
+        const again = await ImageSearch.searchAllParallel(over, deeper, {
+          stop: () => state.sweepStopped,
+          // Low enough to nominate a word the page is fighting, deep enough
+          // that nominating it does not push it back out again.
+          coarseThreshold: DEEP_COARSE,
+          maxCandidates: DEEP_CANDIDATES,
+          perScale: DEEP_PER_SCALE,
+          verifyLimit: DEEP_VERIFY,
+        }, done => sweepProgress(pages.length, pages.length, done, over.length));
+        placeResults(deeper, again);
+      } catch (_) {
+        // A deeper look that fails leaves the ordinary one's answer standing.
+      }
+    }
+
 
     state.sweepRunning = false;
     // The best score each word reached, whether or not it cleared its bar.
@@ -8029,16 +8131,24 @@
     return added;
   }
 
-  function sweepProgress(done, total) {
+  // `deep` and `deepOf` describe the second look, which runs over a few pages
+  // after the first pass and would otherwise make the bar sit at the end while
+  // the check was plainly still working.
+  function sweepProgress(done, total, deep, deepOf) {
     state.sweepDone = done;
     state.sweepTotal = total;
     const fill = el('sweepfill');
     if (fill) fill.style.width = (total ? (done / total) * 100 : 0).toFixed(1) + '%';
     const line = el('sweepprogress');
-    if (line) {
-      line.textContent = 'Checking page ' + Math.min(done + 1, total) + ' of ' + total
+    if (!line) return;
+    if (deepOf) {
+      line.textContent = 'Looking again where nothing was found: '
+        + Math.min(deep + 1, deepOf) + ' of ' + deepOf
         + '  - you can carry on reviewing.';
+      return;
     }
+    line.textContent = 'Checking page ' + Math.min(done + 1, total) + ' of ' + total
+      + '  - you can carry on reviewing.';
   }
 
   // The button, and what it says afterwards.

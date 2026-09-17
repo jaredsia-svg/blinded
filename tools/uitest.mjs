@@ -3946,6 +3946,37 @@ try {
     }
   }
 
+  // ---------- looking again where nothing was found ----------
+  //
+  // The nominating pass proposes a position only if it scores 0.4 on a
+  // shrunken page, and only a few dozen positions per page are checked
+  // properly. Both are right for an ordinary page and wrong for a hard one:
+  // measured on a slide whose wordmark sits in white over a photograph, the
+  // true position of "Tokenomics" scored under 0.4 and was never offered for
+  // verification — a best of 0.000 for a word plainly on the page.
+  //
+  // Moving those numbers everywhere roughly doubles the check, and on one
+  // document it pushed a true match out of the shortlist. So they move only
+  // for a word the document holds no mark for at all, which is the case where
+  // there is nothing to lose and something to find.
+  {
+    const deep = await page.evaluate(async () => {
+      const B = window.Blinded;
+      const was = B.state.terms.slice();
+      B.state.terms = ['Jane', 'Qzzxwvunlikely'];
+      await B.runSweep();
+      const out = { deepened: (B.state.sweepDeepened || []).slice(),
+        found: B.state.pages.reduce((n, p) =>
+          n + (p.imageHits || []).filter(m => m.term === 'Jane').length, 0) };
+      B.state.terms = was;
+      return out;
+    });
+    check('a word the document holds no mark for is looked for again, harder',
+      deep.deepened.includes('Qzzxwvunlikely'), JSON.stringify(deep));
+    check('and a word that was found is left alone',
+      !deep.deepened.includes('Jane') || deep.found === 0, JSON.stringify(deep));
+  }
+
   // ---------- what counts as already covered ----------
   //
   // Two questions that were being asked as one. The same word found twice in
