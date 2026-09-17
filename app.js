@@ -2299,6 +2299,19 @@
         score: hit.score,
         inverted: Boolean(hit.inverted),
       }));
+      // Every candidate this search verified, kept with the image.
+      //
+      // They were all scored at full resolution, above and below the bar
+      // alike, and then all but the scores were thrown away — so the panel
+      // could say what 0.70 would find and could not draw it without searching
+      // the document again. Moving the bar within what was verified is a
+      // filter, not a search, and it should take no longer than a filter.
+      //
+      // Not saved in a draft: a draft holds the reviewer's work, and this is
+      // the search's working-out, rebuilt by the next search in any case.
+      entry.logo.verified = found.matches.concat(found.near || [])
+        .map(hit => ({ pageIndex: hit.pageIndex, x: hit.x, y: hit.y, w: hit.w, h: hit.h,
+          score: hit.score, inverted: Boolean(hit.inverted) }));
       entry.logo.matches = found.matches.length;
       entry.logo.rawMatches = found.matches.length;
       entry.logo.best = found.best;
@@ -2396,24 +2409,89 @@
   // found at the old bar is dropped, and the button goes back to asking for a
   // search. Not searched on the spot — a press that started minutes of work
   // without being asked for is the surprise this tool does not spring.
-  function moveBarTo(template, bar) {
-    if (!template) return;
-    const was = sensFor(template);
-    if (Math.abs(was - bar) < 0.005) return;
-    template.chosenBar = true;
-    template.sens = clampSens(bar);
-    template.searched = false;
-    template.matches = 0;
-    template.rawMatches = 0;
+  // Can this bar be answered from what the last search already verified?
+  //
+  // Everything it verified was scored at full resolution, so filtering that
+  // set is not an approximation of searching again — it is the same answer.
+  // The limit is downwards: verification stops at a gate and a few candidates
+  // per page, so below the weakest thing it looked at there may be copies it
+  // never scored, and claiming otherwise would be claiming to have found
+  // everything when the search had stopped looking.
+  function answeredAlready(template, bar) {
+    const kept = template && template.verified;
+    if (!kept || !kept.length) return false;
+    return bar >= Math.min(...kept.map(hit => hit.score)) - 1e-9;
+  }
+
+  function applyKeptAt(template, bar) {
     for (const page of state.pages) {
       page.imageHits = page.imageHits.filter(
         mark => mark.bySweep || mark.templateId !== template.id);
     }
+    let count = 0;
+    for (const hit of template.verified) {
+      if (hit.score < bar) continue;
+      const page = state.pages[hit.pageIndex];
+      if (!page) continue;
+      // The same id the search would mint, so a mark the reviewer dismissed
+      // stays dismissed when the bar moves back over it.
+      page.imageHits.push({
+        id: template.id + ':' + hit.pageIndex + ':'
+          + Math.round(hit.x) + ':' + Math.round(hit.y),
+        templateId: template.id,
+        rect: { x: hit.x, y: hit.y, w: hit.w, h: hit.h },
+        score: hit.score,
+        inverted: Boolean(hit.inverted),
+      });
+      count++;
+    }
+    template.matches = count;
+    template.rawMatches = count;
+  }
+
+  function moveBarTo(template, bar) {
+    if (!template) return;
+    const was = sensFor(template);
+    if (Math.abs(was - bar) < 0.005) return;
+    const wasHits = state.pages.map(page =>
+      page.imageHits.filter(mark => mark.templateId === template.id));
+    const wasCount = template.matches;
+    template.chosenBar = true;
+    template.sens = clampSens(bar);
+
+    const instant = answeredAlready(template, template.sens);
+    if (instant) {
+      applyKeptAt(template, template.sens);
+      // The marks changed, so a document that had been covered is not any
+      // more — but nothing needs searching, so the button does not ask.
+      markDuplicates();
+      if (state.applied) markPending();
+    } else {
+      template.searched = false;
+      template.matches = 0;
+      template.rawMatches = 0;
+      for (const page of state.pages) {
+        page.imageHits = page.imageHits.filter(
+          mark => mark.bySweep || mark.templateId !== template.id);
+      }
+      needsSearch();
+    }
+
     pushUndo('that sensitivity change', () => {
       template.sens = was;
       template.chosenBar = false;
+      template.matches = wasCount;
+      template.rawMatches = wasCount;
+      template.searched = true;
+      state.pages.forEach((page, i) => {
+        page.imageHits = page.imageHits
+          .filter(mark => mark.templateId !== template.id)
+          .concat(wasHits[i]);
+      });
+      renderTemplates();
+      refreshApply();
+      redrawAll();
     });
-    needsSearch();
     renderTemplates();
     refreshApply();
     redrawAll();
@@ -5361,7 +5439,10 @@
     // image the reviewer has not chosen.
     // The column heading goes with the column: with nothing picked there are
     // no sliders for it to head.
-    el('senshead').hidden = !state.templates.length;
+    // The heading goes with the sliders it heads: before the first search
+    // there are none, because a bar over an answer nobody has yet is a control
+    // over nothing.
+    el('senshead').hidden = !state.templates.some(template => template.searched);
 
     if (!state.templates.length) {
       const hint = el('pickhint');
@@ -5532,7 +5613,25 @@
         needsSearch();
       });
 
-      row.append(template.thumbnail, bar, count, remove);
+      // The bar only once there is something for it to be a bar on.
+      //
+      // Before the first search this row shows a red "?", because nothing has
+      // been looked for yet — and a slider beside it is a control over an
+      // answer that does not exist. Worse, it invites the reviewer to set a
+      // number before anything is known, which is the very guess the search
+      // now makes for them: it reads the scores and puts the bar where they
+      // fall. Offering the control first asks them to overrule a measurement
+      // that has not been taken.
+      row.append(template.thumbnail);
+      if (template.searched) row.append(bar);
+      else {
+        // The space the bar will take, held open, so the row does not shuffle
+        // sideways the moment a search finishes.
+        const gap = document.createElement('span');
+        gap.className = 'rowsens';
+        row.append(gap);
+      }
+      row.append(count, remove);
       host.append(row);
 
       // What this image's search found, under this image's row.
@@ -7432,17 +7531,61 @@
   // Is this spot already accounted for? A sweep that re-proposes what the
   // reader already found would bury the handful of genuine additions in
   // hundreds of duplicates, which is the failure this feature replaces.
-  function alreadyCovered(page, rect) {
+  //
+  // Two different questions, and they were being asked as one.
+  //
+  // The same word found twice in the same place is a duplicate, and a modest
+  // overlap settles it. A *different* word's mark nearby is not a duplicate —
+  // it is a different word — and it only accounts for this one if it actually
+  // covers it. The old rule asked neither: it measured the overlap against the
+  // smaller of the two boxes, so a large mark clipping the corner of a small
+  // candidate counted as having dealt with it.
+  //
+  // Measured. On a photographed slide, "Thailand" was found at 0.724 against a
+  // bar of 0.63 and thrown away as covered — by a mark for "Singapore". On
+  // another, all four copies of "ThaiBev" were found at 0.849 against a bar of
+  // 0.64 and all four were thrown away the same way. Both words then reported
+  // as found nowhere, which is how a redaction goes missing while every part
+  // of the machinery believes it did its job.
+  const SAME_WORD_AGAIN = 0.3;
+  const REALLY_COVERED = 0.85;
+  // Two boxes this alike are the same place, whatever words they carry: a
+  // candidate four pixels off an existing mark is that mark again.
+  const SAME_SPOT = 0.8;
+
+  function accountsFor(mark, rect, term, markTerm) {
+    // The same word again: any decent overlap means one find, not two.
+    if (term && markTerm && markTerm === term) {
+      return Match.overlapFraction(mark, rect) > SAME_WORD_AGAIN;
+    }
+    // Anything else has to actually cover it — or be the same box by another
+    // name, which a mark in the same place is however it was found.
+    return Match.coveredFraction(rect, mark) >= REALLY_COVERED
+      || Match.overlapFraction(mark, rect) >= SAME_SPOT;
+  }
+
+  // Returns what accounts for this spot, or null. A string rather than a flag,
+  // because "already covered" is a thing a reviewer can be shown and a thing
+  // an investigation needs: by the same word found twice, by a different word
+  // whose mark contains this one, or by a box drawn by hand.
+  function alreadyCovered(page, rect, term) {
     for (const hit of page.hits || []) {
-      for (const r of hit.rects) if (Match.overlapFraction(r, rect) > 0.3) return true;
+      const hitTerm = hit.term || (hit.finding && hit.finding.term);
+      for (const r of hit.rects) {
+        if (accountsFor(r, rect, term, hitTerm)) return 'read:' + (hitTerm || '?');
+      }
     }
     for (const match of page.imageHits || []) {
-      if (match.rect && Match.overlapFraction(match.rect, rect) > 0.3) return true;
+      if (match.rect && accountsFor(match.rect, rect, term, match.term)) {
+        return 'mark:' + (match.term || match.templateId || '?');
+      }
     }
+    // A box drawn by hand says "cover this", about no word in particular, so
+    // it accounts for a candidate only by containing it.
     for (const box of page.manual || []) {
-      if (Match.overlapFraction(box, rect) > 0.3) return true;
+      if (Match.coveredFraction(rect, box) >= REALLY_COVERED) return 'a box drawn by hand';
     }
-    return false;
+    return null;
   }
 
   // Does the reader already know this is a different word?
@@ -7714,9 +7857,13 @@
           }
           for (const hit of Match.pairPhraseHits(parts, hitsByPart, skipped)) {
             const rect = { x: hit.x, y: hit.y, w: hit.w, h: hit.h };
-            if (alreadyCovered(page, rect)) continue;
+            const accounted = alreadyCovered(page, rect, term);
+            if (accounted) {
+              refused.push({ pageIndex, at: rect.y, term, why: 'covered by ' + accounted });
+              continue;
+            }
             if (readerContradicts(page, rect, term) || shortAcronymShapeRefused(page, rect, term)) {
-              refused.push({ pageIndex, at: rect.y, term });
+              refused.push({ pageIndex, at: rect.y, term, why: 'reader' });
               continue;
             }
             page.imageHits.push({
@@ -7746,13 +7893,21 @@
         if (!page) continue;
         for (const hit of Match.suppress(hits, 0.3)) {
           const rect = { x: hit.x, y: hit.y, w: hit.w, h: hit.h };
-          if (alreadyCovered(page, rect)) continue;
+          // Already dealt with is not the same as refused, but it is the same
+          // to anyone looking for a mark that is not there, so it is recorded
+          // too — with its own reason, because "covered" and "the reader says
+          // otherwise" want opposite responses from whoever reads it.
+          const accounted = alreadyCovered(page, rect, term);
+          if (accounted) {
+            refused.push({ pageIndex, at: rect.y, term, why: 'covered by ' + accounted });
+            continue;
+          }
           if (readerContradicts(page, rect, term)) {
             // Where, not just how many. The note tells the reviewer this is
             // where to look when a mark they expected is missing, and until
             // now there was nothing to look at: a count of two, over sixty
             // pages, is not a place.
-            refused.push({ pageIndex, at: rect.y, term });
+            refused.push({ pageIndex, at: rect.y, term, why: 'reader' });
             continue;
           }
           page.imageHits.push({
@@ -7777,9 +7932,28 @@
     for (const entry of entries) {
       const found = results.get(entry.key);
       if (!found) continue;
+      // The best *verified* score, which is the one the bar is a bar on.
+      //
+      // `found.best` is not that when nothing cleared the bar: the search
+      // falls back to reporting refinement's best, which is measured on a
+      // shrunken copy and runs higher. Read as a verify score it says a word
+      // cleared its bar and was thrown away afterwards, which sent one
+      // investigation off entirely — "Thailand" looked like 0.724 against a
+      // bar of 0.63 and was in fact never verified at all.
+      const seen = (found.matches || []).map(hit => hit.score)
+        .concat((found.near || []).map(hit => hit.score));
+      const best = {
+        score: seen.length ? Math.max(...seen) : 0,
+        verified: seen.length > 0,
+        refined: found.best || 0,
+        part: entry.part,
+        bar: entry.threshold,
+      };
       const was = state.sweepBest[entry.term];
-      const best = { score: found.best || 0, part: entry.part, bar: entry.threshold };
-      if (!was || best.score > was.score) state.sweepBest[entry.term] = best;
+      if (!was || best.score > was.score
+        || (!was.verified && best.refined > was.refined)) {
+        state.sweepBest[entry.term] = best;
+      }
     }
     // A run that was stopped part way has not answered the document, so it
     // does not get to claim it has: the offer stands, and the note says how
@@ -8672,7 +8846,8 @@
 
   window.Blinded = { state, rescan, loadFile, exportFile, setMode, addTemplate,
     undoLast, undoStack, applyLabels, labelItems, downloadKey,
-    sensFor, barFromScores, settleBar, barSteps, moveBarTo, liveImageHits,
+    sensFor, barFromScores, settleBar, barSteps, moveBarTo, answeredAlready,
+    liveImageHits,
     AUTO_FLOOR, REAL_GAP,
     anchorOn, returnTo, stepPage, refreshPaging,
     watchPinch, pinching, PINCH_IN, wordSensitivity, wordBarFor,

@@ -1034,6 +1034,28 @@ check('an empty term is harmless', TextImage.shapeRelief('') === 0
   const left = { x: 10, y: 20, w: 40, h: 12, score: 0.8 };
   const right = { x: 55, y: 21, w: 35, h: 12, score: 0.75 };
   const far = { x: 200, y: 21, w: 35, h: 12, score: 0.9 };
+  // How much of a thing lies inside another — coveredFraction(inner, outer),
+  // in that order, which is the whole point of it existing beside
+  // overlapFraction. Written down here because a second function of the same
+  // name with the arguments the other way round was added over the top of this
+  // one and silently answered every existing caller wrongly.
+  {
+    const outer = { x: 0, y: 0, w: 100, h: 100 };
+    const inside = { x: 10, y: 10, w: 20, h: 20 };
+    const clipped = { x: 90, y: 90, w: 20, h: 20 };
+    check('a box inside another is entirely covered by it',
+      Match.coveredFraction(inside, outer) === 1,
+      String(Match.coveredFraction(inside, outer)));
+    check('and the big one is barely covered by the small one',
+      Math.abs(Match.coveredFraction(outer, inside) - 0.04) < 1e-9,
+      String(Match.coveredFraction(outer, inside)));
+    check('a box clipped at the corner is a quarter covered',
+      Math.abs(Match.coveredFraction(clipped, outer) - 0.25) < 1e-9,
+      String(Match.coveredFraction(clipped, outer)));
+    check('and nothing overlapping is nothing covered',
+      Match.coveredFraction({ x: 200, y: 200, w: 10, h: 10 }, outer) === 0);
+  }
+
   check('adjacent phrase hits are accepted',
     Match.phraseHitsAdjacent(left, right, 0) === true);
   check('distant hits are not',
@@ -2146,6 +2168,33 @@ check('no creation date is carried into the output', !meta.info.CreationDate);
       if (seen.has(name)) twice.push(name); else seen.set(name, true);
     }
     check('nothing at the top of app.js is declared twice',
+      twice.length === 0, 'declared more than once: ' + twice.join(', '));
+  }
+
+  // And the same again for the libraries, for functions rather than consts.
+  //
+  // A second `function` of the same name is not a SyntaxError — it quietly
+  // wins, and every existing caller gets the new one. Written by adding a
+  // coveredFraction(outer, inner) beside a coveredFraction(inner, outer) that
+  // had been there all along: the file parsed, the tests ran, and three
+  // unrelated pieces of the tool began answering a question nobody had asked
+  // them, with the arguments the wrong way round.
+  {
+    const files = ['match.js', 'imagesearch.js', 'pageprep.js', 'detect.js',
+      'render.js', 'boxes.js', 'labels.js', 'textimage.js', 'pagerole.js'];
+    const twice = [];
+    for (const name of files) {
+      const path = new URL('../lib/' + name, import.meta.url);
+      if (!existsSync(path)) continue;
+      const seen = new Set();
+      for (const line of readFileSync(path, 'utf8').split('\n')) {
+        const found = line.match(/^\s*function ([A-Za-z_$][\w$]*)\s*\(/);
+        if (!found) continue;
+        if (seen.has(found[1])) twice.push(name + ':' + found[1]);
+        else seen.add(found[1]);
+      }
+    }
+    check('no library declares the same function twice',
       twice.length === 0, 'declared more than once: ' + twice.join(', '));
   }
 }

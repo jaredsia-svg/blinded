@@ -3323,12 +3323,31 @@ try {
     });
     await page.waitForTimeout(200);
 
+    // Before any search these rows show a red "?" and no slider: a bar over an
+    // answer nobody has yet is a control over nothing, and setting it would be
+    // overruling a measurement that has not been taken. So the search runs
+    // first, and then there is something for a bar to be a bar on.
+    const beforeSearch = await page.evaluate(() => ({
+      sliders: document.querySelectorAll('.templates .rowsens input').length,
+      heading: !document.getElementById('senshead').hidden,
+      asking: [...document.querySelectorAll('.templates .n')].every(n =>
+        n.textContent.trim() === '?'),
+    }));
+    check('an image not yet searched for shows no bar to set',
+      beforeSearch.sliders === 0 && beforeSearch.heading === false,
+      JSON.stringify(beforeSearch));
+    check('only the red question mark that says so',
+      beforeSearch.asking === true, JSON.stringify(beforeSearch));
+    await redact(page);
+
     const rows = await page.evaluate(() => ({
       sliders: document.querySelectorAll('.templates .rowsens input').length,
       heading: !document.getElementById('senshead').hidden,
       // Between the thumbnail on the left and the tally on the right, which
       // is where it was asked for.
-      between: [...document.querySelectorAll('.templates li')].every(li => {
+      // The image rows only: the notes under them are list items too, and they
+      // hold settings rather than a thumbnail and a tally.
+      between: [...document.querySelectorAll('.templates li:not(.imgnote)')].every(li => {
         const kids = [...li.children];
         const thumb = kids.findIndex(k => k.tagName === 'CANVAS');
         const bar = kids.findIndex(k => k.classList.contains('rowsens'));
@@ -3844,6 +3863,98 @@ try {
       moved.steps.length >= 2 && moved.steps[0].count === 2
       && moved.steps.every(step => step.bar >= 0.62 && step.count > 0),
       JSON.stringify(moved.steps));
+  }
+
+  // ---------- pressing a setting does not search again ----------
+  //
+  // The circles are built from candidates the search already verified at full
+  // resolution, above and below the bar alike. Moving the bar within that set
+  // is a filter, not a search, and a reviewer comparing two settings should
+  // not be made to wait twice for an answer the tool already has.
+  {
+    const swapped = await page.evaluate(async () => {
+      const B = window.Blinded;
+      const template = B.state.templates[0];
+      if (!template || !template.verified || !template.verified.length) return null;
+      const scores = template.verified.map(hit => hit.score).sort((a, b) => b - a);
+      const lower = Math.max(B.AUTO_FLOOR,
+        Math.floor((scores[scores.length - 1] - 0.005) * 100) / 100);
+      const before = { bar: B.sensFor(template), marks: template.matches,
+        searched: template.searched };
+      const began = Date.now();
+      B.moveBarTo(template, lower);
+      const took = Date.now() - began;
+      const marks = B.state.pages.reduce((n, p) =>
+        n + p.imageHits.filter(m => m.templateId === template.id).length, 0);
+      // And back again, through undo, which has to put the marks back too.
+      B.undoLast();
+      const after = { bar: B.sensFor(template), marks: template.matches };
+      return { before, took, lower, marks, searched: template.searched,
+        canServe: B.answeredAlready(template, lower),
+        cannotServeBelow: B.answeredAlready(template, 0.1), after };
+    });
+    if (swapped) {
+      check('a setting within what was verified is served from it',
+        swapped.canServe === true && swapped.cannotServeBelow === false,
+        JSON.stringify(swapped));
+      check('and pressing it leaves the document searched, not asking again',
+        swapped.searched === true, JSON.stringify(swapped));
+      check('the marks change at once rather than after a search',
+        swapped.marks >= swapped.before.marks && swapped.took < 1500,
+        JSON.stringify(swapped));
+      check('and undo puts the bar and its marks back',
+        Math.abs(swapped.after.bar - swapped.before.bar) < 0.005
+        && swapped.after.marks === swapped.before.marks, JSON.stringify(swapped));
+    }
+  }
+
+  // ---------- what counts as already covered ----------
+  //
+  // Two questions that were being asked as one. The same word found twice in
+  // the same place is a duplicate, and a modest overlap settles it. A
+  // different word's mark nearby is not a duplicate — it is a different word —
+  // and it only accounts for this one if it actually covers it.
+  //
+  // Measured: on a photographed slide, "Thailand" was found at 0.724 against a
+  // bar of 0.63 and thrown away; on another, all four copies of "ThaiBev" at
+  // 0.849 against 0.64. In both the mark that swallowed them belonged to the
+  // same word, which is correct — but the rule that let it would equally have
+  // let a large mark for one word bury a small candidate for another, because
+  // it measured the overlap against whichever box was smaller.
+  {
+    const rules = await page.evaluate(() => {
+      const B = window.Blinded;
+      const page0 = B.state.pages[0];
+      const hits = page0.imageHits;
+      const manual = page0.manual;
+      page0.imageHits = [{ id: 'x', term: 'Singapore',
+        rect: { x: 0, y: 0, w: 200, h: 40 } }];
+      page0.manual = [];
+      const corner = { x: 180, y: 30, w: 60, h: 20 };
+      const within = { x: 20, y: 5, w: 40, h: 20 };
+      const out = {
+        sameWordAgain: B.alreadyCovered(page0, within, 'Singapore'),
+        otherWordClipped: B.alreadyCovered(page0, corner, 'Thailand'),
+        otherWordInside: B.alreadyCovered(page0, within, 'Thailand'),
+        // The same place by another name: a candidate a few pixels off an
+        // existing mark is that mark again, whatever word it carries.
+        sameSpot: B.alreadyCovered(page0, { x: 4, y: 2, w: 200, h: 40 }, 'Thailand'),
+      };
+      page0.imageHits = hits;
+      page0.manual = manual;
+      return out;
+    });
+    check('the same word in the same place is one find, not two',
+      Boolean(rules.sameWordAgain), JSON.stringify(rules));
+    check('another word merely clipped by that mark is not accounted for',
+      rules.otherWordClipped === null, JSON.stringify(rules));
+    check('but one sitting inside it is',
+      Boolean(rules.otherWordInside), JSON.stringify(rules));
+    check('and so is one in the very same place',
+      Boolean(rules.sameSpot), JSON.stringify(rules));
+    check('and what accounts for it is named, not just flagged',
+      typeof rules.sameWordAgain === 'string'
+      && rules.sameWordAgain.includes('Singapore'), JSON.stringify(rules));
   }
 
   // ---------- what the comprehensive check draws ----------
@@ -6850,9 +6961,14 @@ try {
       p.imageHits = [];
       return out;
     });
+    // What accounts for it, not merely that something does: a reviewer looking
+    // for a mark that is not there needs to know whether the same word was
+    // already found here, a different one covers it, or they drew a box over
+    // it themselves.
     check('a spot already marked is not proposed again',
-      dedupe.onTop === true, JSON.stringify(dedupe));
-    check('but a spot nothing has touched is', dedupe.elsewhere === false,
+      typeof dedupe.onTop === 'string' && dedupe.onTop.includes('KNW'),
+      JSON.stringify(dedupe));
+    check('but a spot nothing has touched is', dedupe.elsewhere === null,
       JSON.stringify(dedupe));
 
     // Amber has to reach the screen, or the distinction does not exist.

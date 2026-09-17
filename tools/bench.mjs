@@ -97,7 +97,16 @@ for (const name of readdirSync(bench).sort()) {
     // The draft restored the marks its own run had found, at whatever bar it
     // was saved with. Left in place they mix with this run's and the report
     // describes two searches at once.
-    for (const p of B.state.pages) p.imageHits = [];
+    //
+    // The boxes drawn by hand go too. They are part of the draft's intent, but
+    // a benchmark is asking what the tool finds on its own: a word sitting
+    // under a box the reviewer had already drawn is skipped as "covered
+    // already" and counted as a miss, which is the opposite of the truth.
+    for (const p of B.state.pages) {
+      p.imageHits = [];
+      p.manual = [];
+      p.dismissed = new Set();
+    }
     return B.runSearch();
   });
   await page.waitForFunction(() => document.getElementById('busy').hidden,
@@ -117,6 +126,11 @@ for (const name of readdirSync(bench).sort()) {
     const B = window.Blinded;
     return {
       pages: B.state.pages.length,
+      // What the check found and then threw away. A word that cleared its bar
+      // and is still not on the page was refused by one of the vetoes, and
+      // that is a different failure from one that never scored well enough.
+      refused: (B.state.sweepRefusedAt || []).map(r => ({
+        term: r.term, page: r.pageIndex, at: Math.round(r.at), why: r.why || 'reader' })),
       // How coarse the pages are, which decides whether they get a second
       // look at twice the size.
       size: [...new Set(B.state.pages.map(p => p.source.width + 'x' + p.source.height))],
@@ -130,7 +144,14 @@ for (const name of readdirSync(bench).sort()) {
         // the check can see it on a scan.
         read: B.state.pages.reduce((n, p) =>
           n + p.hits.filter(hit => hit.term === term).length, 0),
+        // Every mark this word has, not only the comprehensive check's. A word
+        // can be found as a picture by the search itself — that is what the
+        // typed-word image pass is for — and counting only the check's marks
+        // reported four copies of a found word as found nowhere, because the
+        // check had correctly deduped its own candidates against them.
         seen: B.state.pages.reduce((n, p) =>
+          n + (p.imageHits || []).filter(hit => hit.term === term).length, 0),
+        bySweep: B.state.pages.reduce((n, p) =>
           n + (p.imageHits || []).filter(hit => hit.bySweep && hit.term === term).length, 0),
         // The best the check managed for this word, and the bar it had to
         // clear: a word missed at 0.62 against 0.70 is a different problem
@@ -138,7 +159,7 @@ for (const name of readdirSync(bench).sort()) {
         best: (B.state.sweepBest || {})[term] || null,
         // Where the check put them, so they can be cropped and looked at.
         where: B.state.pages.flatMap(p => (p.imageHits || [])
-          .filter(hit => hit.bySweep && hit.term === term && hit.rect)
+          .filter(hit => hit.term === term && hit.rect)
           .map(hit => ({ p: p.index, x: Math.round(hit.rect.x), y: Math.round(hit.rect.y),
             w: Math.round(hit.rect.w), h: Math.round(hit.rect.h),
             s: +(hit.score || 0).toFixed(3) }))) })),
@@ -166,13 +187,29 @@ for (const name of readdirSync(bench).sort()) {
 
   console.log('==', name, '·', out.pages, 'pages · ' + out.size.join('/') + ' · ' + out.dpi.join('/') + ' dpi · search ' + searchTook.toFixed(1)
     + 's · check ' + sweepTook.toFixed(1) + 's (+' + sweepAdded + ')');
+  if (out.refused.length) {
+    const byTerm = new Map();
+    for (const one of out.refused) {
+      const key = one.term + ' (' + one.why + ')';
+      byTerm.set(key, (byTerm.get(key) || 0) + 1);
+    }
+    console.log('   refused ' + [...byTerm].map(([t, n]) => JSON.stringify(t) + ' x' + n)
+      .join(', '));
+  }
   for (const term of out.terms) {
+    // The verified best is the one the bar is a bar on. When nothing was
+    // verified at all, only refinement's guess exists, and it is a different
+    // and higher scale — saying so keeps it from being read as a near miss.
     const best = term.best
-      ? ' · best ' + term.best.score.toFixed(3) + ' of ' + term.best.bar.toFixed(2)
-        + ' (' + term.best.part + ')'
+      ? (term.best.verified
+        ? ' · best ' + term.best.score.toFixed(3) + ' of ' + term.best.bar.toFixed(2)
+          + ' (' + term.best.part + ')'
+        : ' · nothing verified, refine topped out at ' + term.best.refined.toFixed(3)
+          + ' (' + term.best.part + ')')
       : '';
     console.log('   word ' + JSON.stringify(term.term)
-      + ' -> read ' + term.read + ', seen ' + term.seen + best);
+      + ' -> read ' + term.read + ', seen ' + term.seen
+      + ' (' + term.bySweep + ' by the check)' + best);
   }
   for (const logo of out.templates) {
     console.log('   image ' + logo.id + ' p' + (logo.page + 1) + ' ' + logo.size
