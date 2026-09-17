@@ -7920,14 +7920,39 @@
     try { await sweepTask; } catch { /* it reports its own failure */ }
   }
 
-  // What the second look changes. Measured over the benchmark set: at these
-  // numbers a word the first pass placed nowhere is found on two documents
+  // How long a shortlist the check works from.
+  //
+  // The matcher nominates places that might be the word, then verifies the
+  // best few properly. The defaults are sized for a picked image, which is
+  // one distinctive picture on a page. A word is not that: a page of body
+  // text offers hundreds of places that correlate weakly with any ten-letter
+  // shape, so the true copy of a name can sit outside a 110-long shortlist
+  // and never be verified at all. These numbers are the second look's, moved
+  // up to the first pass.
+  //
+  // Measured across the nine benchmark documents: one further true copy of a
+  // name is found on the scanned deck, along with one false mark on a word of
+  // similar shape ("commitment," read as "Inderpreet" at 0.637 against that
+  // word's 0.612 bar); the other eight documents are unchanged, mark for
+  // mark, and the slowest check grows about four percent. An intermediate
+  // shortlist (200/12/32) was measured too and changes nothing at all, so
+  // there is no cheaper point worth taking.
+  //
+  // The reviewer's own picked images keep the default budget. Raising it
+  // there was tried and made image matching worse.
+  const SWEEP_CANDIDATES = 400;
+  const SWEEP_PER_SCALE = 24;
+  const SWEEP_VERIFY = 64;
+
+  // What the second look changes on top of that: only the gate a place has to
+  // clear to be nominated at all. Measured over the benchmark set: at this
+  // threshold a word the first pass placed nowhere is found on two documents
   // that had been missing it, no document loses a mark it already had, and no
   // new false positive appeared on the one document that is prone to them.
   const DEEP_COARSE = 0.22;
-  const DEEP_CANDIDATES = 400;
-  const DEEP_PER_SCALE = 24;
-  const DEEP_VERIFY = 64;
+  const DEEP_CANDIDATES = SWEEP_CANDIDATES;
+  const DEEP_PER_SCALE = SWEEP_PER_SCALE;
+  const DEEP_VERIFY = SWEEP_VERIFY;
 
   async function sweepNow() {
     const entries = sweepTemplates();
@@ -7973,7 +7998,10 @@
     let results;
     try {
       results = await ImageSearch.searchAllParallel(pages, entries,
-        { stop: () => state.sweepStopped },
+        { stop: () => state.sweepStopped,
+          maxCandidates: SWEEP_CANDIDATES,
+          perScale: SWEEP_PER_SCALE,
+          verifyLimit: SWEEP_VERIFY },
         done => sweepProgress(done, pages.length));
     } catch (error) {
       state.sweepRunning = false;

@@ -83,33 +83,6 @@ for (const name of readdirSync(bench).sort()) {
   await page.setInputFiles('#file', join(folder, doc));
   await page.waitForSelector('#view-review:not([hidden])', { timeout: 180000 });
   await page.waitForTimeout(1200);
-  if (process.env.COARSE) {
-    await page.evaluate(n => {
-      window.__searchOpts = { ...(window.__searchOpts || {}), coarseThreshold: n };
-    }, Number(process.env.COARSE));
-  }
-  if (process.env.BUDGET) {
-    await page.evaluate(() => {
-      window.__searchOpts = { ...(window.__searchOpts || {}),
-        maxCandidates: 400, perScale: 24, verifyLimit: 64 };
-    });
-  }
-  if (process.env.NO_MASK) {
-    await page.evaluate(() => {
-      window.__searchOpts = { ...(window.__searchOpts || {}), noMask: true };
-    });
-  }
-  if (process.env.MAX_UPSCALE) {
-    await page.evaluate(n => { window.__searchOpts = { maxUpscale: n }; },
-      Number(process.env.MAX_UPSCALE));
-  }
-  if (process.env.READER_SURE) {
-    await page.evaluate(n => { window.__readerSure = n; }, Number(process.env.READER_SURE));
-  }
-  if (process.env.BAR_NUDGE) {
-    const by = Number(process.env.BAR_NUDGE);
-    await page.evaluate(n => { window.__barNudge = n; }, by);
-  }
 
   const started = Date.now();
   // A restored draft comes back already searched, and its picked images come

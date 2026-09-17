@@ -3965,10 +3965,11 @@ try {
   // true position of "Tokenomics" scored under 0.4 and was never offered for
   // verification — a best of 0.000 for a word plainly on the page.
   //
-  // Moving those numbers everywhere roughly doubles the check, and on one
-  // document it pushed a true match out of the shortlist. So they move only
-  // for a word the document holds no mark for at all, which is the case where
-  // there is nothing to lose and something to find.
+  // The shortlist part of that has since been measured properly and moved to
+  // the check's first pass, where it costs about four percent of the slowest
+  // document. What stays here for a word with no mark anywhere is the gate
+  // itself: dropping it to 0.22 is what roughly doubles the work, so it is
+  // spent only where there is nothing to lose and something to find.
   {
     const deep = await page.evaluate(async () => {
       const B = window.Blinded;
@@ -3985,6 +3986,47 @@ try {
       deep.deepened.includes('Qzzxwvunlikely'), JSON.stringify(deep));
     check('and a word that was found is left alone',
       !deep.deepened.includes('Jane') || deep.found === 0, JSON.stringify(deep));
+  }
+
+  // ---------- how long a shortlist each pass works from ----------
+  //
+  // A page of body text offers hundreds of places that correlate weakly with
+  // any long word, so a true copy of a name can sit outside the default
+  // shortlist and never be verified. The check works from a longer one. A
+  // picked image does not: raising it there was tried on real documents and
+  // made image matching worse, so the two must not drift back together.
+  {
+    const budgets = await page.evaluate(async () => {
+      const IS = window.BlindedImageSearch;
+      const real = IS.searchAllParallel;
+      const seen = [];
+      IS.searchAllParallel = (pages, entries, opts, report) => {
+        seen.push({ words: entries.every(e => !e.logo),
+          maxCandidates: opts && opts.maxCandidates,
+          perScale: opts && opts.perScale,
+          verifyLimit: opts && opts.verifyLimit });
+        return real(pages, entries, opts, report);
+      };
+      try {
+        const was = window.Blinded.state.terms.slice();
+        window.Blinded.state.terms = ['Jane'];
+        await window.Blinded.runSweep();
+        window.Blinded.state.terms = was;
+        await window.Blinded.runSearch();
+      } finally {
+        IS.searchAllParallel = real;
+      }
+      return seen;
+    });
+    const check1 = budgets.find(b => b.words);
+    const picked = budgets.find(b => !b.words);
+    check('the check works from a longer shortlist than the default',
+      Boolean(check1) && check1.maxCandidates === 400 && check1.perScale === 24
+      && check1.verifyLimit === 64, JSON.stringify(budgets));
+    check('and a picked image keeps the default one',
+      !picked || (picked.maxCandidates === undefined
+        && picked.perScale === undefined && picked.verifyLimit === undefined),
+      JSON.stringify(budgets));
   }
 
   // ---------- what counts as already covered ----------
