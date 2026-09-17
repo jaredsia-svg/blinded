@@ -935,21 +935,19 @@ body.picking .tools {
 .barpip i { font: 400 9.5px/1.15 var(--sans); font-style: normal; color: var(--ink-soft); }
 .barpip:hover { border-color: var(--ink-soft); }
 .barpip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-/* Where it is now. Nothing to press, so nothing that looks pressable. */
+/* The one in use. The search puts the bar where the scores point, so this is
+   normally the recommendation as well — it is filled rather than outlined, and
+   there is nothing to press, so nothing that looks pressable. */
 .barpip.now {
-  cursor: default; background: var(--bg);
-  border-style: dashed; color: var(--ink-soft);
+  cursor: default;
+  border-color: var(--accent); background: rgba(31, 111, 235, .1); color: var(--accent);
 }
-.barpip.now b { color: var(--ink); }
-/* And what the scores point at, which is the only thing in this row that is a
-   recommendation rather than a possibility. */
-.barpip.best {
-  border-color: var(--accent); background: rgba(31, 111, 235, .07); color: var(--accent);
-}
-/* Already on the recommended setting: still a readout, and still said. */
-.barpip.now.best { border-style: dashed; }
-.barpip.best b, .barpip.best i { color: var(--accent); }
-.barpip.best:hover { background: rgba(31, 111, 235, .13); }
+.barpip.now b, .barpip.now i { color: var(--accent); }
+/* And what the scores point at when the bar is somewhere else, because the
+   reviewer moved it: outlined, and one press away. */
+.barpip.best:not(.now) { border-color: var(--accent); }
+.barpip.best:not(.now) b { color: var(--accent); }
+.barpip.best:not(.now):hover { background: rgba(31, 111, 235, .07); }
 
 .imgnote {
   list-style: none; margin: -2px 0 8px; padding: 0 2px 0 44px;

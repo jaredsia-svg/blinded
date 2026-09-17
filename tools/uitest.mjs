@@ -1866,12 +1866,22 @@ try {
       && /^\d+ match(es)?$/.test(pip.count || '')), JSON.stringify(wheel));
   // Where it stands now is a readout, not an offer: a control that does
   // nothing is a control the reviewer stops trusting.
-  check('the first is where the bar stands, and cannot be pressed',
-    wheel[0].now === true && wheel[0].tag === 'SPAN'
-    && wheel.slice(1).every(pip => pip.tag === 'BUTTON' && !pip.now),
+  check('exactly one of them is the setting in use, and it cannot be pressed',
+    wheel.filter(pip => pip.now).length === 1
+    && wheel.every(pip => (pip.now ? pip.tag === 'SPAN' : pip.tag === 'BUTTON')),
+    JSON.stringify(wheel));
+  // Left to right by how strict they are, the way the slider runs. A row whose
+  // order changed with the answer would be a row nobody could learn.
+  check('and they run from the loosest setting to the strictest',
+    wheel.every((pip, i) => i === 0 || Number(pip.bar) > Number(wheel[i - 1].bar)),
     JSON.stringify(wheel));
   check('and at most one of them is singled out as the recommendation',
     wheel.filter(pip => pip.best).length <= 1, JSON.stringify(wheel));
+  // Ordinarily the same circle: the search puts the bar where the scores say,
+  // so the setting in use is the recommended one unless the reviewer has
+  // moved it.
+  check('which after a search is the setting the search chose',
+    wheel.filter(pip => pip.best).every(pip => pip.now), JSON.stringify(wheel));
   check('and they are actually on screen',
     await page.isVisible('#templates .imgnote'));
   // On the row of the image it is about, under it: with three picked images
@@ -3768,9 +3778,9 @@ try {
                                      0.82, 0.818, 0.815, 0.812]),
                       near: hits([0.74, 0.73]) };
       const raised = B.settleBar(flood, 0.75);
-      // Four copies of a wordmark at four sizes score 1.00, 0.95, 0.88, 0.83.
-      // Spread out, and every one of them real: a rule that cut those would be
-      // a rule that loses redactions, so this one does not.
+      // Four copies of a wordmark at four sizes score 1.00, 0.95, 0.88, 0.83:
+      // spread out, and every one of them real. The bar goes to the gap here
+      // too, which is the trade this makes — see below.
       const spread = { matches: hits([1, 0.95, 0.88, 0.83]), near: hits([0.5]) };
       const spared = B.settleBar(spread, 0.75);
       const steps = B.barSteps([1, 0.99, 0.84, 0.836, 0.831, 0.825, 0.82, 0.818, 0.74], 3);
@@ -3814,10 +3824,20 @@ try {
     check('and what is left is the two that scored like the mark itself',
       moved.keptAfterRaise === 2 && moved.droppedByRaise === 12,
       JSON.stringify(moved));
-    // The asymmetry that matters: proposing one mark too many costs a moment's
-    // reading, and quietly withdrawing one costs a redaction.
-    check('but a handful of copies spread across the sizes is never cut',
-      moved.spared === null && moved.sparedKept === 4, JSON.stringify(moved));
+    // And it goes there in the ordinary case too, not only against a flood.
+    //
+    // This was once conservative in one direction — down on its own, up only
+    // against overwhelming evidence — on the reasoning that proposing one mark
+    // too many costs a moment's reading while withdrawing one costs a
+    // redaction. That asymmetry is real, and it is answered somewhere better:
+    // the settings beside the slider always name a looser bar and what it
+    // would find, including one that takes in everything this bar turned away.
+    // A bar that goes back in one press does not lose anything. What the old
+    // rule cost was a reviewer left reading fifty-six proposals, two of which
+    // were the logo, and then aiming a slider at a number nobody had told them.
+    check('and to the gap in the ordinary case as well, not only against a flood',
+      moved.spared !== null && moved.spared > 0.75 && moved.sparedKept < 4,
+      JSON.stringify(moved));
     // The runners-up, so the reviewer is choosing from a list rather than
     // aiming a slider at a number nobody has told them.
     check('the other places the bar could stand are named, with their counts',

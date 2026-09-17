@@ -2476,14 +2476,17 @@
       }
     }
 
-    // Which of them the scores actually point at. It can be the one the bar is
-    // already on, and saying so is worth a colour: "you are where the scores
-    // say" is an answer, not a silence.
+    // Which of them the scores actually point at. Ordinarily that is the one
+    // the bar is already on, since the search puts it there; it is not, when
+    // the reviewer has moved the bar themselves.
     const best = barFromScores(all);
     const settings = [here].concat(others.slice(0, 2));
     for (const step of settings) {
       step.best = best !== null && Math.abs(step.bar - best) < 0.005;
     }
+    // Left to right by how strict they are, the way the slider runs: a row
+    // whose order changed with the answer would be a row nobody could learn.
+    settings.sort((a, b) => a.bar - b.bar);
     return { warn: false, settings };
   }
 
@@ -2586,31 +2589,21 @@
     return out;
   }
 
-  // A flood is this many marks or more. Below it, a search that proposed a few
-  // things too many is a search the reviewer can read.
-  const A_FLOOD = 8;
-
   // Where the bar settles once the search has been run, which is the first
   // moment anything is known about it.
   //
-  // Two directions, and they are not symmetrical, because the two mistakes are
-  // not symmetrical. Lowering the bar proposes more marks, and every proposal
-  // is shown to the reviewer to accept or dismiss; the cost of being wrong is
-  // a moment's reading. Raising it takes marks away, and a redaction tool that
-  // quietly stops covering something is the failure that matters. So:
+  // 0.75 is where the slider starts and nobody chose it. Once the search has
+  // been run the scores know better, in both directions, so the bar goes to
+  // where they say and the search reports itself at that setting rather than
+  // at the one it happened to begin with.
   //
-  //   nothing found        -> come down to what the search actually saw
-  //   a flood of junk      -> go up, but only on overwhelming evidence
-  //   anything else        -> leave it, and say in the note where it could go
-  //
-  // What counts as overwhelming: the scores below the gap have to be both many
-  // and densely packed. That is the signature of page furniture rhyming with
-  // the mark — measured, a 46x46 roundel proposed 56 marks of which two were
-  // the logo and fifty-four were the letter o in body text, all within a
-  // hundredth or two of each other. Copies of one mark at different sizes do
-  // not look like that: in a fixture built for it, four copies of a wordmark
-  // score 1.00, 0.95, 0.88 and 0.83 — spread out, and every one of them real.
-  // A rule that cut those would be a rule that loses redactions.
+  // This was once conservative in one direction — it would come down on its
+  // own but only go up against an overwhelming flood — on the reasoning that
+  // proposing one mark too many costs a moment's reading while withdrawing one
+  // costs a redaction. That asymmetry is real and it is answered somewhere
+  // better: the settings beside the slider always name a lower bar and what it
+  // would find, including one that takes in everything this bar turned away.
+  // A bar that can be put back in one press is not a bar that loses anything.
   //
   // Only while the reviewer has not set the bar themselves. A number they
   // moved is a decision, and moving it under them would overrule it.
@@ -2618,20 +2611,6 @@
     const all = (found.matches || []).concat(found.near || []);
     const suggested = barFromScores(all.map(hit => hit.score));
     if (suggested === null || Math.abs(suggested - bar) < 0.005) return null;
-
-    if (suggested > bar) {
-      const dropped = all.filter(hit => hit.score >= bar && hit.score < suggested)
-        .map(hit => hit.score).sort((a, b) => b - a);
-      if (dropped.length < A_FLOOD) return null;
-      // Densely packed: most of them heaped around one score. Measured
-      // against the whole range rather than most of it, two stragglers
-      // between the mark and the heap were enough to call a plateau of
-      // fifty-four spread out, so the test is how many sit near the middle.
-      const middle = dropped[dropped.length >> 1];
-      const heaped = dropped.filter(score => Math.abs(score - middle) <= ONE_CLUMP);
-      if (heaped.length < dropped.length * 0.7) return null;
-    }
-
     found.matches = all.filter(hit => hit.score >= suggested);
     found.near = all.filter(hit => hit.score < suggested);
     return suggested;
