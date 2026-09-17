@@ -690,6 +690,28 @@ check('suppression keeps finds that do not overlap', Match.suppress([
 // which straddles 1.0 at 0.954 and 1.192 and never lands on it: refining the
 // source position scored 0.977 while the search topped out at 0.805 and
 // reported nothing found.
+// The rungs are chosen for the template's size: what decides whether a copy can
+// be told apart from the page is how many pixels it has. Measured on a real
+// deck — see MIN_COPY_AREA in match.js — where one ladder for every template
+// both flooded a small mark with junk and put a large mark's real copies out
+// of reach.
+{
+  const small = Match.scalesFor(46, 46);
+  const large = Match.scalesFor(231, 195);
+  const wide = Match.scalesFor(113, 25);
+  check('a small mark is not searched for at sizes with nothing left in them',
+    small[0] >= 0.4, JSON.stringify(small.slice(0, 3)));
+  check('while a large one is searched far below the shared floor',
+    large[0] <= 0.12, JSON.stringify(large.slice(0, 3)));
+  // Area, not the short side: a wordmark's short side is its x-height, and
+  // half of a 113x25 lockup is still 672 pixels of shape.
+  check('and a wordmark is measured by how much of it is left, not its height',
+    wide[0] <= 0.4, JSON.stringify(wide.slice(0, 3)));
+  check('every ladder still contains exactly 1.0',
+    [small, large, wide].every(l => l.filter(s => s === 1).length === 1),
+    JSON.stringify([small.includes(1), large.includes(1), wide.includes(1)]));
+}
+
 check('the scale ladder contains exactly 1.0', Match.SCALES.includes(1),
   Match.SCALES.join(','));
 check('and 1.0 is not merely close to a rung',
