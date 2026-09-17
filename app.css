@@ -491,8 +491,13 @@ textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; border-
    the page, and must still pan it or draw a mark. */
 .notelayer { position: absolute; inset: 0; pointer-events: none; }
 
+/* A note belongs to its tool. With the tool put away the note is part of the
+   page — drawn on it, carried into the export — and not a thing that can be
+   picked up, retyped or dragged by a press meant for the document. */
+.notechip { pointer-events: none; }
+.placing-text .notechip { pointer-events: auto; }
 .notechip {
-  position: absolute; pointer-events: auto;
+  position: absolute;
   left: calc(var(--x) * 1cqw); top: calc(var(--y) * 1cqw);
   width: calc(var(--w) * 1cqw); min-height: calc(var(--h) * 1cqw);
   font: calc(var(--s) * 1cqw)/1.3 Helvetica, Arial, "Helvetica Neue", sans-serif;
@@ -563,11 +568,17 @@ textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; border-
   width: calc(var(--w) * 1cqw); height: calc(var(--h) * 1cqw);
   touch-action: none;
 }
-/* The chip takes no presses at all: a line is chosen by pressing the line, on
-   the canvas, where the press can be measured against the stroke rather than
-   against the rectangle round it. Only the controls are clickable, which is
-   also what makes them usable while the pen is still in hand. */
+/* An unchosen line's chip takes no presses: a line is chosen by pressing the
+   line itself, on the canvas, where the press can be measured against the
+   stroke rather than against the rectangle round it — the rectangle round a
+   long diagonal is mostly empty, and it would sit over the page catching
+   drags meant for the page. The chosen one is different: it is the handle for
+   moving the line, and the cursor says so. */
 .inkchip .notebar { pointer-events: auto; }
+.inkchip.on { pointer-events: auto; cursor: move; }
+/* And the same cursor before the press, over a line the pen is passing over,
+   so that "this can be picked up" is known without trying it. */
+.inking .page canvas.over-ink { cursor: move; }
 /* A ring rather than a crosshair. A crosshair is the cursor for aiming at a
    point, and this is a pen: the ring is roughly the nib, and the dot in the
    middle is where it will land. */

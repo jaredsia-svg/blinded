@@ -3396,7 +3396,12 @@
       if (state.placingText) {
         event.preventDefault();
         const where = at(event);
-        stopPlacingText();
+        // The tool stays armed. A note tapped on the page is rarely the only
+        // one, and — the reason that matters now — a note can only be moved,
+        // rewritten or removed while its tool is in hand, so disarming after
+        // the first one would put the note out of reach the moment it existed.
+        // A tap that lands on a note is the chip's, not ours: those chips take
+        // presses only while this tool is armed.
         addNoteAt(page, where.x, where.y);
         return;
       }
@@ -3414,10 +3419,10 @@
       }
       // A press on the page is a press away from whatever note was in hand.
       if (state.textSel) { commitNote(); selectNote(null); }
-      // And away from whatever line was chosen, unless the press is on the
-      // line itself — which is handled when the hand comes up, once it is
-      // known whether the press was a click or the start of a box.
-      if (state.inkSel && !inkNear(page, at(event).x, at(event).y)) selectInk(null);
+      // With the pen put away a line is not a thing on the page any more: it
+      // cannot be chosen, and anything that was chosen is let go. Lines belong
+      // to the pen, the way notes belong to the note tool.
+      if (state.inkSel) selectInk(null);
       // A second finger turns whatever was happening into a pinch. Whatever
       // the first one had started — a pan, half a box — is abandoned, because
       // finishing it with the hand that is now zooming is not what anyone
@@ -3440,6 +3445,13 @@
 
     canvas.addEventListener('pointermove', event => {
       if (pinching()) { panning = null; start = null; inking = null; drawPage(page); return; }
+      // Nothing in hand, pen armed: say whether the thing under the pointer is
+      // a line that can be taken hold of. Said with the cursor because there
+      // is nowhere else to say it without putting a label over the page.
+      if (state.inking && !inking) {
+        const over = at(event);
+        canvas.classList.toggle('over-ink', Boolean(inkNear(page, over.x, over.y)));
+      }
       if (inking) {
         event.preventDefault();
         const now = at(event);
@@ -3491,10 +3503,9 @@
         // again between each is what makes a drawing tool tiring. Escape puts
         // it away, and so does pressing the button again.
         if (stroke.drew) { addInk(page, stroke.points); return; }
-        // A tap is not. It is either "this line, please" — so that an old
-        // line can be recoloured or removed without putting the pen down —
-        // or, over bare page, a request for the colours and the thickness
-        // before anything is drawn at all.
+        // A tap is not. It is either "this line, please" — an old line, to be
+        // moved, recoloured or removed — or, over bare page, a request for the
+        // colours and the thickness before anything is drawn at all.
         const where = stroke.points[0];
         const already = inkNear(page, where.x, where.y);
         if (already) selectInk(already.id);
@@ -3527,11 +3538,6 @@
         return;
       }
       if (rect.w < minimum && rect.h < minimum) {
-        // A line drawn by hand is chosen by pressing it, with or without the
-        // pen: that is the only way to reach its colour, its thickness and its
-        // cross once the pen has been put away.
-        const already = inkNear(page, end.x, end.y);
-        if (already) { selectInk(already.id); return; }
         toggleAt(page, end.x, end.y);
         markPending();
       } else {
@@ -3677,6 +3683,11 @@
   function stopPlacingText() {
     if (!state.placingText) return;
     state.placingText = false;
+    // Nothing stays selected behind a tool that has been put away: the
+    // controls round a note would be the only things on screen still offering
+    // to do something the next press cannot reach.
+    commitNote();
+    selectNote(null);
     document.body.classList.remove('placing-text');
     el('page-text').setAttribute('aria-pressed', 'false');
     setTip();
@@ -4217,7 +4228,10 @@
       // to the canvas, which is where a line is both drawn and chosen, so that
       // the box round a stroke cannot swallow the drag that draws the next one
       // or the drag that draws a redaction box over it.
-      if (chosen) chip.append(inkBar(page, ink));
+      if (chosen) {
+        chip.append(inkBar(page, ink));
+        wireInkDrag(page, ink, chip);
+      }
       layer.append(chip);
     }
 
@@ -4236,6 +4250,45 @@
       chip.append(inkBar(page, null));
       layer.append(chip);
     }
+  }
+
+  // A chosen line can be moved. The chip round it is what the hand takes hold
+  // of, which is why only the chosen one takes presses at all: an unchosen
+  // line's box would sit over the page catching drags meant for the page.
+  function wireInkDrag(page, ink, chip) {
+    chip.addEventListener('pointerdown', event => {
+      event.preventDefault();
+      event.stopPropagation();
+      const start = noteSpace(page, event);
+      const was = ink.points.map(point => ({ ...point }));
+      let moved = false;
+      try { chip.setPointerCapture(event.pointerId); } catch { /* not fatal */ }
+      const move = onMove => {
+        const now = noteSpace(page, onMove);
+        const dx = now.x - start.x;
+        const dy = now.y - start.y;
+        // The slop is in screen pixels, so the distance in page pixels is
+        // divided by the scale: a page shown at half size moves two of its own
+        // pixels for every one on screen.
+        if (!moved) {
+          if (Math.abs(dx) / now.scale <= NOTE_SLOP
+            && Math.abs(dy) / now.scale <= NOTE_SLOP) return;
+          moved = true;
+          inkUndo(page, 'moving that line');
+        }
+        ink.points = was.map(point => ({ x: point.x + dx, y: point.y + dy }));
+        drawPage(page);
+      };
+      const done = () => {
+        chip.removeEventListener('pointermove', move);
+        chip.removeEventListener('pointerup', done);
+        chip.removeEventListener('pointercancel', done);
+        if (moved) { renderNotes(page); drawPage(page); }
+      };
+      chip.addEventListener('pointermove', move);
+      chip.addEventListener('pointerup', done);
+      chip.addEventListener('pointercancel', done);
+    });
   }
 
   // One bar, two jobs. With a line it restyles that line; with none it sets
@@ -4695,7 +4748,8 @@
       // Said on every screen, not only a phone: nothing else in the tool
       // waits for a tap on the document, so without a line here the button
       // looks as though it did nothing.
-      tip.textContent = 'Tap the page where the note should go.';
+      tip.textContent = 'Tap the page to add a note, or a note to change it. '
+        + 'Escape, or the button again, to stop.';
       tip.hidden = false;
       return;
     }
@@ -4703,7 +4757,8 @@
       // And the same for the pen, which changes what a press on the page
       // means until it is put away. Both ways out are named, because a mode
       // with no visible exit is a mode reviewers get stuck in.
-      tip.textContent = 'Draw on the page. Escape, or the pen again, to stop.';
+      tip.textContent = 'Draw on the page, or tap a line to change it. '
+        + 'Escape, or the pen again, to stop.';
       tip.hidden = false;
       return;
     }

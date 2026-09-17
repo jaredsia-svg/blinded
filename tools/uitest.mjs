@@ -5684,8 +5684,11 @@ try {
     });
     check('tapping the page puts a note there',
       placed.notes === 1 && placed.near === true, JSON.stringify(placed));
-    check('the tap is spent, not a mode left running',
-      placed.placing === false, JSON.stringify(placed));
+    // It used to be one tap and out. It cannot be: a note is only movable,
+    // rewritable and removable while its tool is in hand, so disarming after
+    // the first one would put the note out of reach the moment it existed.
+    check('the tool stays in hand, because that is what a note can be edited from',
+      placed.placing === true, JSON.stringify(placed));
     check('and the caret is already in it, so typing is the next thing that happens',
       placed.editing === true && placed.writing === 1
       && placed.focused === 'notewrite', JSON.stringify(placed));
@@ -5830,6 +5833,29 @@ try {
     check('a note left empty is thrown away rather than kept',
       dropped.made === dropped.before + 1 && dropped.after === dropped.before,
       JSON.stringify(dropped));
+
+    // A note belongs to its tool too. With the tool put away the note is part
+    // of the page — drawn on it, carried into the export — and not something a
+    // press meant for the document can pick up, retype or drag away.
+    const inert = await page.evaluate(async () => {
+      const B = window.Blinded;
+      B.stopPlacingText();
+      await new Promise(r => setTimeout(r, 60));
+      const chip = document.querySelector('.notechip');
+      const away = getComputedStyle(chip).pointerEvents;
+      const letGo = B.state.textSel;
+      B.startPlacingText();
+      await new Promise(r => setTimeout(r, 60));
+      const armed = getComputedStyle(document.querySelector('.notechip')).pointerEvents;
+      B.stopPlacingText();
+      return { away, armed, letGo };
+    });
+    check('a note cannot be taken hold of with its tool put away',
+      inert.away === 'none', JSON.stringify(inert));
+    check('and putting the tool away lets go of whatever was in hand',
+      inert.letGo === null, JSON.stringify(inert));
+    check('while with the tool in hand it can', inert.armed === 'auto',
+      JSON.stringify(inert));
 
     // A note is the reviewer's, not the document's, so it belongs in a draft.
     const kept = await page.evaluate(() => {
@@ -6053,11 +6079,13 @@ try {
     check('undo brings the line back', gone.back === 1, JSON.stringify(gone));
     check('and the controls go with the line', gone.bars === 0, JSON.stringify(gone));
 
-    // With the pen away, a line is still reachable: pressing it chooses it,
-    // which is the only route to its colour, its thickness and its cross.
+    // A line belongs to the pen, the way a note belongs to the note tool: with
+    // the pen in hand a press chooses one, and with the pen away a press on
+    // the page is the document's again and the line is part of the picture.
     const chosen = await page.evaluate(async () => {
       const B = window.Blinded;
       B.selectInk(null);
+      B.startInking();
       const page0 = B.state.pages[0];
       const ink = B.inksOf(page0)[0];
       const spot = ink.points[Math.floor(ink.points.length / 2)];
@@ -6071,19 +6099,43 @@ try {
       await new Promise(r => setTimeout(r, 80));
       const onIt = B.state.inkSel === ink.id;
       const bars = document.querySelectorAll('.inkchip .notebar').length;
-      // And a press well away from it lets go again.
+      const takeable = getComputedStyle(document.querySelector('.inkchip.on')).cursor;
+      // Moved by the chip round it, which is the handle a chosen line gets.
+      const chip = document.querySelector('.inkchip.on');
+      const from = { ...ink.points[0] };
+      chip.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerId: 86,
+        clientX: press.clientX, clientY: press.clientY }));
+      chip.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, pointerId: 86,
+        clientX: press.clientX + 60, clientY: press.clientY + 30 }));
+      chip.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 86,
+        clientX: press.clientX + 60, clientY: press.clientY + 30 }));
+      await new Promise(r => setTimeout(r, 80));
+      const now = B.inksOf(page0)[0].points[0];
+      const shifted = Math.round(now.x - from.x) > 10 && Math.round(now.y - from.y) > 5;
+      const moveLabel = (B.undoStack[B.undoStack.length - 1] || {}).label;
+      B.undoLast();
+      const putBack = Math.abs(B.inksOf(page0)[0].points[0].x - from.x) < 1;
+      // The pen away, and the line is part of the picture again: a press on it
+      // is the document's, and nothing is chosen.
+      B.stopInking();
       for (const type of ['pointerdown', 'pointerup']) {
-        canvas.dispatchEvent(new PointerEvent(type, { bubbles: true, pointerId: 85,
-          clientX: box.left + box.width * 0.93, clientY: box.top + box.height * 0.93 }));
+        canvas.dispatchEvent(new PointerEvent(type, { bubbles: true, pointerId: 85, ...press }));
       }
       await new Promise(r => setTimeout(r, 80));
-      return { armed: B.state.inking, onIt, bars, after: B.state.inkSel };
+      return { onIt, bars, takeable, shifted, moveLabel, putBack,
+        afterwards: B.state.inkSel };
     });
-    check('a line can be chosen again with the pen put away',
-      chosen.armed === false && chosen.onIt === true && chosen.bars === 1,
+    check('with the pen in hand a press on a line chooses it',
+      chosen.onIt === true && chosen.bars === 1, JSON.stringify(chosen));
+    check('and the chosen line says it can be picked up',
+      chosen.takeable === 'move', JSON.stringify(chosen));
+    check('dragging it moves the whole line', chosen.shifted === true,
       JSON.stringify(chosen));
-    check('and a press away from it lets go',
-      chosen.after === null, JSON.stringify(chosen));
+    check('and moving it is undoable',
+      chosen.moveLabel === 'moving that line' && chosen.putBack === true,
+      JSON.stringify(chosen));
+    check('with the pen put away a line cannot be chosen at all',
+      chosen.afterwards === null, JSON.stringify(chosen));
 
     // Both page tools belong to the sheet. Going back to the words puts them
     // down, or the next press on the document does something the reviewer
