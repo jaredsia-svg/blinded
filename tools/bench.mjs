@@ -102,15 +102,35 @@ for (const name of readdirSync(bench).sort()) {
   });
   await page.waitForFunction(() => document.getElementById('busy').hidden,
     undefined, { timeout: 900000 });
-  const took = (Date.now() - started) / 1000;
+  const searchTook = (Date.now() - started) / 1000;
+
+  // Then the comprehensive check, which is the half that matters on a scanned
+  // page: the plain search reads the text layer, and a photographed slide has
+  // none. Reported separately because they cost very different amounts.
+  const swept = Date.now();
+  const sweepAdded = await page.evaluate(() => window.Blinded.runSweep());
+  await page.waitForFunction(() => document.getElementById('busy').hidden,
+    undefined, { timeout: 1800000 });
+  const sweepTook = (Date.now() - swept) / 1000;
 
   const out = await page.evaluate(() => {
     const B = window.Blinded;
     return {
       pages: B.state.pages.length,
       terms: B.state.terms.map(term => ({ term,
-        hits: B.state.pages.reduce((n, p) =>
-          n + p.hits.filter(hit => hit.term === term).length, 0) })),
+        // What the reading found, and what the check found by sight, kept
+        // apart: a word found in the text layer says nothing about whether
+        // the check can see it on a scan.
+        read: B.state.pages.reduce((n, p) =>
+          n + p.hits.filter(hit => hit.term === term).length, 0),
+        seen: B.state.pages.reduce((n, p) =>
+          n + (p.imageHits || []).filter(hit => hit.bySweep && hit.term === term).length, 0),
+        // Where the check put them, so they can be cropped and looked at.
+        where: B.state.pages.flatMap(p => (p.imageHits || [])
+          .filter(hit => hit.bySweep && hit.term === term && hit.rect)
+          .map(hit => ({ p: p.index, x: Math.round(hit.rect.x), y: Math.round(hit.rect.y),
+            w: Math.round(hit.rect.w), h: Math.round(hit.rect.h),
+            s: +(hit.score || 0).toFixed(3) }))) })),
       templates: B.state.templates.map(logo => {
         const report = logo.report || {};
         const all = (report.scores || []).concat(report.near || [])
@@ -133,9 +153,11 @@ for (const name of readdirSync(bench).sort()) {
     };
   });
 
-  console.log('==', name, '·', out.pages, 'pages ·', took.toFixed(1) + 's');
+  console.log('==', name, '·', out.pages, 'pages · search ' + searchTook.toFixed(1)
+    + 's · check ' + sweepTook.toFixed(1) + 's (+' + sweepAdded + ')');
   for (const term of out.terms) {
-    console.log('   word ' + JSON.stringify(term.term) + ' -> ' + term.hits);
+    console.log('   word ' + JSON.stringify(term.term)
+      + ' -> read ' + term.read + ', seen ' + term.seen);
   }
   for (const logo of out.templates) {
     console.log('   image ' + logo.id + ' p' + (logo.page + 1) + ' ' + logo.size

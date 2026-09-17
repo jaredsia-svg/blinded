@@ -14,7 +14,11 @@ const folder = resolve(process.argv[2]);
 const wanted = process.argv[3];
 const picks = process.argv[4] ? process.argv[4].split(',').map(Number) : null;
 const scores = JSON.parse(readFileSync(join(folder, 'scores.json')));
-const logo = scores.templates.find(t => t.id === wanted) || scores.templates[0];
+// Either a picked image by its id, or a word the comprehensive check found.
+const logo = scores.templates.find(t => t.id === wanted)
+  || scores.terms.find(t => t.term === wanted)
+  || scores.templates[0];
+if (logo && logo.term) logo.id = logo.term.replace(/[^a-z0-9]+/gi, '-');
 const spots = (picks ? picks.map(i => logo.where[i]) : logo.where.slice(0, 8)).filter(Boolean);
 const doc = readdirSync(folder).find(f => /\.(pdf|jpe?g|png)$/i.test(f) && !/redact/i.test(f));
 

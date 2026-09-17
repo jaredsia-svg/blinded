@@ -3804,6 +3804,38 @@ try {
       JSON.stringify(moved.steps));
   }
 
+  // ---------- what the comprehensive check draws ----------
+  //
+  // The check looks for a word by drawing it and correlating the picture. What
+  // it draws is therefore a real decision, and lower case is the wrong answer:
+  // lower-case letterforms are mostly x-height blobs, so "rolex" resembles an
+  // enormous amount of ordinary body text. Measured on a six-page deck, the
+  // check proposed eight places for it and every one was the word "roles" in
+  // "held senior roles with"; the same deck searched for the capitalised form
+  // proposed none, and the deck contains no Rolex to miss.
+  //
+  // Nothing is lost by capitalising: the letters themselves are found by
+  // reading the page, which does not care about case, and this check only runs
+  // where the reading could not see.
+  {
+    const drawn = await page.evaluate(() => {
+      const B = window.Blinded;
+      return {
+        lower: B.sweepCaseOf('rolex'),
+        already: B.sweepCaseOf('Rolex'),
+        acronym: B.sweepCaseOf('TDTC'),
+        mixed: B.sweepCaseOf('iPhone'),
+        empty: B.sweepCaseOf(''),
+      };
+    });
+    check('a word typed in lower case is drawn with a capital',
+      drawn.lower === 'Rolex', JSON.stringify(drawn));
+    check('one that already has a capital is drawn as typed',
+      drawn.already === 'Rolex' && drawn.mixed === 'iPhone', JSON.stringify(drawn));
+    check('and an acronym is left alone, having plenty of shape already',
+      drawn.acronym === 'TDTC' && drawn.empty === '', JSON.stringify(drawn));
+  }
+
   // ---------- the sample slide on the front page ----------
   //
   // Someone deciding whether to hand this a confidential document should be

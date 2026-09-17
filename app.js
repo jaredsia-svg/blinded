@@ -7362,6 +7362,30 @@
     return parts.length >= 2 ? parts : [trimmed];
   }
 
+  // How a word is drawn for the visual check.
+  //
+  // A word typed in lower case is drawn in lower case, and lower-case
+  // letterforms are mostly x-height blobs: "rolex" resembles an enormous
+  // amount of ordinary body text, and on a real document the check proposed
+  // dozens of places that were not it. The same word capitalised has an
+  // ascender and a cap at the front, which is structure, and the same document
+  // came back with no false positives at all.
+  //
+  // So a part typed in lower case is drawn capitalised. Nothing is lost by it:
+  // the letters themselves are found by reading the page, which does not care
+  // about case at all, and this check only ever runs where the reading could
+  // not see. A word the document really does set in lower case is still
+  // matched by its shape, since correlation is not asked for an exact
+  // photograph of the glyphs.
+  //
+  // Words already carrying a capital are left alone, and so are acronyms,
+  // which are all caps and have plenty of structure already.
+  function sweepCaseOf(part) {
+    const text = String(part || '');
+    if (!text || text !== text.toLowerCase()) return text;
+    return text.charAt(0).toUpperCase() + text.slice(1);
+  }
+
   function sweepTemplates() {
     const entries = [];
     for (const term of state.terms) {
@@ -7372,7 +7396,7 @@
       const parts = sweepPartsFor(term);
       const draw = isPhrase ? parts : [term.trim()];
       draw.forEach((part, partIndex) => {
-        TextImage.templatesFor(part, TextImage.SWEEP_FACES).forEach((template, i) => {
+        TextImage.templatesFor(sweepCaseOf(part), TextImage.SWEEP_FACES).forEach((template, i) => {
           entries.push({
             key: 'sweep:' + term + ':' + part + ':' + i,
             template,
@@ -8654,7 +8678,7 @@
     pendingTemplates,
     termsNeedingPictures,
     readPages, matchOcr, ocrPending, ocrMatchStale, showWordControls,
-    sweepTemplates, runSweep, renderSweep, alreadyCovered, readerContradicts, sweepPartsFor,
+    sweepTemplates, sweepCaseOf, runSweep, renderSweep, alreadyCovered, readerContradicts, sweepPartsFor,
     pageHasConfidentTerm, pagesNeedingSweep, sweepWorkload,
     READER_SURE, sweepProgress,
     settleSweep,

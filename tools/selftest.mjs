@@ -1053,6 +1053,39 @@ check('an empty term is harmless', TextImage.shapeRelief('') === 0
   }
   check('skippedConnectorsBetween counts and',
     Match.skippedConnectorsBetween('Fraser and Neave', 'Fraser', 'Neave') === 1);
+
+  // A name set over two lines is ordinary — on a slide, in a signature block,
+  // under a photograph — and a phrase searched only along the line can never
+  // find one. Measured: "Inderpreet Wadhwa" appears stacked on a deck and the
+  // check found neither copy while finding each word on its own.
+  const over = { x: 100, y: 40, w: 60, h: 14, score: 0.8 };
+  const under = { x: 104, y: 56, w: 52, h: 14, score: 0.78 };
+  check('a word directly under another is part of the same phrase',
+    Match.phraseHitsStacked(over, under) === true);
+  check('and a centred second line counts too',
+    Match.phraseHitsStacked(over, { x: 108, y: 56, w: 44, h: 14 }) === true);
+  // Two words on consecutive lines of a paragraph are not a phrase.
+  check('but a word a line below and half a column across is not',
+    Match.phraseHitsStacked(over, { x: 260, y: 56, w: 52, h: 14 }) === false);
+  check('nor one three lines down',
+    Match.phraseHitsStacked(over, { x: 104, y: 110, w: 52, h: 14 }) === false);
+
+  const stackedParts = new Map([['Inderpreet', [over]], ['Wadhwa', [under]]]);
+  const chained = Match.pairPhraseHits(['Inderpreet', 'Wadhwa'], stackedParts, [0]);
+  check('a stacked phrase is chained into one mark',
+    chained.length === 1, JSON.stringify(chained));
+  if (chained.length) {
+    check('and the mark covers both lines',
+      chained[0].y === 40 && chained[0].h >= 30, JSON.stringify(chained[0]));
+  }
+  // Along the line first: a word beside is a stronger claim than one below.
+  const both = new Map([
+    ['Middle', [left]],
+    ['East', [right, { x: 14, y: 36, w: 35, h: 12, score: 0.9 }]],
+  ]);
+  const preferred = Match.pairPhraseHits(['Middle', 'East'], both, [0]);
+  check('and a word beside still wins over a word below',
+    preferred.length === 1 && preferred[0].h <= 14, JSON.stringify(preferred));
 })();
 
 // Dark header bands for inverted OCR (white-on-colour titles).
