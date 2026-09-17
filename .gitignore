@@ -1,2 +1,6 @@
 node_modules/
 *.tgz
+
+# Benchmark documents are real and confidential. The runner reads whatever is
+# here; nothing in it is ever committed.
+bench/

@@ -2274,10 +2274,16 @@
       // Only when the search found nothing. A bar that found something is a
       // bar the reviewer is entitled to keep, and moving it under them would
       // overrule a decision they made.
-      const autoBar = lowerBarIfEmpty(found, sensFor(entry.logo));
+      // Where the scores say the bar belongs, unless the reviewer has said so
+      // themselves.
+      const wasBar = sensFor(entry.logo);
+      const autoBar = entry.logo.chosenBar ? null : settleBar(found, wasBar);
       if (autoBar !== null) {
         entry.logo.sens = autoBar;
         entry.logo.autoBar = autoBar;
+        entry.logo.barWas = wasBar;
+      } else {
+        entry.logo.autoBar = null;
       }
 
       distribute(found.matches, hit => ({
@@ -2302,6 +2308,9 @@
         best: found.best,
         bar: sensFor(entry.logo),
         autoBar: autoBar === undefined ? null : autoBar,
+        barWas: autoBar === null ? null : entry.logo.barWas,
+        steps: barSteps(found.matches.map(hit => hit.score)
+          .concat((found.near || []).map(hit => hit.score)), 3),
       };
       // The line under the pick button described whichever image searched
       // last. It says nothing now: every sentence it carried belongs to one
@@ -2376,6 +2385,34 @@
   // Built from what was stored on the template rather than written at search
   // time, so it can be drawn again whenever the row is — when the slider
   // moves, when another image is picked, when the panel is rebuilt.
+  // Puts the bar where one of the offered steps says, exactly as dragging the
+  // slider there would: the number becomes the reviewer's, what this image
+  // found at the old bar is dropped, and the button goes back to asking for a
+  // search. Not searched on the spot — a press that started minutes of work
+  // without being asked for is the surprise this tool does not spring.
+  function moveBarTo(template, bar) {
+    if (!template) return;
+    const was = sensFor(template);
+    if (Math.abs(was - bar) < 0.005) return;
+    template.chosenBar = true;
+    template.sens = clampSens(bar);
+    template.searched = false;
+    template.matches = 0;
+    template.rawMatches = 0;
+    for (const page of state.pages) {
+      page.imageHits = page.imageHits.filter(
+        mark => mark.bySweep || mark.templateId !== template.id);
+    }
+    pushUndo('that sensitivity change', () => {
+      template.sens = was;
+      template.chosenBar = false;
+    });
+    needsSearch();
+    renderTemplates();
+    refreshApply();
+    redrawAll();
+  }
+
   function reportFor(template) {
     const report = template && template.report;
     if (!report) return null;
@@ -2420,11 +2457,24 @@
     }
 
     if (report.autoBar !== null && report.autoBar !== undefined) {
-      text = 'Nothing matched at the setting it was on, so the bar came down to '
-        + report.autoBar.toFixed(2) + '. ' + text
-        + ' Move the slider if that is not what you wanted.';
+      const was = report.barWas === null || report.barWas === undefined
+        ? null : clampSens(report.barWas);
+      const moved = was !== null && report.autoBar > was
+        ? 'The scores fell into two groups with a clear gap between them, so the '
+          + 'bar moved up from ' + was.toFixed(2) + ' to ' + report.autoBar.toFixed(2)
+          + ', which is where that gap is.'
+        : 'Nothing matched at the setting it was on, so the bar came down to '
+          + report.autoBar.toFixed(2) + '.';
+      text = moved + ' ' + text;
     }
-    return { warn: false, text };
+
+    // And the other places the scores would let it stand. A number nobody can
+    // aim becomes a short list anyone who knows the document can answer — and
+    // the buttons that carry it mean they do not have to aim at all.
+    const steps = (report.steps || [])
+      .filter(step => Math.abs(step.bar - clampSens(report.bar)) > 0.005);
+    if (steps.length) text += ' The scores would also allow:';
+    return { warn: false, text, steps };
   }
 
 
@@ -2445,6 +2495,10 @@
   // scatter between copies of one mark.
   const REAL_GAP = 0.03;
 
+  // How tightly copies of one mark score together. Above this a group is not
+  // one thing repeated.
+  const ONE_CLUMP = 0.06;
+
   function barFromScores(scores) {
     const sorted = scores.filter(s => s >= AUTO_FLOOR).sort((a, b) => b - a);
     if (!sorted.length) return null;
@@ -2455,9 +2509,31 @@
     // anyone could see.
     let cut = sorted[sorted.length - 1];
     let widest = REAL_GAP;
+    let at = -1;
     for (let i = 0; i < sorted.length - 1; i++) {
       const gap = sorted[i] - sorted[i + 1];
-      if (gap > widest) { widest = gap; cut = sorted[i]; }
+      if (gap > widest) { widest = gap; cut = sorted[i]; at = i; }
+    }
+
+    // The mark always matches itself, and that is not a population of one.
+    //
+    // A template cut out of the page correlates with the pixels it was cut
+    // from at 1.00, while honest copies of it elsewhere — rescaled, re-encoded,
+    // knocked out of a coloured banner — land near 0.92. That leaves the
+    // widest gap directly under the top score, and cutting there keeps the one
+    // copy the reviewer already knew about and throws away the four they were
+    // looking for.
+    //
+    // So when the widest gap is the first one, look at what is under it: a
+    // tight group is copies of the mark and belongs above the bar, while a
+    // spread-out one is the page rhyming with it at every distance and the gap
+    // was telling the truth. Measured over nine benchmark documents, this is
+    // the difference between finding five Kimberly-Clark lockups and finding
+    // only the one that was picked — and, in the other direction, between
+    // covering one Kenvue wordmark and also covering two HUGGIES.
+    if (at === 0 && sorted.length > 1) {
+      const rest = sorted.slice(1);
+      if (rest[0] - rest[rest.length - 1] <= ONE_CLUMP) cut = rest[rest.length - 1];
     }
     // A hundredth of clearance, and rounded to where the slider can actually
     // stand — a bar the reviewer cannot reproduce by moving the control is a
@@ -2474,13 +2550,79 @@
   // `found` is edited in place: the promoted hits move from near to matches.
   // They must move rather than be copied, or the note below ends up saying
   // "4 matches, and 4 more were left out" about one set of four.
-  function lowerBarIfEmpty(found, bar) {
-    if (found.matches.length) return null;
-    if (!found.near || !found.near.length) return null;
-    const suggested = barFromScores(found.near.map(hit => hit.score));
-    if (suggested === null || suggested >= bar) return null;
-    found.matches = found.near.filter(hit => hit.score >= suggested);
-    found.near = found.near.filter(hit => hit.score < suggested);
+  // The other natural places the bar could stand, best first, as {bar, count}.
+  //
+  // The gap rule picks one of these. Naming the runners-up is what turns a
+  // number the reviewer cannot aim into a short list they can: told "93 here,
+  // 39 there, 2 there", a person who knows the document knows immediately
+  // which one is right, and a slider never told them any of it.
+  function barSteps(scores, limit) {
+    const sorted = scores.filter(score => score >= AUTO_FLOOR).sort((a, b) => b - a);
+    const gaps = [];
+    for (let i = 0; i < sorted.length - 1; i++) {
+      const gap = sorted[i] - sorted[i + 1];
+      if (gap > REAL_GAP) gaps.push({ at: sorted[i], gap });
+    }
+    gaps.sort((a, b) => b.gap - a.gap);
+    const out = [];
+    for (const step of gaps) {
+      const bar = Math.min(0.99, Math.max(AUTO_FLOOR,
+        Math.floor((step.at - 0.005) * 100) / 100));
+      if (out.some(seen => Math.abs(seen.bar - bar) < 0.005)) continue;
+      out.push({ bar, count: sorted.filter(score => score >= bar).length });
+      if (out.length >= (limit || 3)) break;
+    }
+    return out;
+  }
+
+  // A flood is this many marks or more. Below it, a search that proposed a few
+  // things too many is a search the reviewer can read.
+  const A_FLOOD = 8;
+
+  // Where the bar settles once the search has been run, which is the first
+  // moment anything is known about it.
+  //
+  // Two directions, and they are not symmetrical, because the two mistakes are
+  // not symmetrical. Lowering the bar proposes more marks, and every proposal
+  // is shown to the reviewer to accept or dismiss; the cost of being wrong is
+  // a moment's reading. Raising it takes marks away, and a redaction tool that
+  // quietly stops covering something is the failure that matters. So:
+  //
+  //   nothing found        -> come down to what the search actually saw
+  //   a flood of junk      -> go up, but only on overwhelming evidence
+  //   anything else        -> leave it, and say in the note where it could go
+  //
+  // What counts as overwhelming: the scores below the gap have to be both many
+  // and densely packed. That is the signature of page furniture rhyming with
+  // the mark — measured, a 46x46 roundel proposed 56 marks of which two were
+  // the logo and fifty-four were the letter o in body text, all within a
+  // hundredth or two of each other. Copies of one mark at different sizes do
+  // not look like that: in a fixture built for it, four copies of a wordmark
+  // score 1.00, 0.95, 0.88 and 0.83 — spread out, and every one of them real.
+  // A rule that cut those would be a rule that loses redactions.
+  //
+  // Only while the reviewer has not set the bar themselves. A number they
+  // moved is a decision, and moving it under them would overrule it.
+  function settleBar(found, bar) {
+    const all = (found.matches || []).concat(found.near || []);
+    const suggested = barFromScores(all.map(hit => hit.score));
+    if (suggested === null || Math.abs(suggested - bar) < 0.005) return null;
+
+    if (suggested > bar) {
+      const dropped = all.filter(hit => hit.score >= bar && hit.score < suggested)
+        .map(hit => hit.score).sort((a, b) => b - a);
+      if (dropped.length < A_FLOOD) return null;
+      // Densely packed: most of them heaped around one score. Measured
+      // against the whole range rather than most of it, two stragglers
+      // between the mark and the heap were enough to call a plateau of
+      // fifty-four spread out, so the test is how many sit near the middle.
+      const middle = dropped[dropped.length >> 1];
+      const heaped = dropped.filter(score => Math.abs(score - middle) <= ONE_CLUMP);
+      if (heaped.length < dropped.length * 0.7) return null;
+    }
+
+    found.matches = all.filter(hit => hit.score >= suggested);
+    found.near = all.filter(hit => hit.score < suggested);
     return suggested;
   }
 
@@ -5371,6 +5513,9 @@
 
       slider.addEventListener('input', () => {
         remember();
+        // From here on the bar is theirs. The search may propose one before
+        // the reviewer has an opinion; it must not have one afterwards.
+        template.chosenBar = true;
         template.sens = clampSens(Number(slider.value) / 100);
         reading.textContent = sensFor(template).toFixed(2);
         if (template.searched) {
@@ -5412,6 +5557,16 @@
         const note = document.createElement('li');
         note.className = 'imgnote' + (told.warn ? ' warnhint' : '');
         note.textContent = told.text;
+        for (const step of told.steps || []) {
+          const move = document.createElement('button');
+          move.type = 'button';
+          move.className = 'barstep';
+          move.textContent = step.bar.toFixed(2) + ' \u2192 '
+            + step.count + (step.count === 1 ? ' match' : ' matches');
+          move.title = 'Put the bar at ' + step.bar.toFixed(2) + ' and look again';
+          move.addEventListener('click', () => moveBarTo(template, step.bar));
+          note.append(' ', move);
+        }
         host.append(note);
       }
 
@@ -8466,7 +8621,7 @@
 
   window.Blinded = { state, rescan, loadFile, exportFile, setMode, addTemplate,
     undoLast, undoStack, applyLabels, labelItems, downloadKey,
-    sensFor, barFromScores, lowerBarIfEmpty, AUTO_FLOOR, REAL_GAP,
+    sensFor, barFromScores, settleBar, barSteps, moveBarTo, AUTO_FLOOR, REAL_GAP,
     anchorOn, returnTo, stepPage, refreshPaging,
     watchPinch, pinching, PINCH_IN, wordSensitivity, wordBarFor,
     setZoom, stepZoom, ZOOM_STEPS,

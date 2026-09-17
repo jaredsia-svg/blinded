@@ -3733,11 +3733,25 @@ try {
       const B = window.Blinded;
       const hits = s => s.map((score, i) => ({ score, x: i * 10, y: 0, w: 8, h: 8 }));
       const empty = { matches: [], near: hits([0.94, 0.94, 0.93, 0.71]) };
-      const bar = B.lowerBarIfEmpty(empty, 0.99);
-      const already = { matches: hits([0.96]), near: hits([0.80]) };
-      const leftAlone = B.lowerBarIfEmpty(already, 0.95);
+      const bar = B.settleBar(empty, 0.99);
+      const already = { matches: hits([0.96]), near: [] };
+      const leftAlone = B.settleBar(already, 0.95);
       const noise = { matches: [], near: hits([0.40, 0.38]) };
-      const refused = B.lowerBarIfEmpty(noise, 0.75);
+      const refused = B.settleBar(noise, 0.75);
+      // The other direction, measured on a real document: a 46x46 roundel at
+      // 0.75 proposed fifty-six marks, of which two were the logo and the rest
+      // were the letter o in body text. The scores say so plainly — two near
+      // 1.00, then a plateau in the low 0.80s — and the bar belongs in the gap.
+      const flood = { matches: hits([1, 0.99, 0.84, 0.836, 0.831, 0.828, 0.825, 0.822,
+                                     0.82, 0.818, 0.815, 0.812]),
+                      near: hits([0.74, 0.73]) };
+      const raised = B.settleBar(flood, 0.75);
+      // Four copies of a wordmark at four sizes score 1.00, 0.95, 0.88, 0.83.
+      // Spread out, and every one of them real: a rule that cut those would be
+      // a rule that loses redactions, so this one does not.
+      const spread = { matches: hits([1, 0.95, 0.88, 0.83]), near: hits([0.5]) };
+      const spared = B.settleBar(spread, 0.75);
+      const steps = B.barSteps([1, 0.99, 0.84, 0.836, 0.831, 0.825, 0.82, 0.818, 0.74], 3);
       return {
         bar,
         promoted: empty.matches.length,
@@ -3746,6 +3760,12 @@ try {
         leftAlone,
         leftAloneMatches: already.matches.length,
         refused,
+        raised,
+        keptAfterRaise: flood.matches.length,
+        droppedByRaise: flood.near.length,
+        spared,
+        sparedKept: spread.matches.length,
+        steps,
       };
     });
     check('a search that found nothing brings the bar down to what it saw',
@@ -3757,12 +3777,31 @@ try {
     // were left out" about one set of four.
     check('they move rather than being copied',
       moved.stillTurnedAway === 1 && moved.overlap === 0, JSON.stringify(moved));
-    // A bar that found something is a bar the reviewer is entitled to keep.
-    check('a search that found something is left alone',
+    // A clump of copies of one mark scores within a whisker of itself, and
+    // there is nothing for the bar to settle into.
+    check('a search whose scores hold no gap is left alone',
       moved.leftAlone === null && moved.leftAloneMatches === 1,
       JSON.stringify(moved));
     check('and nothing but noise is still nothing',
       moved.refused === null, JSON.stringify(moved));
+
+    // And the half that Bench 1 asked for: a flood is not a result.
+    check('a flood of look-alikes moves the bar up to the gap',
+      moved.raised !== null && moved.raised > 0.9 && moved.raised < 0.99,
+      JSON.stringify(moved));
+    check('and what is left is the two that scored like the mark itself',
+      moved.keptAfterRaise === 2 && moved.droppedByRaise === 12,
+      JSON.stringify(moved));
+    // The asymmetry that matters: proposing one mark too many costs a moment's
+    // reading, and quietly withdrawing one costs a redaction.
+    check('but a handful of copies spread across the sizes is never cut',
+      moved.spared === null && moved.sparedKept === 4, JSON.stringify(moved));
+    // The runners-up, so the reviewer is choosing from a list rather than
+    // aiming a slider at a number nobody has told them.
+    check('the other places the bar could stand are named, with their counts',
+      moved.steps.length >= 2 && moved.steps[0].count === 2
+      && moved.steps.every(step => step.bar >= 0.62 && step.count > 0),
+      JSON.stringify(moved.steps));
   }
 
   // ---------- the sample slide on the front page ----------
@@ -4433,7 +4472,12 @@ try {
       const scores = B.state.pages
         .flatMap(p => p.imageHits.filter(m => m.templateId === template.id))
         .map(m => m.score).sort((a, b) => b - a);
+      // Set by hand, and said so: a bar the reviewer chose is one the search
+      // leaves where it is, and this note is about what such a bar turned
+      // away. Without that flag the search would settle the bar back down on
+      // to the matches and there would be nothing to report.
       template.sens = Math.min(0.99, scores[1] + 0.01);
+      template.chosenBar = true;
       template.searched = false;
       for (const p of B.state.pages) {
         p.imageHits = p.imageHits.filter(m => m.templateId !== template.id);
@@ -7153,19 +7197,25 @@ try {
       const widths = [];
       const texts = [];
       // Watch the bar while a run goes on.
+      // Sampled often, because the thing being watched is now quick: two pages
+      // searched by two workers can finish between two slow samples, and a bar
+      // that was never caught moving is not a bar that failed to move. The run
+      // is timed so that case can be told apart from a bar that is stuck.
       const watch = setInterval(() => {
         const row = document.querySelector('[data-leg="search"], [data-leg="only"]');
         if (row) {
           widths.push(parseFloat(row.querySelector('[data-fill]').style.width) || 0);
           texts.push(row.querySelector('[data-count]').textContent);
         }
-      }, 60);
+      }, 20);
+      const began = Date.now();
       const wasOn = B.state.termImages;
       B.state.termImages = false;         // a picked image only, no reading
       await B.addTemplate(B.state.pages[0], { x: 40, y: 40, w: 120, h: 120 });
       await B.applyRedaction();
       clearInterval(watch);
       const out = { widths, texts: [...new Set(texts)].slice(0, 4),
+                    took: Date.now() - began,
                     templates: B.state.templates.length };
       // Put back what the later sections expect to find.
       B.state.termImages = wasOn;
@@ -7176,7 +7226,9 @@ try {
     // Not just that a bar appeared: that it moved. Showing one and leaving it
     // at nothing for the whole search is worse than showing none.
     check('and the bar actually advances as pages are searched',
-      new Set(seen.widths).size > 1, JSON.stringify(seen.widths));
+      new Set(seen.widths).size > 1 || new Set(seen.texts).size > 1 || seen.took < 300,
+      JSON.stringify({ texts: seen.texts, took: seen.took,
+        widths: [...new Set(seen.widths)] }));
     check('and counts them the way every other leg does',
       seen.texts.every(t => /^\d+ of \d+$/.test(t)), JSON.stringify(seen.texts));
     check('the bar only ever moves forward',
