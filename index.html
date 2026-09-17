@@ -41,7 +41,7 @@
      origins for one program and two sets of response headers to keep right;
      Pages publishing is off and this says which copy is the copy. -->
 <link rel="canonical" href="https://blinded.onrender.com/">
-<link rel="stylesheet" href="app.css?v=7b90561b">
+<link rel="stylesheet" href="app.css?v=2696beac">
 </head>
 <body>
 
@@ -132,86 +132,150 @@
       </li>
     </ul>
 
-    <!-- A real page, and a hard one: a photograph of a screen, so the whole
-         slide is a picture and there is no text layer to search at all. What
-         is shown is the output – the file this produced holds no recoverable
-         text, which is the claim the picture is here to make. -->
     <!-- What people actually open this for.
-         
+
          Written as jobs rather than as features: somebody arrives with a
          document and a deadline, not with an interest in correlation
-         thresholds. The first card is the one that is growing fastest and the
-         one nobody else answers – a file cannot go to a model until the names
-         are out of it, and a tool that uploads the file to do that has not
-         solved the problem it was brought in for. -->
+         thresholds. Two lines each, because a card nobody finishes reading
+         says less than a card that stops. The first is the one growing
+         fastest and the one nobody else answers – a file cannot go to a model
+         until the names are out of it, and a tool that uploads the file to do
+         that has not solved the problem it was brought in for. -->
     <section class="uses">
-      <h2>What it is used for</h2>
-      <p class="sample-lede">One document, a few minutes, and nothing leaves
-        your machine. These are the jobs people bring it.</p>
+      <h2>Top use cases</h2>
 
       <ul class="usegrid">
         <li class="usecard">
-          <h3>Feeding a document to an AI, safely</h3>
-          <p>Strip the names, logos and client details first, then paste the
-            file into whatever model you like. The analysis still works – the
-            numbers, the charts and the argument are all still there – but the
-            party is no longer in it. Nothing is uploaded to do the stripping,
-            which is the point: a redaction tool that sends your file away has
-            not solved the problem you had.</p>
+          <h3>Before it goes to an AI</h3>
+          <p>Take the names and logos out, then paste the file into any model.
+            The numbers and the argument survive; the party does not.</p>
         </li>
         <li class="usecard">
           <h3>Deal materials</h3>
-          <p>CIMs, board decks, diligence packs and teasers, cleaned for a
-            wider bidder list. Cover the target's name and logo once and every
-            copy goes – the footer on page 2, the wordmark on the cover, the
-            badge inside a chart on page 63.</p>
+          <p>CIMs, board decks, diligence packs. Cover the target once and
+            every copy goes, down to the badge in a chart on page 63.</p>
         </li>
         <li class="usecard">
           <h3>Legal agreements</h3>
-          <p>SPAs, SHAs, employment contracts and side letters. Counterparties,
-            prices and signatures out; the clauses left readable, so the
-            precedent can be shared without the deal behind it.</p>
+          <p>Counterparties, prices and signatures out. The clauses stay
+            readable, so the precedent can be shared without the deal.</p>
         </li>
         <li class="usecard">
           <h3>Discovery and FOIA</h3>
-          <p>Productions and public releases where the redaction has to be
-            real, not a black rectangle somebody can select the text out of.
-            What is covered here is gone from the file, and the labels say
-            what was removed and why it was removed there.</p>
+          <p>Covered text is gone from the file, not hidden under a rectangle
+            somebody can select through. Each bar says what it removed.</p>
         </li>
         <li class="usecard">
-          <h3>De-identified medical records</h3>
-          <p>Patient names, dates, record numbers and hospital marks removed
-            before a chart is used for research, teaching or a second opinion.
-            The document never leaves the machine it is opened on, which is
-            usually the condition that makes the rest possible.</p>
+          <h3>Medical records</h3>
+          <p>Names, dates, record numbers and hospital marks off a chart
+            before it is used for research, teaching or a second opinion.</p>
         </li>
         <li class="usecard">
-          <h3>Anything with a logo on it</h3>
-          <p>An invoice, a letterhead, a screenshot pasted into a report.
-            Draw a box around the mark once and every other copy of it in the
-            document is found by sight, at any size, in any colour, including
-            the ones inside pictures.</p>
+          <h3>Anything with a logo</h3>
+          <p>Draw a box round the mark once. Every other copy is found by
+            sight, at any size, in any colour, pictures included.</p>
         </li>
       </ul>
     </section>
 
-    <section class="sample">
-      <h2>Sample slide redaction</h2>
-      <p class="sample-lede">This is a scan of a corporate slide with low
-        resolution and no text layer. Blinded is still able to redact it
-        anyway, covering the company, some brands, the logos and the artwork
-        alike. Each redaction is labelled, so the sentence around it still
-        reads coherently, with the private key file only accessible by you.</p>
-      <button type="button" id="sample-open" class="sample-shot"
-        aria-label="See this slide larger">
-        <img src="sample-slide.jpg" alt="A scanned beverage-sector board slide
-          after redaction: the company name, brand names, several logos and
-          product images are covered by black bars carrying placeholder labels
-          such as [T1], [P1] and [L1], while the charts and figures are left
-          readable." width="1280" height="965" draggable="false" loading="lazy">
-        <span class="sample-zoom">Click to enlarge</span>
-      </button>
+    <!-- A real deck, both ways round. The slides are pages of a published
+         investor presentation, and the redacted ones are what this tool
+         produced from them: not a mock-up, not a drawing of what it would do.
+         Both are shipped as pictures, which is why there are twelve of them
+         and why every one but the first slide's is loaded lazily. -->
+    <section class="gallery" id="gallery">
+      <h2>A real deck, redacted</h2>
+      <p class="sample-lede">These are pages of a published investor
+        presentation, and the redacted ones are what Blinded made of them: the
+        two companies’ logos and names covered wherever they appear, in the
+        headline, in the small print and inside the artwork, while the figures,
+        the charts and the rival brands are left readable. Each redaction is
+        labelled, so the sentence around it still reads coherently, with the
+        private key file only accessible by you.</p>
+
+      <div class="galtop">
+        <div class="galswitch" role="group" aria-label="Show the slides before or after redaction">
+          <button type="button" class="galside" id="gal-original" aria-pressed="false">Original</button>
+          <button type="button" class="galside on" id="gal-redacted" aria-pressed="true">Redacted</button>
+        </div>
+        <div class="galnav">
+          <button type="button" class="galarrow" id="gal-prev" aria-label="The slide before">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="M15 5l-7 7 7 7"/>
+            </svg>
+          </button>
+          <span class="galcount" id="gal-count" aria-live="polite">1 of 6</span>
+          <button type="button" class="galarrow" id="gal-next" aria-label="The next slide">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="M9 5l7 7-7 7"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <ol class="galstrip" id="galstrip" tabindex="0"
+        aria-label="Sample slides, before and after redaction">
+        <li class="galslide">
+          <button type="button" class="galshot" data-slide="1"
+            aria-label="See “Building a global health and wellness leader” larger">
+            <img class="galimg galorig" src="gallery/slide-1-original.jpg"
+              alt="The title slide: a row of consumer product packs under the words BUILDING A GLOBAL HEALTH &amp; WELLNESS LEADER, with both company logos beneath them." width="1280" height="720" draggable="false" loading="lazy">
+            <img class="galimg galred" src="gallery/slide-1-redacted.jpg"
+              alt="The same slide after redaction: both company logos are covered by black bars labelled [L1] and [L2], and the packs that carry their brands by bars labelled [R1], [L2], [L4] and [L5], while the packs of other brands and the headline are left alone." width="1280" height="720" draggable="false">
+            <span class="sample-zoom">Click to enlarge</span>
+          </button>
+        </li>
+        <li class="galslide">
+          <button type="button" class="galshot" data-slide="2"
+            aria-label="See “Today’s presenters” larger">
+            <img class="galimg galorig" src="gallery/slide-2-original.jpg"
+              alt="Four headshots arranged in a block, each one with a name under it, then the company that person works for and the job title they hold." width="1280" height="720" draggable="false" loading="lazy">
+            <img class="galimg galred" src="gallery/slide-2-redacted.jpg"
+              alt="The same slide after redaction: every name is covered by a labelled bar and one headshot by a bar labelled [L7], while the job titles (Chairman &amp; Chief Executive Officer, Lead Independent Director) are left readable." width="1280" height="720" draggable="false" loading="lazy">
+            <span class="sample-zoom">Click to enlarge</span>
+          </button>
+        </li>
+        <li class="galslide">
+          <button type="button" class="galshot" data-slide="3"
+            aria-label="See “Scale against the rest of the sector” larger">
+            <img class="galimg galorig" src="gallery/slide-3-original.jpg"
+              alt="A bar chart of sales by company, each bar labelled with a competitor’s logo, beside a wheel of brand wordmarks." width="1280" height="720" draggable="false" loading="lazy">
+            <img class="galimg galred" src="gallery/slide-3-redacted.jpg"
+              alt="The same slide after redaction: the two logos of the companies in the deal are covered wherever they appear, including inside the wheel of wordmarks, while the rival logos, every figure and the axis are left readable." width="1280" height="720" draggable="false" loading="lazy">
+            <span class="sample-zoom">Click to enlarge</span>
+          </button>
+        </li>
+        <li class="galslide">
+          <button type="button" class="galshot" data-slide="4"
+            aria-label="See “Why the two companies fit together” larger">
+            <img class="galimg galorig" src="gallery/slide-4-original.jpg"
+              alt="A headline naming both companies, four supporting points, and the two logos side by side with a plus sign between them." width="1280" height="720" draggable="false" loading="lazy">
+            <img class="galimg galred" src="gallery/slide-4-redacted.jpg"
+              alt="The same slide after redaction: the company names in the headline, the two logos, and the name inside the third supporting point are covered by labelled bars, while the four points themselves read as written." width="1280" height="720" draggable="false" loading="lazy">
+            <span class="sample-zoom">Click to enlarge</span>
+          </button>
+        </li>
+        <li class="galslide">
+          <button type="button" class="galshot" data-slide="5"
+            aria-label="See “What the combination offers consumers” larger">
+            <img class="galimg galorig" src="gallery/slide-5-original.jpg"
+              alt="Six claims about the combined business, a row of ten brand wordmarks, and a panel of revenue and EBITDA figures." width="1280" height="720" draggable="false" loading="lazy">
+            <img class="galimg galred" src="gallery/slide-5-redacted.jpg"
+              alt="The same slide after redaction: three of the ten wordmarks are covered by labelled bars and the rest left alone, with the figures, the claims and the footnote untouched." width="1280" height="720" draggable="false" loading="lazy">
+            <span class="sample-zoom">Click to enlarge</span>
+          </button>
+        </li>
+        <li class="galslide">
+          <button type="button" class="galshot" data-slide="6"
+            aria-label="See “A complementary market portfolio” larger">
+            <img class="galimg galorig" src="gallery/slide-6-original.jpg"
+              alt="A Venn diagram of the two companies’ markets, with a flag and a sales figure for each country." width="1280" height="720" draggable="false" loading="lazy">
+            <img class="galimg galred" src="gallery/slide-6-redacted.jpg"
+              alt="The same slide after redaction: only the two logos at the top are covered, leaving every flag, every country figure and the diagram itself readable." width="1280" height="720" draggable="false" loading="lazy">
+            <span class="sample-zoom">Click to enlarge</span>
+          </button>
+        </li>
+      </ol>
     </section>
 
     <!-- Against the tools people already have. Every claim here is about a
@@ -745,7 +809,7 @@
         <path d="M6 6l12 12M18 6L6 18"/>
       </svg>
     </button>
-    <div class="samplestage"><img id="samplebig" src="sample-slide.jpg" alt="" draggable="false"></div>
+    <div class="samplestage"><img id="samplebig" src="gallery/slide-1-redacted.jpg" alt="" draggable="false"></div>
   </div>
 </div>
 
@@ -834,7 +898,7 @@
 <script src="lib/pdfwrite.js?v=4b977425"></script>
 <script src="lib/pdfread.js?v=ca229552"></script>
 <script src="lib/render.js?v=65c3fe76"></script>
-<script src="app.js?v=81080ab8"></script>
+<script src="app.js?v=2ab32ef5"></script>
 <script type="module" src="lib/boot.mjs?v=8b98ed8f"></script>
 </body>
 </html>

@@ -1774,35 +1774,48 @@ check('no creation date is carried into the output', !meta.info.CreationDate);
     JSON.stringify(spans('Tokenomics,Tokenomics', 'Tokenomics')));
 }
 
-// ---------- the sample slide ----------
+// ---------- the gallery on the front page ----------
 //
-// It used to be a drawing, invented end to end, and the check here pointed
-// this tool's own detectors at it to prove there was nothing real on it. It is
-// a real page now — a scan of a board slide, after a pass through Blinded —
-// which makes it a stronger thing to show and a different thing to guard.
+// It began as a drawing, invented end to end, then became one real page. It is
+// six pages now, each shown before and after, from a published investor
+// presentation — which is what makes showing the unredacted half possible at
+// all, and it is the half that makes the other half mean anything.
 //
-// What was verified before it was committed, with pdf.js against the source
-// PDF: zero characters of extractable text on the page. That is the claim the
-// picture is on the front page to make, and it is why a real document can be
-// shown at all. What can be held here is the rest: that the file is present,
-// that the page and the enlargement are the same one image, and that the
-// original never came along with it.
+// What can be held here is the shape of it: that every picture the markup
+// names is in the repository, that both halves of every slide exist, that the
+// set is light enough for a front page, that each is described in words, and
+// that no source document was left beside them.
 {
   const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
-  const shot = new URL('../sample-slide.jpg', import.meta.url);
-  check('the sample slide is in the repository', existsSync(shot),
-    'sample-slide.jpg is missing');
-
-  if (existsSync(shot)) {
-    const bytes = statSync(shot).size;
-    // A front page that costs half a megabyte before anyone has done anything
-    // is a front page people leave.
-    check('and is small enough to sit on a front page', bytes < 340 * 1024,
-      Math.round(bytes / 1024) + 'KB');
+  // Twelve pictures: six slides, each one before and after. Both halves have
+  // to be present, because a toggle with nothing on one side of it is worse
+  // than no toggle.
+  const wanted = [...html.matchAll(/<img class="galimg[^>]*src="(gallery\/[^"]+)"/g)]
+    .map(m => m[1]);
+  check('the gallery names twelve pictures', wanted.length === 12, String(wanted.length));
+  const missing = wanted.filter(name => !existsSync(new URL('../' + name, import.meta.url)));
+  check('and every one of them is in the repository', missing.length === 0,
+    missing.join(', '));
+  for (let n = 1; n <= 6; n++) {
+    check('slide ' + n + ' has both halves',
+      wanted.includes('gallery/slide-' + n + '-original.jpg')
+      && wanted.includes('gallery/slide-' + n + '-redacted.jpg'));
   }
 
-  const shown = [...html.matchAll(/src="(sample[^"]*)"/g)].map(m => m[1]);
-  
+  // A front page that costs a megabyte before anyone has done anything is a
+  // front page people leave. Only the first slide is loaded up front; the
+  // rest wait until they are scrolled to, so the budget that matters is the
+  // whole set rather than any one of them.
+  const weight = wanted
+    .filter(name => existsSync(new URL('../' + name, import.meta.url)))
+    .reduce((sum, name) => sum + statSync(new URL('../' + name, import.meta.url)).size, 0);
+  check('and the gallery is small enough to sit on a front page',
+    weight < 1400 * 1024, Math.round(weight / 1024) + 'KB');
+  const eager = [...html.matchAll(/<img class="galimg[^>]*>/g)]
+    .filter(tag => !/loading="lazy"/.test(tag[0]));
+  check('and only the first slide is fetched before it is scrolled to',
+    eager.length === 1, String(eager.length));
+
   check('the confirm dialog closes with a corner X, not a Cancel button',
     html.includes('id="confirmx"') && html.includes('class="dialog-x"')
       && !html.includes('id="confirmno"'),
@@ -1824,22 +1837,27 @@ check('no creation date is carried into the output', !meta.info.CreationDate);
       /id="file"/.test(html));
   }
 
-check('the page and its enlargement show the same picture',
-    shown.length >= 2 && new Set(shown).size === 1, shown.join(', '));
-  check('and it is the slide, not the drawing it replaced',
-    shown.every(name => name.startsWith('sample-slide.')), shown.join(', '));
 
-  // A picture of a document says nothing to a reader who cannot see it.
-  const alt = html.match(/<img src="sample-slide[^>]*alt="([^"]*)"/);
-  check('the sample is described for a reader who cannot see it',
-    Boolean(alt) && alt[1].replace(/\s+/g, ' ').trim().length > 80,
-    alt ? alt[1].length + ' characters' : 'no alt text');
+  // The picture the enlargement opens on has to be one of the gallery's, or
+  // the first press of it shows something that is not on the page.
+  const big = html.match(/id="samplebig" src="([^"]+)"/);
+  check('the enlargement opens on a picture the gallery holds',
+    Boolean(big) && wanted.includes(big[1]), big ? big[1] : 'no src');
 
-  // The source was a real confidential deck. Only the redacted render belongs
-  // here, and a stray PDF at the root is how the other thing gets published.
+  // A picture of a document says nothing to a reader who cannot see it, and
+  // here the description is doing real work: it is where the difference
+  // between the two halves is said in words.
+  const alts = [...html.matchAll(/<img class="galimg[^>]*alt="([^"]*)"/g)]
+    .map(m => m[1].replace(/\s+/g, ' ').trim());
+  check('every slide is described for a reader who cannot see it',
+    alts.length === 12 && alts.every(text => text.length > 80),
+    alts.map(text => text.length).join(','));
+
+  // The source was a real deck. Only the renders belong here, and a stray PDF
+  // at the root is how the other thing gets published.
   const strays = readdirSync(new URL('../', import.meta.url))
     .filter(name => /\.pdf$/i.test(name));
-  check('and no PDF was left behind beside it', strays.length === 0,
+  check('and no PDF was left behind beside them', strays.length === 0,
     strays.join(', '));
 }
 

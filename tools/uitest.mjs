@@ -3776,10 +3776,10 @@ try {
     await page.waitForSelector('#view-drop:not([hidden])', { timeout: 15000 });
 
     const shot = await page.evaluate(() => {
-      const open = document.getElementById('sample-open');
+      const open = document.querySelector('.galshot');
       if (!open) return null;
       open.scrollIntoView({ block: 'center' });
-      const img = open.querySelector('img');
+      const img = open.querySelector('.galred');
       const r = img.getBoundingClientRect();
       return {
         onTheFrontPage: open.closest('#view-drop') !== null,
@@ -3804,10 +3804,10 @@ try {
     const big = await page.evaluate(async () => {
       const box = document.getElementById('samplebox');
       const shut = box.hidden;
-      document.getElementById('sample-open').click();
+      document.querySelector('.galshot').click();
       await new Promise(r => setTimeout(r, 150));
       const img = document.getElementById('samplebig').getBoundingClientRect();
-      const thumb = document.querySelector('.sample-shot img').getBoundingClientRect();
+      const thumb = document.querySelector('.galshot .galred').getBoundingClientRect();
       return {
         shut, open: !box.hidden,
         // Bigger than the thumbnail it was opened from, or there was no point.
@@ -3829,7 +3829,7 @@ try {
     check('the button closes it',
       await page.evaluate(() => document.getElementById('samplebox').hidden) === true);
 
-    await page.click('#sample-open');
+    await page.click('.galshot');
     await page.waitForTimeout(120);
     await page.keyboard.press('Escape');
     await page.waitForTimeout(120);
@@ -3838,14 +3838,14 @@ try {
 
     const backdrop = await page.evaluate(async () => {
       const box = document.getElementById('samplebox');
-      document.getElementById('sample-open').click();
+      document.querySelector('.galshot').click();
       await new Promise(r => setTimeout(r, 120));
       box.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await new Promise(r => setTimeout(r, 120));
       const shut = box.hidden;
       // And a click on the picture itself does not, or a drag to read it
       // would keep shutting it.
-      document.getElementById('sample-open').click();
+      document.querySelector('.galshot').click();
       await new Promise(r => setTimeout(r, 120));
       document.getElementById('samplebig').dispatchEvent(
         new MouseEvent('click', { bubbles: true }));
@@ -3859,15 +3859,110 @@ try {
     check('while a click on the slide itself leaves it open',
       backdrop.stillOpen === true, JSON.stringify(backdrop));
 
+    // ---------- before and after, and the strip they sit on ----------
+    //
+    // The redacted half is what the tool did; the original is what it did it
+    // to. Either on its own is an assertion — together they are evidence, so
+    // the toggle has to actually swap them and the strip has to reach all six.
+    const both = await page.evaluate(() => {
+      const shot = document.querySelector('.galshot');
+      const shown = el => el && getComputedStyle(el).display !== 'none';
+      const before = { red: shown(shot.querySelector('.galred')),
+                       orig: shown(shot.querySelector('.galorig')) };
+      document.getElementById('gal-original').click();
+      const after = { red: shown(shot.querySelector('.galred')),
+                      orig: shown(shot.querySelector('.galorig')),
+                      pressed: document.getElementById('gal-original').getAttribute('aria-pressed'),
+                      other: document.getElementById('gal-redacted').getAttribute('aria-pressed') };
+      document.getElementById('gal-redacted').click();
+      const back = { red: shown(shot.querySelector('.galred')),
+                     orig: shown(shot.querySelector('.galorig')) };
+      return { before, after, back,
+        slides: document.querySelectorAll('.galslide').length,
+        pairs: document.querySelectorAll('.galslide .galorig').length };
+    });
+    check('the gallery holds six slides, each one twice',
+      both.slides === 6 && both.pairs === 6, JSON.stringify(both));
+    check('it opens on the redacted half, which is what the tool did',
+      both.before.red === true && both.before.orig === false, JSON.stringify(both));
+    check('Original swaps them, and says which one is showing',
+      both.after.orig === true && both.after.red === false
+      && both.after.pressed === 'true' && both.after.other === 'false',
+      JSON.stringify(both));
+    check('and Redacted swaps them back',
+      both.back.red === true && both.back.orig === false, JSON.stringify(both));
+
+    // Six slides on a strip is only useful if the other five can be reached.
+    const walked = await page.evaluate(async () => {
+      const strip = document.getElementById('galstrip');
+      strip.scrollLeft = 0;
+      await new Promise(r => setTimeout(r, 60));
+      const said = () => document.getElementById('gal-count').textContent.trim();
+      const start = { where: strip.scrollLeft, said: said(),
+        back: document.getElementById('gal-prev').disabled };
+      document.getElementById('gal-next').click();
+      await new Promise(r => setTimeout(r, 450));
+      const moved = { where: strip.scrollLeft, said: said(),
+        back: document.getElementById('gal-prev').disabled };
+      document.getElementById('gal-prev').click();
+      await new Promise(r => setTimeout(r, 450));
+      const home = { where: strip.scrollLeft, said: said() };
+      // And the end of the strip is an end, not a wrap: jumping back to the
+      // first slide from the last reads as having lost your place.
+      // Jumped rather than animated: the strip scrolls smoothly, and a reading
+      // taken while it is still travelling is a reading of where it was, not
+      // where it was sent. 'auto' is not enough — it defers to the stylesheet,
+      // which is the thing being worked around — so the behaviour is turned
+      // off for the jump and put back afterwards.
+      strip.style.scrollBehavior = 'auto';
+      strip.scrollLeft = strip.scrollWidth;
+      await new Promise(r => setTimeout(r, 150));
+      const end = { said: said(), on: document.getElementById('gal-next').disabled };
+      strip.scrollLeft = 0;
+      await new Promise(r => setTimeout(r, 150));
+      strip.style.scrollBehavior = '';
+      return { start, moved, home, end };
+    });
+    check('the strip starts at the first slide and says so',
+      walked.start.said === '1 of 6' && walked.start.back === true,
+      JSON.stringify(walked));
+    check('the right arrow moves it along',
+      walked.moved.where > walked.start.where && walked.moved.said === '2 of 6'
+      && walked.moved.back === false, JSON.stringify(walked));
+    check('and the left arrow brings it back',
+      walked.home.where < walked.moved.where && walked.home.said === '1 of 6',
+      JSON.stringify(walked));
+    check('the last slide is the end of the strip, not a wrap round to the first',
+      walked.end.said === '6 of 6' && walked.end.on === true, JSON.stringify(walked));
+
+    // Enlarging shows the half being looked at. Opening the redacted one over
+    // a reviewer comparing the originals would be the tool arguing with them.
+    const enlarged = await page.evaluate(async () => {
+      document.getElementById('gal-original').click();
+      document.querySelector('.galshot').click();
+      await new Promise(r => setTimeout(r, 150));
+      const wasOriginal = document.getElementById('samplebig').getAttribute('src');
+      document.getElementById('samplebox').hidden = true;
+      document.getElementById('gal-redacted').click();
+      document.querySelector('.galshot').click();
+      await new Promise(r => setTimeout(r, 150));
+      const wasRedacted = document.getElementById('samplebig').getAttribute('src');
+      document.getElementById('samplebox').hidden = true;
+      return { wasOriginal, wasRedacted };
+    });
+    check('enlarging shows the half that is on screen',
+      /original/.test(enlarged.wasOriginal) && /redacted/.test(enlarged.wasRedacted),
+      JSON.stringify(enlarged));
+
     // On a phone the picture is the screen: no card, no mat, no page-width
     // minimum dragging it sideways before any of it can be read.
     {
       const small = await context.newPage();
       await small.setViewportSize({ width: 390, height: 844 });
       await small.goto(base);
-      await small.waitForSelector('#sample-open', { timeout: 15000 });
+      await small.waitForSelector('.galshot', { timeout: 15000 });
       const full = await small.evaluate(async () => {
-        document.getElementById('sample-open').click();
+        document.querySelector('.galshot').click();
         await new Promise(r => setTimeout(r, 200));
         const img = document.getElementById('samplebig').getBoundingClientRect();
         const stage = document.querySelector('.samplestage');
@@ -3911,7 +4006,7 @@ try {
         // Opening it again starts from the whole picture.
         document.querySelector('#sampleclose').click();
         await new Promise(r => setTimeout(r, 80));
-        document.getElementById('sample-open').click();
+        document.querySelector('.galshot').click();
         await new Promise(r => setTimeout(r, 150));
         return { before: Math.round(before), after: Math.round(after),
           reopened: Math.round(img.getBoundingClientRect().width) };
@@ -3999,7 +4094,7 @@ try {
         };
         document.querySelector('#sampleclose').click();
         await new Promise(r => setTimeout(r, 80));
-        document.getElementById('sample-open').click();
+        document.querySelector('.galshot').click();
         await new Promise(r => setTimeout(r, 150));
         const fit = img.getBoundingClientRect();
         const focus = { x: Math.round(window.innerWidth * 0.75), y: 360 };
@@ -4054,7 +4149,7 @@ try {
     // Close were two rows of chrome around the one thing being looked at.
     const bare = await page.evaluate(async () => {
       const box = document.getElementById('samplebox');
-      document.getElementById('sample-open').click();
+      document.querySelector('.galshot').click();
       await new Promise(r => setTimeout(r, 120));
       const inner = box.querySelector('.busy-inner');
       const out = {
@@ -5175,13 +5270,29 @@ try {
       if (dot) dot.click();
       await new Promise(r => setTimeout(r, 120));
       const rows = [...document.querySelectorAll('#termcounts .tallywhere li')];
+      // Measured, not assumed: the cross belongs beside the row, and it spent
+      // a while under it instead, because the more specific of the two rules
+      // governing these list items still said display: block.
+      const seams = rows.map(li => {
+        const cross = li.querySelector('.tallydrop');
+        const spot = li.querySelector('.tallyspot');
+        if (!cross || !spot) return null;
+        const a = cross.getBoundingClientRect();
+        const b = spot.getBoundingClientRect();
+        return { sameLine: Math.abs(a.top - b.top) <= a.height,
+                 toTheRight: a.left >= b.right - 2 };
+      });
       return {
         rows: rows.length,
         hasCross: rows.every(li => Boolean(li.querySelector('.tallydrop'))),
+        beside: seams.every(seam => seam && seam.sameLine && seam.toTheRight),
+        seams: seams.slice(0, 2),
       };
     });
     check('a tally row carries a way to say no to that mark',
       opened.rows > 0 && opened.hasCross === true, JSON.stringify(opened));
+    check('and it sits beside the row, not under it',
+      opened.beside === true, JSON.stringify(opened.seams));
 
     const lit = await page.evaluate(async () => {
       const B = window.Blinded;
@@ -5677,6 +5788,72 @@ try {
       armed.inking === true && armed.pressed === 'true', JSON.stringify(armed));
     check('and says how to put it away again', armed.said === true, JSON.stringify(armed));
 
+    // The first press is not a line. It puts the colours and the thickness on
+    // the page and leaves the page alone, so the choosing happens before the
+    // drawing rather than being corrected after it.
+    const first = await page.evaluate(async () => {
+      const B = window.Blinded;
+      const canvas = B.state.pages[0].canvas;
+      const box = canvas.getBoundingClientRect();
+      const at = (fx, fy) => ({ clientX: box.left + box.width * fx,
+                                clientY: box.top + box.height * fy });
+      for (const type of ['pointerdown', 'pointerup']) {
+        canvas.dispatchEvent(new PointerEvent(type,
+          { bubbles: true, pointerId: 80, ...at(0.6, 0.62) }));
+      }
+      await new Promise(r => setTimeout(r, 60));
+      return { inks: B.inksOf(B.state.pages[0]).length,
+        bars: document.querySelectorAll('.inkfresh .notebar').length,
+        dots: document.querySelectorAll('.inkfresh .notedot').length,
+        nib: document.querySelectorAll('.inkfresh .inknib').length };
+    });
+    check('the first press leaves no mark on the page',
+      first.inks === 0, JSON.stringify(first));
+    check('it brings up the colours and the thickness instead',
+      first.bars === 1 && first.dots === 4, JSON.stringify(first));
+    check('with a sample of the line it is about to draw',
+      first.nib === 1, JSON.stringify(first));
+
+    // And those controls work, which is the whole reason they are there
+    // before the first line rather than after it.
+    const chose = await page.evaluate(async () => {
+      const B = window.Blinded;
+      document.querySelectorAll('.inkfresh .notedot')[2].click();
+      const thicker = [...document.querySelectorAll('.inkfresh .notestep')]
+        .find(b => b.title === 'Thicker');
+      thicker.click();
+      await new Promise(r => setTimeout(r, 60));
+      const canvas = B.state.pages[0].canvas;
+      const box = canvas.getBoundingClientRect();
+      const at = (fx, fy) => ({ clientX: box.left + box.width * fx,
+                                clientY: box.top + box.height * fy });
+      canvas.dispatchEvent(new PointerEvent('pointerdown',
+        { bubbles: true, pointerId: 82, ...at(0.6, 0.72) }));
+      for (let i = 1; i <= 6; i++) {
+        canvas.dispatchEvent(new PointerEvent('pointermove',
+          { bubbles: true, pointerId: 82, ...at(0.6 + 0.02 * i, 0.72) }));
+      }
+      canvas.dispatchEvent(new PointerEvent('pointerup',
+        { bubbles: true, pointerId: 82, ...at(0.72, 0.72) }));
+      await new Promise(r => setTimeout(r, 60));
+      const ink = B.inksOf(B.state.pages[0])[0];
+      const wide = B.state.pages[0].source.width;
+      return { colour: ink && ink.colour, width: ink && ink.width, wide,
+        fresh: document.querySelectorAll('.inkfresh').length };
+    });
+    check('what is chosen there is what the next line is drawn in',
+      chose.colour === '#1a56db' && chose.width > chose.wide / 280,
+      JSON.stringify(chose));
+    check('and the controls give up their place to the line',
+      chose.fresh === 0, JSON.stringify(chose));
+
+    await page.evaluate(() => {
+      const B = window.Blinded;
+      B.state.pages[0].inks = [];
+      B.selectInk(null);
+      B.renderNotes(B.state.pages[0]);
+    });
+
     // Down, along, up. Released for the same reason the note test releases:
     // a press left holding makes every gesture after it a pinch.
     const drawn = await page.evaluate(() => {
@@ -5716,7 +5893,7 @@ try {
       const B = window.Blinded;
       const ink = B.inksOf(B.state.pages[0])[0];
       const was = { colour: ink.colour, width: ink.width };
-      document.querySelectorAll('.inkchip .notedot')[2].click();
+      document.querySelectorAll('.inkchip .notedot')[3].click();
       const thicker = [...document.querySelectorAll('.inkchip .notestep')]
         .find(b => b.title === 'Thicker');
       thicker.click();
@@ -5791,6 +5968,64 @@ try {
     check('the cross removes the line it belongs to', gone.after === 0, JSON.stringify(gone));
     check('undo brings the line back', gone.back === 1, JSON.stringify(gone));
     check('and the controls go with the line', gone.bars === 0, JSON.stringify(gone));
+
+    // With the pen away, a line is still reachable: pressing it chooses it,
+    // which is the only route to its colour, its thickness and its cross.
+    const chosen = await page.evaluate(async () => {
+      const B = window.Blinded;
+      B.selectInk(null);
+      const page0 = B.state.pages[0];
+      const ink = B.inksOf(page0)[0];
+      const spot = ink.points[Math.floor(ink.points.length / 2)];
+      const canvas = page0.canvas;
+      const box = canvas.getBoundingClientRect();
+      const press = { clientX: box.left + (spot.x / page0.source.width) * box.width,
+                      clientY: box.top + (spot.y / page0.source.height) * box.height };
+      for (const type of ['pointerdown', 'pointerup']) {
+        canvas.dispatchEvent(new PointerEvent(type, { bubbles: true, pointerId: 84, ...press }));
+      }
+      await new Promise(r => setTimeout(r, 80));
+      const onIt = B.state.inkSel === ink.id;
+      const bars = document.querySelectorAll('.inkchip .notebar').length;
+      // And a press well away from it lets go again.
+      for (const type of ['pointerdown', 'pointerup']) {
+        canvas.dispatchEvent(new PointerEvent(type, { bubbles: true, pointerId: 85,
+          clientX: box.left + box.width * 0.93, clientY: box.top + box.height * 0.93 }));
+      }
+      await new Promise(r => setTimeout(r, 80));
+      return { armed: B.state.inking, onIt, bars, after: B.state.inkSel };
+    });
+    check('a line can be chosen again with the pen put away',
+      chosen.armed === false && chosen.onIt === true && chosen.bars === 1,
+      JSON.stringify(chosen));
+    check('and a press away from it lets go',
+      chosen.after === null, JSON.stringify(chosen));
+
+    // Both page tools belong to the sheet. Going back to the words puts them
+    // down, or the next press on the document does something the reviewer
+    // stopped asking for several clicks ago.
+    const putDown = await page.evaluate(async () => {
+      const B = window.Blinded;
+      const sheet = document.getElementById('organisesect');
+      sheet.open = true;
+      await new Promise(r => setTimeout(r, 60));
+      document.getElementById('page-draw').click();
+      document.getElementById('page-text').click();
+      const armed = { ink: B.state.inking, note: B.state.placingText };
+      // Whichever was armed last; both are put away by the same move.
+      document.getElementById('page-draw').click();
+      const bothOn = { ink: B.state.inking, note: B.state.placingText };
+      sheet.open = false;
+      await new Promise(r => setTimeout(r, 80));
+      const shut = { ink: B.state.inking, note: B.state.placingText };
+      return { armed, bothOn, shut };
+    });
+    check('arming the pen puts the note down, and the other way round',
+      putDown.armed.note === true && putDown.armed.ink === false,
+      JSON.stringify(putDown));
+    check('closing Organise puts both page tools down',
+      putDown.shut.ink === false && putDown.shut.note === false,
+      JSON.stringify(putDown));
 
     await page.evaluate(() => {
       const B = window.Blinded;
@@ -8290,7 +8525,7 @@ try {
         // the difference the eye reads before it reads a word.
         inkedHeads: heads.filter(c => c === ink).length,
         width: Math.round(document.querySelector('.versus').getBoundingClientRect().width),
-        above: Math.round(document.querySelector('.sample').getBoundingClientRect().width),
+        above: Math.round(document.querySelector('.gallery').getBoundingClientRect().width),
         // A comparison is read by sweeping across it, which only works while
         // each cell is a phrase rather than a paragraph.
         longest: Math.max(...[...table.querySelectorAll('tbody td')]

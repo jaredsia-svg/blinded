@@ -105,6 +105,11 @@
     // reason — there is only ever one of each.
     inking: false,
     inkSel: null,
+    // Where the colours and the thickness are sitting, before there is a line
+    // for them to belong to: the first press with the pen armed puts them on
+    // the page rather than a mark, so the choosing happens before the drawing
+    // rather than after it.
+    inkPlacing: null,
     // Logos the reviewer has picked. Each holds the greyscale patch it was cut
     // from, so its matches can be recomputed when the sensitivity moves
     // without making them draw the box again.
@@ -3399,15 +3404,20 @@
       // panning and marking the same way placing a note does.
       if (state.inking) {
         event.preventDefault();
-        if (state.inkSel) selectInk(null);
-        inking = [at(event)];
+        // Held, not drawn. Whether this press is a line or a tap is not known
+        // until the hand either moves or does not, and a press that laid down
+        // a dot straight away is what made the first click leave a mark before
+        // anyone had chosen a colour for it.
+        inking = { points: [at(event)], drew: false };
         try { canvas.setPointerCapture(event.pointerId); } catch { /* not fatal */ }
         return;
       }
       // A press on the page is a press away from whatever note was in hand.
       if (state.textSel) { commitNote(); selectNote(null); }
-      // And away from whatever line was chosen, so its controls go with it.
-      if (state.inkSel) selectInk(null);
+      // And away from whatever line was chosen, unless the press is on the
+      // line itself — which is handled when the hand comes up, once it is
+      // known whether the press was a click or the start of a box.
+      if (state.inkSel && !inkNear(page, at(event).x, at(event).y)) selectInk(null);
       // A second finger turns whatever was happening into a pinch. Whatever
       // the first one had started — a pan, half a box — is abandoned, because
       // finishing it with the hand that is now zooming is not what anyone
@@ -3433,15 +3443,25 @@
       if (inking) {
         event.preventDefault();
         const now = at(event);
-        const last = inking[inking.length - 1];
+        const points = inking.points;
+        const first = points[0];
+        // Far enough to be a line rather than a press that wandered. Until
+        // that is settled nothing is drawn, so a tap leaves the page as it
+        // found it.
+        if (!inking.drew) {
+          const slop = page.source.width * 0.006;
+          if (Math.abs(now.x - first.x) < slop && Math.abs(now.y - first.y) < slop) return;
+          inking.drew = true;
+        }
+        const last = points[points.length - 1];
         // Samples closer together than a fifth of the line's own width add
         // nothing to the shape and a great deal to the size of a draft.
         const near = page.source.width * INK_WIDTH * 0.2;
         if (Math.abs(now.x - last.x) > near || Math.abs(now.y - last.y) > near) {
-          inking.push(now);
+          points.push(now);
           // Drawn as it is drawn rather than on release: a line that appears
           // only once the hand comes up is a line the reviewer cannot aim.
-          drawPage(page, null, inking);
+          drawPage(page, null, points);
         }
         return;
       }
@@ -3464,13 +3484,21 @@
       // mark or leave a box behind.
       if (pinching()) { panning = null; start = null; inking = null; return; }
       if (inking) {
-        const points = inking;
+        const stroke = inking;
         inking = null;
-        // The pen stays armed: a reviewer ringing three figures draws three
-        // lines, and having to press the button again between each is the
-        // thing that makes a drawing tool tiring. Escape puts it away, and so
-        // does pressing the button again.
-        addInk(page, points);
+        // A drag is a line. The pen stays armed after it: a reviewer ringing
+        // three figures draws three lines, and having to press the button
+        // again between each is what makes a drawing tool tiring. Escape puts
+        // it away, and so does pressing the button again.
+        if (stroke.drew) { addInk(page, stroke.points); return; }
+        // A tap is not. It is either "this line, please" — so that an old
+        // line can be recoloured or removed without putting the pen down —
+        // or, over bare page, a request for the colours and the thickness
+        // before anything is drawn at all.
+        const where = stroke.points[0];
+        const already = inkNear(page, where.x, where.y);
+        if (already) selectInk(already.id);
+        else placeInkBar(page, where.x, where.y);
         return;
       }
       // A drag that moved the page leaves nothing behind, and neither does a
@@ -3499,6 +3527,11 @@
         return;
       }
       if (rect.w < minimum && rect.h < minimum) {
+        // A line drawn by hand is chosen by pressing it, with or without the
+        // pen: that is the only way to reach its colour, its thickness and its
+        // cross once the pen has been put away.
+        const already = inkNear(page, end.x, end.y);
+        if (already) { selectInk(already.id); return; }
         toggleAt(page, end.x, end.y);
         markPending();
       } else {
@@ -4032,6 +4065,7 @@
     stopPlacingText();
     state.inking = true;
     state.inkSel = null;
+    state.inkPlacing = null;
     document.body.classList.add('inking');
     el('page-draw').setAttribute('aria-pressed', 'true');
     // As with a note: on a phone the panel and the document take turns, and
@@ -4043,14 +4077,60 @@
   function stopInking() {
     if (!state.inking) return;
     state.inking = false;
+    const where = state.inkPlacing;
+    state.inkPlacing = null;
     document.body.classList.remove('inking');
     el('page-draw').setAttribute('aria-pressed', 'false');
+    if (where && state.pages[where.pageIndex]) {
+      renderNotes(state.pages[where.pageIndex]);
+      drawPage(state.pages[where.pageIndex]);
+    }
     setTip();
+  }
+
+  // Both page tools put away at once. Leaving one armed while the reviewer has
+  // gone back to the words means the next press on the document does something
+  // they stopped asking for several clicks ago.
+  function stopPageTools() {
+    stopPlacingText();
+    stopInking();
+  }
+
+  // The line nearest a press, or nothing. Measured against the points rather
+  // than the box round them, because the box round a long diagonal is mostly
+  // empty and choosing it by that box would put a stroke under presses that
+  // are nowhere near it.
+  function inkNear(page, x, y) {
+    let best = null;
+    let nearest = Infinity;
+    for (const ink of inksOf(page)) {
+      const reach = Math.max(ink.width, page.source.width * 0.008);
+      for (const point of ink.points) {
+        const gap = Math.hypot(point.x - x, point.y - y);
+        if (gap <= reach && gap < nearest) { nearest = gap; best = ink; }
+      }
+    }
+    return best;
+  }
+
+  // Puts the colours and the thickness on the page at a spot, belonging to
+  // nothing yet. What is chosen there is what the next line is drawn in.
+  function placeInkBar(page, x, y) {
+    state.inkSel = null;
+    state.inkPlacing = { pageIndex: page.index, x, y };
+    renderNotes(page);
+    drawPage(page);
   }
 
   function selectInk(id) {
     const was = state.inkSel;
+    const hadBar = state.inkPlacing;
     state.inkSel = id;
+    state.inkPlacing = null;
+    if (hadBar && state.pages[hadBar.pageIndex]) {
+      renderNotes(state.pages[hadBar.pageIndex]);
+      drawPage(state.pages[hadBar.pageIndex]);
+    }
     if (was === id) return;
     for (const page of state.pages) {
       if (inksOf(page).some(ink => ink.id === was || ink.id === id)) {
@@ -4106,6 +4186,7 @@
     // on screen: chosen after the first stroke, beside the stroke, and gone
     // again when the reviewer presses somewhere else.
     state.inkSel = ink.id;
+    state.inkPlacing = null;
     renderNotes(page);
     drawPage(page);
     return ink;
@@ -4131,36 +4212,58 @@
       // No room above a stroke drawn near the top of the page, and the page
       // clips what hangs off it.
       chip.classList.toggle('low', box.y < width * 0.08);
+      // Only the chosen one carries anything. A chip is a place to hang the
+      // controls, never a thing that takes a press: presses on the page belong
+      // to the canvas, which is where a line is both drawn and chosen, so that
+      // the box round a stroke cannot swallow the drag that draws the next one
+      // or the drag that draws a redaction box over it.
       if (chosen) chip.append(inkBar(page, ink));
-      chip.addEventListener('pointerdown', event => {
-        // While the pen is armed a press is a new stroke, even over an old
-        // one: drawing over your own work is ordinary, and a chip that
-        // swallowed it would make the second stroke impossible.
-        if (state.inking) return;
-        event.preventDefault();
-        event.stopPropagation();
-        selectInk(ink.id);
-      });
+      layer.append(chip);
+    }
+
+    // And the same controls with no line yet: put on the page by the first
+    // press after the pen is picked up, so the colour and the thickness are
+    // chosen before anything is drawn rather than corrected afterwards.
+    if (state.inkPlacing && state.inkPlacing.pageIndex === page.index && !state.inkSel) {
+      const chip = document.createElement('div');
+      chip.className = 'inkchip inkfresh';
+      chip.dataset.ink = 'new';
+      chip.style.setProperty('--x', share(state.inkPlacing.x));
+      chip.style.setProperty('--y', share(state.inkPlacing.y));
+      chip.style.setProperty('--w', share(width * 0.001));
+      chip.style.setProperty('--h', share(width * 0.001));
+      chip.classList.toggle('low', state.inkPlacing.y < width * 0.08);
+      chip.append(inkBar(page, null));
       layer.append(chip);
     }
   }
 
+  // One bar, two jobs. With a line it restyles that line; with none it sets
+  // what the next line will be drawn in. They are the same control because
+  // they are the same question, and a reviewer who has just used one of them
+  // should not have to learn the other.
   function inkBar(page, ink) {
     const bar = document.createElement('div');
     bar.className = 'notebar inkbarrow';
     const stop = event => { event.preventDefault(); event.stopPropagation(); };
     bar.addEventListener('pointerdown', stop);
 
+    // How thick the line is, as a share of the page's width, whichever of the
+    // two the bar is speaking for.
+    const widthNow = () => (ink ? ink.width / page.source.width : inkStyle.width);
+    const colourNow = () => (ink ? ink.colour : inkStyle.colour);
+
     for (const colour of INK_COLOURS) {
       const dot = document.createElement('button');
       dot.type = 'button';
-      dot.className = 'notedot' + (ink.colour === colour.value ? ' on' : '');
+      dot.className = 'notedot' + (colourNow() === colour.value ? ' on' : '');
       dot.style.background = colour.value;
       dot.title = colour.name;
       dot.setAttribute('aria-label', colour.name);
       dot.addEventListener('click', event => {
         stop(event);
-        restyleInk(ink.id, item => { item.colour = colour.value; }, 'that colour');
+        if (ink) restyleInk(ink.id, item => { item.colour = colour.value; }, 'that colour');
+        else { inkStyle = { ...inkStyle, colour: colour.value }; renderNotes(page); }
       });
       bar.append(dot);
     }
@@ -4173,18 +4276,57 @@
       button.textContent = step.sign;
       button.title = step.say;
       button.setAttribute('aria-label', step.say);
-      button.addEventListener('click', event => { stop(event); thickenInk(ink.id, step.by); });
+      button.addEventListener('click', event => {
+        stop(event);
+        if (ink) { thickenInk(ink.id, step.by); return; }
+        inkStyle = { ...inkStyle,
+          width: Math.max(INK_THINNEST, Math.min(INK_THICKEST, inkStyle.width * step.by)) };
+        renderNotes(page);
+      });
       bar.append(button);
     }
 
-    const bin = document.createElement('button');
-    bin.type = 'button';
-    bin.className = 'notestep notebin';
-    bin.textContent = '✕';
-    bin.title = 'Remove this line';
-    bin.setAttribute('aria-label', 'Remove this line');
-    bin.addEventListener('click', event => { stop(event); dropInk(ink.id); });
-    bar.append(bin);
+    // What the next line will look like, at the size it will be drawn. A
+    // thickness named in numbers means nothing; a sample of it means all of it.
+    const show = document.createElement('span');
+    show.className = 'inkshow';
+    show.setAttribute('aria-hidden', 'true');
+    const nib = document.createElement('span');
+    nib.className = 'inknib';
+    const rect = page.canvas ? page.canvas.getBoundingClientRect() : null;
+    const onScreen = rect && rect.width
+      ? widthNow() * rect.width : widthNow() * page.source.width;
+    nib.style.width = nib.style.height = Math.max(2, Math.min(22, onScreen)) + 'px';
+    nib.style.background = colourNow();
+    show.append(nib);
+    bar.append(show);
+
+    if (ink) {
+      const bin = document.createElement('button');
+      bin.type = 'button';
+      bin.className = 'notestep notebin';
+      bin.textContent = '✕';
+      bin.title = 'Remove this line';
+      bin.setAttribute('aria-label', 'Remove this line');
+      bin.addEventListener('click', event => { stop(event); dropInk(ink.id); });
+      bar.append(bin);
+    } else {
+      // The way out of the bar when nothing has been drawn yet, for a reviewer
+      // who put it on the page and then thought better of the whole thing.
+      const done = document.createElement('button');
+      done.type = 'button';
+      done.className = 'notestep';
+      done.textContent = '✕';
+      done.title = 'Put these away';
+      done.setAttribute('aria-label', 'Put these away');
+      done.addEventListener('click', event => {
+        stop(event);
+        state.inkPlacing = null;
+        renderNotes(page);
+        drawPage(page);
+      });
+      bar.append(done);
+    }
     return bar;
   }
 
@@ -6666,6 +6808,12 @@
 
       const sheet = el('organisesect');
 
+      // Both page tools belong to the sheet. Leaving the pen or the note armed
+      // while the reviewer has gone back to the words means the next press on
+      // the document does something they stopped asking for several clicks
+      // ago — and Organise closing is exactly the moment they stopped.
+      if (section === sheet ? !sheet.open : section.open) stopPageTools();
+
       // The sheet's own toggle owns the panel's shape, in both directions.
       //
       // It used to be answered only when a section opened, which meant
@@ -7704,7 +7852,15 @@
   // which are the point — are not readable.
   {
     const box = el('samplebox');
-    const show = () => {
+    // Which button opened it, so closing puts the keyboard back where it was.
+    // With six slides on a strip that is no longer a constant.
+    let opener = null;
+    const show = (picture, said, from) => {
+      if (picture) {
+        el('samplebig').src = picture;
+        el('samplebig').alt = said || '';
+      }
+      opener = from || opener;
       box.hidden = false;
       box.dispatchEvent(new CustomEvent('blinded:sample'));
       el('sampleclose').focus();
@@ -7712,7 +7868,7 @@
     const hide = () => {
       if (box.hidden) return;
       box.hidden = true;
-      el('sample-open').focus();
+      if (opener && opener.isConnected) opener.focus();
     };
     // Zooming the picture: pinch, double tap, drag to move about.
     //
@@ -7873,7 +8029,95 @@
       });
     }
 
-    el('sample-open').addEventListener('click', show);
+    // ---------- the gallery on the front page ----------
+    //
+    // Six slides, each held twice. The toggle is a class on the section, so
+    // what is on screen is decided in one place by CSS rather than by a dozen
+    // hidden attributes that can disagree with each other.
+    const strip = el('galstrip');
+    const gallery = el('gallery');
+    if (strip && gallery) {
+      const slides = () => [...strip.querySelectorAll('.galslide')];
+
+      // Which slide is under the middle of the strip. Read from where things
+      // actually are rather than counted, because the strip can be flicked
+      // with a finger, dragged by a scrollbar or stepped by the arrows, and a
+      // number kept alongside all three would be wrong after the first flick.
+      const current = () => {
+        const middle = strip.scrollLeft + strip.clientWidth / 2;
+        let best = 0;
+        let nearest = Infinity;
+        slides().forEach((slide, i) => {
+          const centre = slide.offsetLeft + slide.offsetWidth / 2;
+          const gap = Math.abs(centre - middle);
+          if (gap < nearest) { nearest = gap; best = i; }
+        });
+        return best;
+      };
+
+      const count = el('gal-count');
+      const prev = el('gal-prev');
+      const next = el('gal-next');
+      const tellWhere = () => {
+        const here = current();
+        const all = slides().length;
+        if (count) count.textContent = (here + 1) + ' of ' + all;
+        // Disabled rather than wrapping: a strip that jumps from the last
+        // slide back to the first looks like it lost your place.
+        if (prev) prev.disabled = here <= 0;
+        if (next) next.disabled = here >= all - 1;
+      };
+
+      const goToSlide = where => {
+        const all = slides();
+        const slide = all[Math.max(0, Math.min(all.length - 1, where))];
+        if (!slide) return;
+        strip.scrollTo({ left: slide.offsetLeft - (strip.clientWidth - slide.offsetWidth) / 2,
+          behavior: 'smooth' });
+      };
+
+      if (prev) prev.addEventListener('click', () => goToSlide(current() - 1));
+      if (next) next.addEventListener('click', () => goToSlide(current() + 1));
+      strip.addEventListener('scroll', tellWhere, { passive: true });
+      window.addEventListener('resize', tellWhere);
+      // The arrows work on the strip itself once it has the keyboard, which is
+      // what a list of pictures should do and what a screen reader's user will
+      // try first.
+      strip.addEventListener('keydown', event => {
+        if (event.key === 'ArrowLeft') { event.preventDefault(); goToSlide(current() - 1); }
+        if (event.key === 'ArrowRight') { event.preventDefault(); goToSlide(current() + 1); }
+      });
+      tellWhere();
+
+      const original = el('gal-original');
+      const redacted = el('gal-redacted');
+      const showSide = side => {
+        const before = side === 'original';
+        gallery.classList.toggle('showing-original', before);
+        if (original) {
+          original.classList.toggle('on', before);
+          original.setAttribute('aria-pressed', String(before));
+        }
+        if (redacted) {
+          redacted.classList.toggle('on', !before);
+          redacted.setAttribute('aria-pressed', String(!before));
+        }
+      };
+      if (original) original.addEventListener('click', () => showSide('original'));
+      if (redacted) redacted.addEventListener('click', () => showSide('redacted'));
+
+      // Enlarging shows the half that is on screen. Showing the redacted one
+      // while the reviewer is looking at the original would be the tool
+      // arguing with them about what they asked to see.
+      for (const shot of strip.querySelectorAll('.galshot')) {
+        shot.addEventListener('click', () => {
+          const wanted = gallery.classList.contains('showing-original')
+            ? shot.querySelector('.galorig') : shot.querySelector('.galred');
+          if (wanted) show(wanted.getAttribute('src'), wanted.getAttribute('alt'), shot);
+        });
+      }
+    }
+
     el('sampleclose').addEventListener('click', hide);
     // Anywhere but the picture is a way out, and the one people reach for.
     // Not only the backdrop: the frame around the picture is outside it too,
