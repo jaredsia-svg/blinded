@@ -8039,6 +8039,20 @@
     if (strip && gallery) {
       const slides = () => [...strip.querySelectorAll('.galslide')];
 
+      // Where each slide is, measured against the strip itself.
+      //
+      // This was offsetLeft against scrollLeft, which are not the same origin:
+      // offsetLeft counts from the nearest positioned ancestor, which here is
+      // the page, so every slide's position carried the strip's own left
+      // margin. On a narrow window that margin was small and the arithmetic
+      // survived it. On a wide one it grew past half a slide, and the arrows
+      // stepped two at a time while the counter said one.
+      const placeOf = slide => {
+        const box = slide.getBoundingClientRect();
+        const mine = strip.getBoundingClientRect();
+        return { left: box.left - mine.left + strip.scrollLeft, width: box.width };
+      };
+
       // Which slide is under the middle of the strip. Read from where things
       // actually are rather than counted, because the strip can be flicked
       // with a finger, dragged by a scrollbar or stepped by the arrows, and a
@@ -8048,8 +8062,8 @@
         let best = 0;
         let nearest = Infinity;
         slides().forEach((slide, i) => {
-          const centre = slide.offsetLeft + slide.offsetWidth / 2;
-          const gap = Math.abs(centre - middle);
+          const place = placeOf(slide);
+          const gap = Math.abs(place.left + place.width / 2 - middle);
           if (gap < nearest) { nearest = gap; best = i; }
         });
         return best;
@@ -8072,9 +8086,38 @@
         const all = slides();
         const slide = all[Math.max(0, Math.min(all.length - 1, where))];
         if (!slide) return;
-        strip.scrollTo({ left: slide.offsetLeft - (strip.clientWidth - slide.offsetWidth) / 2,
+        const place = placeOf(slide);
+        strip.scrollTo({ left: place.left - (strip.clientWidth - place.width) / 2,
           behavior: 'smooth' });
       };
+
+      // The half of a slide that is being shown, whichever way it is reached.
+      const halfOf = slide => (gallery.classList.contains('showing-original')
+        ? slide.querySelector('.galorig') : slide.querySelector('.galred'));
+
+      // Which slide the enlargement is on. Kept apart from which one the strip
+      // is on, because a smooth scroll takes a moment and reading the strip
+      // mid-flight would step the picture somewhere nobody asked for. The
+      // strip is sent after it and catches up.
+      let bigAt = 0;
+      const tellBig = () => {
+        const all = slides().length;
+        if (el('big-count')) el('big-count').textContent = (bigAt + 1) + ' of ' + all;
+        if (el('big-prev')) el('big-prev').disabled = bigAt <= 0;
+        if (el('big-next')) el('big-next').disabled = bigAt >= all - 1;
+      };
+
+      function showBig(where) {
+        const all = slides();
+        bigAt = Math.max(0, Math.min(all.length - 1, where));
+        const slide = all[bigAt];
+        const wanted = slide && halfOf(slide);
+        if (!wanted) return;
+        show(wanted.getAttribute('src'), wanted.getAttribute('alt'),
+          slide.querySelector('.galshot'));
+        tellBig();
+        goToSlide(bigAt);
+      }
 
       if (prev) prev.addEventListener('click', () => goToSlide(current() - 1));
       if (next) next.addEventListener('click', () => goToSlide(current() + 1));
@@ -8087,35 +8130,47 @@
         if (event.key === 'ArrowLeft') { event.preventDefault(); goToSlide(current() - 1); }
         if (event.key === 'ArrowRight') { event.preventDefault(); goToSlide(current() + 1); }
       });
-      tellWhere();
 
-      const original = el('gal-original');
-      const redacted = el('gal-redacted');
       const showSide = side => {
         const before = side === 'original';
         gallery.classList.toggle('showing-original', before);
-        if (original) {
-          original.classList.toggle('on', before);
-          original.setAttribute('aria-pressed', String(before));
+        for (const button of [el('gal-original'), el('big-original')]) {
+          if (!button) continue;
+          button.classList.toggle('on', before);
+          button.setAttribute('aria-pressed', String(before));
         }
-        if (redacted) {
-          redacted.classList.toggle('on', !before);
-          redacted.setAttribute('aria-pressed', String(!before));
+        for (const button of [el('gal-redacted'), el('big-redacted')]) {
+          if (!button) continue;
+          button.classList.toggle('on', !before);
+          button.setAttribute('aria-pressed', String(!before));
         }
+        // Enlarged, the switch changes the picture under it rather than only
+        // the strip behind it.
+        if (!box.hidden) showBig(bigAt);
       };
-      if (original) original.addEventListener('click', () => showSide('original'));
-      if (redacted) redacted.addEventListener('click', () => showSide('redacted'));
+      for (const [id, side] of [['gal-original', 'original'], ['gal-redacted', 'redacted'],
+        ['big-original', 'original'], ['big-redacted', 'redacted']]) {
+        const button = el(id);
+        if (button) button.addEventListener('click', () => showSide(side));
+      }
+
+      // The same two controls follow the picture when it is enlarged: someone
+      // comparing six slides should not have to close the picture, step the
+      // strip and open it again between each one.
+      if (el('big-prev')) el('big-prev').addEventListener('click', () => showBig(bigAt - 1));
+      if (el('big-next')) el('big-next').addEventListener('click', () => showBig(bigAt + 1));
 
       // Enlarging shows the half that is on screen. Showing the redacted one
       // while the reviewer is looking at the original would be the tool
       // arguing with them about what they asked to see.
       for (const shot of strip.querySelectorAll('.galshot')) {
         shot.addEventListener('click', () => {
-          const wanted = gallery.classList.contains('showing-original')
-            ? shot.querySelector('.galorig') : shot.querySelector('.galred');
-          if (wanted) show(wanted.getAttribute('src'), wanted.getAttribute('alt'), shot);
+          const where = slides().indexOf(shot.closest('.galslide'));
+          if (where >= 0) showBig(where);
         });
       }
+      tellWhere();
+      tellBig();
     }
 
     el('sampleclose').addEventListener('click', hide);
@@ -8124,7 +8179,7 @@
     // and a click there that did nothing would read as a dialog that has
     // stopped responding rather than as a miss.
     box.addEventListener('click', event => {
-      if (!event.target.closest('.samplestage, .sample-x')) hide();
+      if (!event.target.closest('.samplestage, .sample-x, .bigbar')) hide();
     });
     document.addEventListener('keydown', event => {
       if (event.key === 'Escape') hide();

@@ -3935,6 +3935,90 @@ try {
     check('the last slide is the end of the strip, not a wrap round to the first',
       walked.end.said === '6 of 6' && walked.end.on === true, JSON.stringify(walked));
 
+    // The counter and the picture have to be the same slide. They were not:
+    // positions were read as offsetLeft, which counts from the page rather
+    // than from the strip, so every slide carried the strip's own left margin.
+    // On a wide window that margin grew past half a slide and the arrows
+    // stepped two at a time while the counter said one.
+    const honest = await page.evaluate(async () => {
+      const strip = document.getElementById('galstrip');
+      const slides = [...strip.querySelectorAll('.galslide')];
+      const centred = () => {
+        const mine = strip.getBoundingClientRect();
+        let best = -1;
+        let near = Infinity;
+        slides.forEach((slide, i) => {
+          const box = slide.getBoundingClientRect();
+          const gap = Math.abs((box.left + box.width / 2) - (mine.left + mine.width / 2));
+          if (gap < near) { near = gap; best = i; }
+        });
+        return best + 1;
+      };
+      const steps = [];
+      for (let i = 0; i < 3; i++) {
+        document.getElementById('gal-next').click();
+        await new Promise(r => setTimeout(r, 650));
+        steps.push({ said: document.getElementById('gal-count').textContent.trim(),
+                     really: centred() });
+      }
+      strip.style.scrollBehavior = 'auto';
+      strip.scrollLeft = 0;
+      await new Promise(r => setTimeout(r, 150));
+      strip.style.scrollBehavior = '';
+      return steps;
+    });
+    check('each press of the arrow moves exactly one slide',
+      honest.every((step, i) => step.really === i + 2), JSON.stringify(honest));
+    check('and the count says the slide that is actually showing',
+      honest.every(step => step.said === step.really + ' of 6'), JSON.stringify(honest));
+
+    // No bar along the bottom. The arrows are the control; a second one under
+    // the pictures was a grey line across a section whose job is to be looked
+    // at. Flicking and dragging still work.
+    const noBar = await page.evaluate(() => {
+      const strip = document.getElementById('galstrip');
+      return { gutter: strip.offsetHeight - strip.clientHeight,
+        scrolls: strip.scrollWidth > strip.clientWidth };
+    });
+    check('the strip carries no scrollbar of its own',
+      noBar.gutter === 0 && noBar.scrolls === true, JSON.stringify(noBar));
+
+    // Enlarged, the same two controls follow the picture: six slides compared
+    // one at a time should not mean closing and reopening between each.
+    const inside = await page.evaluate(async () => {
+      document.querySelector('.galshot').click();
+      await new Promise(r => setTimeout(r, 250));
+      const big = () => document.getElementById('samplebig').getAttribute('src');
+      const opened = big();
+      const said = document.getElementById('big-count').textContent.trim();
+      document.getElementById('big-next').click();
+      await new Promise(r => setTimeout(r, 500));
+      const stepped = big();
+      const thenSaid = document.getElementById('big-count').textContent.trim();
+      document.getElementById('big-original').click();
+      await new Promise(r => setTimeout(r, 200));
+      const flipped = big();
+      // Pressing its own controls must not be read as pressing the dark
+      // around the picture.
+      const stillOpen = document.getElementById('samplebox').hidden === false;
+      document.getElementById('big-redacted').click();
+      document.getElementById('sampleclose').click();
+      await new Promise(r => setTimeout(r, 150));
+      const strip = document.getElementById('galstrip');
+      strip.style.scrollBehavior = 'auto';
+      strip.scrollLeft = 0;
+      await new Promise(r => setTimeout(r, 150));
+      strip.style.scrollBehavior = '';
+      return { opened, said, stepped, thenSaid, flipped, stillOpen };
+    });
+    check('the enlarged slide can be stepped without closing it',
+      /slide-1-redacted/.test(inside.opened) && /slide-2-redacted/.test(inside.stepped)
+      && inside.said === '1 of 6' && inside.thenSaid === '2 of 6', JSON.stringify(inside));
+    check('and swapped for its other half in place',
+      /slide-2-original/.test(inside.flipped), JSON.stringify(inside));
+    check('and pressing those controls does not close it',
+      inside.stillOpen === true, JSON.stringify(inside));
+
     // Enlarging shows the half being looked at. Opening the redacted one over
     // a reviewer comparing the originals would be the tool arguing with them.
     const enlarged = await page.evaluate(async () => {

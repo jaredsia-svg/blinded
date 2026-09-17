@@ -783,10 +783,16 @@ body.picking .tools {
 .galarrow svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 2; }
 
 .galstrip {
-  display: flex; gap: 14px; margin: 0; padding: 0 0 6px; list-style: none;
+  display: flex; gap: 14px; margin: 0; padding: 0; list-style: none;
   overflow-x: auto; scroll-snap-type: x mandatory; scroll-behavior: smooth;
   overscroll-behavior-x: contain;
+  /* No bar under the pictures. The arrows and the count above them are the
+     control, and a second one along the bottom was a grey line across a
+     section whose whole job is to be looked at. Flicking and dragging still
+     work; only the bar is gone. */
+  scrollbar-width: none; -ms-overflow-style: none;
 }
+.galstrip::-webkit-scrollbar { width: 0; height: 0; display: none; }
 .galstrip:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
 .galslide { flex: 0 0 100%; scroll-snap-align: center; }
 /* Hidden with a class rather than the hidden attribute: both pictures stay in
@@ -812,10 +818,12 @@ body.picking .tools {
    the point is the tap that makes it big. */
 @media (max-width: 640px) {
   .sample-zoom { right: 8px; bottom: 8px; }
-  /* Room for a thumb rather than a mouse, and the arrows moved under the
-     switch so neither is squeezed. */
+  /* Room for a thumb rather than a mouse. */
   .galtop { gap: 8px; }
   .galside { padding: 6px 16px; }
+  /* On a phone the picture is the screen, so its controls sit inside it. */
+  .bigbar { top: 10px; left: 10px; right: 54px; }
+  .bigbar .galcount { display: none; }
 }
 @media (prefers-reduced-motion: reduce) { .galstrip { scroll-behavior: auto; } }
 
@@ -836,6 +844,20 @@ body.picking .tools {
   touch-action: none; cursor: grab;
 }
 .samplestage:active { cursor: grabbing; }
+
+/* The strip's two controls, over the enlarged picture. Left of the close X
+   rather than under it, and above the picture rather than beside it, because
+   the picture is the dialog and a row of chrome would push it down. */
+.bigbar {
+  position: absolute; z-index: 3; top: 14px; left: 14px; right: 62px;
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  pointer-events: none;
+}
+.bigbar > * { pointer-events: auto; }
+.bigbar .galswitch, .bigbar .galcount {
+  background: rgba(255, 255, 255, .92); border-radius: 999px;
+}
+.bigbar .galcount { padding: 4px 10px; }
 /* Over the picture rather than under it: the dialog is the picture now, and a
    row of its own for one button would put the thing being looked at further
    from the middle of the screen. */
@@ -900,18 +922,32 @@ body.picking .tools {
    reader is looking for the one that describes them, not reading all six.
    Two columns where there is room, one on a phone.
 */
-.uses { margin: 40px auto 0; max-width: 980px; padding: 0 20px; }
+/* The same column as everything else on the front page. It was wider, from
+   when it was a grid of six cards that needed the room; as one box it has to
+   line up with the gallery under it or the page looks like two pages. */
+.uses { margin: 40px auto 0; max-width: var(--front-width); }
 .uses h2 { font-size: 20px; margin: 0 0 8px; }
+/* One box, five lines. Six cards in a grid read as six things to compare,
+   which is not what a list of jobs is: it is one answer to "what do people
+   open this for", and a reader should be able to run down it. */
 .usegrid {
-  list-style: none; margin: 18px 0 0; padding: 0;
-  display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  list-style: none; margin: 18px 0 0; padding: 4px 6px;
+  background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
 }
 .usecard {
-  background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
-  padding: 16px 18px;
+  display: flex; align-items: flex-start; gap: 12px;
+  padding: 12px 12px; border-top: 1px solid var(--line);
 }
-.usecard h3 { margin: 0 0 6px; font-size: 14.5px; }
+.usecard:first-child { border-top: 0; }
 .usecard p { margin: 0; font-size: 13.5px; line-height: 1.55; color: var(--ink-soft); }
+.usecard strong { color: var(--ink); font-weight: 600; }
+.useico {
+  flex: none; display: inline-flex; align-items: center; justify-content: center;
+  width: 30px; height: 30px; border-radius: 8px;
+  background: rgba(31, 111, 235, .08); color: var(--accent);
+}
+.useico svg { width: 17px; height: 17px; fill: none; stroke: currentColor;
+  stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 
 /* Confirming a pick. The crop is shown big, because the whole point is to see
    what was actually caught — at the size it sits on the page a logo is a few

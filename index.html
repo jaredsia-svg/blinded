@@ -41,7 +41,7 @@
      origins for one program and two sets of response headers to keep right;
      Pages publishing is off and this says which copy is the copy. -->
 <link rel="canonical" href="https://blinded.onrender.com/">
-<link rel="stylesheet" href="app.css?v=2696beac">
+<link rel="stylesheet" href="app.css?v=cd013600">
 </head>
 <body>
 
@@ -146,34 +146,58 @@
 
       <ul class="usegrid">
         <li class="usecard">
-          <h3>Before it goes to an AI</h3>
-          <p>Take the names and logos out, then paste the file into any model.
-            The numbers and the argument survive; the party does not.</p>
+          <span class="useico" aria-hidden="true">
+            <svg viewBox="0 0 24 24" focusable="false">
+              <path d="M12 3a4 4 0 0 1 4 4v1a4 4 0 0 1 0 8v1a4 4 0 0 1-8 0v-1a4 4 0 0 1 0-8V7a4 4 0 0 1 4-4z"/>
+              <path d="M12 3v18"/>
+            </svg>
+          </span>
+          <p><strong>Before it goes to an AI.</strong> Take the names and logos
+            out, then paste the file into any model. The numbers and the
+            argument survive; the party does not.</p>
         </li>
         <li class="usecard">
-          <h3>Deal materials</h3>
-          <p>CIMs, board decks, diligence packs. Cover the target once and
-            every copy goes, down to the badge in a chart on page 63.</p>
+          <span class="useico" aria-hidden="true">
+            <svg viewBox="0 0 24 24" focusable="false">
+              <path d="M4 7h16v13H4z"/>
+              <path d="M9 7V4h6v3M4 12h16"/>
+            </svg>
+          </span>
+          <p><strong>Deal materials.</strong> CIMs, board decks, diligence
+            packs. Cover the target once and every copy goes, down to the badge
+            in a chart on page 63.</p>
         </li>
         <li class="usecard">
-          <h3>Legal agreements</h3>
-          <p>Counterparties, prices and signatures out. The clauses stay
-            readable, so the precedent can be shared without the deal.</p>
+          <span class="useico" aria-hidden="true">
+            <svg viewBox="0 0 24 24" focusable="false">
+              <path d="M12 4v16M5 8h14M7 8l-3 6a3 3 0 0 0 6 0zM17 8l-3 6a3 3 0 0 0 6 0z"/>
+            </svg>
+          </span>
+          <p><strong>Legal agreements.</strong> Counterparties, prices and
+            signatures out. The clauses stay readable, so the precedent can be
+            shared without the deal.</p>
         </li>
         <li class="usecard">
-          <h3>Discovery and FOIA</h3>
-          <p>Covered text is gone from the file, not hidden under a rectangle
-            somebody can select through. Each bar says what it removed.</p>
+          <span class="useico" aria-hidden="true">
+            <svg viewBox="0 0 24 24" focusable="false">
+              <path d="M6 3h8l4 4v14H6z"/>
+              <path d="M14 3v4h4M9 12h6M9 16h4"/>
+            </svg>
+          </span>
+          <p><strong>Discovery and FOIA.</strong> Covered text is gone from the
+            file, not hidden under a rectangle somebody can select through.
+            Each bar says what it removed.</p>
         </li>
         <li class="usecard">
-          <h3>Medical records</h3>
-          <p>Names, dates, record numbers and hospital marks off a chart
-            before it is used for research, teaching or a second opinion.</p>
-        </li>
-        <li class="usecard">
-          <h3>Anything with a logo</h3>
-          <p>Draw a box round the mark once. Every other copy is found by
-            sight, at any size, in any colour, pictures included.</p>
+          <span class="useico" aria-hidden="true">
+            <svg viewBox="0 0 24 24" focusable="false">
+              <path d="M4 5h16v14H4z"/>
+              <path d="M12 9v6M9 12h6"/>
+            </svg>
+          </span>
+          <p><strong>Medical records.</strong> Names, dates, record numbers and
+            hospital marks off a chart before it is used for research, teaching
+            or a second opinion.</p>
         </li>
       </ul>
     </section>
@@ -809,6 +833,28 @@
         <path d="M6 6l12 12M18 6L6 18"/>
       </svg>
     </button>
+    <!-- The same two controls as the strip behind it: someone comparing six
+         slides should not have to close the picture, step the strip and open
+         it again between each one. -->
+    <div class="bigbar">
+      <div class="galswitch" role="group" aria-label="Show this slide before or after redaction">
+        <button type="button" class="galside" id="big-original" aria-pressed="false">Original</button>
+        <button type="button" class="galside on" id="big-redacted" aria-pressed="true">Redacted</button>
+      </div>
+      <div class="galnav">
+        <button type="button" class="galarrow" id="big-prev" aria-label="The slide before">
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path d="M15 5l-7 7 7 7"/>
+          </svg>
+        </button>
+        <span class="galcount" id="big-count" aria-live="polite">1 of 6</span>
+        <button type="button" class="galarrow" id="big-next" aria-label="The next slide">
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path d="M9 5l7 7-7 7"/>
+          </svg>
+        </button>
+      </div>
+    </div>
     <div class="samplestage"><img id="samplebig" src="gallery/slide-1-redacted.jpg" alt="" draggable="false"></div>
   </div>
 </div>
@@ -898,7 +944,7 @@
 <script src="lib/pdfwrite.js?v=4b977425"></script>
 <script src="lib/pdfread.js?v=ca229552"></script>
 <script src="lib/render.js?v=65c3fe76"></script>
-<script src="app.js?v=2ab32ef5"></script>
+<script src="app.js?v=c71f8321"></script>
 <script type="module" src="lib/boot.mjs?v=8b98ed8f"></script>
 </body>
 </html>
