@@ -7164,8 +7164,12 @@ try {
     // again then, and there is nothing for this to be a second opinion about.
     const backToSearch = await page.evaluate(() => {
       const B = window.Blinded;
+      // A search standing and no check run against it yet: the one state in
+      // which the panel has something to say. Once the check has run it says
+      // nothing — what it did is reported in the foot — and once the question
+      // changes there is nothing to be a second opinion about.
       B.state.searched = true;
-      B.state.sweptTerms = ['Amphitheatre'];
+      B.state.sweptTerms = [];
       B.renderSweep();
       const offered = !document.getElementById('sweepbox').hidden;
       B.state.searched = false;
@@ -7326,7 +7330,9 @@ try {
       const out = {
         added,
         marks: p.imageHits.filter(m => m.bySweep).length,
-        note: document.getElementById('sweepnote').textContent,
+        // Reported in the foot, with the bars that were filling a moment
+        // ago, rather than a second time in the panel.
+        note: document.getElementById('runfoot-text').textContent,
         buttonGone: document.getElementById('sweep').hidden,
       };
       p.imageHits = [];
@@ -7532,8 +7538,8 @@ try {
       swept.added >= 1 && swept.marks === swept.added, JSON.stringify(swept));
     check('and every mark it adds is flagged as its own',
       swept.marks >= 1, JSON.stringify(swept));
-    check('afterwards it says what it added',
-      /added \d+ (amber )?mark/.test(swept.note),
+    check('afterwards the foot says what it added',
+      /Comprehensive check complete \u2013 \d+ more mark/.test(swept.note),
       JSON.stringify(swept.note));
 
     // And what it found and stood down from. The check refuses a spot the
@@ -7543,45 +7549,49 @@ try {
     const refused = await page.evaluate(() => {
       const B = window.Blinded;
       const was = B.state.sweepRefused;
-      // The note only reports a finished check of the words as they stand.
       const swept = B.state.sweptTerms;
       const terms = B.state.terms;
-      // A finished check of the words as they stand, which is the only state
-      // in which the note reports what the check did.
+      const ran = B.state.footRan;
+      // A finished check of the words as they stand, reported where every
+      // finished run is reported: the foot of the page. The panel used to say
+      // this a second time, in amber, under a term list that already answers
+      // the same question as a number beside each word.
       B.state.terms = ['Parkway'];
       B.state.sweptTerms = ['Parkway'];
+      B.state.searched = true;
       B.state.sweepStopped = false;
       B.state.sweepAdded = 1;
+      B.state.footRan = 'check';
+      B.state.footAdded = 1;
+      B.state.footStopped = false;
       B.state.sweepRefused = 2;
       B.state.sweepRefusedAt = [{ pageIndex: 1, at: 400 }, { pageIndex: 0, at: 120 }];
-      B.renderSweep();
-      const note = document.getElementById('sweepnote');
-      const withSome = note.textContent;
-      const rows = [...note.querySelectorAll('.tallyspot')].map(b => b.textContent);
+      B.refreshApply();
+      const withSome = document.getElementById('runfoot-text').textContent;
+      const panel = document.getElementById('sweepnote').textContent.trim();
+      const panelShown = !document.getElementById('sweepbox').hidden;
       B.state.sweepRefused = 0;
       B.state.sweepRefusedAt = [];
-      B.renderSweep();
-      const withNone = document.getElementById('sweepnote').textContent;
-      const noRows = document.querySelectorAll('#sweepnote .tallyspot').length;
+      B.refreshApply();
+      const withNone = document.getElementById('runfoot-text').textContent;
       B.state.sweepRefused = was;
       B.state.sweptTerms = swept;
       B.state.terms = terms;
-      B.renderSweep();
-      return { withSome, withNone, rows, noRows };
+      B.state.footRan = ran;
+      B.refreshApply();
+      return { withSome, withNone, panel, panelShown };
     });
     check('a refusal is reported, not silently swallowed',
-      /2 other spots were left alone/.test(refused.withSome), refused.withSome);
-    check('and it says where to look when a mark is missing',
-      /read them as something else/.test(refused.withSome), refused.withSome);
-    // "Somewhere in this document" is not a place. Each refusal is a row that
-    // goes there, in page order.
-    check('each place it stood down from is one row of its own',
-      refused.rows.length === 2, JSON.stringify(refused.rows));
-    check('in page order, and saying why nothing was marked',
-      /^Page 1/.test(refused.rows[0]) && /^Page 2/.test(refused.rows[1])
-      && /read as something else/.test(refused.rows[0]), JSON.stringify(refused.rows));
+      /2 skipped by the reader/.test(refused.withSome), refused.withSome);
+    check('alongside what the check itself added',
+      /1 more mark/.test(refused.withSome), refused.withSome);
     check('while refusing nothing says nothing',
-      !/left alone/.test(refused.withNone) && refused.noRows === 0, refused.withNone);
+      !/skipped/.test(refused.withNone), refused.withNone);
+    // The run's result is reported once. The panel is where the check is
+    // offered, not where it is summed up afterwards.
+    check('and the panel does not repeat it',
+      refused.panel === '' && refused.panelShown === false,
+      JSON.stringify(refused));
     check('and stops offering itself for the same words',
       swept.buttonGone === true, JSON.stringify(swept));
 

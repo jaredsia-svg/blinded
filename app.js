@@ -319,30 +319,52 @@
     const foot = el('runfoot');
     if (!said || !foot) return;
     // Nothing to report, or something still running that is reporting itself.
-    if (!state.footRan || !state.searched) {
-      if (!state.redacting && !state.sweepRunning) {
-        state.footRan = null;
-        said.textContent = '';
-        foot.hidden = true;
-      }
+    //
+    // What makes a report stale is the question changing, not the document
+    // going back to un-searched: changing an image's setting does that too,
+    // and it was wiping out the result of a check that had just finished. So
+    // the places that change the question clear this, and here it is only
+    // read.
+    if (state.redacting || state.sweepRunning) return;
+    if (!state.footRan) {
+      said.textContent = '';
+      foot.hidden = true;
       return;
     }
-    if (state.redacting || state.sweepRunning) return;
 
     const check = state.footRan === 'check';
     const what = check
       ? (state.footStopped ? 'Comprehensive check stopped' : 'Comprehensive check complete')
       : 'Search complete';
+    // One sentence, not two, and not three. The foot used to say a run was
+    // complete a few pixels from a second line saying the marks were outlined
+    // and to press Redact, while the panel said in amber how many the check
+    // had added. All of it is the same report, so it is made once, here.
+    //
+    // What a run found and what is left to cover are two different counts, and
+    // they have to be read separately: a check can add marks to a document
+    // that is otherwise fully covered, and a search can find nothing while
+    // marks from before are still waiting.
     const marks = plannedCount();
-    // One sentence, not two. The foot used to say that the search was complete
-    // while the line beside the Redact button said the marks were outlined and
-    // to press it — the same sentence cut in half and set a few pixels apart.
-    said.textContent = marks && !state.applied
-      ? what + ' and outlined. Press Redact to cover them.'
-      : marks
-        ? what + ' \u2013 everything found is covered.'
-        : what + (check ? ' \u2013 nothing further found.'
-          : ' \u2013 nothing found to redact.');
+    const pending = Boolean(marks) && !state.applied;
+    said.textContent = check
+      ? (state.footAdded
+        ? what + ' \u2013 ' + state.footAdded
+          + (state.footAdded === 1 ? ' more mark' : ' more marks')
+          + (pending ? ' outlined. Press Redact to cover them.' : '.')
+        : what + ' \u2013 nothing further found.')
+      : (pending
+        ? what + ' and outlined. Press Redact to cover them.'
+        : marks
+          ? what + ' \u2013 everything found is covered.'
+          : what + ' \u2013 nothing found to redact.');
+    // The one thing the panel's note said that nothing else does: where the
+    // check stood down because the reader had already read that spot as
+    // something else. It is the answer to "a mark I expected is missing".
+    if (check && state.sweepRefused) {
+      said.textContent = said.textContent.replace(/\.$/, '') + ' \u00b7 '
+        + state.sweepRefused + ' skipped by the reader.';
+    }
 
     // The bars are gone, and an empty row where they were takes the width the
     // sentence should be sitting in — which is what pushed it into the middle
@@ -784,6 +806,7 @@
     if (added.length || gone.length) {
       state.sweptTerms = [];
       state.searched = false;
+      state.footRan = null;
     }
     // Reading is a claim about every page, so a new one un-reads the document.
     // Losing a page does not: what is left has still been read.
@@ -1467,6 +1490,7 @@
     state.ocrRead = false;
     state.searched = false;
     state.sweptTerms = [];
+    state.footRan = null;
 
     pushUndo(turning.length === 1 ? 'turning a page' : 'turning ' + turning.length + ' pages',
       () => {
@@ -1792,6 +1816,8 @@
   function needsSearch() {
     state.searched = false;
     state.applied = false;
+    // Whatever the foot is reporting was the answer to the old question.
+    state.footRan = null;
     state.openTally = null;
     // And the tallies go with it: they counted an answer to a question that
     // is no longer the one being asked.
@@ -8769,45 +8795,13 @@
       return;
     }
 
+    // Once the check has run there is nothing for this panel to say. What it
+    // did is a run's result, and a run's result belongs in the foot with the
+    // bars that were filling a moment ago — the panel was repeating it a
+    // second time, in amber, under a term list that already shows the same
+    // answer as a number beside each word.
     button.hidden = true;
-    let summary;
-    let full;
-    if (state.sweepSkipped) {
-      summary = 'Nothing left for a second check – reading already covered every typed word.';
-      full = summary;
-    } else if (state.sweepAdded === 0) {
-      summary = 'Second check found nothing new.';
-      full = 'The second check found nothing the reading had missed.';
-    } else {
-      summary = 'Second check added ' + state.sweepAdded
-        + (state.sweepAdded === 1 ? ' amber mark' : ' amber marks')
-        + '. Press Redact to cover '
-        + (state.sweepAdded === 1 ? 'it' : 'them') + '.';
-      full = 'The second check added ' + state.sweepAdded
-        + (state.sweepAdded === 1 ? ' mark' : ' marks')
-        + ', outlined in amber. Press Redact to cover '
-        + (state.sweepAdded === 1 ? 'it' : 'them') + '.';
-    }
-
-    const extras = [];
-    if (state.sweepRefused) {
-      const spots = (state.sweepRefusedAt || []).slice()
-        .sort((a, b) => a.pageIndex - b.pageIndex || a.at - b.at);
-      full += ' ' + state.sweepRefused
-        + (state.sweepRefused === 1 ? ' other spot was' : ' other spots were')
-        + ' left alone because the page reader had already read '
-        + (state.sweepRefused === 1 ? 'it' : 'them')
-        + ' as something else. If a mark you expected is missing, '
-        + (spots.length ? 'look here:' : 'that is where to look.');
-      if (spots.length) {
-        extras.push(tallyRows(spots.map(spot => ({
-          pageIndex: spot.pageIndex, kind: 'refused', at: spot.at,
-        }))));
-      }
-      summary = summary.replace(/\.$/, '') + ' · '
-        + state.sweepRefused + ' skipped by the reader.';
-    }
-    setSidebarNote(note, summary, full, extras);
+    note.textContent = '';
   }
 
 
@@ -9374,6 +9368,7 @@
     state.applied = false;
     state.exported = false;
     state.searched = false;
+    state.footRan = null;
     state.searchedTerms = [];
     state.sweptTerms = [];
     state.sweepAdded = 0;
@@ -9420,6 +9415,7 @@
     state.applied = false;
     state.exported = false;
     state.searched = false;
+    state.footRan = null;
     state.searchedTerms = [];
     state.countedTerms = [];
     state.countedKinds = [];
