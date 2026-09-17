@@ -231,14 +231,75 @@
   // used to carry all of the first and none of the rest — "Searching for 1
   // word — page 30 of 100" spends most of its width restating a setting the
   // reviewer chose a moment ago.
-  function busy(on, message) {
-    el('busy').hidden = !on;
-    if (message !== undefined && message !== null) el('busy-text').textContent = message;
+  // Two ways of saying "this is running".
+  //
+  // Reading a file, or building the redacted one, holds everything up: there
+  // is no sensible thing to do while the document is being taken apart or put
+  // back together, and the dialog says so by covering the page.
+  //
+  // Searching is not like that. It takes as long as it takes, and the reviewer
+  // has a document in front of them to read while it happens — so it reports
+  // itself along the foot of the page, where the button that started it is,
+  // and leaves the page alone. The bars are the same bars; only where they sit
+  // changes.
+  let runsInFoot = false;
+
+  function busy(on, message, where) {
+    // Where it reports is set by whoever starts the run, and everything inside
+    // that run leaves it alone.
+    //
+    // A search raises these for itself and then the reading pass raises them
+    // again for its own leg. Reading the placement from every call meant the
+    // second one moved the bars back to the dialog while the first one's rows
+    // stayed in the foot — so the row being updated was not the row on screen,
+    // the count never moved, and a progress bar sat at zero for the length of
+    // a search. It is cleared when a run ends, so the next one starts fresh.
+    if (where) runsInFoot = Boolean(on && where.inFoot);
+    if (!on) runsInFoot = false;
+    el('busy').hidden = !on || runsInFoot;
+    if (!on) el('busy').hidden = true;
+    const foot = el('runfoot');
+    if (foot) foot.hidden = !runsInFoot;
+    if (message !== undefined && message !== null) {
+      el('busy-text').textContent = message;
+      const said = el('runfoot-text');
+      if (said) said.textContent = message;
+    }
     if (!on) {
       el('busy-pause').hidden = true;
+      // Both hosts: the bars may have been raised in one and the run ended
+      // from the other, and a stale bar left in the foot reads as a search
+      // that never finished.
       legs([]);
+      const other = el('runfoot-legs');
+      if (other) other.textContent = '';
       busyNote('');
     }
+  }
+
+  // Where the bars go: the dialog, or the foot of the page.
+  function legsHost() {
+    return runsInFoot && el('runfoot-legs') ? el('runfoot-legs') : el('busy-legs');
+  }
+
+  // What the foot says once a search has finished, in place of the bars.
+  //
+  // A bar that fills and disappears answers nothing: the reviewer looks up a
+  // moment later and cannot tell whether it finished or they missed it. So the
+  // line stays, and says what was found.
+  function saidSearched() {
+    const said = el('runfoot-text');
+    const foot = el('runfoot');
+    if (!said || !foot) return;
+    const marks = state.pages.reduce((sum, page) =>
+      sum + liveImageHits(page).filter(mark => !page.dismissed.has(mark.id)).length
+      + page.hits.filter(hit => !page.dismissed.has(hit.finding.id)).length, 0);
+    said.textContent = marks
+      ? 'Search complete \u2013 ' + marks + (marks === 1 ? ' mark' : ' marks') + ' proposed.'
+      : 'Search complete \u2013 nothing found to redact.';
+    const legs = el('runfoot-legs');
+    if (legs) legs.textContent = '';
+    foot.hidden = false;
   }
 
   // A line under the bars, for when the wait itself raises the question.
@@ -266,7 +327,7 @@
   // A leg that has no work is not drawn at all. An empty bar for a search
   // nobody asked for is a bar that will never move.
   function legs(list) {
-    const host = el('busy-legs');
+    const host = legsHost();
     host.textContent = '';
     host.hidden = !list.length;
     for (const leg of list) {
@@ -306,7 +367,7 @@
   }
 
   function leg(key, done) {
-    const row = el('busy-legs').querySelector('[data-leg="' + key + '"]');
+    const row = legsHost().querySelector('[data-leg="' + key + '"]');
     if (!row) return;
     const total = Number(row.dataset.total) || 0;
     const at = Math.max(0, Math.min(total, done));
@@ -340,7 +401,7 @@
   // A run with one leg, which is most of them.
   function pageProgress(done, total, label) {
     const key = 'only';
-    const host = el('busy-legs');
+    const host = legsHost();
     if (!host.querySelector('[data-leg="' + key + '"]')) {
       legs([{ key, label: label || 'Pages', total }]);
     }
@@ -1773,18 +1834,26 @@
     // reviewer who has just deleted their last word does not need the footer
     // shouting at them. With nothing to find it is an ordinary blue button,
     // which is what it will be for the next press anyway.
-    button.classList.toggle('hunt', searching && unanswered > 0);
+    // Not while it is running: red is "there is something here for you to
+    // answer", and a button that cannot be pressed is not asking anything.
+    button.classList.toggle('hunt', searching && unanswered > 0 && !state.redacting);
     button.classList.toggle('done', !searching && state.applied);
     button.title = !searching && state.applied ? 'Press to uncover and look at the marks again' : '';
     // Not while the comprehensive check is running: it is a pass over the same
     // pages, and the two cannot both own the document. Stopping it is a button
     // in the panel, not a dialog thrown in front of this one.
-    button.disabled = state.sweepRunning || (searching
+    // Nor while a search is running. It used to be impossible to press,
+    // because the search put a dialog over the page; now that it reports
+    // itself along the foot and leaves the page alone, the button is sitting
+    // there, live, next to its own progress bar.
+    button.disabled = state.sweepRunning || state.redacting || (searching
       ? state.kind !== 'text' && !state.pages.length
       : !state.applied && marks === 0 && unsearched === 0);
     if (state.sweepRunning) {
       button.title = 'The comprehensive check is running  - let it finish, '
-        + 'or stop it in the panel';
+        + 'or stop it at the foot of the page';
+    } else if (state.redacting) {
+      button.title = 'Searching  - the bar beside this says how far it has got';
     }
 
     el('export').disabled = !state.applied || marks === 0;
@@ -1795,9 +1864,13 @@
 
     const note = el('exportnote');
     const unread = state.pages.filter(page => !page.ocrItems).length;
-    if (state.sweepRunning) {
-      note.textContent = 'The comprehensive check is running. Let it finish, or '
-        + 'stop it in the panel.';
+    // While something is running, the line beside the bar is the status, and
+    // this one would be a second opinion about a question already being
+    // answered — "press Search to find them" said next to Search running.
+    if (state.redacting) {
+      note.textContent = '';
+    } else if (state.sweepRunning) {
+      note.textContent = '';
     } else if (searching) {
       // Named by what the reviewer can see. Every word and every picked image
       // that nothing has looked for yet wears a red question mark in the
@@ -1871,13 +1944,18 @@
     state.redacting = true;
     state.paused = false;
 
-    // The overlay goes up here rather than inside the reading pass.
+    // The bars go up here rather than inside the reading pass.
     //
-    // It used to be raised by readPages, which only runs when there are pages
-    // left to read — so on a document already read, pressing the button did
-    // nothing visible at all while several seconds of searching went by, and
-    // then the marks simply appeared. From the outside that is a dead button.
-    busy(true, 'Working…');
+    // They used to be raised by readPages, which only runs when there are
+    // pages left to read — so on a document already read, pressing the button
+    // did nothing visible at all while several seconds of searching went by,
+    // and then the marks simply appeared. From the outside that is a dead
+    // button.
+    //
+    // Along the foot of the page rather than over it: a search is not a reason
+    // to stop reading the document, and covering it for the length of one was
+    // taking the reviewer's work away to tell them their work was happening.
+    busy(true, 'Searching…', { inFoot: true });
     refreshApply();
 
     // One bar across both passes.
@@ -1979,10 +2057,13 @@
     // came down without the control following it would be a reading that
     // disagrees with the thing it reads.
     renderTemplates();
-    // Whatever ran or did not run below, the overlay comes down here: the
-    // passes each lower it on their own way out, and a search where neither
-    // had anything to do would otherwise leave it up for good.
+    // Whatever ran or did not run below, the bars come down here: the passes
+    // each lower them on their own way out, and a search where neither had
+    // anything to do would otherwise leave them up for good.
     busy(false);
+    // And the foot says so. A bar that fills and vanishes leaves the question
+    // it was answering unanswered: "has it finished, or did I miss it?"
+    saidSearched();
     applyLabels();
     redrawAll();
     refreshApply();
@@ -2261,7 +2342,11 @@
       results = await ImageSearch.searchAllParallel(state.pages, entries, {},
         (done, total) => progress(done, total));
     } finally {
-      busy(false);
+      // Only if this pass is the whole job. Inside a search it is one of two,
+      // and taking the bars down between them makes them blink out and back —
+      // which reads as the run having finished and started again. The search
+      // lowers them itself once both passes are done.
+      if (!state.redacting) busy(false);
     }
 
     // Logos: one entry each, so the results land directly.
@@ -8703,8 +8788,12 @@
       const tellBig = () => {
         const all = slides().length;
         if (el('big-count')) el('big-count').textContent = (bigAt + 1) + ' of ' + all;
-        if (el('big-prev')) el('big-prev').disabled = bigAt <= 0;
-        if (el('big-next')) el('big-next').disabled = bigAt >= all - 1;
+        for (const id of ['big-prev', 'big-back']) {
+          if (el(id)) el(id).disabled = bigAt <= 0;
+        }
+        for (const id of ['big-next', 'big-on']) {
+          if (el(id)) el(id).disabled = bigAt >= all - 1;
+        }
       };
 
       function showBig(where) {
@@ -8757,8 +8846,41 @@
       // The same two controls follow the picture when it is enlarged: someone
       // comparing six slides should not have to close the picture, step the
       // strip and open it again between each one.
-      if (el('big-prev')) el('big-prev').addEventListener('click', () => showBig(bigAt - 1));
-      if (el('big-next')) el('big-next').addEventListener('click', () => showBig(bigAt + 1));
+      for (const id of ['big-prev', 'big-back']) {
+        if (el(id)) el(id).addEventListener('click', () => showBig(bigAt - 1));
+      }
+      for (const id of ['big-next', 'big-on']) {
+        if (el(id)) el(id).addEventListener('click', () => showBig(bigAt + 1));
+      }
+
+      // A swipe across the picture does what the edge arrows do.
+      //
+      // Only while the slide is whole. Once it is zoomed, one finger is how
+      // the picture is moved about, and taking that away to change slides
+      // would make a zoomed slide impossible to read the right-hand side of.
+      // The gesture is measured on the way up rather than followed live: the
+      // stage is a scroller, and fighting it for the same pixels is how a
+      // drag ends up doing both things badly.
+      const SWIPE = 60;
+      const stage = document.querySelector('.samplestage');
+      if (stage) {
+        let from = null;
+        stage.addEventListener('pointerdown', event => {
+          from = event.isPrimary ? { x: event.clientX, y: event.clientY,
+            at: Date.now(), wide: stage.scrollWidth <= stage.clientWidth + 2 } : null;
+        });
+        const settle = event => {
+          const start = from;
+          from = null;
+          if (!start || !start.wide) return;      // zoomed: the finger is a pan
+          const dx = event.clientX - start.x;
+          const dy = event.clientY - start.y;
+          if (Math.abs(dx) < SWIPE || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+          showBig(bigAt + (dx < 0 ? 1 : -1));
+        };
+        stage.addEventListener('pointerup', settle);
+        stage.addEventListener('pointercancel', () => { from = null; });
+      }
 
       // Enlarging shows the half that is on screen. Showing the redacted one
       // while the reviewer is looking at the original would be the tool
@@ -8779,7 +8901,7 @@
     // and a click there that did nothing would read as a dialog that has
     // stopped responding rather than as a miss.
     box.addEventListener('click', event => {
-      if (!event.target.closest('.samplestage, .sample-x, .bigbar')) hide();
+      if (!event.target.closest('.samplestage, .sample-x, .bigbar, .bigedge')) hide();
     });
     document.addEventListener('keydown', event => {
       if (event.key === 'Escape') hide();

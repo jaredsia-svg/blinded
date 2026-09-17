@@ -167,12 +167,22 @@ async function dismissSweepOffer(page) {
   await page.waitForTimeout(60);
 }
 
+// "Nothing is running", whichever way the run reports itself.
+//
+// A search used to hold the page behind a dialog, so waiting for the dialog to
+// go was waiting for the search. It reports itself along the foot of the page
+// now and leaves the page alone — which means the dialog is already hidden
+// while the search is still going, and every wait written against it returns
+// at once and tests the document mid-search.
+const settled = () => `!window.Blinded || (document.getElementById('busy').hidden
+  && !window.Blinded.state.redacting && !window.Blinded.state.sweepRunning)`;
+
 async function redact(page) {
   await dismissSweepOffer(page);
   await page.click('#apply');
   await page.waitForFunction(() => window.Blinded.state.searched === true,
     undefined, { timeout: 240000 });
-  await page.waitForFunction(() => document.getElementById('busy').hidden,
+  await page.waitForFunction(settled(),
     undefined, { timeout: 240000 });
   await dismissSweepOffer(page);
   // Only if there is something to cover: with nothing found the button is
@@ -185,7 +195,7 @@ async function redact(page) {
     await page.waitForFunction(() => window.Blinded.state.applied === true,
       undefined, { timeout: 60000 });
   }
-  await page.waitForFunction(() => document.getElementById('busy').hidden,
+  await page.waitForFunction(settled(),
     undefined, { timeout: 240000 });
 }
 
@@ -598,7 +608,7 @@ try {
     await page.click('#apply');
     await page.waitForFunction(() => window.Blinded.state.searched === true,
       undefined, { timeout: 240000 });
-    await page.waitForFunction(() => document.getElementById('busy').hidden,
+    await page.waitForFunction(settled(),
       undefined, { timeout: 240000 });
     const found = await state();
     check('searching proposes what it found', found.drawn > 0, JSON.stringify(found));
@@ -2165,7 +2175,7 @@ try {
   await page.click('#apply');
   await page.waitForFunction(() => window.Blinded.state.searched === true,
     undefined, { timeout: 240000 });
-  await page.waitForFunction(() => document.getElementById('busy').hidden,
+  await page.waitForFunction(settled(),
     undefined, { timeout: 240000 });
   await dismissSweepOffer(page);
   await reveal(page, 'labelling');
@@ -2649,7 +2659,7 @@ try {
     await page.click('#apply');
     await page.waitForFunction(() => window.Blinded.state.searched === true,
       undefined, { timeout: 240000 });
-    await page.waitForFunction(() => document.getElementById('busy').hidden,
+    await page.waitForFunction(settled(),
       undefined, { timeout: 240000 });
     await dismissSweepOffer(page);
 
@@ -3137,7 +3147,7 @@ try {
   await page.click('#apply');
   await page.waitForFunction(() => window.Blinded.state.searched === true,
     undefined, { timeout: 240000 });
-  await page.waitForFunction(() => document.getElementById('busy').hidden,
+  await page.waitForFunction(settled(),
     undefined, { timeout: 240000 });
   await dismissSweepOffer(page);
   await page.evaluate(() => {
@@ -7172,6 +7182,10 @@ try {
         disabled: button.disabled,
         title: button.title,
         note: document.getElementById('exportnote').textContent,
+        // Where the check now reports itself, and where its stop button is.
+        foot: !document.getElementById('sweeprun').hidden,
+        stop: Boolean(document.getElementById('sweepstop')
+          && document.getElementById('sweepstop').closest('.exportbar')),
         // Pressing it anyway must do nothing at all.
         asked: !document.getElementById('confirmbox').hidden,
       };
@@ -7193,8 +7207,16 @@ try {
       raced.during.disabled === true, JSON.stringify(raced));
     check('and says why', /comprehensive check is running/i.test(raced.during.title),
       raced.during.title);
-    check('the panel says so too and points at the stop button',
-      /stop it in the panel/i.test(raced.during.note), raced.during.note);
+    // It used to say so in the panel, beside a yellow box holding the bar and
+    // the stop button. Both live at the foot of the page now, with the button
+    // that would have started a search — so the sentence that pointed at the
+    // panel would be pointing at nothing.
+    check('the check reports itself at the foot of the page',
+      raced.during.foot === true, JSON.stringify(raced.during));
+    check('with its stop button there too',
+      raced.during.stop === true, JSON.stringify(raced.during));
+    check('and the line beside the buttons does not argue with it',
+      raced.during.note === '', JSON.stringify(raced.during));
     check('no dialog is thrown in front of the reviewer',
       raced.during.asked === false && raced.afterPress.asked === false,
       JSON.stringify(raced));
@@ -7795,7 +7817,9 @@ try {
         ocrRead: B.state.ocrRead,
         read: B.state.pages.filter(p => p.ocrItems).length,
         total: B.state.pages.length,
-        overlay: document.getElementById('busy').hidden,
+        // Inside the page: nothing left running, and nothing covering it.
+        overlay: document.getElementById('busy').hidden
+          && !B.state.redacting && !B.state.sweepRunning,
       };
     });
     check('a paused run does not claim the document is redacted',
@@ -8654,7 +8678,9 @@ try {
     const watched = page.evaluate(() => new Promise(resolve => {
       const seen = new Set();
       const look = () => {
-        for (const row of document.querySelectorAll('#busy-legs .leg')) {
+        // Wherever the run is reporting itself: a search says so along the
+        // foot of the page, and everything else in the dialog.
+        for (const row of document.querySelectorAll('[data-leg]')) {
           const label = row.querySelector('.leg-label span');
           if (label) seen.add(label.textContent.trim());
         }
@@ -8856,11 +8882,15 @@ try {
     // poll would not be a gap the reviewer misses, but it would be one the
     // test misses.
     const watched = page.evaluate(() => new Promise(resolve => {
-      const busy = document.getElementById('busy');
-      // Counted as stretches, not samples. The overlay is legitimately hidden
-      // before the click lands and again once the run is over; what would be
-      // a dead button is it going down and coming back up in between, so that
-      // is what is counted: one stretch is right, two means a hole.
+      // The foot of the page, which is where a search reports itself. It used
+      // to be the dialog over the whole page; what is being watched is the
+      // same thing either way — that the reviewer can see it running, without
+      // a gap, for as long as it runs.
+      const busy = document.getElementById('runfoot');
+      // Counted as stretches, not samples. The bar is legitimately hidden
+      // before the click lands; what would be a dead button is it going down
+      // and coming back up in between, so that is what is counted: one stretch
+      // is right, two means a hole.
       let spells = 0;
       let seen = 0;
       let up = false;
@@ -8869,6 +8899,7 @@ try {
       // the reading only" from "up throughout".
       let searchingSeen = 0;
       let searchingHidden = 0;
+      let dialog = 0;
       const look = () => {
         const nowUp = !busy.hidden;
         if (nowUp && !up) spells++;
@@ -8877,6 +8908,7 @@ try {
         const leg = document.querySelector('[data-leg="search"] [data-count]');
         const moving = leg && !/^0 of/.test(leg.textContent || '');
         if (moving) { if (nowUp) searchingSeen++; else searchingHidden++; }
+        if (!document.getElementById('busy').hidden) dialog++;
       };
       const observer = new MutationObserver(look);
       observer.observe(document.body, { attributes: true, subtree: true });
@@ -8884,21 +8916,25 @@ try {
       const done = setInterval(() => {
         if (!window.Blinded.state.searched) return;
         clearInterval(poll); clearInterval(done); observer.disconnect();
-        resolve({ seen, spells, searchingSeen, searchingHidden });
+        resolve({ seen, spells, searchingSeen, searchingHidden, dialog });
       }, 30);
     }));
     await page.click('#apply');
     await page.waitForFunction(() => window.Blinded.state.searched === true,
       undefined, { timeout: 240000 });
     const overlay = await watched;
-    check('the overlay is up while the search runs',
+    check('the foot of the page says a search is running',
       overlay.seen > 0, JSON.stringify(overlay));
     // Both passes ran, so a hole between them would show here.
     check('and does not blink out between reading and searching',
       overlay.spells === 1, JSON.stringify(overlay));
-    check('it is still up while the image search is running',
+    check('it is still there while the image search is running',
       overlay.searchingSeen > 0 && overlay.searchingHidden === 0,
       JSON.stringify(overlay));
+    // And the page was never covered, which is the point of moving it: a
+    // search is not a reason to stop reading the document.
+    check('while the dialog never went up over the document',
+      overlay.dialog === 0, JSON.stringify(overlay));
   }
 
   // ---------- the front page on a laptop ----------

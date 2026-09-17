@@ -41,7 +41,7 @@
      origins for one program and two sets of response headers to keep right;
      Pages publishing is off and this says which copy is the copy. -->
 <link rel="canonical" href="https://blinded.onrender.com/">
-<link rel="stylesheet" href="app.css?v=fae8f741">
+<link rel="stylesheet" href="app.css?v=3cd1e426">
 </head>
 <body>
 
@@ -209,11 +209,11 @@
          and why every one but the first slide's is loaded lazily. -->
     <section class="gallery" id="gallery">
       <h2>A real deck, redacted</h2>
-      <p class="sample-lede">These are pages of a published investor
-        presentation, and the redacted ones are what Blinded made of them: the
-        two companies’ logos and names covered wherever they appear, in the
-        headline, in the small print and inside the artwork, while the figures,
-        the charts and the rival brands are left readable. Each redaction is
+      <p class="sample-lede">This is Kimberly Clark's investor presentation on
+        their acquisition of Kenvue. Blinded is able to redact the two
+        companies’ logos and names, specific key brands, people's names across
+        the deck, in small print and inside the artwork, while the figures, the
+        charts and the rival brands are left readable. Each redaction is
         labelled, so the sentence around it still reads coherently, with the
         private key file only accessible by you.</p>
 
@@ -485,11 +485,6 @@
             <p class="hint warnhint" id="ocrnote" hidden></p>
             <div id="sweepbox" hidden>
               <button type="button" id="sweep" class="ghost wide">Comprehensive Check</button>
-              <div id="sweeprun" hidden>
-                <div class="sweepbar"><span id="sweepfill"></span></div>
-                <p class="hint" id="sweepprogress"></p>
-                <button type="button" id="sweepstop" class="ghost wide">Stop the check</button>
-              </div>
               <!-- A div rather than a paragraph: when the check has stood down from
                    somewhere, the note carries a list of those places, and a list
                    inside a paragraph is not a list the browser will keep. -->
@@ -618,6 +613,22 @@
     </div>
 
     <div class="exportbar">
+      <!-- What is running, where the buttons that started it are.
+           The check used to report itself in a yellow box inside the Text
+           section, and the search behind a dialog over the whole page. Both
+           are long, and neither is a reason to stop reading the document,
+           which is what a reviewer is doing while they wait. -->
+      <!-- A search reports itself here rather than behind a dialog: it takes as
+           long as it takes, and there is a document to read while it does. -->
+      <div id="runfoot" class="runbar" hidden>
+        <div id="runfoot-legs" class="runlegs"></div>
+        <p class="hint" id="runfoot-text"></p>
+      </div>
+      <div id="sweeprun" class="runbar" hidden>
+        <div class="sweepbar"><span id="sweepfill"></span></div>
+        <p class="hint" id="sweepprogress"></p>
+        <button type="button" id="sweepstop" class="ghost">Stop the check</button>
+      </div>
       <div class="exportgo">
         <span id="exportnote" class="hint"></span>
         <button type="button" id="apply" class="primary" disabled>Redact</button>
@@ -828,14 +839,11 @@
 <div id="samplebox" class="busy" hidden role="dialog" aria-modal="true"
   aria-label="The sample slide, enlarged">
   <div class="busy-inner sampleinner">
-    <button type="button" id="sampleclose" class="sample-x" aria-label="Close">
-      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-        <path d="M6 6l12 12M18 6L6 18"/>
-      </svg>
-    </button>
     <!-- The same two controls as the strip behind it: someone comparing six
          slides should not have to close the picture, step the strip and open
-         it again between each one. -->
+         it again between each one.
+         Above the picture rather than over it: they were floating on top of
+         the slide, which is the one thing the dialog exists to show. -->
     <div class="bigbar">
       <div class="galswitch" role="group" aria-label="Show this slide before or after redaction">
         <button type="button" class="galside" id="big-original" aria-pressed="false">Original</button>
@@ -854,8 +862,28 @@
           </svg>
         </button>
       </div>
+      <button type="button" id="sampleclose" class="sample-x" aria-label="Close">
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <path d="M6 6l12 12M18 6L6 18"/>
+        </svg>
+      </button>
     </div>
-    <div class="samplestage"><img id="samplebig" src="gallery/slide-1-redacted.jpg" alt="" draggable="false"></div>
+    <!-- And a way through the slides at the edges of the picture itself, which
+         is where a hand already is. Faded, because they sit over the slide and
+         the slide is the point; on a phone a swipe does the same thing. -->
+    <div class="bigframe">
+      <button type="button" class="bigedge left" id="big-back" aria-label="The slide before">
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <path d="M15 5l-7 7 7 7"/>
+        </svg>
+      </button>
+      <div class="samplestage"><img id="samplebig" src="gallery/slide-1-redacted.jpg" alt="" draggable="false"></div>
+      <button type="button" class="bigedge right" id="big-on" aria-label="The next slide">
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <path d="M9 5l7 7-7 7"/>
+        </svg>
+      </button>
+    </div>
   </div>
 </div>
 
@@ -944,7 +972,7 @@
 <script src="lib/pdfwrite.js?v=4b977425"></script>
 <script src="lib/pdfread.js?v=ca229552"></script>
 <script src="lib/render.js?v=65c3fe76"></script>
-<script src="app.js?v=a20188e9"></script>
+<script src="app.js?v=b6c61d7c"></script>
 <script type="module" src="lib/boot.mjs?v=8b98ed8f"></script>
 </body>
 </html>
