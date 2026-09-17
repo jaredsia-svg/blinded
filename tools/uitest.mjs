@@ -1846,11 +1846,33 @@ try {
 
   // A search that found things used to say nothing at all, so the slider was
   // a dial with no reading: move it, re-run, count the boxes, guess again.
-  check('a finished image search says how the matches scored',
-    /^(\d+ matches, scoring \d\.\d\d down to \d\.\d\d|One match, scoring \d\.\d\d)/
-      .test((await page.textContent('#templates .imgnote')).trim()),
-    await page.textContent('#templates .imgnote'));
-  check('and that note is actually on screen',
+  // Then it said far too much — a paragraph about where the scores fell, read
+  // past rather than read. What a reviewer needs is the two or three places
+  // this bar could stand and what each would find.
+  const wheel = await page.evaluate(() => {
+    const pips = [...document.querySelectorAll('#templates .imgnote .barpip')];
+    return pips.map(pip => ({
+      tag: pip.tagName,
+      now: pip.classList.contains('now'),
+      best: pip.classList.contains('best'),
+      bar: (pip.querySelector('b') || {}).textContent,
+      count: (pip.querySelector('i') || {}).textContent,
+    }));
+  });
+  check('a finished image search offers the settings its scores allow',
+    wheel.length >= 1 && wheel.length <= 3, JSON.stringify(wheel));
+  check('each one reading as a bar and what it would find',
+    wheel.every(pip => /^\d\.\d\d$/.test(pip.bar || '')
+      && /^\d+ match(es)?$/.test(pip.count || '')), JSON.stringify(wheel));
+  // Where it stands now is a readout, not an offer: a control that does
+  // nothing is a control the reviewer stops trusting.
+  check('the first is where the bar stands, and cannot be pressed',
+    wheel[0].now === true && wheel[0].tag === 'SPAN'
+    && wheel.slice(1).every(pip => pip.tag === 'BUTTON' && !pip.now),
+    JSON.stringify(wheel));
+  check('and at most one of them is singled out as the recommendation',
+    wheel.filter(pip => pip.best).length <= 1, JSON.stringify(wheel));
+  check('and they are actually on screen',
     await page.isVisible('#templates .imgnote'));
   // On the row of the image it is about, under it: with three picked images
   // the reviewer has to be able to tell which story belongs to which picture.
@@ -4515,60 +4537,64 @@ try {
         p.imageHits = p.imageHits.filter(m => m.templateId !== template.id);
       }
       await B.runSearch();
+      const pips = [...document.querySelectorAll('#templates .imgnote .barpip')]
+        .map(pip => ({ now: pip.classList.contains('now'),
+                       bar: Number((pip.querySelector('b') || {}).textContent),
+                       count: parseInt((pip.querySelector('i') || {}).textContent, 10) }));
       const out = { scores: scores.map(s => +s.toFixed(3)),
-                    hint: (document.querySelector('#templates .imgnote') || {}).textContent
-                      ? document.querySelector('#templates .imgnote').textContent.trim() : '',
+                    pips,
+                    bar: B.sensFor(template),
                     marks: B.state.pages.reduce((n, p) =>
                       n + p.imageHits.filter(m => m.templateId === template.id).length, 0) };
       B.state.termImages = true;
       return out;
     });
-    check('a bar that turns matches away says how many and what they scored',
-      /\d+ more scored \d\.\d\d( down to \d\.\d\d)? and (was|were) left out/.test(told.hint),
+    // A bar set by hand that turned candidates away is exactly the case the
+    // settings are for: one of them is lower than where the bar stands and
+    // finds more, which is "lower it past this to include them" without the
+    // paragraph that used to say so.
+    const here = told.pips.find(pip => pip.now);
+    const lower = told.pips.filter(pip => !pip.now && pip.bar < told.bar);
+    check('the settings say where the bar stands and what it found',
+      Boolean(here) && here.bar === Number(told.bar.toFixed(2))
+      && here.count === told.marks, JSON.stringify(told));
+    check('and a bar that turned matches away offers a lower one that keeps them',
+      lower.length >= 1 && lower.every(pip => pip.count > here.count),
       JSON.stringify(told));
-    check('and names the number to come down past',
-      /lower the bar past \d\.\d\d/.test(told.hint), told.hint);
-    // The weak echoes a picked mark turns up all over a page are not near
-    // misses: counting them in made the note say "30 more" when five of them
-    // were the point.
-    const span = told.hint.match(/more scored (\d\.\d\d) down to (\d\.\d\d)/);
-    check('and only counts the ones close enough to be worth a nudge',
-      !span || Number(span[1]) - Number(span[2]) <= 0.08 + 1e-9, told.hint);
+    check('with each setting a bar the slider can actually stand on',
+      told.pips.every(pip => Number.isFinite(pip.bar) && pip.bar >= 0.45 && pip.bar <= 0.99),
+      JSON.stringify(told.pips));
 
-    // And when it turned nothing away, it says so, because the silence looks
-    // like an omission. "15 matches, scoring 0.99 down to 0.78" beside a
-    // slider reading 0.75 invites the obvious question — is 0.78 the real
-    // setting, and why is the control saying something else? It is not: the
-    // bar is a floor, and the space between it and the weakest match is empty.
+    // And a bar with nothing near it offers nothing below: the space between
+    // the bar and the weakest match is empty, and a setting that found the
+    // same things at a different number would be noise.
     const quiet = await page.evaluate(async () => {
       const B = window.Blinded;
       const template = B.state.templates[0];
       // Well below everything, so nothing is anywhere near being turned away.
       template.sens = B.AUTO_FLOOR;
+      template.chosenBar = true;
       template.searched = false;
       for (const p of B.state.pages) {
         p.imageHits = p.imageHits.filter(m => m.templateId !== template.id);
       }
       await B.runSearch();
-      const scores = B.state.pages
-        .flatMap(p => p.imageHits.filter(m => m.templateId === template.id))
-        .map(m => m.score);
-      return { hint: (document.querySelector('#templates .imgnote') || { textContent: '' })
-                 .textContent.trim(),
-               bar: B.sensFor(template),
-               weakest: scores.length ? Math.min(...scores) : null };
+      // Counted the way the pill beside the slider counts, which is the
+      // number the circle has to agree with: two proposals in one place are
+      // one mark, and a dismissed one is none.
+      const marks = B.state.pages.reduce((n, p) =>
+        n + B.liveImageHits(p).filter(m => m.templateId === template.id).length, 0);
+      const pips = [...document.querySelectorAll('#templates .imgnote .barpip')]
+        .map(pip => ({ now: pip.classList.contains('now'),
+                       bar: Number((pip.querySelector('b') || {}).textContent),
+                       count: parseInt((pip.querySelector('i') || {}).textContent, 10) }));
+      return { pips, marks, bar: B.sensFor(template) };
     });
-    check('a bar with nothing near it says the space below is empty',
-      /nothing landed between the bar at \d\.\d\d/i.test(quiet.hint),
-      JSON.stringify(quiet));
-    check('and names the bar rather than the weakest match',
-      quiet.weakest === null
-        || quiet.hint.includes('bar at ' + quiet.bar.toFixed(2)),
-      JSON.stringify(quiet));
-    // Both halves cannot be true at once: either something was turned away or
-    // nothing was.
-    check('and does not also claim something was left out',
-      !/left out/.test(quiet.hint), quiet.hint);
+    check('a bar under everything still says where it stands, and counts as the pill does',
+      quiet.pips.length >= 1 && quiet.pips[0].now === true
+      && quiet.pips[0].count === quiet.marks, JSON.stringify(quiet));
+    check('and offers nothing below it, because there is nothing down there',
+      quiet.pips.every(pip => pip.now || pip.bar > quiet.bar), JSON.stringify(quiet));
   }
 
   // ---------- a searchable redacted file ----------

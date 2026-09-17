@@ -1252,9 +1252,61 @@ check('an empty term is harmless', TextImage.shapeRelief('') === 0
   const hugeAssets = PagePrep.pageAssets(huge, 2000, 1500);
   check('a long-edge over the smallText cap disables the 1.5x pass',
     hugeAssets.allowSmallText === false);
+  // The 2x pass reaches further, because a page short of pixels for what is on
+  // it is exactly the page that needs it, and a slide rendered at 144 dots to
+  // the inch is already past the gentler cap.
+  check('but the coarse-page 2x pass still reaches it',
+    hugeAssets.allowUpscale === true);
+  const vast = new Float32Array(3000 * 2000);
+  vast.fill(128);
+  check('and stops where a page has pixels to spare',
+    PagePrep.pageAssets(vast, 3000, 2000).allowUpscale === false);
   check('and the working grey is capped',
     Math.max(hugeAssets.work.width, hugeAssets.work.height) === PagePrep.WORK_LONG_EDGE,
     hugeAssets.work.width + 'x' + hugeAssets.work.height);
+
+  // ---------- how far a page is resampled up for a second look ----------
+  //
+  // Three reasons, and they are not the same reason. A page short of pixels
+  // for what it holds needs the most; a mark small in its own right needs the
+  // same treatment whatever page it came from; small lettering on an ordinary
+  // page needs the gentler pass. And a page with pixels to spare needs none,
+  // because doubling it is four times the area for detail that is already
+  // there.
+  {
+    const wordish = { template: { width: 90, height: 20 }, smallText: true };
+    const logoish = { template: { width: 90, height: 60 } };
+    const titchy = { template: { width: 40, height: 9 } };
+    const roomy = { allowSmallText: true, allowUpscale: true };
+    const big = { allowSmallText: false, allowUpscale: true };
+    const vastPage = { allowSmallText: false, allowUpscale: false };
+
+    check('a coarse page is looked at again at twice the size',
+      ImageSearch.upscaleFor(logoish, roomy, { pageDpi: 96 })
+        === ImageSearch.COARSE_PAGE_UPSCALE);
+    check('and so is a mark too small to hold its shape',
+      ImageSearch.upscaleFor(titchy, roomy, { pageDpi: 300 })
+        === ImageSearch.COARSE_PAGE_UPSCALE);
+    check('small lettering on an ordinary page gets the gentler pass',
+      ImageSearch.upscaleFor(wordish, roomy, { pageDpi: 300 })
+        === ImageSearch.SMALL_TEXT_UPSCALE);
+    check('a page with pixels to spare gets neither',
+      ImageSearch.upscaleFor(wordish, vastPage, { pageDpi: 96 }) === 1);
+    check('and a large but coarse page still gets the 2x pass',
+      ImageSearch.upscaleFor(logoish, big, { pageDpi: 96 })
+        === ImageSearch.COARSE_PAGE_UPSCALE);
+    check('an ordinary picked image on an ordinary page is searched once',
+      ImageSearch.upscaleFor(logoish, roomy, { pageDpi: 300 }) === 1);
+
+    // Dots per inch is measured against the paper the page was rendered from.
+    // A photograph has no paper, and calling its pixels points would say 72
+    // about every image ever opened.
+    check('dpi is measured off the paper size',
+      Math.round(ImageSearch.dpiOf({ widthPt: 612, source: { width: 1224 } })) === 144);
+    check('and is unknown for an image file',
+      ImageSearch.dpiOf({ fromImage: true, widthPt: 900, source: { width: 900 } }) === null
+      && ImageSearch.dpiOf({ source: { width: 900 } }) === null);
+  }
 
   const level = PagePrep.pyramidLevel(assets.pyramid, Math.round(assets.work.width / 2));
   check('pyramidLevel picks a level near the target width',

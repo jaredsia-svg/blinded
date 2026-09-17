@@ -507,7 +507,13 @@
         URL.revokeObjectURL(url);
         // An image has no text layer, so there is nothing to detect and
         // everything is covered by hand.
-        resolve({ index: 0, canvas, widthPt: img.naturalWidth, heightPt: img.naturalHeight, text: '', items: [] });
+        //
+        // Its "points" are its pixels, which is a convenient lie: there is no
+        // paper size behind a photograph. Marked as such so nothing downstream
+        // measures dots per inch off it and concludes that every image ever
+        // opened was rendered at 72.
+        resolve({ index: 0, canvas, widthPt: img.naturalWidth, heightPt: img.naturalHeight,
+          fromImage: true, text: '', items: [] });
       };
       img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('the image could not be decoded')); };
       img.src = url;
@@ -2413,69 +2419,74 @@
     redrawAll();
   }
 
-  function reportFor(template) {
+  // `showing` is how many marks this image actually has on the pages, which is
+  // what the pill beside the slider says. It is not always the number of
+  // scores: two proposals in the same place are one mark, and a dismissed one
+  // is none. The circle that reports where the bar stands has to agree with
+  // the pill it sits under, or the panel contradicts itself in two places a
+  // centimetre apart. The other circles are predictions from the scores and
+  // can only be raw counts.
+  function reportFor(template, showing) {
     const report = template && template.report;
     if (!report) return null;
+    const bar = clampSens(report.bar);
     const scores = report.scores || [];
+
+    // Nothing at all, which is the one case with no settings to choose
+    // between and the one that needs a sentence.
     if (!scores.length) {
       const best = report.best > 0 ? report.best.toFixed(2) : null;
       return {
         warn: true,
         text: best
-          ? 'No match at ' + clampSens(report.bar).toFixed(2) + '. The closest '
-            + 'thing scored ' + best + ' \u2013 lower the bar below that to include it.'
+          ? 'No match at ' + bar.toFixed(2) + '. The closest thing scored '
+            + best + ' \u2013 lower the bar below that to include it.'
           : 'Nothing resembling this was found anywhere in the document.',
       };
     }
 
-    const low = Math.min(...scores), high = Math.max(...scores);
-    let text = scores.length === 1
-      ? 'One match, scoring ' + high.toFixed(2) + '.'
-      : scores.length + ' matches, scoring ' + high.toFixed(2)
-        + ' down to ' + low.toFixed(2) + '.';
+    // Three settings, and no prose. What a reviewer needs is not a paragraph
+    // about where the scores fell: it is the two or three places this bar
+    // could sensibly stand and what each would find. The first is where it
+    // stands now; the others are one press away.
+    const all = scores.concat(report.near || []);
+    const here = { bar, now: true,
+      count: typeof showing === 'number' ? showing : scores.length };
+    const others = (report.steps || [])
+      .filter(step => Math.abs(step.bar - bar) > 0.005)
+      .map(step => ({ ...step, now: false }));
 
-    // And what the bar turned away, which is the half that says where to put
-    // it. Only the ones close enough to be worth a nudge: a picked mark turns
-    // up dozens of weak echoes of itself, and 0.67 against a bar of 0.99 is
-    // not a near miss.
+    // And one that takes in what this bar turned away, if the gaps did not
+    // already offer one.
+    //
+    // The gaps are where the scores fall into groups, and a bar set by hand
+    // can sit in the middle of a group: measured on a fixture, fourteen
+    // candidates from 0.92 down to 0.87 with no gap anywhere among them, and
+    // so nothing below to offer. That left a reviewer who had turned away
+    // fourteen matches with no way back to them but the slider, which is the
+    // thing these settings exist to replace.
     const NEARLY = 0.08;
-    const near = (report.near || [])
-      .filter(score => score >= clampSens(report.bar) - NEARLY)
+    const near = (report.near || []).filter(score => score >= bar - NEARLY)
       .sort((a, b) => b - a);
-    if (near.length) {
-      const top = near[0], bottom = near[near.length - 1];
-      text += ' ' + near.length + ' more scored '
-        + (near.length === 1 || top.toFixed(2) === bottom.toFixed(2)
-          ? top.toFixed(2)
-          : top.toFixed(2) + ' down to ' + bottom.toFixed(2))
-        + ' and ' + (near.length === 1 ? 'was' : 'were')
-        + ' left out \u2013 lower the bar past ' + top.toFixed(2) + ' to include '
-        + (near.length === 1 ? 'it.' : 'them.');
-    } else if (low - clampSens(report.bar) > 0.015) {
-      text += ' Nothing landed between the bar at ' + clampSens(report.bar).toFixed(2)
-        + ' and the weakest of these, so it has room to move up.';
+    if (near.length && !others.some(step => step.bar < bar)) {
+      const include = Math.max(AUTO_FLOOR, Math.floor((near[0] - 0.005) * 100) / 100);
+      if (include < bar) {
+        others.push({ bar: include,
+          count: all.filter(score => score >= include).length, now: false });
+      }
     }
 
-    if (report.autoBar !== null && report.autoBar !== undefined) {
-      const was = report.barWas === null || report.barWas === undefined
-        ? null : clampSens(report.barWas);
-      const moved = was !== null && report.autoBar > was
-        ? 'The scores fell into two groups with a clear gap between them, so the '
-          + 'bar moved up from ' + was.toFixed(2) + ' to ' + report.autoBar.toFixed(2)
-          + ', which is where that gap is.'
-        : 'Nothing matched at the setting it was on, so the bar came down to '
-          + report.autoBar.toFixed(2) + '.';
-      text = moved + ' ' + text;
+    // Which of them the scores actually point at. It can be the one the bar is
+    // already on, and saying so is worth a colour: "you are where the scores
+    // say" is an answer, not a silence.
+    const best = barFromScores(all);
+    const settings = [here].concat(others.slice(0, 2));
+    for (const step of settings) {
+      step.best = best !== null && Math.abs(step.bar - best) < 0.005;
     }
-
-    // And the other places the scores would let it stand. A number nobody can
-    // aim becomes a short list anyone who knows the document can answer — and
-    // the buttons that carry it mean they do not have to aim at all.
-    const steps = (report.steps || [])
-      .filter(step => Math.abs(step.bar - clampSens(report.bar)) > 0.005);
-    if (steps.length) text += ' The scores would also allow:';
-    return { warn: false, text, steps };
+    return { warn: false, settings };
   }
+
 
 
   // Where the bar wants to be, read off what the search actually saw.
@@ -5552,20 +5563,36 @@
       // two and the sentence the reviewer read belonged to none of them in
       // particular. Here it sits with the thumbnail, the bar and the tally it
       // is about.
-      const told = template.searched ? reportFor(template) : null;
+      const told = template.searched ? reportFor(template, live) : null;
       if (told) {
         const note = document.createElement('li');
         note.className = 'imgnote' + (told.warn ? ' warnhint' : '');
-        note.textContent = told.text;
-        for (const step of told.steps || []) {
-          const move = document.createElement('button');
-          move.type = 'button';
-          move.className = 'barstep';
-          move.textContent = step.bar.toFixed(2) + ' \u2192 '
-            + step.count + (step.count === 1 ? ' match' : ' matches');
-          move.title = 'Put the bar at ' + step.bar.toFixed(2) + ' and look again';
-          move.addEventListener('click', () => moveBarTo(template, step.bar));
-          note.append(' ', move);
+        if (told.text) note.textContent = told.text;
+        if (told.settings) {
+          const wheel = document.createElement('div');
+          wheel.className = 'barwheel';
+          for (const step of told.settings) {
+            // Where the bar stands is a readout, not an offer: pressing it
+            // would do nothing, and a control that does nothing is a control
+            // the reviewer stops trusting.
+            const pip = document.createElement(step.now ? 'span' : 'button');
+            pip.className = 'barpip' + (step.now ? ' now' : '')
+              + (step.best ? ' best' : '');
+            if (!step.now) {
+              pip.type = 'button';
+              pip.title = 'Put the bar at ' + step.bar.toFixed(2) + ' and look again';
+              pip.addEventListener('click', () => moveBarTo(template, step.bar));
+            } else {
+              pip.title = 'Where the bar is now';
+            }
+            const reading = document.createElement('b');
+            reading.textContent = step.bar.toFixed(2);
+            const many = document.createElement('i');
+            many.textContent = step.count + (step.count === 1 ? ' match' : ' matches');
+            pip.append(reading, many);
+            wheel.append(pip);
+          }
+          note.append(wheel);
         }
         host.append(note);
       }
@@ -7322,8 +7349,17 @@
   function pageHasConfidentTerm(page, term) {
     // Text-layer hits are exact: the page really contains the term, and
     // Comprehensive has nothing to second-guess there.
+    //
+    // Only where the reading can say *where*. A finding with no rectangle is a
+    // match in the characters that could not be placed on the page — the text
+    // layer holds the word but not the boxes for it — so nothing is drawn and
+    // nothing is covered. Measured on a slide deck: "Tokenomics" was found in
+    // the text at offset 2, given no rectangle, marked nowhere, and the
+    // comprehensive check then skipped the page as already answered. The word
+    // was on the page in plain sight the whole time. A reading that cannot
+    // point at the word has not settled anything.
     for (const f of page.findings || []) {
-      if (f.kind === 'term' && f.term === term) return true;
+      if (f.kind === 'term' && f.term === term && f.rects && f.rects.length) return true;
     }
     // OCR hits do NOT settle the page. Measured on a photographed TCC slide
     // where "F&N" was typed: OCR boxed four copies confidently and skipped
@@ -7754,6 +7790,18 @@
     }
 
     state.sweepRunning = false;
+    // The best score each word reached, whether or not it cleared its bar.
+    // A word that was missed because it scored 0.62 against a bar of 0.70 is a
+    // different problem from one that scored 0.21, and without this the two
+    // are indistinguishable from the outside.
+    state.sweepBest = {};
+    for (const entry of entries) {
+      const found = results.get(entry.key);
+      if (!found) continue;
+      const was = state.sweepBest[entry.term];
+      const best = { score: found.best || 0, part: entry.part, bar: entry.threshold };
+      if (!was || best.score > was.score) state.sweepBest[entry.term] = best;
+    }
     // A run that was stopped part way has not answered the document, so it
     // does not get to claim it has: the offer stands, and the note says how
     // far it reached.
@@ -8645,7 +8693,8 @@
 
   window.Blinded = { state, rescan, loadFile, exportFile, setMode, addTemplate,
     undoLast, undoStack, applyLabels, labelItems, downloadKey,
-    sensFor, barFromScores, settleBar, barSteps, moveBarTo, AUTO_FLOOR, REAL_GAP,
+    sensFor, barFromScores, settleBar, barSteps, moveBarTo, liveImageHits,
+    AUTO_FLOOR, REAL_GAP,
     anchorOn, returnTo, stepPage, refreshPaging,
     watchPinch, pinching, PINCH_IN, wordSensitivity, wordBarFor,
     setZoom, stepZoom, ZOOM_STEPS,

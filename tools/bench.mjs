@@ -117,6 +117,13 @@ for (const name of readdirSync(bench).sort()) {
     const B = window.Blinded;
     return {
       pages: B.state.pages.length,
+      // How coarse the pages are, which decides whether they get a second
+      // look at twice the size.
+      size: [...new Set(B.state.pages.map(p => p.source.width + 'x' + p.source.height))],
+      dpi: [...new Set(B.state.pages.map(p => {
+        const at = window.BlindedImageSearch.dpiOf(p);
+        return at ? Math.round(at) : 0;
+      }))],
       terms: B.state.terms.map(term => ({ term,
         // What the reading found, and what the check found by sight, kept
         // apart: a word found in the text layer says nothing about whether
@@ -125,6 +132,10 @@ for (const name of readdirSync(bench).sort()) {
           n + p.hits.filter(hit => hit.term === term).length, 0),
         seen: B.state.pages.reduce((n, p) =>
           n + (p.imageHits || []).filter(hit => hit.bySweep && hit.term === term).length, 0),
+        // The best the check managed for this word, and the bar it had to
+        // clear: a word missed at 0.62 against 0.70 is a different problem
+        // from one missed at 0.21.
+        best: (B.state.sweepBest || {})[term] || null,
         // Where the check put them, so they can be cropped and looked at.
         where: B.state.pages.flatMap(p => (p.imageHits || [])
           .filter(hit => hit.bySweep && hit.term === term && hit.rect)
@@ -153,11 +164,15 @@ for (const name of readdirSync(bench).sort()) {
     };
   });
 
-  console.log('==', name, '·', out.pages, 'pages · search ' + searchTook.toFixed(1)
+  console.log('==', name, '·', out.pages, 'pages · ' + out.size.join('/') + ' · ' + out.dpi.join('/') + ' dpi · search ' + searchTook.toFixed(1)
     + 's · check ' + sweepTook.toFixed(1) + 's (+' + sweepAdded + ')');
   for (const term of out.terms) {
+    const best = term.best
+      ? ' · best ' + term.best.score.toFixed(3) + ' of ' + term.best.bar.toFixed(2)
+        + ' (' + term.best.part + ')'
+      : '';
     console.log('   word ' + JSON.stringify(term.term)
-      + ' -> read ' + term.read + ', seen ' + term.seen);
+      + ' -> read ' + term.read + ', seen ' + term.seen + best);
   }
   for (const logo of out.templates) {
     console.log('   image ' + logo.id + ' p' + (logo.page + 1) + ' ' + logo.size
