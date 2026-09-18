@@ -2367,11 +2367,36 @@ check('no creation date is carried into the output', !meta.info.CreationDate);
   const html = readFileSync(join(root, 'faq.html'), 'utf8');
   const licence = existsSync(join(root, 'LICENSE'))
     ? readFileSync(join(root, 'LICENSE'), 'utf8') : '';
-  // The FAQ calls it free and open source. Without a licence file that is a
-  // claim nobody can act on: the default is all rights reserved.
-  check('the page calls it open source', /free and open source/.test(html));
-  check('so there is a licence to read', licence.length > 0, 'LICENSE is missing');
-  check('and the README names it', /MIT, in `LICENSE`/.test(readme));
+  const notice = existsSync(join(root, 'NOTICE'))
+    ? readFileSync(join(root, 'NOTICE'), 'utf8') : '';
+  // Without a licence file, "you can read the code" is a claim nobody can act
+  // on: the default is all rights reserved.
+  check('there is a licence to read', licence.length > 0, 'LICENSE is missing');
+  check('and it is the one the page says it is',
+    /PolyForm Noncommercial License 1\.0\.0/.test(licence), licence.slice(0, 80));
+  check('with the licensor named in it',
+    /Required Notice: Copyright \d{4} \S/.test(licence), licence.split('\n')[0]);
+  check('and the README names the same one',
+    /PolyForm Noncommercial 1\.0\.0, in `LICENSE`/.test(readme));
+
+  // Source-available is not open source, and the page must not say it is.
+  // A redactor asking to be believed about where your document goes cannot
+  // afford to be loose about a claim its own repository disproves.
+  check('the page says the code can be read', /Read\s+it, run it yourself/.test(html));
+  check('and says which licence, in the words that licence uses',
+    /source-available rather than open source/i.test(html)
+      && /PolyForm Noncommercial License 1\.0\.0/.test(html), 'faq.html');
+  check('without calling it open source', !/open source:/.test(html)
+    && !/free and open source/.test(html), 'faq.html still claims open source');
+
+  // The vendored code is not the licensor's to relicense, and a LICENSE at
+  // the root of a repository looks like it covers everything under it.
+  check('and what the licence does not cover is written down',
+    notice.length > 0 && /Apache License 2\.0/.test(notice)
+      && /vendor\//.test(notice), 'NOTICE is missing or says nothing');
+  for (const kept of ['vendor/pdf.js-LICENSE', 'vendor/tesseract/LICENSE']) {
+    check('and ' + kept + ' is still there to read', existsSync(join(root, kept)), kept);
+  }
 }
 
 // ---------- what a search engine is told ----------

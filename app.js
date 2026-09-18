@@ -35,10 +35,10 @@
         + 'some other site, which could change what this looks like and what '
         + 'the buttons appear to do. Open it directly instead.';
       const link = document.createElement('a');
-      link.href = 'https://blinded.onrender.com/';
+      link.href = 'https://blinded.dev/';
       link.target = '_top';
       link.rel = 'noopener';
-      link.textContent = 'Open blinded.onrender.com';
+      link.textContent = 'Open blinded.dev';
       say.append(head, body, link);
       document.body.textContent = '';
       document.body.append(say);
@@ -1081,14 +1081,30 @@
   // to the thumbnails. The line says what it is standing in for, so nothing
   // has gone missing — it is a door back, and it says so by naming what is
   // behind it. Clicking it shuts the sheet, which brings all five back.
-  // The four sections above the sheet, open, with the sheet shut. This is the
-  // shape the panel opens in and the shape it comes back to when the sheet is
-  // rolled away.
-  function openSections() {
+  // The shape the panel opens in, and comes back to when the sheet is rolled
+  // away: the two that are a reviewer's first move, open; the rest shut.
+  //
+  // All four used to be open, which is the whole panel spent before anything
+  // has happened. Detectors and Placeholders are answers to questions asked
+  // later -- what else is in here, how should the bars be labelled -- and a
+  // panel that opens with every question asked at once is a panel that has
+  // not said where to start.
+  const OPEN_BY_DEFAULT = ['textsect', 'imagesect'];
+
+  // `keep` is a section the reviewer has just opened. Putting the panel back
+  // must not shut it: they asked for it, and answering by closing it is the
+  // panel arguing with them.
+  function openSections(keep) {
     for (const sect of document.querySelectorAll('details.sect')) {
-      sect.open = sect !== el('organisesect');
+      sect.open = sect === keep
+        || (sect !== el('organisesect') && OPEN_BY_DEFAULT.includes(sect.id));
     }
   }
+
+  // Which section the reviewer opened to get out of Organise. A <details>
+  // fires its toggle on a later task, so the sheet's own handler cannot see
+  // what closed it unless it is written down here first.
+  let leftSheetFor = null;
 
   function organising() {
     const sheet = el('organisesect');
@@ -5759,15 +5775,23 @@
       searched: false,
     };
     state.templates.push(template);
-    pushUndo('picking that logo', () => dropTemplate(template.id));
+    // Not an undo step.
+    //
+    // Picking an image is an instruction, not an edit: it says what to look
+    // for, the way typing a word does, and typing a word has never been
+    // undoable either. The row that appears carries its own x, which is
+    // nearer, plainer and does only this -- where Undo, pressed twice by
+    // somebody who meant to take back a box they drew, would silently take
+    // the picked image with it.
     renderTemplates();
     renderSectionNotes();
     needsSearch();
     drawPage(page);
   }
 
-  // Removal without recording an undo, so undoing an *add* does not leave a
-  // "redo the removal" entry behind it.
+  // Removal without recording an undo. Taking a picked image away *is* an
+  // undo step -- it throws away a search and the review of it -- but that is
+  // recorded by removeTemplate below; this is the part both paths share.
   function dropTemplate(id) {
     state.templates = state.templates.filter(t => t.id !== id);
     for (const page of state.pages) {
@@ -7492,9 +7516,11 @@
           }
           sheet.scrollIntoView({ block: 'nearest' });
         } else {
-          // Closing Organise brings the four back open — the shape the panel
-          // opens in — not as four shut headings under the roll line.
-          openSections();
+          // Closing Organise puts the panel back in the shape it opens in,
+          // not four shut headings under a roll line -- and keeps open
+          // whichever section the reviewer opened to close it.
+          openSections(leftSheetFor);
+          leftSheetFor = null;
         }
         // The panel stops scrolling and hands its spare height to the
         // thumbnails, so they are the only thing with a scrollbar. Two nested
@@ -7509,8 +7535,12 @@
       }
 
       // Any other section opening shuts the sheet, which comes back through
-      // here as the sheet's own toggle and puts the panel right.
-      if (section.open && sheet.open) sheet.open = false;
+      // here as the sheet's own toggle and puts the panel right — with this
+      // one still open, because opening it is what the reviewer just did.
+      if (section.open && sheet.open) {
+        leftSheetFor = section;
+        sheet.open = false;
+      }
     });
   }
 

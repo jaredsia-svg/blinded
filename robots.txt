@@ -13,4 +13,4 @@ Disallow: /lib/
 Disallow: /tools/
 Disallow: /bench/
 
-Sitemap: https://blinded.onrender.com/sitemap.xml
+Sitemap: https://blinded.dev/sitemap.xml

@@ -5321,6 +5321,10 @@ try {
       // reviewer never runs: they open one section, then another. Waited out
       // between the two so this tests the behaviour and not the scheduler.
       sheet.open = false;
+      // Shutting the sheet puts the panel back in the shape it opens in, and
+      // that answer arrives on a later task. Opening the four before it lands
+      // means measuring what this undid rather than what it does.
+      await new Promise(r => setTimeout(r, 60));
       for (const sect of others) sect.open = true;
       await new Promise(r => setTimeout(r, 50));
       const before = others.filter(d => d.open).length;
@@ -5329,7 +5333,7 @@ try {
       return { before, sheet: sheet.open,
         othersOpen: others.filter(d => d.open).length, others: others.length };
     });
-    check('the other sections start open', alone.before === alone.others,
+    check('the other sections can all be open at once', alone.before === alone.others,
       JSON.stringify(alone));
     check('opening the sheet closes every other section',
       alone.sheet === true && alone.othersOpen === 0 && alone.others >= 3,
@@ -5526,7 +5530,7 @@ try {
     check('the other sections roll into one line', rolled.shown === true
       && rolled.hidden === rolled.of, JSON.stringify(rolled));
     check('and that line names every one of them',
-      ['Text', 'Images', 'Detectors', 'Placeholders']
+      ['Text input', 'Image input', 'Detectors', 'Placeholders']
         .every(name => rolled.says.includes(name)), JSON.stringify(rolled));
 
     const unrolled = await page.evaluate(async () => {
@@ -5551,9 +5555,13 @@ try {
       JSON.stringify(unrolled));
     check('with the sheet shut again and the line gone',
       unrolled.sheet === false && unrolled.roll === true, JSON.stringify(unrolled));
-    // Open as the panel opens, not as they happened to be left.
-    check('all four come back open, the shape the panel opens in',
-      unrolled.open.every(open => open === true), JSON.stringify(unrolled.open));
+    // As the panel opens, not as they happened to be left: the two that are a
+    // reviewer's first move, and not the two that answer questions asked
+    // later. All four open is the whole panel spent before anything has
+    // happened.
+    check('they come back in the shape the panel opens in',
+      unrolled.open.join() === [true, true, false, false].join(),
+      JSON.stringify(unrolled.open));
 
     await page.evaluate(async () => {
       document.getElementById('organisesect').open = true;
@@ -5893,8 +5901,13 @@ try {
       JSON.stringify(wired));
     check('and is not wired up at all behind the refusal',
       wired.blinded === 'undefined' && wired.drop === false, JSON.stringify(wired));
+    // Read off index.html's own canonical rather than written out here: the
+    // day the domain changes, a test asserting the old one is a test that
+    // fails for being right.
+    const canonical = /<link rel="canonical" href="([^"]+)"/
+      .exec(readFileSync(resolve(here, '..', 'index.html'), 'utf8'))[1];
     check('with a way out to the canonical copy',
-      away === 'https://blinded.onrender.com/', String(away));
+      away === canonical, String(away) + ' vs ' + canonical);
   });
 
   // ---------- one section from the next ----------
@@ -9036,7 +9049,13 @@ try {
       icon: !!(link && link.querySelector('svg')),
       // The claim the whole tool rests on should be the first thing answered.
       firstQuestion: (document.querySelector('.faq h2') || {}).textContent,
-      openSource: /free and open source/i.test(document.body.textContent),
+      // Source-available, said in those words. It is not open source and the
+      // page must not say it is: a tool asking to be believed about where a
+      // document goes cannot be loose about a claim its own repository
+      // disproves.
+      openSource: /source-available rather than open source/i.test(document.body.textContent)
+        && /PolyForm Noncommercial License 1\.0\.0/.test(document.body.textContent)
+        && !/free and open source/i.test(document.body.textContent),
       back: !!document.getElementById('faq-back-bottom'),
       header: document.getElementById('faq-open').textContent.trim(),
       title: (document.querySelector('.faqtitle') || {}).textContent,
@@ -9080,7 +9099,8 @@ try {
     faq.href);
   check('the link is actually rendered, not just present', faq.visible === true);
   check('the link carries its mark', faq.icon === true);
-  check('and it still says the tool is free and open source', faq.openSource === true);
+  check('and it names the licence rather than calling it open source',
+    faq.openSource === true);
   check('there is a way back to the tool', faq.back === true);
   check('and the header button offers the way back too',
     /back to the tool/i.test(faq.header), faq.header);

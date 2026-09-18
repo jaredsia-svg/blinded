@@ -1,0 +1,23 @@
+Blinded
+Copyright 2026 Jared Sia
+
+The terms in LICENSE are the PolyForm Noncommercial License 1.0.0, and they
+cover the code written for this project: index.html, faq.html, app.js,
+app.css, lib/ and tools/.
+
+They do not cover the third-party code in vendor/, which arrives under its
+own terms and keeps them:
+
+  vendor/pdf.min.mjs, vendor/pdf.worker.min.mjs
+      Mozilla's pdf.js, Apache License 2.0.
+      Full text in vendor/pdf.js-LICENSE.
+
+  vendor/tesseract/
+      tesseract.js and a Tesseract OCR build, Apache License 2.0.
+      Full text in vendor/tesseract/LICENSE, with the per-file notices in
+      vendor/tesseract/tesseract.min.js.LICENSE.txt and
+      vendor/tesseract/worker.min.js.LICENSE.txt.
+
+Nothing here restricts what those licences permit. A copy of this project
+carries both: the terms above for the part written here, and Apache 2.0 for
+the part that was not.

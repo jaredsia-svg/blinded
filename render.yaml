@@ -1,7 +1,15 @@
 # How the canonical copy is served.
 #
-# blinded.onrender.com is the one address. GitHub Pages publishing is off:
-# two origins serving the same app meant two sets of response headers, and the
+# blinded.dev is the one address, and it has to stay the one address. The
+# service also answers on its blinded.onrender.com hostname, and two hostnames
+# serving the same bytes is the same page at two URLs: a crawler has to pick
+# one and discount the other, and the markup's rel="canonical" says which,
+# but only to the crawlers that honour it. Set blinded.dev as the primary
+# custom domain in Render (Settings -> Custom Domains); Render then sends a
+# 301 from the onrender hostname to it, which settles it for everything.
+#
+# GitHub Pages publishing is off, for the same reason and a worse one: two
+# origins serving the same app meant two sets of response headers, and the
 # Pages one sent Access-Control-Allow-Origin: * and nothing about framing.
 #
 # The headers here are the half of the app's defences that a page cannot state

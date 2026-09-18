@@ -672,15 +672,30 @@ tools/            the two test suites, a fixture builder, a static server
 
 ## Licence
 
-MIT, in `LICENSE`.
+PolyForm Noncommercial 1.0.0, in `LICENSE`. Source-available, not open source:
+read it, change it, run it, use it for anything noncommercial — and not
+commercially without a separate licence.
 
-pdf.js in `vendor/` is Apache-2.0; its licence is alongside it. Tesseract's
-build in `vendor/tesseract/` carries its own, Apache-2.0 as well.
+The point of publishing it is that the promise it makes is checkable. A
+redactor that says your document is never uploaded is asking to be believed,
+and a program nobody can read is asking for that on trust alone. Whatever the
+licence says about selling it, every line of what it does with your file is
+here to be read.
+
+Versions published before this under MIT stay MIT. A licence change binds what
+comes after it; it cannot reach back and take away a grant somebody already
+has.
+
+`NOTICE` lists what those terms do not cover: pdf.js in `vendor/` is
+Apache-2.0, with its licence alongside it, and Tesseract's build in
+`vendor/tesseract/` carries its own, Apache-2.0 as well.
 
 ## Where it is served
 
-`https://blinded.onrender.com` is the canonical copy, and `index.html` says so
-with a `rel="canonical"`. It was also published from GitHub Pages for a while,
+`https://blinded.dev` is the canonical copy, and `index.html` says so
+with a `rel="canonical"`. The service answers on its `blinded.onrender.com`
+hostname too; setting blinded.dev as the primary custom domain in Render makes
+that hostname 301 to it, so the same page is not served at two addresses. It was also published from GitHub Pages for a while,
 which is one program on two origins with two sets of response headers to keep
 right — and the Pages one sent `Access-Control-Allow-Origin: *` and nothing
 about framing. Pages publishing is off; Render is the one address.

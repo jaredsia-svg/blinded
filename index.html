@@ -40,7 +40,7 @@
 <!-- One address. The app was also being served from GitHub Pages, which is two
      origins for one program and two sets of response headers to keep right;
      Pages publishing is off and this says which copy is the copy. -->
-<link rel="canonical" href="https://blinded.onrender.com/">
+<link rel="canonical" href="https://blinded.dev/">
 <!-- What a link to this looks like when somebody pastes it into Slack, a
      message or a post. Without these a share is the bare URL, which for a
      tool that has to be trusted before it is used is the worst possible first
@@ -54,8 +54,8 @@
 <meta property="og:site_name" content="Blinded">
 <meta property="og:title" content="Blinded – redaction that never uploads your document">
 <meta property="og:description" content="Pick a name, a logo or a signature once. Every copy is deleted, at any size, even inside a scan. Nothing is uploaded: it all happens in your browser.">
-<meta property="og:url" content="https://blinded.onrender.com/">
-<meta property="og:image" content="https://blinded.onrender.com/og.png">
+<meta property="og:url" content="https://blinded.dev/">
+<meta property="og:image" content="https://blinded.dev/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="A slide before and after redaction: names and logos gone from the second copy.">
@@ -63,13 +63,13 @@
 <!-- The questions, at the address that holds them. In the tool they are
      fetched into a view so that opening them never closes the document; this
      is the link a crawler follows and a reader can send to somebody. -->
-<link rel="alternate" href="https://blinded.onrender.com/faq.html" title="Q&amp;A">
+<link rel="alternate" href="https://blinded.dev/faq.html" title="Q&amp;A">
 <script type="application/ld+json">
 {
   "@context": "https://schema.org",
   "@type": "SoftwareApplication",
   "name": "Blinded",
-  "url": "https://blinded.onrender.com/",
+  "url": "https://blinded.dev/",
   "applicationCategory": "SecurityApplication",
   "operatingSystem": "Any browser",
   "description": "A document redactor that runs entirely in the browser. Names, logos, signatures and detected personal data are removed from PDFs and images by rebuilding each page, and the file is never uploaded.",
@@ -83,7 +83,7 @@
   "isAccessibleForFree": true
 }
 </script>
-<link rel="stylesheet" href="app.css?v=4fdd02bd">
+<link rel="stylesheet" href="app.css?v=2f2f98d0">
 </head>
 <body>
 
@@ -512,8 +512,8 @@
         <button type="button" id="sectroll" class="sectroll" hidden
           aria-controls="organisesect"></button>
 
-        <details class="sect" open>
-          <summary><span class="s-title">Text</span><button type="button"
+        <details class="sect" id="textsect" open>
+          <summary><span class="s-title">Text input</span><button type="button"
               class="why" aria-label="What does this section do?"
               data-tip="Type a name, a number or a word and every copy of it is covered – in the text, in the lettering of a screenshot, and inside a logo. Case does not matter, and the longest match wins, so &quot;Jane Doe&quot; beats &quot;Jane&quot;.">i</button><span class="s-note" id="term-note"></span></summary>
           <div class="s-body">
@@ -538,7 +538,7 @@
         </details>
 
         <details class="sect" id="imagesect" open>
-          <summary><span class="s-title">Images</span><button type="button"
+          <summary><span class="s-title">Image input</span><button type="button"
               class="why" aria-label="What does this section do?"
               data-tip="Draw a box around a logo, a signature, a stamp or a face, and every other copy of it in the document is found and covered – at any size, and whatever colour it has been recast in. Use it for marks no search can reach.">i</button><span class="s-note" id="image-note"></span></summary>
           <div class="s-body">
@@ -562,7 +562,7 @@
           </div>
         </details>
 
-        <details class="sect" id="kindsect" open>
+        <details class="sect" id="kindsect">
           <summary><span class="s-title">Detectors</span><button type="button"
               class="why" aria-label="What does this section do?"
               data-tip="Things worth covering that nobody had to type: email addresses, phone numbers, web addresses, street addresses, and names read off the layout around them. Only the kinds actually found in this document are listed, with how many of each.">i</button></summary>
@@ -571,7 +571,7 @@
           </div>
         </details>
 
-        <details class="sect" open>
+        <details class="sect" id="labelsect">
           <summary><span class="s-title">Placeholders</span><button type="button"
               class="why" aria-label="What does this section do?"
               data-tip="Writes [P1], [E2] into each bar so a later reader, or a model, can follow the sentence. The same thing always gets the same label.">i</button><span class="s-note" id="label-note">off</span></summary>
@@ -941,7 +941,7 @@
 <script src="lib/pdfwrite.js?v=4b977425"></script>
 <script src="lib/pdfread.js?v=ca229552"></script>
 <script src="lib/render.js?v=65c3fe76"></script>
-<script src="app.js?v=1b16a322"></script>
+<script src="app.js?v=2569fdd6"></script>
 <script type="module" src="lib/boot.mjs?v=8b98ed8f"></script>
 </body>
 </html>
