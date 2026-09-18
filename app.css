@@ -2188,3 +2188,60 @@ body.choosing { -webkit-user-select: none; user-select: none; }
   box-shadow: 0 2px 8px rgba(16, 22, 32, .3);
 }
 .scrub-say[hidden] { display: none; }
+
+
+/* ---------- the pages somebody lands on from a search ---------- */
+/*
+   The same column the questions use, with three things they do not need: a
+   before-and-after, a numbered how-to, and a way into the tool that does not
+   require scrolling back to the header to find one.
+*/
+.lander .lede { max-width: 62ch; margin: 0 0 18px; font-size: 16px; }
+.lander h2 { margin-top: 0; }
+.lander h3 { margin: 16px 0 4px; font-size: 14.5px; }
+.landgo { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 18px 0; }
+.landcta {
+  display: inline-block; background: var(--accent); color: #fff;
+  border: 1px solid var(--accent); border-radius: 8px;
+  padding: 9px 18px; font-weight: 600; text-decoration: none;
+}
+.landcta:hover { background: #1a5fd0; }
+.landfree { color: var(--ink-soft); font-size: 13px; }
+/* The comparison is the strongest thing on the page, and inside a 760px
+   column it was two thumbnails. It breaks out of the text column -- as wide
+   as the page allows, capped so it does not become a billboard -- while the
+   prose stays at a width that can be read. */
+.landshot {
+  margin: 22px 0 26px; width: min(1000px, calc(100vw - 40px));
+  max-width: 1000px; margin-left: 50%; transform: translateX(-50%);
+}
+@media (max-width: 1040px) {
+  .landshot { width: auto; margin-left: 0; transform: none; }
+}
+/* Side by side on a screen with the room, stacked on one without: the point
+   is the comparison, and a comparison you have to scroll between is not one. */
+.landpair { display: flex; gap: 14px; flex-wrap: wrap; }
+.landpair > span { flex: 1 1 280px; min-width: 0; display: block; }
+.landpair b {
+  display: block; margin-bottom: 5px; font-size: 11px; letter-spacing: .08em;
+  text-transform: uppercase; color: var(--ink-soft); font-weight: 600;
+}
+.landpair img {
+  width: 100%; height: auto; display: block; border-radius: 8px;
+  border: 1px solid var(--line); background: #fff;
+}
+.landshot figcaption {
+  margin-top: 8px; font-size: 12.5px; color: var(--ink-soft); max-width: 62ch;
+}
+.landsteps { margin: 0; padding-left: 20px; max-width: 62ch; }
+.landsteps li { margin-bottom: 7px; }
+.landalso { margin: 0; padding-left: 18px; }
+.landalso li { margin-bottom: 5px; }
+
+/* The jobs people arrive with, at the foot of the front page. */
+.landnav { margin: 26px 0 8px; }
+.landnav h2 { margin: 0 0 10px; font-size: 15px; }
+.landnav ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 7px;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+.landnav a { color: var(--ink); text-decoration: none; font-size: 13.5px; }
+.landnav a:hover { text-decoration: underline; }

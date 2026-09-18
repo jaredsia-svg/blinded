@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="
+  default-src 'self';
+  script-src 'self' 'unsafe-eval';
+  style-src 'self' 'unsafe-inline';
+  img-src 'self' data: blob:;
+  connect-src 'self' blob:;
+  worker-src 'self' blob:;
+  frame-src 'none';
+  object-src 'none';
+  base-uri 'none';
+  form-action 'none'">
+<title>Redact a CIM without uploading it – Blinded</title>
+<meta name="description" content="Strip names, logos and signatures out of a confidential information memorandum in your browser. The file never leaves your machine, so nothing goes to a server you would have to explain.">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="canonical" href="https://blinded.dev/redact-cim/">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Blinded">
+<meta property="og:title" content="Redact a CIM without uploading it">
+<meta property="og:description" content="Strip names, logos and signatures out of a confidential information memorandum in your browser. The file never leaves your machine, so nothing goes to a server you would have to explain.">
+<meta property="og:url" content="https://blinded.dev/redact-cim/">
+<meta property="og:image" content="https://blinded.dev/og.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="stylesheet" href="/app.css">
+<script type="application/ld+json">
+[
+  {
+    "@context": "https://schema.org",
+    "@type": "Article",
+    "headline": "Redact a CIM without uploading it",
+    "description": "Strip names, logos and signatures out of a confidential information memorandum in your browser. The file never leaves your machine, so nothing goes to a server you would have to explain.",
+    "mainEntityOfPage": "https://blinded.dev/redact-cim/",
+    "image": "https://blinded.dev/og.png",
+    "about": {
+      "@type": "SoftwareApplication",
+      "name": "Blinded",
+      "url": "https://blinded.dev/"
+    }
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": [
+      {
+        "@type": "Question",
+        "name": "Does the file get uploaded?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "No. There is no server to upload it to, and the page is not permitted by the browser to send anything anywhere. You can confirm both in the network panel, or by disconnecting."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Will it find the name inside a logo?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Yes. Words are searched for three ways: in the text layer, in the lettering of pictures and scans, and by shape where the reading was defeated by an unusual typeface. A picked logo is matched by shape at any size or colour."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Can the redacted text be recovered from the exported file?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "No. Each page is rebuilt from pixels rather than covered with a rectangle, so the removed words are not in the file to recover. That is the difference between this and a black box drawn in a PDF editor."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "How long does a 200-page CIM take?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "The first pass over a deck of that size is a few minutes, and it reports its progress along the foot while you read the document. The optional second check, which looks for words that exist only as pictures, states the wait before it starts so you can decide."
+        }
+      }
+    ]
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    "itemListElement": [
+      {
+        "@type": "ListItem",
+        "position": 1,
+        "name": "Blinded",
+        "item": "https://blinded.dev/"
+      },
+      {
+        "@type": "ListItem",
+        "position": 2,
+        "name": "Redact a CIM without uploading it",
+        "item": "https://blinded.dev/redact-cim/"
+      }
+    ]
+  }
+]
+</script>
+</head>
+<body class="plainpage">
+
+<header class="top">
+  <div class="wrap top-inner">
+    <a class="mark" href="/">
+      <svg class="markmark" viewBox="0 0 26 15" aria-hidden="true" focusable="false">
+        <g fill="currentColor">
+          <rect width="26" height="6.4" rx="2"/>
+          <rect y="8.6" width="14" height="6.4" rx="2"/>
+          <rect x="16.6" y="8.6" width="3.6" height="6.4" rx="1.5"/>
+          <rect x="22.2" y="8.6" width="2" height="6.4" rx="1"/>
+        </g>
+      </svg> Blinded</a>
+    <p class="claim">Efficient redaction for your most sensitive documents, all done locally.</p>
+    <div class="top-actions">
+      <a class="top-link" href="/faq.html">Q&amp;A</a>
+      <a class="top-link" href="/">Open the tool</a>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+<article class="view faqmain lander">
+
+  <h1 class="faqtitle">Redact a CIM without uploading it</h1>
+  <p class="lede">A CIM goes out to twenty parties before anybody signs. Most of it is meant to go; the company name, the sponsor, the management team and the logos in the footer are not. Doing that with a tool that uploads the file first is a problem you have to explain to a client, and often cannot.</p>
+
+  <p class="landgo"><a class="landcta" href="/">Open the tool</a>
+    <span class="landfree">Free, in your browser. Nothing is uploaded.</span></p>
+
+  <figure class="landshot">
+    <div class="landpair">
+      <span><b>Before</b><img src="/gallery/slide-4-original.jpg"
+        alt="Before redaction." loading="lazy" width="1280" height="720"></span>
+      <span><b>After</b><img src="/gallery/slide-4-redacted.jpg"
+        alt="A deal slide before and after: the two company names in the headline and the logos beside them are gone." loading="lazy" width="1280" height="720"></span>
+    </div>
+    <figcaption>A deal slide before and after: the two company names in the headline and the logos beside them are gone.</figcaption>
+  </figure>
+
+  <section class="faq">
+    <h2>The part that makes this hard is not the text</h2>
+    <p>Search-and-redact handles a name that is typed as text. A CIM is not mostly typed text. It is a deck: the company name is set in the master slide as part of an image, the sponsor logo is a PNG in the corner of every page, the management photographs carry names underneath them in a graphic, and the org chart is one flat picture of everything you are trying to remove.</p>
+    <p>Nothing in an ordinary search reaches any of that. Which is why the usual answer is an analyst with a rectangle tool and four hours, and why the usual failure is page 47.</p>
+  </section>
+
+  <section class="faq">
+    <h2>What this does instead</h2>
+    <p>Type the name once. It is found in the text, in the lettering of a screenshot, and inside a logo, on every page. Draw a box round the sponsor mark once and every other copy of it is found too, at whatever size it has been dropped in at and whatever colour it has been recast in for the dark slides.</p>
+    <p>The export is not the original file with rectangles laid over it. Each page is rebuilt from pixels, so the words under a bar are not in the file any more -- there is nothing left to select, copy or recover.</p>
+  </section>
+
+  <section class="faq">
+    <h2>And it runs in the tab</h2>
+    <p>There is no server to upload to. The whole thing -- opening the PDF, reading it, matching the logo, writing the new file -- happens on your own machine. Open your browser’s network panel and watch: nothing leaves. Pull the network cable out and it carries on working.</p>
+    <p>That is enforced rather than promised. The page carries a content security policy the browser applies whatever the code asks for, and the line that matters says the page may not send anything anywhere.</p>
+  </section>
+
+  <section class="faq">
+    <h2>How to do it, in four steps</h2>
+    <ol class="landsteps">
+      <li>Open the CIM. It is read in the tab; nothing is sent anywhere.</li>
+      <li>Type the names: the company, the sponsor, the management, the adviser. Each one is counted before you commit to it, so you can see whether a name is on four pages or four hundred.</li>
+      <li>Draw a box round each logo that has no text to search for. Every other copy in the document is found at any size.</li>
+      <li>Press Redact, check the marks, and export. The pages are rebuilt, so what was covered is gone rather than hidden.</li>
+    </ol>
+  </section>
+
+  <section class="faq">
+    <h2>Who it is for</h2>
+    <p>Bankers and advisers sending a teaser to a buyer list, sponsors preparing a data room, and anybody who has to hand a deal document to somebody who is not allowed to know whose it is.</p>
+    <p class="landgo"><a class="landcta" href="/">Open the tool</a></p>
+  </section>
+
+  <section class="faq">
+    <h2>Questions</h2>
+    <h3>Does the file get uploaded?</h3>
+    <p>No. There is no server to upload it to, and the page is not permitted by the browser to send anything anywhere. You can confirm both in the network panel, or by disconnecting.</p>
+    <h3>Will it find the name inside a logo?</h3>
+    <p>Yes. Words are searched for three ways: in the text layer, in the lettering of pictures and scans, and by shape where the reading was defeated by an unusual typeface. A picked logo is matched by shape at any size or colour.</p>
+    <h3>Can the redacted text be recovered from the exported file?</h3>
+    <p>No. Each page is rebuilt from pixels rather than covered with a rectangle, so the removed words are not in the file to recover. That is the difference between this and a black box drawn in a PDF editor.</p>
+    <h3>How long does a 200-page CIM take?</h3>
+    <p>The first pass over a deck of that size is a few minutes, and it reports its progress along the foot while you read the document. The optional second check, which looks for words that exist only as pictures, states the wait before it starts so you can decide.</p>
+  </section>
+
+  <section class="faq">
+    <h2>Also</h2>
+    <ul class="landalso">
+        <li><a href="/redact-logos-pitch-deck/">Redact logos in a pitch deck</a></li>
+        <li><a href="/foia-redaction/">FOIA redaction without sending the records anywhere</a></li>
+        <li><a href="/de-identify-scanned-records/">De-identify scanned records</a></li>
+        <li><a href="/redacted-text-still-extractable/">Your redacted text is still extractable. Here is why</a></li>
+        <li><a href="/redact-before-ai/">Redact a PDF before you paste it into ChatGPT or Claude</a></li>
+        <li><a href="/faq.html">How it works, in full</a></li>
+        <li><a href="https://github.com/jaredsia-svg/blinded" rel="noopener">Read the source on GitHub</a></li>
+    </ul>
+  </section>
+
+  <p class="faqback"><a class="faqbackbtn" href="/">Open the tool</a></p>
+
+</article>
+</main>
+
+</body>
+</html>

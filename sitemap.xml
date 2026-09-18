@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- Two pages, because there are two pages. A sitemap listing assets or
-     invented URLs is a sitemap a crawler learns to distrust. -->
+<!-- Written by tools/pages.mjs. Every page of the site and nothing else: a
+     sitemap listing assets, or URLs that do not exist, is a sitemap a crawler
+     learns to distrust. -->
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
     <loc>https://blinded.dev/</loc>
@@ -11,5 +12,35 @@
     <loc>https://blinded.dev/faq.html</loc>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://blinded.dev/redact-cim/</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://blinded.dev/redact-logos-pitch-deck/</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://blinded.dev/foia-redaction/</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://blinded.dev/de-identify-scanned-records/</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://blinded.dev/redacted-text-still-extractable/</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://blinded.dev/redact-before-ai/</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
   </url>
 </urlset>

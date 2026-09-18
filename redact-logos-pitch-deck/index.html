@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="
+  default-src 'self';
+  script-src 'self' 'unsafe-eval';
+  style-src 'self' 'unsafe-inline';
+  img-src 'self' data: blob:;
+  connect-src 'self' blob:;
+  worker-src 'self' blob:;
+  frame-src 'none';
+  object-src 'none';
+  base-uri 'none';
+  form-action 'none'">
+<title>Redact logos in a pitch deck – Blinded</title>
+<meta name="description" content="Remove a customer logo wall, a sponsor mark or a partner badge from every slide at once. Pick one, and every other copy is found at any size or colour, in the browser.">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="canonical" href="https://blinded.dev/redact-logos-pitch-deck/">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Blinded">
+<meta property="og:title" content="Redact logos in a pitch deck">
+<meta property="og:description" content="Remove a customer logo wall, a sponsor mark or a partner badge from every slide at once. Pick one, and every other copy is found at any size or colour, in the browser.">
+<meta property="og:url" content="https://blinded.dev/redact-logos-pitch-deck/">
+<meta property="og:image" content="https://blinded.dev/og.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="stylesheet" href="/app.css">
+<script type="application/ld+json">
+[
+  {
+    "@context": "https://schema.org",
+    "@type": "Article",
+    "headline": "Redact logos in a pitch deck",
+    "description": "Remove a customer logo wall, a sponsor mark or a partner badge from every slide at once. Pick one, and every other copy is found at any size or colour, in the browser.",
+    "mainEntityOfPage": "https://blinded.dev/redact-logos-pitch-deck/",
+    "image": "https://blinded.dev/og.png",
+    "about": {
+      "@type": "SoftwareApplication",
+      "name": "Blinded",
+      "url": "https://blinded.dev/"
+    }
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": [
+      {
+        "@type": "Question",
+        "name": "Does it find the logo at a different size?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Yes. The match is on shape and runs over a range of scales, so a footer mark and a full-width one on the title slide are the same find."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "What about a logo recoloured for a dark slide?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Also found. Matching is done on the greyscale structure rather than on colour, so a white knockout of a mark matches the full colour original."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Can I keep some of the logos and remove others?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Yes. Every proposed match is shown before anything is covered, with a page reference and an x to dismiss it. Nothing is redacted until you press Redact."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Are the logos really gone from the exported file?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Yes. The page is rebuilt from pixels, so the original image is not in the exported PDF underneath a black rectangle."
+        }
+      }
+    ]
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    "itemListElement": [
+      {
+        "@type": "ListItem",
+        "position": 1,
+        "name": "Blinded",
+        "item": "https://blinded.dev/"
+      },
+      {
+        "@type": "ListItem",
+        "position": 2,
+        "name": "Redact logos in a pitch deck",
+        "item": "https://blinded.dev/redact-logos-pitch-deck/"
+      }
+    ]
+  }
+]
+</script>
+</head>
+<body class="plainpage">
+
+<header class="top">
+  <div class="wrap top-inner">
+    <a class="mark" href="/">
+      <svg class="markmark" viewBox="0 0 26 15" aria-hidden="true" focusable="false">
+        <g fill="currentColor">
+          <rect width="26" height="6.4" rx="2"/>
+          <rect y="8.6" width="14" height="6.4" rx="2"/>
+          <rect x="16.6" y="8.6" width="3.6" height="6.4" rx="1.5"/>
+          <rect x="22.2" y="8.6" width="2" height="6.4" rx="1"/>
+        </g>
+      </svg> Blinded</a>
+    <p class="claim">Efficient redaction for your most sensitive documents, all done locally.</p>
+    <div class="top-actions">
+      <a class="top-link" href="/faq.html">Q&amp;A</a>
+      <a class="top-link" href="/">Open the tool</a>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+<article class="view faqmain lander">
+
+  <h1 class="faqtitle">Redact logos in a pitch deck</h1>
+  <p class="lede">The logo wall is the slide nobody can redact. It is one row of twenty customer marks, each a different picture, none of them text, and two of them belong to companies that have not agreed to be named as customers.</p>
+
+  <p class="landgo"><a class="landcta" href="/">Open the tool</a>
+    <span class="landfree">Free, in your browser. Nothing is uploaded.</span></p>
+
+  <figure class="landshot">
+    <div class="landpair">
+      <span><b>Before</b><img src="/gallery/slide-5-original.jpg"
+        alt="Before redaction." loading="lazy" width="1280" height="720"></span>
+      <span><b>After</b><img src="/gallery/slide-5-redacted.jpg"
+        alt="A logo wall before and after: two of the ten brand marks are replaced with labelled black bars." loading="lazy" width="1280" height="720"></span>
+    </div>
+    <figcaption>A logo wall before and after: two of the ten brand marks are replaced with labelled black bars.</figcaption>
+  </figure>
+
+  <section class="faq">
+    <h2>Why search cannot touch it</h2>
+    <p>A logo is a picture. It has no letters a search can find, no text layer entry, and often no name anywhere near it on the slide. The only handle on it is what it looks like -- and what it looks like changes: the same mark is 40 pixels wide in the footer, 200 wide on the customer slide, full colour on white and knocked back to one flat grey on the dark section divider.</p>
+    <p>So the work is manual, and manual work on a forty-slide deck misses the appendix.</p>
+  </section>
+
+  <section class="faq">
+    <h2>Pick it once</h2>
+    <p>Draw a box round the mark on any slide. Every other copy in the deck is found -- at any size, and whatever colour it has been recast in, because the match is on shape rather than on pixels being equal.</p>
+    <p>Each picked image gets its own sensitivity, offered as the two or three settings the scores on your actual document point at, with what each one would find. A clean wordmark and a scanned stamp do not want the same number, and you should not have to guess either of them.</p>
+  </section>
+
+  <section class="faq">
+    <h2>What it will not do for you</h2>
+    <p>It proposes; you decide. Nothing is covered until you press Redact, and every match is listed with the slide it is on so you can walk the list rather than trust it. That is deliberate: a shape match on a small, low-contrast mark is a judgement, and a tool that made that judgement silently would be wrong on a deck you had already sent.</p>
+    <p>It will not find a logo that appears only once, redrawn by hand, in a style the original does not share -- that is a different picture, not a copy. And it does not read the deck for meaning: if a customer is named in the body text as well as shown in the wall, the name is a word to type, separately from the mark you picked.</p>
+    <p>What it is good at is the failure that actually happens, which is not missing the logo on the customer slide. It is missing the fourth copy of it, 40 pixels wide, in the footer of the appendix.</p>
+  </section>
+
+  <section class="faq">
+    <h2>Placeholders, when the slide stops making sense</h2>
+    <p>Take four logos out of a row of ten and the sentence under it -- &quot;our customers include&quot; -- is suddenly about nothing. Turn on labels and each bar carries [L1], [L2], consistently, so the same company is the same label everywhere in the deck. A reader, or a model, can still follow which one is which without knowing who they are.</p>
+  </section>
+
+  <section class="faq">
+    <h2>How to do it, in four steps</h2>
+    <ol class="landsteps">
+      <li>Open the deck. Every page is rendered in the tab.</li>
+      <li>Press the pick button and draw a box round one copy of the logo.</li>
+      <li>Let it search. Every other copy is proposed, with a count per slide and a way to say no to any one of them.</li>
+      <li>Repeat for each mark, then Redact and export a deck with the pages rebuilt.</li>
+    </ol>
+  </section>
+
+  <section class="faq">
+    <h2>Who it is for</h2>
+    <p>Founders sending a deck to an investor who competes with a customer, agencies reusing a case study, and anybody who needs the numbers on the slide without the names around them.</p>
+    <p class="landgo"><a class="landcta" href="/">Open the tool</a></p>
+  </section>
+
+  <section class="faq">
+    <h2>Questions</h2>
+    <h3>Does it find the logo at a different size?</h3>
+    <p>Yes. The match is on shape and runs over a range of scales, so a footer mark and a full-width one on the title slide are the same find.</p>
+    <h3>What about a logo recoloured for a dark slide?</h3>
+    <p>Also found. Matching is done on the greyscale structure rather than on colour, so a white knockout of a mark matches the full colour original.</p>
+    <h3>Can I keep some of the logos and remove others?</h3>
+    <p>Yes. Every proposed match is shown before anything is covered, with a page reference and an x to dismiss it. Nothing is redacted until you press Redact.</p>
+    <h3>Are the logos really gone from the exported file?</h3>
+    <p>Yes. The page is rebuilt from pixels, so the original image is not in the exported PDF underneath a black rectangle.</p>
+  </section>
+
+  <section class="faq">
+    <h2>Also</h2>
+    <ul class="landalso">
+        <li><a href="/redact-cim/">Redact a CIM without uploading it</a></li>
+        <li><a href="/foia-redaction/">FOIA redaction without sending the records anywhere</a></li>
+        <li><a href="/de-identify-scanned-records/">De-identify scanned records</a></li>
+        <li><a href="/redacted-text-still-extractable/">Your redacted text is still extractable. Here is why</a></li>
+        <li><a href="/redact-before-ai/">Redact a PDF before you paste it into ChatGPT or Claude</a></li>
+        <li><a href="/faq.html">How it works, in full</a></li>
+        <li><a href="https://github.com/jaredsia-svg/blinded" rel="noopener">Read the source on GitHub</a></li>
+    </ul>
+  </section>
+
+  <p class="faqback"><a class="faqbackbtn" href="/">Open the tool</a></p>
+
+</article>
+</main>
+
+</body>
+</html>

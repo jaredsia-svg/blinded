@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="
+  default-src 'self';
+  script-src 'self' 'unsafe-eval';
+  style-src 'self' 'unsafe-inline';
+  img-src 'self' data: blob:;
+  connect-src 'self' blob:;
+  worker-src 'self' blob:;
+  frame-src 'none';
+  object-src 'none';
+  base-uri 'none';
+  form-action 'none'">
+<title>Redact a PDF before you paste it into ChatGPT or Claude – Blinded</title>
+<meta name="description" content="Strip names, logos and personal data out of a document before it goes to a model, with labels that keep the sentence readable. Done in your browser, so the unredacted file never leaves.">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="canonical" href="https://blinded.dev/redact-before-ai/">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Blinded">
+<meta property="og:title" content="Redact a PDF before you paste it into ChatGPT or Claude">
+<meta property="og:description" content="Strip names, logos and personal data out of a document before it goes to a model, with labels that keep the sentence readable. Done in your browser, so the unredacted file never leaves.">
+<meta property="og:url" content="https://blinded.dev/redact-before-ai/">
+<meta property="og:image" content="https://blinded.dev/og.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="stylesheet" href="/app.css">
+<script type="application/ld+json">
+[
+  {
+    "@context": "https://schema.org",
+    "@type": "Article",
+    "headline": "Redact a PDF before you paste it into ChatGPT or Claude",
+    "description": "Strip names, logos and personal data out of a document before it goes to a model, with labels that keep the sentence readable. Done in your browser, so the unredacted file never leaves.",
+    "mainEntityOfPage": "https://blinded.dev/redact-before-ai/",
+    "image": "https://blinded.dev/og.png",
+    "about": {
+      "@type": "SoftwareApplication",
+      "name": "Blinded",
+      "url": "https://blinded.dev/"
+    }
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": [
+      {
+        "@type": "Question",
+        "name": "Why not just upload it and ask the model to ignore the names?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Because by then the document has been sent. Redaction is about what leaves your machine, and an instruction to a model is not a control over that."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Will the model still understand the document?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "With labels on, yes. Each removed thing keeps a consistent code, so references between parties, clauses and addresses survive even though the identities do not."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Does the model get a picture or text?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Either. The export is a rebuilt page by default; turn on searchable text and the redacted pages are read back so the remaining words can be found and copied."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Is Blinded itself an AI service?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "No. Nothing is sent to a model, and nothing is sent anywhere at all. The reading and matching run in your browser."
+        }
+      }
+    ]
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    "itemListElement": [
+      {
+        "@type": "ListItem",
+        "position": 1,
+        "name": "Blinded",
+        "item": "https://blinded.dev/"
+      },
+      {
+        "@type": "ListItem",
+        "position": 2,
+        "name": "Redact a PDF before you paste it into ChatGPT or Claude",
+        "item": "https://blinded.dev/redact-before-ai/"
+      }
+    ]
+  }
+]
+</script>
+</head>
+<body class="plainpage">
+
+<header class="top">
+  <div class="wrap top-inner">
+    <a class="mark" href="/">
+      <svg class="markmark" viewBox="0 0 26 15" aria-hidden="true" focusable="false">
+        <g fill="currentColor">
+          <rect width="26" height="6.4" rx="2"/>
+          <rect y="8.6" width="14" height="6.4" rx="2"/>
+          <rect x="16.6" y="8.6" width="3.6" height="6.4" rx="1.5"/>
+          <rect x="22.2" y="8.6" width="2" height="6.4" rx="1"/>
+        </g>
+      </svg> Blinded</a>
+    <p class="claim">Efficient redaction for your most sensitive documents, all done locally.</p>
+    <div class="top-actions">
+      <a class="top-link" href="/faq.html">Q&amp;A</a>
+      <a class="top-link" href="/">Open the tool</a>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+<article class="view faqmain lander">
+
+  <h1 class="faqtitle">Redact a PDF before you paste it into ChatGPT or Claude</h1>
+  <p class="lede">You want the model to summarise the contract, not to be told who the counterparty is. The obvious move -- redact it first -- runs into an obvious problem: most redaction tools upload the file to redact it, so the unredacted document has already gone somewhere before the model ever sees the safe version.</p>
+
+  <p class="landgo"><a class="landcta" href="/">Open the tool</a>
+    <span class="landfree">Free, in your browser. Nothing is uploaded.</span></p>
+
+  <figure class="landshot">
+    <div class="landpair">
+      <span><b>Before</b><img src="/gallery/slide-4-original.jpg"
+        alt="Before redaction." loading="lazy" width="1280" height="720"></span>
+      <span><b>After</b><img src="/gallery/slide-4-redacted.jpg"
+        alt="A deal slide before and after, with the removed names replaced by consistent labels rather than blank bars." loading="lazy" width="1280" height="720"></span>
+    </div>
+    <figcaption>A deal slide before and after, with the removed names replaced by consistent labels rather than blank bars.</figcaption>
+  </figure>
+
+  <section class="faq">
+    <h2>Redact first, in a tab that cannot send anything</h2>
+    <p>This runs entirely in your browser. There is no server, and the page is prevented by the browser itself from sending anything anywhere. The unredacted document does not leave your machine, which is the whole point of redacting it.</p>
+    <p>What you then paste into a model is the exported file: pages rebuilt from pixels, with the removed words genuinely absent rather than covered.</p>
+  </section>
+
+  <section class="faq">
+    <h2>Blank bars break the sentence. Labels do not</h2>
+    <p>A contract with forty black bars in it is not a document a model can reason about: every party is the same nothing, and &quot;the obligations of [blank] to [blank]&quot; has lost the structure that made it a sentence.</p>
+    <p>Turn labels on and each removed thing carries a stable code -- [P1], [E2] -- with the same thing always getting the same label. The model can follow who owes what to whom, which clause refers back to which party, and which email address appeared twice, without any of them being identifiable.</p>
+    <p>Export with searchable text on, and the file arrives as text the model can actually read rather than a stack of pictures.</p>
+  </section>
+
+  <section class="faq">
+    <h2>Check it before you paste it</h2>
+    <p>Open the exported file and read it as the model will. Select across a bar and paste somewhere: nothing comes out, because the page was rebuilt rather than covered. Search it for one of the names you removed. Look at the filename, which is often the last place a name survives -- you can change it on export, and the name you type is checked against what you redacted.</p>
+    <p>Then read it for sense. If the labels have made a clause unreadable, you have removed something structural rather than something identifying, and it is better to find that out now than in an answer that quietly guessed.</p>
+    <p>None of this is advice about what your employer permits. It is the mechanics of making a file safe to send; whether it may be sent is a different question with a different answer at every company.</p>
+  </section>
+
+  <section class="faq">
+    <h2>What to take out</h2>
+    <p>Type the names you know. Tick the detectors for email addresses, phone numbers, web addresses and street addresses, which catch the identifiers nobody thinks to list. Pick out the letterhead and the signature, which are pictures and which no search will reach.</p>
+    <p>Every proposal is shown before anything is covered, with a count per page, so you decide what goes rather than discovering it afterwards.</p>
+  </section>
+
+  <section class="faq">
+    <h2>How to do it, in four steps</h2>
+    <ol class="landsteps">
+      <li>Open the document here first. Nothing is uploaded.</li>
+      <li>Type the names, tick the detectors, and pick out any letterhead or signature.</li>
+      <li>Turn on labels so the redacted document still reads as a document.</li>
+      <li>Export with searchable text on, and give that file to the model.</li>
+    </ol>
+  </section>
+
+  <section class="faq">
+    <h2>Who it is for</h2>
+    <p>Anybody using a model on work documents: lawyers summarising contracts, analysts pulling numbers out of a deck, support teams running tickets through a model, and anyone whose employer has a rule about what may be pasted where.</p>
+    <p class="landgo"><a class="landcta" href="/">Open the tool</a></p>
+  </section>
+
+  <section class="faq">
+    <h2>Questions</h2>
+    <h3>Why not just upload it and ask the model to ignore the names?</h3>
+    <p>Because by then the document has been sent. Redaction is about what leaves your machine, and an instruction to a model is not a control over that.</p>
+    <h3>Will the model still understand the document?</h3>
+    <p>With labels on, yes. Each removed thing keeps a consistent code, so references between parties, clauses and addresses survive even though the identities do not.</p>
+    <h3>Does the model get a picture or text?</h3>
+    <p>Either. The export is a rebuilt page by default; turn on searchable text and the redacted pages are read back so the remaining words can be found and copied.</p>
+    <h3>Is Blinded itself an AI service?</h3>
+    <p>No. Nothing is sent to a model, and nothing is sent anywhere at all. The reading and matching run in your browser.</p>
+  </section>
+
+  <section class="faq">
+    <h2>Also</h2>
+    <ul class="landalso">
+        <li><a href="/redact-cim/">Redact a CIM without uploading it</a></li>
+        <li><a href="/redact-logos-pitch-deck/">Redact logos in a pitch deck</a></li>
+        <li><a href="/foia-redaction/">FOIA redaction without sending the records anywhere</a></li>
+        <li><a href="/de-identify-scanned-records/">De-identify scanned records</a></li>
+        <li><a href="/redacted-text-still-extractable/">Your redacted text is still extractable. Here is why</a></li>
+        <li><a href="/faq.html">How it works, in full</a></li>
+        <li><a href="https://github.com/jaredsia-svg/blinded" rel="noopener">Read the source on GitHub</a></li>
+    </ul>
+  </section>
+
+  <p class="faqback"><a class="faqbackbtn" href="/">Open the tool</a></p>
+
+</article>
+</main>
+
+</body>
+</html>

@@ -4,6 +4,16 @@
 // so that they can be loaded here without a bundler, the same way the page
 // loads them. tools/uitest.mjs covers the parts that need a real canvas.
 import { faqData, faqIsCurrent } from './faq.mjs';
+import { pages as landers } from '../content/pages.mjs';
+import { renderPage, renderSitemap, renderKeywords } from './pages.mjs';
+
+// The same two answers tools/pages.mjs gives, asked here so a stale page
+// fails the suite rather than going out looking finished.
+function landerWords(page) {
+  return [page.lede, ...page.sections.flatMap(one => [one.h, ...one.p]),
+    ...page.steps, page.who, ...page.faq.flatMap(one => [one.q, one.a])]
+    .join(' ').split(/\s+/).filter(Boolean).length;
+}
 import { readFileSync, existsSync, statSync, readdirSync } from 'node:fs';
 import { deflateSync } from 'node:zlib';
 import { dirname, join } from 'node:path';
@@ -2443,10 +2453,90 @@ check('no creation date is carried into the output', !meta.info.CreationDate);
     [...index.matchAll(/<meta property="og:(image|url)" content="([^"]+)"/g)]
       .every(one => /^https:\/\//.test(one[2])), 'a relative og: URL');
 
-  // A crawler that cannot find the second page will not index it.
+  // A crawler that cannot find the other pages will not index them.
   const map = readFileSync(join(root, 'sitemap.xml'), 'utf8');
   check('both pages are in the sitemap',
     /<loc>https:\/\/[^<]+\/<\/loc>/.test(map) && /faq\.html<\/loc>/.test(map), map.length + ' bytes');
+  // ---------- the pages somebody lands on from a search ----------
+  //
+  // Thin pages are worse than no pages: a handful of keyword-shaped stubs
+  // teaches a search engine that this site answers nothing, and that judgement
+  // is about the site rather than the page. So each of these has to be a real
+  // page, and these checks are the floor.
+  {
+    const home = readFileSync(join(root, 'index.html'), 'utf8');
+    const wrote = new Map(landers.map(one =>
+      [join(root, one.slug, 'index.html'), renderPage(one)]));
+    wrote.set(join(root, 'sitemap.xml'), renderSitemap());
+    wrote.set(join(root, 'KEYWORDS.md'), renderKeywords());
+    const stale = [...wrote].filter(([where, body]) =>
+      !existsSync(where) || readFileSync(where, 'utf8') !== body).map(([w]) => w);
+    check('the landing pages on disk are the ones the content file describes',
+      stale.length === 0, 'stale - run: node tools/pages.mjs\n    ' + stale.join('\n    '));
+    check('there are some', landers.length >= 6, landers.length + ' pages');
+
+    for (const one of landers) {
+      const where = join(root, one.slug, 'index.html');
+      const page = existsSync(where) ? readFileSync(where, 'utf8') : '';
+      const say = one.slug + ': ';
+      check(say + 'it exists as its own page', page.length > 0, where);
+      // Enough of an answer to be worth returning. Six hundred words is not a
+      // magic number; it is about where a page stops being a stub.
+      check(say + 'it says enough to be worth landing on',
+        landerWords(one) >= 600, landerWords(one) + ' words');
+      // The search sentence, in the two places a search engine reads first.
+      check(say + 'the title and the heading are the thing searched for',
+        page.includes('<title>' + one.title + ' \u2013 Blinded</title>')
+          && page.includes('<h1 class="faqtitle">' + one.h1 + '</h1>'),
+        one.title);
+      check(say + 'it is canonical to itself, at a directory URL',
+        page.includes('<link rel="canonical" href="https://blinded.dev/'
+          + one.slug + '/">'), one.slug);
+      check(say + 'it has a picture of the thing it describes',
+        new RegExp('gallery/slide-' + one.shot.slide + '-original')
+          .test(page)
+          && new RegExp('gallery/slide-' + one.shot.slide + '-redacted')
+            .test(page)
+          && existsSync(join(root, 'gallery',
+            'slide-' + one.shot.slide + '-redacted.jpg')), one.slug);
+      check(say + 'four steps, because that is what it promises',
+        (page.match(/<li>/g) || []).length >= 4 && one.steps.length === 4,
+        one.steps.length + ' steps');
+      check(say + 'three to five questions at the foot',
+        one.faq.length >= 3 && one.faq.length <= 5, one.faq.length + ' questions');
+      check(say + 'structured data a search engine can use',
+        /"@type": "FAQPage"/.test(page) && /"@type": "Article"/.test(page)
+          && /"@type": "BreadcrumbList"/.test(page), one.slug);
+      // A page that links nowhere is a dead end a crawler leaves the way it
+      // came in, and a reader with a question has nowhere to take it.
+      check(say + 'it links to the tool, the questions and the source',
+        /href="\/"/.test(page) && /href="\/faq\.html"/.test(page)
+          && /github\.com\/jaredsia-svg\/blinded/.test(page), one.slug);
+      check(say + 'and to every other one of these pages',
+        landers.filter(other => other.slug !== one.slug)
+          .every(other => page.includes('href="/' + other.slug + '/"')), one.slug);
+      check(say + 'the sitemap knows about it',
+        map.includes('https://blinded.dev/' + one.slug + '/'), one.slug);
+      // The other half of that: the sitemap gives a crawler the address, a
+      // link tells it the address belongs to this site.
+      check(say + 'and so does the front page',
+        home.includes('href="/' + one.slug + '/"'), one.slug);
+    }
+
+    // The keyword list is the thing that gets edited between rounds, so it is
+    // generated with the pages rather than kept beside them by hand.
+    const list = existsSync(join(root, 'KEYWORDS.md'))
+      ? readFileSync(join(root, 'KEYWORDS.md'), 'utf8') : '';
+    check('the keyword list covers every page',
+      landers.every(one => list.includes('/' + one.slug + '/')), 'KEYWORDS.md');
+    check('and every page says what it is for',
+      landers.every(one => one.keywords.length >= 3), 'a page with no keywords');
+    // robots.txt keeps crawlers off the folders that are not pages, and the
+    // source the pages are written from is one of them.
+    check('the generator source is not offered as a page',
+      /Disallow: \/content\//.test(readFileSync(join(root, 'robots.txt'), 'utf8')));
+  }
+
   check('and robots.txt says where the sitemap is',
     /Sitemap: https:\/\/\S+\/sitemap\.xml/.test(readFileSync(join(root, 'robots.txt'), 'utf8')));
 }

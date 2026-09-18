@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="
+  default-src 'self';
+  script-src 'self' 'unsafe-eval';
+  style-src 'self' 'unsafe-inline';
+  img-src 'self' data: blob:;
+  connect-src 'self' blob:;
+  worker-src 'self' blob:;
+  frame-src 'none';
+  object-src 'none';
+  base-uri 'none';
+  form-action 'none'">
+<title>De-identify scanned records – Blinded</title>
+<meta name="description" content="Remove names, dates of birth, addresses and signatures from scanned medical or personnel records, in the browser, with nothing sent to a server.">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="canonical" href="https://blinded.dev/de-identify-scanned-records/">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Blinded">
+<meta property="og:title" content="De-identify scanned records">
+<meta property="og:description" content="Remove names, dates of birth, addresses and signatures from scanned medical or personnel records, in the browser, with nothing sent to a server.">
+<meta property="og:url" content="https://blinded.dev/de-identify-scanned-records/">
+<meta property="og:image" content="https://blinded.dev/og.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="stylesheet" href="/app.css">
+<script type="application/ld+json">
+[
+  {
+    "@context": "https://schema.org",
+    "@type": "Article",
+    "headline": "De-identify scanned records",
+    "description": "Remove names, dates of birth, addresses and signatures from scanned medical or personnel records, in the browser, with nothing sent to a server.",
+    "mainEntityOfPage": "https://blinded.dev/de-identify-scanned-records/",
+    "image": "https://blinded.dev/og.png",
+    "about": {
+      "@type": "SoftwareApplication",
+      "name": "Blinded",
+      "url": "https://blinded.dev/"
+    }
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": [
+      {
+        "@type": "Question",
+        "name": "Is anything sent to a server?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "No. There is no server, and the browser is not permitted to send the file anywhere. It works offline."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Does it read handwriting?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "No. Handwriting is not read, which is why a handwritten signature is picked out as a picture instead -- one pick finds every other copy of it in the file."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "How are names found without a list?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "By the layout around them rather than by their capitalisation: a job title under a name, a phone number or email under it, a \"Name:\" label, or a sign-off above it. That is where names actually sit, and it works the same for names that are not English."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Can the identifiers be recovered from the export?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "No. Each page is rebuilt from pixels, so what was covered is not in the file."
+        }
+      }
+    ]
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    "itemListElement": [
+      {
+        "@type": "ListItem",
+        "position": 1,
+        "name": "Blinded",
+        "item": "https://blinded.dev/"
+      },
+      {
+        "@type": "ListItem",
+        "position": 2,
+        "name": "De-identify scanned records",
+        "item": "https://blinded.dev/de-identify-scanned-records/"
+      }
+    ]
+  }
+]
+</script>
+</head>
+<body class="plainpage">
+
+<header class="top">
+  <div class="wrap top-inner">
+    <a class="mark" href="/">
+      <svg class="markmark" viewBox="0 0 26 15" aria-hidden="true" focusable="false">
+        <g fill="currentColor">
+          <rect width="26" height="6.4" rx="2"/>
+          <rect y="8.6" width="14" height="6.4" rx="2"/>
+          <rect x="16.6" y="8.6" width="3.6" height="6.4" rx="1.5"/>
+          <rect x="22.2" y="8.6" width="2" height="6.4" rx="1"/>
+        </g>
+      </svg> Blinded</a>
+    <p class="claim">Efficient redaction for your most sensitive documents, all done locally.</p>
+    <div class="top-actions">
+      <a class="top-link" href="/faq.html">Q&amp;A</a>
+      <a class="top-link" href="/">Open the tool</a>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+<article class="view faqmain lander">
+
+  <h1 class="faqtitle">De-identify scanned records</h1>
+  <p class="lede">De-identification is not a search problem, it is a reading problem. The record is a scan. There is no text to search, the handwriting is somebody else’s, and the name appears eleven different ways across ninety pages.</p>
+
+  <p class="landgo"><a class="landcta" href="/">Open the tool</a>
+    <span class="landfree">Free, in your browser. Nothing is uploaded.</span></p>
+
+  <figure class="landshot">
+    <div class="landpair">
+      <span><b>Before</b><img src="/gallery/slide-1-original.jpg"
+        alt="Before redaction." loading="lazy" width="1280" height="720"></span>
+      <span><b>After</b><img src="/gallery/slide-1-redacted.jpg"
+        alt="A scanned page before and after: names, a date and a signature block are gone." loading="lazy" width="1280" height="720"></span>
+    </div>
+    <figcaption>A scanned page before and after: names, a date and a signature block are gone.</figcaption>
+  </figure>
+
+  <section class="faq">
+    <h2>Why a text search finds nothing</h2>
+    <p>A scanned record has no text layer, or a bad one. Every identifier -- the patient name in the header of each page, the date of birth on the form, the clinician’s signature, the address on the referral letter -- exists only as pixels. Search finds nothing, and nothing is exactly as many matches as a tool with no reader can offer.</p>
+  </section>
+
+  <section class="faq">
+    <h2>Three ways at the same word</h2>
+    <p>Each page is read in the tab, so a name typed once is found in the lettering of the scan. Where the reading is defeated -- a stamp, a poor fax, an unusual typeface -- the word is looked for by shape instead, which is an optional second pass that says how long it will take before it starts.</p>
+    <p>Repeating furniture is picked out with a box: the letterhead, the signature, the hospital stamp. One pick finds every copy in the file.</p>
+    <p>Dates of birth, phone numbers, addresses and email addresses have detectors of their own, and names are found by reading the layout around them -- a title under a name, a &quot;Name:&quot; before it, a sign-off above it -- rather than by guessing which capitalised words are people.</p>
+  </section>
+
+  <section class="faq">
+    <h2>What it does not do, and why that matters here</h2>
+    <p>It does not decide what counts as an identifier. De-identification standards differ, a study protocol is not a records request, and the judgement about whether a rare diagnosis on a specific date is itself identifying is yours. The tool finds and removes what you ask for, and shows you everything it proposes before anything is covered.</p>
+    <p>It does not read handwriting, and it does not claim to. It does not verify its own work -- after exporting, open the file and read it, which on a de-identification job is the step nobody should skip.</p>
+    <p>And it has no memory. Nothing is stored, nothing is sent, and closing the tab ends it. If you want to come back to a part-done record, save a draft -- a file on your own machine holding your marks and the words you typed, which is as sensitive as the record itself and should be kept the same way.</p>
+  </section>
+
+  <section class="faq">
+    <h2>Consistent labels for a study set</h2>
+    <p>Switch labels on and every removed identifier carries a stable code: the same person is the same label on every page. A record stays followable -- this result belongs to that patient -- without the record saying who they are.</p>
+  </section>
+
+  <section class="faq">
+    <h2>How to do it, in four steps</h2>
+    <ol class="landsteps">
+      <li>Open the record. It is read in the tab, page by page.</li>
+      <li>Type the identifiers you know, and tick the detectors for dates of birth, addresses and phone numbers.</li>
+      <li>Pick out the signature, the letterhead and any stamp with a box.</li>
+      <li>Turn on labels if the set has to stay followable, then Redact and export.</li>
+    </ol>
+  </section>
+
+  <section class="faq">
+    <h2>Who it is for</h2>
+    <p>Research teams preparing a study set, clinicians sharing a case, HR handling a personnel file, and anybody who has to hand over a record without handing over the person.</p>
+    <p class="landgo"><a class="landcta" href="/">Open the tool</a></p>
+  </section>
+
+  <section class="faq">
+    <h2>Questions</h2>
+    <h3>Is anything sent to a server?</h3>
+    <p>No. There is no server, and the browser is not permitted to send the file anywhere. It works offline.</p>
+    <h3>Does it read handwriting?</h3>
+    <p>No. Handwriting is not read, which is why a handwritten signature is picked out as a picture instead -- one pick finds every other copy of it in the file.</p>
+    <h3>How are names found without a list?</h3>
+    <p>By the layout around them rather than by their capitalisation: a job title under a name, a phone number or email under it, a &quot;Name:&quot; label, or a sign-off above it. That is where names actually sit, and it works the same for names that are not English.</p>
+    <h3>Can the identifiers be recovered from the export?</h3>
+    <p>No. Each page is rebuilt from pixels, so what was covered is not in the file.</p>
+  </section>
+
+  <section class="faq">
+    <h2>Also</h2>
+    <ul class="landalso">
+        <li><a href="/redact-cim/">Redact a CIM without uploading it</a></li>
+        <li><a href="/redact-logos-pitch-deck/">Redact logos in a pitch deck</a></li>
+        <li><a href="/foia-redaction/">FOIA redaction without sending the records anywhere</a></li>
+        <li><a href="/redacted-text-still-extractable/">Your redacted text is still extractable. Here is why</a></li>
+        <li><a href="/redact-before-ai/">Redact a PDF before you paste it into ChatGPT or Claude</a></li>
+        <li><a href="/faq.html">How it works, in full</a></li>
+        <li><a href="https://github.com/jaredsia-svg/blinded" rel="noopener">Read the source on GitHub</a></li>
+    </ul>
+  </section>
+
+  <p class="faqback"><a class="faqbackbtn" href="/">Open the tool</a></p>
+
+</article>
+</main>
+
+</body>
+</html>

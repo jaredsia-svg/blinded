@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="
+  default-src 'self';
+  script-src 'self' 'unsafe-eval';
+  style-src 'self' 'unsafe-inline';
+  img-src 'self' data: blob:;
+  connect-src 'self' blob:;
+  worker-src 'self' blob:;
+  frame-src 'none';
+  object-src 'none';
+  base-uri 'none';
+  form-action 'none'">
+<title>FOIA redaction without sending the records anywhere – Blinded</title>
+<meta name="description" content="Redact a FOIA or public-records release on your own machine. No upload, no account, no third party holding the file while you work on it.">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="canonical" href="https://blinded.dev/foia-redaction/">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Blinded">
+<meta property="og:title" content="FOIA redaction without sending the records anywhere">
+<meta property="og:description" content="Redact a FOIA or public-records release on your own machine. No upload, no account, no third party holding the file while you work on it.">
+<meta property="og:url" content="https://blinded.dev/foia-redaction/">
+<meta property="og:image" content="https://blinded.dev/og.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="stylesheet" href="/app.css">
+<script type="application/ld+json">
+[
+  {
+    "@context": "https://schema.org",
+    "@type": "Article",
+    "headline": "FOIA redaction without sending the records anywhere",
+    "description": "Redact a FOIA or public-records release on your own machine. No upload, no account, no third party holding the file while you work on it.",
+    "mainEntityOfPage": "https://blinded.dev/foia-redaction/",
+    "image": "https://blinded.dev/og.png",
+    "about": {
+      "@type": "SoftwareApplication",
+      "name": "Blinded",
+      "url": "https://blinded.dev/"
+    }
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": [
+      {
+        "@type": "Question",
+        "name": "Does anything leave my machine?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "No. There is no server. The browser is prevented from sending anything anywhere by a content security policy on the page, and the tool works with the network disconnected."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Can it handle scans with no text layer?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Yes. The pages are read in the tab, and words are also matched by shape where the reading was defeated by a poor scan or an unusual typeface."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Can I prove nothing was uploaded?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Open the network panel and redact a document: nothing leaves. The source is published, so the claim is checkable rather than a promise."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Is there an audit trail?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "A draft can be saved: your marks, the words you typed and what was found, as a file on your own machine to reopen and edit later. It holds the same sensitive material as the document, so keep it as carefully."
+        }
+      }
+    ]
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    "itemListElement": [
+      {
+        "@type": "ListItem",
+        "position": 1,
+        "name": "Blinded",
+        "item": "https://blinded.dev/"
+      },
+      {
+        "@type": "ListItem",
+        "position": 2,
+        "name": "FOIA redaction without sending the records anywhere",
+        "item": "https://blinded.dev/foia-redaction/"
+      }
+    ]
+  }
+]
+</script>
+</head>
+<body class="plainpage">
+
+<header class="top">
+  <div class="wrap top-inner">
+    <a class="mark" href="/">
+      <svg class="markmark" viewBox="0 0 26 15" aria-hidden="true" focusable="false">
+        <g fill="currentColor">
+          <rect width="26" height="6.4" rx="2"/>
+          <rect y="8.6" width="14" height="6.4" rx="2"/>
+          <rect x="16.6" y="8.6" width="3.6" height="6.4" rx="1.5"/>
+          <rect x="22.2" y="8.6" width="2" height="6.4" rx="1"/>
+        </g>
+      </svg> Blinded</a>
+    <p class="claim">Efficient redaction for your most sensitive documents, all done locally.</p>
+    <div class="top-actions">
+      <a class="top-link" href="/faq.html">Q&amp;A</a>
+      <a class="top-link" href="/">Open the tool</a>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+<article class="view faqmain lander">
+
+  <h1 class="faqtitle">FOIA redaction without sending the records anywhere</h1>
+  <p class="lede">A public-records release is the one document where sending the file to a third party to redact it is the most obviously wrong thing you could do. The whole exercise is about controlling what leaves; the first step should not be making a copy somewhere you do not run.</p>
+
+  <p class="landgo"><a class="landcta" href="/">Open the tool</a>
+    <span class="landfree">Free, in your browser. Nothing is uploaded.</span></p>
+
+  <figure class="landshot">
+    <div class="landpair">
+      <span><b>Before</b><img src="/gallery/slide-2-original.jpg"
+        alt="Before redaction." loading="lazy" width="1280" height="720"></span>
+      <span><b>After</b><img src="/gallery/slide-2-redacted.jpg"
+        alt="A page of people before and after: the names and titles under each photograph are replaced with labelled bars." loading="lazy" width="1280" height="720"></span>
+    </div>
+    <figcaption>A page of people before and after: the names and titles under each photograph are replaced with labelled bars.</figcaption>
+  </figure>
+
+  <section class="faq">
+    <h2>The exemption is in the pages, not the metadata</h2>
+    <p>A release is usually a pile of scans: printed emails, forms with handwriting on them, faxed letters, signature pages. The names, the direct lines, the home addresses and the signatures are in the pixels. A text search finds none of it, because there is no text.</p>
+    <p>So the work is done a page at a time with a rectangle tool, and the reason releases get re-issued is that somewhere in nine hundred pages a name went through.</p>
+  </section>
+
+  <section class="faq">
+    <h2>Read the pages, then search them</h2>
+    <p>Scanned pages are read in the tab, so a name typed once is found in the lettering of every scan as well as in any real text. A signature, a letterhead or a stamp is picked out with a box and found everywhere else it appears.</p>
+    <p>There are detectors for the things that leak and that nobody thinks to type: email addresses, phone numbers, web addresses, street addresses and postal codes, and dates of birth. Each says how many it can see before you switch it on.</p>
+  </section>
+
+  <section class="faq">
+    <h2>Checked before it is committed, and again afterwards</h2>
+    <p>Every proposal is on screen before anything is covered, with the page it is on and a count per term, so a release is reviewed as a list rather than by scrolling nine hundred pages hoping to notice something. Marks the tool is least sure of are put back to you as questions rather than quietly applied.</p>
+    <p>Words that exist only as pictures -- a name in a letterhead, a stamp with type in it -- get an optional second pass that looks for them by shape. It states the wait before it starts, because on a long release it is minutes, and it is your decision whether this document needs it.</p>
+    <p>When the export is done, check it the way a recipient would: open it, select across a bar, and paste. Nothing comes out, because the page was rebuilt rather than covered. Do the same test on whatever you use today.</p>
+  </section>
+
+  <section class="faq">
+    <h2>A record you can defend</h2>
+    <p>The exported file has each page rebuilt from pixels. What is under a bar is not in the file -- not selectable, not copyable, not recoverable by pulling the content stream apart. That is the property a release has to have, and the one that a rectangle drawn in a PDF editor does not.</p>
+    <p>Labels can be turned on so each bar carries a consistent code, which is how you show that four bars on four pages are the same withheld individual without naming them.</p>
+  </section>
+
+  <section class="faq">
+    <h2>How to do it, in four steps</h2>
+    <ol class="landsteps">
+      <li>Open the release. Nothing is uploaded; the pages are read on your machine.</li>
+      <li>Type the names and numbers to withhold, and tick the detectors for addresses, phone numbers and the rest.</li>
+      <li>Pick out signatures, stamps and letterheads with a box; every other copy is found.</li>
+      <li>Review every proposal, dismiss the ones that should stay, then Redact and export.</li>
+    </ol>
+  </section>
+
+  <section class="faq">
+    <h2>Who it is for</h2>
+    <p>Records officers, FOIA and public-records teams, litigation support preparing a production, and journalists redacting a source document before publishing it.</p>
+    <p class="landgo"><a class="landcta" href="/">Open the tool</a></p>
+  </section>
+
+  <section class="faq">
+    <h2>Questions</h2>
+    <h3>Does anything leave my machine?</h3>
+    <p>No. There is no server. The browser is prevented from sending anything anywhere by a content security policy on the page, and the tool works with the network disconnected.</p>
+    <h3>Can it handle scans with no text layer?</h3>
+    <p>Yes. The pages are read in the tab, and words are also matched by shape where the reading was defeated by a poor scan or an unusual typeface.</p>
+    <h3>Can I prove nothing was uploaded?</h3>
+    <p>Open the network panel and redact a document: nothing leaves. The source is published, so the claim is checkable rather than a promise.</p>
+    <h3>Is there an audit trail?</h3>
+    <p>A draft can be saved: your marks, the words you typed and what was found, as a file on your own machine to reopen and edit later. It holds the same sensitive material as the document, so keep it as carefully.</p>
+  </section>
+
+  <section class="faq">
+    <h2>Also</h2>
+    <ul class="landalso">
+        <li><a href="/redact-cim/">Redact a CIM without uploading it</a></li>
+        <li><a href="/redact-logos-pitch-deck/">Redact logos in a pitch deck</a></li>
+        <li><a href="/de-identify-scanned-records/">De-identify scanned records</a></li>
+        <li><a href="/redacted-text-still-extractable/">Your redacted text is still extractable. Here is why</a></li>
+        <li><a href="/redact-before-ai/">Redact a PDF before you paste it into ChatGPT or Claude</a></li>
+        <li><a href="/faq.html">How it works, in full</a></li>
+        <li><a href="https://github.com/jaredsia-svg/blinded" rel="noopener">Read the source on GitHub</a></li>
+    </ul>
+  </section>
+
+  <p class="faqback"><a class="faqbackbtn" href="/">Open the tool</a></p>
+
+</article>
+</main>
+
+</body>
+</html>

@@ -7,10 +7,14 @@ Allow: /
 
 # Except the parts that are not pages. A crawler spending its budget on a
 # 1.4MB PDF worker or eleven megabytes of recognition data is a crawler not
-# reading the two pages that say what this is.
+# reading the pages that say what this is.
+#
+# content/ and the generator are the source the pages are written from, not
+# pages themselves.
 Disallow: /vendor/
 Disallow: /lib/
 Disallow: /tools/
 Disallow: /bench/
+Disallow: /content/
 
 Sitemap: https://blinded.dev/sitemap.xml

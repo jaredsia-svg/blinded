@@ -16,13 +16,27 @@ const TYPES = {
   '.json': 'application/json',
   '.pdf': 'application/pdf',
   '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.xml': 'application/xml',
+  '.md': 'text/markdown; charset=utf-8',
   '.svg': 'image/svg+xml',
   '.txt': 'text/plain; charset=utf-8',
 };
 
 createServer((req, res) => {
   const requested = decodeURIComponent(new URL(req.url, 'http://localhost').pathname);
-  const path = join(root, normalize(requested === '/' ? '/index.html' : requested));
+  // A directory means its index, which is how the landing pages are
+  // addressed: /redact-cim/ is redact-cim/index.html. Static hosts do this;
+  // without it here the pages are a 404 in local development and in the test
+  // suite, which is the worst place to differ from what ships.
+  const wanted = requested === '/' ? '/index.html'
+    : requested.endsWith('/') ? requested + 'index.html'
+    : requested;
+  let path = join(root, normalize(wanted));
+  try {
+    if (statSync(path).isDirectory()) path = join(path, 'index.html');
+  } catch { /* handled below */ }
 
   // Refuse anything that escaped the project directory.
   if (!path.startsWith(root)) {

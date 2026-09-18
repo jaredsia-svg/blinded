@@ -59,14 +59,26 @@ if (ONLY) {
 const TYPES = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
   '.mjs': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
+  // The gallery is JPEG, and a browser handed image/octet-stream draws
+  // nothing: a landing page's before-and-after came out as two empty boxes
+  // and the page still passed, because nothing was asking whether the
+  // pictures had pixels in them.
+  '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png',
+  '.svg': 'image/svg+xml', '.xml': 'application/xml',
 };
 
 function serve() {
   const server = createServer((req, res) => {
     const requested = decodeURIComponent(new URL(req.url, 'http://x').pathname);
-    const path = join(root, normalize(requested === '/' ? '/index.html' : requested));
+    // A directory is its index, which is how the landing pages are addressed.
+    const wanted = requested === '/' ? '/index.html'
+      : requested.endsWith('/') ? requested + 'index.html' : requested;
+    let path = join(root, normalize(wanted));
     if (!path.startsWith(root)) return res.writeHead(403).end();
-    try { statSync(path); } catch { return res.writeHead(404).end(); }
+    try {
+      if (statSync(path).isDirectory()) path = join(path, 'index.html');
+      statSync(path);
+    } catch { return res.writeHead(404).end(); }
     res.writeHead(200, { 'Content-Type': TYPES[extname(path)] || 'application/octet-stream' });
     createReadStream(path).pipe(res);
   });
