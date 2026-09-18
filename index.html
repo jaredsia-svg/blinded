@@ -83,7 +83,7 @@
   "isAccessibleForFree": true
 }
 </script>
-<link rel="stylesheet" href="app.css?v=2f2f98d0">
+<link rel="stylesheet" href="app.css?v=a0d98f35">
 </head>
 <body>
 
@@ -572,9 +572,9 @@
         </details>
 
         <details class="sect" id="labelsect">
-          <summary><span class="s-title">Placeholders</span><button type="button"
+          <summary><span class="s-title">Labels</span><button type="button"
               class="why" aria-label="What does this section do?"
-              data-tip="Writes [P1], [E2] into each bar so a later reader, or a model, can follow the sentence. The same thing always gets the same label.">i</button><span class="s-note" id="label-note">off</span></summary>
+              data-tip="Writes [P1], [E2] into each bar so a later reader, or a model, can follow the sentence. The same thing always gets the same label.">i</button><span class="s-note" id="label-note"></span></summary>
           <div class="s-body">
             <label class="check"><input type="checkbox" id="labelling">
               Label each redaction
@@ -652,6 +652,22 @@
       </aside>
 
       <div class="stage">
+        <!-- A way down a long document with a thumb. On a phone the document
+             is the whole screen and the browser's own scrollbar is a hairline
+             that appears while you flick and cannot be grabbed: forty pages
+             is forty flicks. This is grabbable, it is the height of a finger,
+             and it says which page it is passing so the reviewer can stop at
+             one rather than somewhere near it.
+
+             First in the scroller, and sticky. Sticky pulls an element down
+             as the view passes it; it does not pull one up from below. Last,
+             after every page, its resting place was the foot of a document
+             forty screens long and it was never on screen at all. -->
+        <div id="scrub" class="scrub" hidden>
+          <div id="scrub-thumb" class="scrub-thumb" role="slider" tabindex="0"
+            aria-label="Page" aria-valuemin="1" aria-valuenow="1" aria-valuemax="1"></div>
+          <div id="scrub-say" class="scrub-say" hidden aria-hidden="true"></div>
+        </div>
         <div id="pages" class="pages"></div>
         <pre id="textview" class="textview" hidden></pre>
       </div>
@@ -941,7 +957,7 @@
 <script src="lib/pdfwrite.js?v=4b977425"></script>
 <script src="lib/pdfread.js?v=ca229552"></script>
 <script src="lib/render.js?v=65c3fe76"></script>
-<script src="app.js?v=2569fdd6"></script>
+<script src="app.js?v=5d930c07"></script>
 <script type="module" src="lib/boot.mjs?v=8b98ed8f"></script>
 </body>
 </html>

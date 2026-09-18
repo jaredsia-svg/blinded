@@ -209,12 +209,24 @@ a.mark { color: inherit; text-decoration: none; }
    the stop button become items of the same row as the bar and can be put in
    that order. Rebuilding the row for the foot alone would mean two shapes of
    leg to keep in step, and the dialog's stacked one is right where it is. */
-.runlegs .leg { margin: 0; display: flex; align-items: center; gap: 10px; }
+/* A grid, not a row of rows: two legs of one run are two readings of the same
+   wait, and bars of different lengths because one is called "Matching words"
+   and the other "Searching images" invite a comparison between them that
+   means nothing. Three columns -- what is running, the bar, the page it is on
+   -- so every bar starts and ends in the same place. */
+.runlegs { display: grid; grid-template-columns: max-content 1fr max-content; }
+.runlegs .leg {
+  margin: 0; display: grid; grid-column: 1 / -1;
+  grid-template-columns: subgrid; align-items: center; gap: 10px;
+}
 .runlegs .leg-label { display: contents; }
-.runlegs .leg-label > span:first-child { order: 1; flex: none; }
-.runlegs .leg .bar { order: 2; flex: 1; min-width: 60px; }
-.runlegs .leg-count { order: 3; flex: none; margin-left: 0; }
-.runlegs .runctl { order: 4; margin-left: 0; }
+/* The row as well as the column. The count is written before the bar in the
+   markup -- it belongs to the label -- and auto-placement will not go
+   backwards to fill column 2 once column 3 of that row is taken, so the bar
+   was landing on a second row of its own. */
+.runlegs .leg-label > span:first-child { grid-area: 1 / 1; }
+.runlegs .leg .bar { grid-area: 1 / 2; min-width: 60px; }
+.runlegs .leg-count { grid-area: 1 / 3; margin-left: 0; }
 .bar > i {
   display: block; height: 100%; width: 0;
   background: var(--accent); border-radius: inherit;
@@ -695,6 +707,16 @@ textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; border-
   font: inherit; font-size: 10px; font-weight: 500; line-height: 16px;
   white-space: nowrap;
 }
+/* Beside the bars rather than in the first of them: it belongs to the run,
+   which is all of them. Two words on two lines, so it is a square at the end
+   of the block instead of a pill whose width comes out of the bars. */
+.runbar > .runctl {
+  align-self: stretch; margin: 0; padding: 3px 9px;
+  display: flex; flex-direction: column; align-items: center;
+  justify-content: center; gap: 0; border-radius: 8px;
+  line-height: 1.25; text-align: center;
+}
+.runbar > .runctl:hover:not(:disabled) { border-color: var(--ink-soft); color: var(--ink); }
 .runctl:hover:not(:disabled) { border-color: var(--ink-soft); color: var(--ink); }
 .runctl:disabled { cursor: default; opacity: .7; }
 .leg-count { margin-left: auto; }
@@ -1780,7 +1802,13 @@ body.reviewing .exportbar { position: static; flex: none; margin: 14px 0 18px; }
   /* The report wraps to as many lines as it needs and takes no room when it
      has nothing to say. */
   #runfoot[hidden] { display: none; }
-  .ranline { align-items: flex-start; }
+  /* The dot sits on the first line of what it marks. Aligned to the top of a
+     sentence that wraps to three lines it reads as a bullet floating above
+     its own text; the baseline is the line the reader starts on. */
+  .ranline { align-items: baseline; }
+  /* Shorter. Three buttons at desktop height, stacked under a two-line
+     report, took a third of a phone screen to say what to press next. */
+  .exportgo > button { padding: 8px 6px; }
 
   /* Pinch is how anyone zooms anything on a phone, and on the document it
      means the document. Handing the gesture to the browser zoomed the whole
@@ -2119,3 +2147,44 @@ body.choosing { -webkit-user-select: none; user-select: none; }
 }
 .footlink:hover { color: var(--accent); }
 .footlink:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+
+/* ---------- the thumb down the side of a long document ---------- */
+/*
+   A phone's own scrollbar is a hairline that fades in during a flick and
+   cannot be caught, so forty pages is forty flicks. This one is the height of
+   a finger and says which page it is passing, because a fast way to end up
+   somewhere unknown is not faster.
+
+   Sticky inside the scroller rather than fixed to the screen: it belongs to
+   the document half, and the foot and the header are not its to cover. The
+   zero height with `top` and `align-self` keeps it out of the flow entirely
+   -- it is an overlay on the pages, not a column beside them.
+*/
+.scrub {
+  position: sticky; top: 0; z-index: 6;
+  height: 0; pointer-events: none;
+}
+.scrub[hidden] { display: none; }
+.scrub-thumb {
+  pointer-events: auto; position: absolute; right: 4px; top: 0;
+  width: 18px; border-radius: 999px;
+  background: rgba(16, 22, 32, .28);
+  border: 1px solid rgba(255, 255, 255, .75);
+  box-shadow: 0 1px 3px rgba(16, 22, 32, .25);
+  touch-action: none; cursor: grab;
+}
+.scrub-thumb.held, .scrub-thumb:active { background: rgba(16, 22, 32, .55); cursor: grabbing; }
+.scrub-thumb:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* Beside the thumb, to its left, where the finger holding the thumb is not.
+   Translated by half its own height so the number is level with the middle of
+   the thumb whatever the number says. */
+.scrub-say {
+  pointer-events: none; position: absolute; right: 30px; top: 0;
+  transform: translateY(-50%);
+  padding: 5px 10px; border-radius: 999px; white-space: nowrap;
+  background: #0d1117; color: #fff;
+  font: 600 12.5px/1.2 var(--sans);
+  box-shadow: 0 2px 8px rgba(16, 22, 32, .3);
+}
+.scrub-say[hidden] { display: none; }

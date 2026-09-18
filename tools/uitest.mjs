@@ -5529,9 +5529,14 @@ try {
     });
     check('the other sections roll into one line', rolled.shown === true
       && rolled.hidden === rolled.of, JSON.stringify(rolled));
+    // Every one of them, and the two inputs as one phrase: "Text input, Image
+    // input" is the same word twice in a line whose job is to be short.
     check('and that line names every one of them',
-      ['Text input', 'Image input', 'Detectors', 'Placeholders']
+      ['Text', 'Image', 'Detectors', 'Labels']
         .every(name => rolled.says.includes(name)), JSON.stringify(rolled));
+    check('with the two inputs folded into one phrase',
+      /Text \/ Image input/.test(rolled.says)
+        && !/Text input, Image input/.test(rolled.says), rolled.says);
 
     const unrolled = await page.evaluate(async () => {
       // Every one of them open before the sheet took them, so that what comes
@@ -8810,6 +8815,115 @@ try {
         geometry.pushed === true && geometry.panelMoved > 0, JSON.stringify(geometry));
     }
 
+    await phone.close();
+  });
+
+  // ---------- a way down a long document with a thumb ----------
+  //
+  // A phone's own scrollbar is a hairline that fades in while a flick is in
+  // progress and cannot be caught, so forty pages is forty flicks and the
+  // reviewer looking for page 31 has no way to ask for it. This one can be
+  // grabbed, and it says which page it is passing -- a fast way to end up
+  // somewhere unknown is not faster.
+  await part("a way down a long document with a thumb", async () => {
+    const phone = await context.newPage();
+    await phone.setViewportSize({ width: 390, height: 844 });
+    await phone.goto(base);
+    // Fourteen pages, because one page has nothing to scrub through.
+    await phone.setInputFiles('#file', manyPath);
+    await phone.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
+    await phone.evaluate(() => window.Blinded.setPane('doc'));
+    await phone.waitForTimeout(400);
+
+    const shown = await phone.evaluate(() => {
+      const track = document.getElementById('scrub');
+      const thumb = document.getElementById('scrub-thumb');
+      const stage = document.querySelector('.stage');
+      const box = thumb.getBoundingClientRect();
+      const view = stage.getBoundingClientRect();
+      return {
+        up: !track.hidden,
+        // Catchable: the thing a finger lands on, not a hairline.
+        wide: Math.round(box.width),
+        // Inside the document half and against its right edge.
+        rightOf: Math.round(view.right - box.right),
+        // And at the top of the view rather than at the foot of the
+        // document. Sticky pulls an element down as the view passes it; it
+        // does not pull one up from below, so drawn after the pages this sat
+        // forty screens down and was never seen.
+        atTop: Math.round(box.top - view.top),
+        // What is actually under the finger there.
+        hit: (() => {
+          const at = document.elementFromPoint(box.x + box.width / 2,
+                                               box.y + box.height / 2);
+          return at ? at.id : 'nothing';
+        })(),
+        says: thumb.getAttribute('aria-valuetext'),
+        role: thumb.getAttribute('role'),
+        pages: document.getElementById('pages').children.length,
+      };
+    });
+    check('a long document gets a thumb down its side', shown.up === true,
+      JSON.stringify(shown));
+    check('wide enough to be caught by a finger', shown.wide >= 14,
+      JSON.stringify(shown));
+    check('against the right edge of the document', shown.rightOf >= 0
+      && shown.rightOf < 20, JSON.stringify(shown));
+    check('at the top of the view, not the foot of the document',
+      Math.abs(shown.atTop) < 2, JSON.stringify(shown));
+    // The one that would have gone unnoticed: it was drawn in the right place
+    // and hit-tested to nothing, so it looked finished and did nothing.
+    check('and the thumb is what the finger actually lands on',
+      shown.hit === 'scrub-thumb', JSON.stringify(shown));
+    check('it says what it is and where it is',
+      shown.role === 'slider' && /Page 1 of \d+/.test(shown.says || ''),
+      JSON.stringify(shown));
+
+    // Dragging it moves the pages, and says which one is passing.
+    const dragged = await phone.evaluate(async () => {
+      const thumb = document.getElementById('scrub-thumb');
+      const stage = document.querySelector('.stage');
+      const say = document.getElementById('scrub-say');
+      const box = thumb.getBoundingClientRect();
+      const from = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+      const fire = (type, y) => thumb.dispatchEvent(new PointerEvent(type, {
+        bubbles: true, cancelable: true, pointerId: 1,
+        clientX: from.x, clientY: y,
+      }));
+      const before = stage.scrollTop;
+      fire('pointerdown', from.y);
+      fire('pointermove', from.y + 200);
+      await new Promise(r => setTimeout(r, 60));
+      const during = { top: stage.scrollTop, said: say.hidden ? null : say.textContent,
+                       held: thumb.classList.contains('held') };
+      fire('pointerup', from.y + 200);
+      await new Promise(r => setTimeout(r, 60));
+      return { before, during, after: say.hidden,
+               moved: thumb.getBoundingClientRect().top - box.top };
+    });
+    check('dragging it moves the document', dragged.during.top > dragged.before,
+      JSON.stringify(dragged));
+    check('and the thumb goes with it', dragged.moved > 0, JSON.stringify(dragged));
+    // Without this it is a fast way to somewhere unknown, which is not faster.
+    check('saying which page is passing while it is held',
+      /^Page \d+ of \d+$/.test(dragged.during.said || ''), JSON.stringify(dragged));
+    check('and letting go puts that away again', dragged.after === true,
+      JSON.stringify(dragged));
+
+    // It belongs to the document half. While the controls are open that half
+    // is a 46-pixel strip, and a thumb down the side of that is a thumb over
+    // nothing.
+    const away = await phone.evaluate(async () => {
+      window.Blinded.setPane('edit');
+      await new Promise(r => setTimeout(r, 200));
+      const gone = document.getElementById('scrub').hidden;
+      window.Blinded.setPane('doc');
+      await new Promise(r => setTimeout(r, 200));
+      return { gone, back: !document.getElementById('scrub').hidden };
+    });
+    check('it goes away with the document half', away.gone === true,
+      JSON.stringify(away));
+    check('and comes back with it', away.back === true, JSON.stringify(away));
     await phone.close();
   });
 

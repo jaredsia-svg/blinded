@@ -288,8 +288,10 @@
       // that never finished.
       runControl = null;
       legs([]);
-      const other = el('runfoot-legs');
-      if (other) other.textContent = '';
+      // And the foot's, which are not the host `legs` was just given. The
+      // control is a sibling of the bars now, so emptying them is not enough
+      // to take it with them.
+      legs([], el('runfoot-legs'));
       busyNote('');
     }
   }
@@ -443,7 +445,7 @@
     // sentence should be sitting in — which is what pushed it into the middle
     // of the bar instead of the start of it.
     const rows = el('runfoot-legs');
-    if (rows) { rows.textContent = ''; rows.hidden = true; }
+    if (rows) { legs([], rows); rows.hidden = true; }
     foot.hidden = false;
   }
 
@@ -483,6 +485,11 @@
   function legs(list, into) {
     const host = into || legsHost();
     host.textContent = '';
+    // The control lives beside the bars now rather than inside the first of
+    // them, so emptying the host no longer takes it with them. A stop button
+    // left standing over a finished run is a button that stops nothing.
+    const beside = host.parentElement;
+    if (beside) for (const old of beside.querySelectorAll(':scope > .runctl')) old.remove();
     host.hidden = !list.length;
     for (const leg of list) {
       if (!leg.total) continue;
@@ -534,15 +541,39 @@
   // there it sat against the Redact button and read as belonging to it.
   function drawRunControl(host) {
     if (!runControl || !host || !host.firstElementChild) return;
-    const label = host.firstElementChild.querySelector('.leg-label');
-    if (!label || label.querySelector('.runctl')) return;
+    // In the foot it belongs to the run, not to the first leg of it. Sitting
+    // inside that leg's label it was one row's worth of width taken out of
+    // one row's bar, so two bars reporting the same run were different
+    // lengths -- and the button was against a "Page 3 of 6" that had nothing
+    // to do with what pressing it would stop.
+    const beside = host.parentElement && host.parentElement.classList.contains('runbar')
+      ? host.parentElement : null;
+    const home = beside || host.firstElementChild.querySelector('.leg-label');
+    if (!home || home.querySelector('.runctl')) return;
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'runctl';
     if (runControl.id) button.id = runControl.id;
-    button.textContent = runControl.label;
+    setRunControlLabel(button, runControl.label);
     button.addEventListener('click', runControl.onPress);
-    label.insertBefore(button, label.querySelector('.leg-count'));
+    if (beside) beside.insertBefore(button, host.nextSibling);
+    else home.insertBefore(button, home.querySelector('.leg-count'));
+  }
+
+  // Two words, two lines, so the button is a square beside the bars rather
+  // than a long pill that has to be paid for out of their width.
+  function setRunControlLabel(button, label) {
+    button.textContent = '';
+    const words = String(label).split(' ');
+    const rest = words.length > 1 ? words.pop() : '';
+    const first = document.createElement('span');
+    first.textContent = words.join(' ');
+    button.append(first);
+    if (rest) {
+      const second = document.createElement('span');
+      second.textContent = rest;
+      button.append(second);
+    }
   }
 
   function offerRunControl(control) {
@@ -590,7 +621,7 @@
     button.textContent = 'Finishing this page…';
     for (const one of document.querySelectorAll('.runctl')) {
       one.disabled = true;
-      one.textContent = 'Finishing this page…';
+      setRunControlLabel(one, 'Finishing…');
     }
   }
 
@@ -1121,7 +1152,23 @@
     const names = others
       .map(sect => (sect.querySelector('.s-title') || {}).textContent || '')
       .filter(Boolean);
-    roll.textContent = names.join(', ');
+    // "Text input, Image input" is the same word twice in a line that exists
+    // to be short. Any run of headings ending in the same word is folded into
+    // one phrase, so this keeps saying the right thing if a third is added or
+    // one is renamed -- which is the whole reason the names are read off the
+    // headings rather than written out here.
+    const said = [];
+    for (let i = 0; i < names.length; i++) {
+      const tail = names[i].slice(names[i].lastIndexOf(' ') + 1);
+      const sharing = [names[i]];
+      while (i + 1 < names.length
+             && names[i + 1].endsWith(' ' + tail)) sharing.push(names[++i]);
+      said.push(sharing.length > 1
+        ? sharing.map(one => one.slice(0, one.lastIndexOf(' '))).join(' / ')
+          + ' ' + tail
+        : names[i]);
+    }
+    roll.textContent = said.join(', ');
     roll.hidden = !rolled;
     roll.setAttribute('aria-expanded', rolled ? 'false' : 'true');
     roll.title = rolled ? 'Show ' + names.join(', ') + ' again' : '';
@@ -3148,9 +3195,12 @@
 
     refreshSheetBar();
 
+    // Nothing when it is off. A grey pill reading "off" is a badge for the
+    // absence of a thing: every other note up here counts something that is
+    // there, and this one was reporting that there was nothing to report.
     set('label-note', state.labelling
       ? (state.labels.entries.length || 0) + ' labels'
-      : 'off', state.labelling);
+      : '', state.labelling);
   }
 
   // One mark per place on the page.
@@ -5121,6 +5171,10 @@
     // The document column has no size while it is a strip, so every page gave
     // up its bitmap; coming back needs them drawn again.
     if (pane === 'doc') updateLivePages();
+    // It lives in the document half, which is a 46-pixel strip while the
+    // controls are open: a thumb down the side of that is a thumb over
+    // nothing.
+    refreshScrub();
   }
 
   // The toolbar belongs above both halves on a phone, because which half is
@@ -5340,6 +5394,175 @@
     stage.addEventListener('lostpointercapture', drop, true);
   }
 
+  // ---------- the thumb down the side of a long document ----------
+  //
+  // On a phone the document is the whole screen, and the browser's own
+  // scrollbar there is a hairline that fades in while a flick is in progress
+  // and cannot be caught. Forty pages is forty flicks, and a reviewer looking
+  // for page 31 has no way to ask for it: the panel's page buttons move one
+  // at a time and the toolbar is three taps away behind the other half.
+  //
+  // So: a track down the right of the view with a thumb the height of a
+  // finger. Dragging it scrolls the pages under it, and a bubble beside it
+  // says which page is passing — without which this is a fast way to end up
+  // somewhere unknown, which is not faster at all.
+  //
+  // Only on a phone. With a mouse the real scrollbar is already draggable and
+  // already has a thumb; a second one would be a worse copy of it.
+  const SCRUB_MIN = 44;          // a thumb has to be catchable by a thumb
+
+  let scrubbing = null;
+
+  function scrubParts() {
+    const track = el('scrub');
+    const thumb = el('scrub-thumb');
+    const stage = document.querySelector('.stage');
+    return track && thumb && stage ? { track, thumb, stage } : null;
+  }
+
+  // Which page the top of the view is in, counting from one.
+  function pageAtTop() {
+    const pages = [...el('pages').children];
+    if (!pages.length) return 0;
+    const here = anchorOn(scrollerFor(el('pages')));
+    const at = here ? pages.indexOf(here.page) : 0;
+    return (at < 0 ? 0 : at) + 1;
+  }
+
+  function refreshScrub() {
+    const parts = scrubParts();
+    if (!parts) return;
+    const { track, thumb, stage } = parts;
+    const pages = el('pages').children.length;
+    const over = stage.scrollHeight - stage.clientHeight;
+    // Nothing to scrub: one page, a document that fits, or a wide screen with
+    // a real scrollbar of its own.
+    const worth = onPhone() && pages > 1 && over > 40 && state.pane === 'doc';
+    track.hidden = !worth;
+    if (!worth) { hideScrubSay(); return; }
+
+    // The track is the height of the view, taken from the view. The element
+    // it is drawn in has no height of its own on purpose: it is an overlay
+    // pinned to the top of the scroller, and giving it the height it appears
+    // to have would push every page down by a screenful.
+    const room = stage.clientHeight;
+    const tall = Math.max(SCRUB_MIN,
+      Math.round(room * (stage.clientHeight / stage.scrollHeight)));
+    const at = over > 0 ? stage.scrollTop / over : 0;
+    thumb.style.height = tall + 'px';
+    thumb.style.transform = 'translateY(' + Math.round(at * (room - tall)) + 'px)';
+    thumb.setAttribute('aria-valuemin', '1');
+    thumb.setAttribute('aria-valuemax', String(pages));
+    thumb.setAttribute('aria-valuenow', String(pageAtTop() || 1));
+    thumb.setAttribute('aria-valuetext', 'Page ' + (pageAtTop() || 1) + ' of ' + pages);
+  }
+
+  function showScrubSay() {
+    const parts = scrubParts();
+    const say = el('scrub-say');
+    if (!parts || !say) return;
+    const pages = el('pages').children.length;
+    say.textContent = 'Page ' + (pageAtTop() || 1) + ' of ' + pages;
+    say.hidden = false;
+    // Beside the thumb rather than at a fixed height, so the number is where
+    // the finger is and not somewhere the finger is covering.
+    const thumb = parts.thumb.getBoundingClientRect();
+    const track = parts.track.getBoundingClientRect();
+    const middle = thumb.top + thumb.height / 2 - track.top;
+    say.style.top = Math.round(middle) + 'px';
+  }
+
+  function hideScrubSay() {
+    const say = el('scrub-say');
+    if (say) { say.hidden = true; }
+    const thumb = el('scrub-thumb');
+    if (thumb) thumb.classList.remove('held');
+  }
+
+  // Where a point down the track puts the document. The thumb is not a point
+  // — it has height — so the reachable travel is the track less the thumb,
+  // and the grab offset is kept so the page does not jump to put the middle
+  // of the thumb under a finger that grabbed its end.
+  function scrubTo(clientY) {
+    const parts = scrubParts();
+    if (!parts || !scrubbing) return;
+    const { thumb, stage } = parts;
+    const box = stage.getBoundingClientRect();
+    const room = stage.clientHeight;
+    const tall = thumb.getBoundingClientRect().height;
+    const travel = Math.max(1, room - tall);
+    const top = box.top;
+    const want = clientY - top - scrubbing.grab;
+    const part = Math.max(0, Math.min(1, want / travel));
+    stage.scrollTop = part * (stage.scrollHeight - stage.clientHeight);
+    refreshScrub();
+    showScrubSay();
+  }
+
+  function watchScrub() {
+    const parts = scrubParts();
+    if (!parts) return;
+    const { track, thumb, stage } = parts;
+
+    thumb.addEventListener('pointerdown', event => {
+      event.preventDefault();
+      const box = thumb.getBoundingClientRect();
+      scrubbing = { id: event.pointerId, grab: event.clientY - box.top };
+      thumb.classList.add('held');
+      thumb.setPointerCapture(event.pointerId);
+      showScrubSay();
+    });
+    thumb.addEventListener('pointermove', event => {
+      if (!scrubbing || event.pointerId !== scrubbing.id) return;
+      event.preventDefault();
+      scrubTo(event.clientY);
+    });
+    const letGo = event => {
+      if (!scrubbing || (event && event.pointerId !== scrubbing.id)) return;
+      scrubbing = null;
+      hideScrubSay();
+    };
+    thumb.addEventListener('pointerup', letGo);
+    thumb.addEventListener('pointercancel', letGo);
+    thumb.addEventListener('lostpointercapture', letGo);
+
+    // Tapping the track jumps there, the way a scrollbar does. The thumb ends
+    // up centred on the tap, which is the one case where taking the middle is
+    // right: there is no grab to preserve.
+    track.addEventListener('pointerdown', event => {
+      if (event.target !== track) return;
+      const tall = thumb.getBoundingClientRect().height;
+      scrubbing = { id: event.pointerId, grab: tall / 2 };
+      scrubTo(event.clientY);
+      scrubbing = null;
+      // Said and left for a moment, because a tap has no drag to say it
+      // during: without this the number appears and vanishes in one frame.
+      showScrubSay();
+      setTimeout(hideScrubSay, 900);
+    });
+
+    // A page at a time from the keyboard, since the thumb is a slider and
+    // says so to anything reading the page.
+    thumb.addEventListener('keydown', event => {
+      const by = event.key === 'ArrowDown' || event.key === 'PageDown' ? 1
+        : event.key === 'ArrowUp' || event.key === 'PageUp' ? -1 : 0;
+      if (!by) return;
+      event.preventDefault();
+      stepPage(by);
+      refreshScrub();
+      showScrubSay();
+      setTimeout(hideScrubSay, 900);
+    });
+
+    // The document moves for many reasons that are not this — a flick, a jump
+    // from a tally row, a page turned from the toolbar — and the thumb has to
+    // follow all of them or it is lying about where the reviewer is.
+    stage.addEventListener('scroll', () => {
+      if (!scrubbing) refreshScrub();
+    }, { passive: true });
+    window.addEventListener('resize', refreshScrub);
+  }
+
   // A page at a time, from wherever the reviewer is.
   //
   // Scrolling lands somewhere in a page; this lands on one, which is what is
@@ -5356,6 +5579,7 @@
   }
 
   function refreshPaging() {
+    refreshScrub();
     const only = el('pages').children.length <= 1;
     const prev = el('page-prev');
     const next = el('page-next');
@@ -7760,7 +7984,7 @@
     // The sentence beside the bars is gone, so the button says it instead.
     for (const one of document.querySelectorAll('.runctl')) {
       one.disabled = true;
-      one.textContent = 'Stopping\u2026';
+      setRunControlLabel(one, 'Stopping\u2026');
     }
   }
 
@@ -8430,7 +8654,7 @@
     if (said) said.textContent = '';
     const foot = el('runfoot');
     if (foot) foot.hidden = true;
-    offerRunControl({ id: 'sweepstop', label: 'Stop the check',
+    offerRunControl({ id: 'sweepstop', label: 'Pause check',
       onPress: stopTheCheck });
     sweepProgress(0, pages.length);
     renderSweep();
@@ -9266,7 +9490,10 @@
       // inside a hidden row, which the next run has to notice and rebuild —
       // and which anything counting bars on the page finds and counts.
       const rows = el('sweeprun-legs');
-      if (rows) { rows.textContent = ''; rows.hidden = true; }
+      // Through `legs`, so the control beside them goes with them: it is a
+      // sibling now, and clearing the host alone left a stop button standing
+      // over a run that was already over.
+      if (rows) { legs([], rows); rows.hidden = true; }
       if (runControl && runControl.id === 'sweepstop') runControl = null;
     }
 
@@ -9308,6 +9535,7 @@
   el('peek-edit').addEventListener('click', () => setPane('edit'));
   el('peek-doc').addEventListener('click', () => setPane('doc'));
   watchSwipes();
+  watchScrub();
   {
     // The document column, which is the only place a pinch means anything.
     const stage = document.querySelector('.stage');
@@ -9987,7 +10215,7 @@
     watchPinch, pinching, PINCH_IN, wordSensitivity, wordBarFor,
     setZoom, stepZoom, ZOOM_STEPS,
     MARK_GREEN,
-    loadFaq,
+    loadFaq, refreshScrub,
     cleanName, coveredText, askName, askPassword, renderPdf, wordLayerFor,
     confirmCrop, redactedName,
     confirmAction, showTemplate,

@@ -47,9 +47,9 @@ const html = `<!doctype html><meta charset="utf-8"><style>
 </div>
 <div class="pair">
   <div class="one"><div class="cap">Before</div>
-    <div class="shot"><img src="${as64('gallery/slide-2-original.jpg')}"></div></div>
+    <div class="shot"><img src="${as64('gallery/slide-4-original.jpg')}"></div></div>
   <div class="one"><div class="cap after">After</div>
-    <div class="shot"><img src="${as64('gallery/slide-2-redacted.jpg')}"></div></div>
+    <div class="shot"><img src="${as64('gallery/slide-4-redacted.jpg')}"></div></div>
 </div>`;
 
 const browser = await chromium.launch();
