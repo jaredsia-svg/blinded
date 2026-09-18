@@ -1536,34 +1536,29 @@ check('cropping lifts out exactly the requested rectangle', (() => {
 
 // The bar a picked image has to clear starts where the matcher itself is
 // tuned, and the two are written in different files. They had drifted once
-// before, when the control shipped at 0.82 against a matcher tuned to 0.75 —
+// before, when the control shipped at 0.82 against a matcher tuned to 0.75 --
 // so the app searched stricter than anything tested and quietly dropped real
-// matches scoring in between. The control is now one slider per picked image,
-// built in app.js, so that is where these numbers live.
+// matches scoring in between.
+//
+// The control is no longer a slider over a hundred values; it is the two or
+// three settings the scores themselves point at. What has to hold is the same
+// either way: whatever a draft, a stray value or a measured suggestion says,
+// the number that reaches the matcher is inside the range the matcher was
+// tuned for, and that range reaches below the default (to find more) and above
+// it (to find only near-certain matches).
 {
   const js = readFileSync(join(root, 'app.js'), 'utf8');
   check('a newly picked image starts at the matcher\'s own threshold',
     /const DEFAULT_SENS = Match\.THRESHOLD;/.test(js),
     'DEFAULT_SENS is not tied to Match.THRESHOLD');
-  const bounds = js.match(/slider\.min = '(\d+)';[\s\S]{0,900}?slider\.max = '(\d+)';/);
-  check('the row slider declares its range', Boolean(bounds), 'not found in app.js');
-  if (bounds) {
-    check('and it can reach below the default, to find more',
-      Number(bounds[1]) / 100 < Match.THRESHOLD, bounds[1]);
+  const clamp = js.match(/Math\.min\((0?\.\d+), Math\.max\((0?\.\d+), n\)\)/);
+  check('every setting is clamped before it reaches the matcher',
+    Boolean(clamp), 'clampSens not found in app.js');
+  if (clamp) {
+    check('and the range reaches below the default, to find more',
+      Number(clamp[2]) < Match.THRESHOLD, clamp[2]);
     check('and above it, to find only near-certain matches',
-      Number(bounds[2]) / 100 > Match.THRESHOLD, bounds[2]);
-  }
-  // Whatever a draft or a stray value says, the search is run somewhere inside
-  // that range: a threshold of 0 would propose every pixel of every page.
-  // The clamp and the slider are the same range written twice, so they are
-  // held together here rather than left to drift.
-  if (bounds) {
-    const clamp = js.match(/Math\.min\((0?\.\d+), Math\.max\((0?\.\d+), n\)\)/);
-    check('the clamp exists', Boolean(clamp), 'clampSens not found');
-    check('and nothing outside the slider\'s own range can reach the matcher',
-      clamp && Number(clamp[1]) === Number(bounds[2]) / 100
-        && Number(clamp[2]) === Number(bounds[1]) / 100,
-      clamp ? clamp[1] + '/' + clamp[2] + ' vs ' + bounds[2] + '/' + bounds[1] : 'none');
+      Number(clamp[1]) > Match.THRESHOLD, clamp[1]);
   }
 }
 

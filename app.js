@@ -5755,6 +5755,34 @@
     hint.classList.remove('warnhint');
   }
 
+  // The settings the scores point at, as circles: what each one would leave
+  // on the page, and which is in use. Two or three of them, never a hundred.
+  function barWheel(template, settings) {
+    const wheel = document.createElement('div');
+    wheel.className = 'barwheel';
+    for (const step of settings) {
+      // Where the bar stands is a readout, not an offer: pressing it would do
+      // nothing, and a control that does nothing is one the reviewer stops
+      // trusting.
+      const pip = document.createElement(step.now ? 'span' : 'button');
+      pip.className = 'barpip' + (step.now ? ' now' : '') + (step.best ? ' best' : '');
+      if (!step.now) {
+        pip.type = 'button';
+        pip.title = 'Put the bar at ' + step.bar.toFixed(2) + ' and look again';
+        pip.addEventListener('click', () => moveBarTo(template, step.bar));
+      } else {
+        pip.title = 'Where the bar is now';
+      }
+      const reading = document.createElement('b');
+      reading.textContent = step.bar.toFixed(2);
+      const many = document.createElement('i');
+      many.textContent = step.count + (step.count === 1 ? ' match' : ' matches');
+      pip.append(reading, many);
+      wheel.append(pip);
+    }
+    return wheel;
+  }
+
   function renderTemplates() {
     const host = el('templates');
     host.textContent = '';
@@ -5787,31 +5815,14 @@
 
       // Nothing in words at all. The thumbnail says which image this is and
       // the number says how many of it were found; "picked image" beside a
-      // picture of it was a caption for something already on screen. What sits
-      // between them is this image's own bar, because that is the one setting
-      // that belongs to this image and nothing else.
+      // picture of it was a caption for something already on screen. Between
+      // them are this image's own settings: the two or three the scores point
+      // at, rather than a slider over a hundred values of which only a few
+      // were ever measurable.
+      const told = template.searched ? reportFor(template, live) : null;
       const bar = document.createElement('span');
       bar.className = 'rowsens';
-      const slider = document.createElement('input');
-      slider.type = 'range';
-      slider.min = '45';
-      // Up to 0.99, not 0.95. Measured on a row of circular letter badges of
-      // the kind decks use for footnotes: the F badge matched itself at 1.00
-      // and the E badge beside it at 0.943 — the circle is most of the tile
-      // and only the glyph differs. The whole range that separates them was
-      // above the old ceiling, so at the highest setting the reviewer could
-      // reach, the E was still being proposed.
-      slider.max = '99';
-      slider.step = '1';
-      slider.value = String(Math.round(sensFor(template) * 100));
-      slider.title = 'How closely something must resemble this image to be '
-        + 'proposed. Lower finds more, including things that only resemble it. '
-        + 'Two marks that differ by one letter need a bar above 0.95.';
-      slider.setAttribute('aria-label', 'Sensitivity for this image');
-      const reading = document.createElement('span');
-      reading.className = 'v';
-      reading.textContent = sensFor(template).toFixed(2);
-      bar.append(slider, reading);
+      if (told && told.settings) bar.append(barWheel(template, told.settings));
 
       const count = document.createElement('button');
       count.type = 'button';
@@ -5845,101 +5856,6 @@
       template.thumbnail.style.cursor = 'zoom-in';
       template.thumbnail.onclick = () => showTemplate(template.id);
 
-      // Moving it is a different question about this image, so its answer
-      // goes — and only its answer. Every other picked image keeps the
-      // results it already has, which is what the one shared slider could not
-      // do: tuning a stubborn signature threw away three finished logos.
-      //
-      // The row is not re-rendered here. A drag fires this on every pixel of
-      // travel, and rebuilding the list under the reviewer's thumb takes the
-      // slider out from under it. The two things that go stale are edited in
-      // place instead.
-      // Moving it is undoable, like everything else that changes what will be
-      // covered. A slider is the easiest control on the panel to knock by
-      // accident — a stray drag on a phone, a scroll wheel over it on a
-      // laptop — and without this the way back was to remember the old number
-      // and everything the old number had found.
-      //
-      // What is remembered is taken before the first pixel of movement, not
-      // when the drag ends: by then the marks it is about have already been
-      // thrown away. And one entry per gesture, not per pixel: `input` fires
-      // continuously and would bury the rest of the stack.
-      let beforeDrag = null;
-      const remember = () => {
-        if (beforeDrag) return;
-        beforeDrag = {
-          sens: sensFor(template),
-          searched: template.searched,
-          matches: template.matches,
-          rawMatches: template.rawMatches,
-          best: template.best,
-          // The marks this image had, page by page, so undoing the setting
-          // brings back what it had found rather than only the number.
-          hits: state.pages.map(page =>
-            page.imageHits.filter(m => m.templateId === template.id)),
-        };
-      };
-      for (const start of ['pointerdown', 'keydown', 'focus']) {
-        slider.addEventListener(start, remember);
-      }
-      // `change` is the end of the gesture: the release, or the key.
-      slider.addEventListener('change', () => {
-        const was = beforeDrag;
-        beforeDrag = null;
-        if (!was || Math.abs(was.sens - sensFor(template)) < 1e-9) return;
-        pushUndo('that sensitivity change', () => {
-          template.sens = was.sens;
-          template.searched = was.searched;
-          template.matches = was.matches;
-          template.rawMatches = was.rawMatches;
-          template.best = was.best;
-          state.pages.forEach((page, i) => {
-            page.imageHits = page.imageHits
-              .filter(m => m.templateId !== template.id)
-              .concat(was.hits[i]);
-          });
-          // The document counts as searched again only if nothing else is
-          // waiting to be looked for. Forcing it true because this one image
-          // was searched would claim an answer for a word typed since, or for
-          // another image picked since — both of which the button is
-          // supposed to still be asking about.
-          if (was.searched && !pendingTemplates().length && !ocrPending()) {
-            state.searched = true;
-          }
-        });
-      });
-
-      slider.addEventListener('input', () => {
-        remember();
-        // From here on the bar is theirs. The search may propose one before
-        // the reviewer has an opinion; it must not have one afterwards.
-        template.chosenBar = true;
-        template.sens = clampSens(Number(slider.value) / 100);
-        reading.textContent = sensFor(template).toFixed(2);
-        if (template.searched) {
-          template.searched = false;
-          template.matches = 0;
-          template.rawMatches = 0;
-          // What this image found was found at the old bar. The second check
-          // check's marks are not this slider's to throw away: they cost
-          // minutes, and they are not about this image.
-          for (const page of state.pages) {
-            page.imageHits = page.imageHits.filter(
-              m => m.bySweep || m.templateId !== template.id);
-          }
-        }
-        count.className = 'n unknown';
-        count.textContent = '?';
-        count.disabled = true;
-        count.removeAttribute('aria-expanded');
-        count.title = 'Not searched for yet  - press Search';
-        // needsSearch closes the open tally, but the list it drew is already
-        // on screen and only a re-render would take it off.
-        const open = row.nextSibling;
-        if (open && open.classList && open.classList.contains('tally')) open.remove();
-        needsSearch();
-      });
-
       // The bar only once there is something for it to be a bar on.
       //
       // Before the first search this row shows a red "?", because nothing has
@@ -5964,41 +5880,15 @@
       // What this image's search found, under this image's row.
       //
       // It used to be one line under the pick button that every picked image
-      // shared, so with three images the third search overwrote the other
-      // two and the sentence the reviewer read belonged to none of them in
-      // particular. Here it sits with the thumbnail, the bar and the tally it
-      // is about.
-      const told = template.searched ? reportFor(template, live) : null;
-      if (told) {
+      // shared, so with three images the third search overwrote the other two
+      // and the sentence the reviewer read belonged to none of them. Here it
+      // sits with the thumbnail, the settings and the tally it is about -- and
+      // only when there is something to say, since the settings themselves
+      // have moved up into the row.
+      if (told && told.text) {
         const note = document.createElement('li');
         note.className = 'imgnote' + (told.warn ? ' warnhint' : '');
-        if (told.text) note.textContent = told.text;
-        if (told.settings) {
-          const wheel = document.createElement('div');
-          wheel.className = 'barwheel';
-          for (const step of told.settings) {
-            // Where the bar stands is a readout, not an offer: pressing it
-            // would do nothing, and a control that does nothing is a control
-            // the reviewer stops trusting.
-            const pip = document.createElement(step.now ? 'span' : 'button');
-            pip.className = 'barpip' + (step.now ? ' now' : '')
-              + (step.best ? ' best' : '');
-            if (!step.now) {
-              pip.type = 'button';
-              pip.title = 'Put the bar at ' + step.bar.toFixed(2) + ' and look again';
-              pip.addEventListener('click', () => moveBarTo(template, step.bar));
-            } else {
-              pip.title = 'Where the bar is now';
-            }
-            const reading = document.createElement('b');
-            reading.textContent = step.bar.toFixed(2);
-            const many = document.createElement('i');
-            many.textContent = step.count + (step.count === 1 ? ' match' : ' matches');
-            pip.append(reading, many);
-            wheel.append(pip);
-          }
-          note.append(wheel);
-        }
+        note.textContent = told.text;
         host.append(note);
       }
 
@@ -8829,9 +8719,14 @@
     const body = el('sweepofferbody');
     if (!body) return;
     const cost = sweepEstimate();
+    // Always minutes here, even for a check of half a one. The question is
+    // whether to wait, and "1 minute" and "20 seconds" are answered the same
+    // way, while a number in seconds invites arithmetic nobody wants to do.
+    const minutes = Math.max(1, Math.round(cost.seconds / 60));
     body.textContent = 'Some of the words you seek to redact appear as images'
       + ' in the document with no underlying text. This requires a second'
-      + ' check (' + describeTime(Math.round(cost.seconds)) + '). Proceed?';
+      + ' check (' + minutes + (minutes === 1 ? ' minute' : ' minutes')
+      + '). Proceed?';
   }
 
   function bindSweepOffer() {

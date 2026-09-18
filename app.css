@@ -1029,16 +1029,19 @@ body.picking .tools {
    paragraph about where the scores fell. The first is where it stands now and
    is a readout, not an offer; the other two are one press away. The one the
    scores point at is the one in colour. */
-.barwheel { display: flex; gap: 8px; margin: 6px 0 2px; flex-wrap: wrap; }
+/* In the row now, not under it. */
+.barwheel { display: flex; gap: 6px; margin: 0; flex-wrap: wrap; }
+/* Small enough that three of them, a thumbnail, a tally and a cross all sit
+   on one row of a panel three hundred pixels wide. */
 .barpip {
-  flex: none; width: 62px; height: 62px; padding: 0;
+  flex: none; width: 46px; height: 46px; padding: 0;
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   gap: 1px; text-align: center; border-radius: 50%;
   background: var(--card); border: 1px solid var(--line); color: var(--ink);
   font: inherit; cursor: pointer;
 }
-.barpip b { font: 600 13px/1 var(--sans); font-variant-numeric: tabular-nums; }
-.barpip i { font: 400 9.5px/1.15 var(--sans); font-style: normal; color: var(--ink-soft); }
+.barpip b { font: 600 11.5px/1 var(--sans); font-variant-numeric: tabular-nums; }
+.barpip i { font: 400 8px/1.1 var(--sans); font-style: normal; color: var(--ink-soft); }
 .barpip:hover { border-color: var(--ink-soft); }
 .barpip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 /* The one in use. The search puts the bar where the scores point, so this is
@@ -1056,12 +1059,10 @@ body.picking .tools {
 .barpip.best:not(.now):hover { background: rgba(31, 111, 235, .07); }
 
 .imgnote {
-  list-style: none; margin: -2px 0 8px; padding: 0 2px 0 44px;
+  list-style: none; margin: -4px 0 8px; padding: 0 2px 0 12px;
   font-size: 11.5px; line-height: 1.45; color: var(--ink-soft);
 }
-.imgnote.warnhint {
-  margin-left: 44px; padding-left: 10px; color: var(--warn);
-}
+.imgnote.warnhint { margin-left: 12px; padding-left: 10px; color: var(--warn); }
 
 /* ---------- what it is used for ---------- */
 /*
@@ -1279,8 +1280,14 @@ body.picking .tools {
 .termcounts li.none .n.dot-green { background: var(--warn-bg); color: var(--warn); }
 .termcounts li.none .t { color: var(--warn); }
 
-.templates li { padding: 5px 0; border-bottom: 1px solid var(--line); }
-.templates li:last-child { border-bottom: 0; }
+/* A card of its own, like a typed word's row: the thumbnail, the settings
+   the scores point at, the tally and the way to remove it. Taller than a
+   word's row because the settings are circles rather than a number. */
+.templates li {
+  background: #f4f6fa; border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 6px 6px 6px 8px; margin-bottom: 6px; gap: 7px; min-height: 58px;
+}
+.templates li:last-child { margin-bottom: 0; }
 .templates canvas {
   width: 42px; height: 28px; object-fit: contain; flex: none;
   border: 1px solid var(--line); border-radius: 4px; background: #fff;
@@ -1307,12 +1314,7 @@ button.wide.on { background: var(--accent); color: #fff; border-color: var(--acc
    between the thumbnail that says which image and the tally that says how
    many. It took the caption's place, which was empty: a picture of the logo
    needs no label saying "picked image". */
-.rowsens { flex: 1; min-width: 0; display: flex; align-items: center; gap: 7px; }
-.rowsens input { flex: 1; min-width: 42px; margin: 0; }
-.rowsens .v {
-  flex: none; font-variant-numeric: tabular-nums; font-size: 11.5px;
-  color: var(--ink-soft);
-}
+.rowsens { flex: 1; min-width: 0; display: flex; align-items: center; }
 
 /* While picking, the page invites a different kind of drag. A crosshair, not
    the thick cell cross: the thing being aimed at is a box corner, and the fine

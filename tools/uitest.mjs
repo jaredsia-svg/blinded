@@ -1900,7 +1900,7 @@ try {
   // past rather than read. What a reviewer needs is the two or three places
   // this bar could stand and what each would find.
   const wheel = await page.evaluate(() => {
-    const pips = [...document.querySelectorAll('#templates .imgnote .barpip')];
+    const pips = [...document.querySelectorAll('#templates .barpip')];
     return pips.map(pip => ({
       tag: pip.tagName,
       now: pip.classList.contains('now'),
@@ -1933,12 +1933,13 @@ try {
   check('which after a search is the setting the search chose',
     wheel.filter(pip => pip.best).every(pip => pip.now), JSON.stringify(wheel));
   check('and they are actually on screen',
-    await page.isVisible('#templates .imgnote'));
-  // On the row of the image it is about, under it: with three picked images
-  // the reviewer has to be able to tell which story belongs to which picture.
-  check('sitting under the row of the image it describes', await page.evaluate(() => {
-    const note = document.querySelector('#templates .imgnote');
-    const row = note && note.previousElementSibling;
+    await page.isVisible('#templates .barwheel'));
+  // On the row of the image it is about: with three picked images the reviewer
+  // has to be able to tell which settings belong to which picture, and a
+  // sentence underneath was one indent away from belonging to the row below.
+  check('in the row of the image it belongs to', await page.evaluate(() => {
+    const wheel = document.querySelector('#templates .barwheel');
+    const row = wheel && wheel.closest('li');
     // The thumbnail is a canvas cut from the page, not an <img>.
     return Boolean(row && (row.querySelector('canvas') || row.querySelector('img')));
   }));
@@ -3360,6 +3361,12 @@ try {
   // over: a clean wordmark that matches at 0.85 and a scanned signature that
   // needs 0.60 cannot both be set right by one number, and moving it to tune
   // the stubborn one threw away the finished results for all the others.
+  //
+  // The control is no longer a slider. It is the two or three settings the
+  // scores themselves point at, drawn as circles in the row: a hundred values
+  // of which only a few are measurable was a hundred ways to be wrong, and
+  // asking somebody to pick a number before anything is known is asking them
+  // to overrule a measurement that has not been taken.
   await part("each picked image keeps its own bar", async () => {
     if (await page.isVisible('#view-review')) await newFile();
     await page.waitForSelector('#view-drop:not([hidden])', { timeout: 15000 });
@@ -3373,118 +3380,112 @@ try {
     });
     await page.waitForTimeout(200);
 
-    // Before any search these rows show a red "?" and no slider: a bar over an
-    // answer nobody has yet is a control over nothing, and setting it would be
-    // overruling a measurement that has not been taken. So the search runs
-    // first, and then there is something for a bar to be a bar on.
+    // Before any search these rows show a red "?" and no settings at all:
+    // there is nothing yet for a setting to be a setting about.
     const beforeSearch = await page.evaluate(() => ({
-      sliders: document.querySelectorAll('.templates .rowsens input').length,
+      pips: document.querySelectorAll('.templates .barpip').length,
       heading: !document.getElementById('senshead').hidden,
       asking: [...document.querySelectorAll('.templates .n')].every(n =>
         n.textContent.trim() === '?'),
     }));
-    check('an image not yet searched for shows no bar to set',
-      beforeSearch.sliders === 0 && beforeSearch.heading === false,
+    check('an image not yet searched for shows no setting to choose',
+      beforeSearch.pips === 0 && beforeSearch.heading === false,
       JSON.stringify(beforeSearch));
     check('only the red question mark that says so',
       beforeSearch.asking === true, JSON.stringify(beforeSearch));
     await redact(page);
 
     const rows = await page.evaluate(() => ({
-      sliders: document.querySelectorAll('.templates .rowsens input').length,
+      wheels: document.querySelectorAll('.templates .barwheel').length,
+      most: Math.max(...[...document.querySelectorAll('.templates .barwheel')]
+        .map(w => w.querySelectorAll('.barpip').length)),
       heading: !document.getElementById('senshead').hidden,
       // Between the thumbnail on the left and the tally on the right, which
-      // is where it was asked for.
-      // The image rows only: the notes under them are list items too, and they
-      // hold settings rather than a thumbnail and a tally.
-      between: [...document.querySelectorAll('.templates li:not(.imgnote)')].every(li => {
-        const kids = [...li.children];
-        const thumb = kids.findIndex(k => k.tagName === 'CANVAS');
-        const bar = kids.findIndex(k => k.classList.contains('rowsens'));
-        const tally = kids.findIndex(k => k.classList.contains('n'));
-        return thumb >= 0 && bar > thumb && tally > bar;
-      }),
+      // is where they were asked for.
+      between: [...document.querySelectorAll('.templates li:not(.imgnote):not(.tally)')]
+        .every(li => {
+          const kids = [...li.children];
+          const thumb = kids.findIndex(k => k.tagName === 'CANVAS');
+          const bar = kids.findIndex(k => k.classList.contains('rowsens'));
+          const tally = kids.findIndex(k => k.classList.contains('n'));
+          const drop = kids.findIndex(k => k.classList.contains('templatedrop'));
+          return thumb >= 0 && bar > thumb && tally > bar && drop > tally;
+        }),
     }));
-    check('every picked image carries a slider of its own', rows.sliders === 2,
+    check('every picked image carries settings of its own', rows.wheels === 2,
       JSON.stringify(rows));
-    check('sitting between the thumbnail and the tally', rows.between === true,
+    check('in the order thumbnail, settings, tally, remove',
+      rows.between === true, JSON.stringify(rows));
+    check('under a heading that says what they are', rows.heading === true,
       JSON.stringify(rows));
-    check('under a heading that says what the column is', rows.heading === true,
-      JSON.stringify(rows));
+    // A few, not a hundred. Three is the most the panel will ever offer,
+    // because each one has to be measured to be worth offering.
+    check('and never more than three of them', rows.most <= 3, JSON.stringify(rows));
 
-    await redact(page);
     const both = await page.evaluate(() =>
       window.Blinded.state.templates.map(t => t.searched));
     check('both are searched at their own bar', both.every(Boolean),
       JSON.stringify(both));
 
-    // Move the first one's slider. Only the first one's answer should go.
+    // Press a setting on the first image. Only the first image's answer moves.
     const after = await page.evaluate(() => {
       const B = window.Blinded;
-      const slider = document.querySelectorAll('.templates .rowsens input')[0];
-      slider.value = '55';
-      slider.dispatchEvent(new Event('input', { bubbles: true }));
+      const was = B.state.templates.map(t => B.sensFor(t));
+      const wheel = document.querySelectorAll('.templates .barwheel')[0];
+      const other = wheel.querySelector('.barpip:not(.now)');
+      if (other) other.click();
       return {
+        was,
         bars: B.state.templates.map(t => B.sensFor(t)),
         searched: B.state.templates.map(t => t.searched),
-        reading: [...document.querySelectorAll('.templates .rowsens .v')]
-          .map(v => v.textContent),
+        pressed: Boolean(other),
       };
     });
-    check('the two images now sit at different bars',
-      Math.abs(after.bars[0] - 0.55) < 1e-9 && after.bars[1] > after.bars[0],
-      JSON.stringify(after));
-    check('and the row says so beside the slider', after.reading[0] === '0.55',
+    check('pressing another setting moves that image to it',
+      after.pressed && Math.abs(after.bars[0] - after.was[0]) > 0.001,
       JSON.stringify(after));
     // The whole point. The old slider set every one of these back to false.
-    check('only the image whose bar moved has to be looked for again',
-      after.searched[0] === false && after.searched[1] === true,
+    check('and leaves every other picked image exactly as it was',
+      Math.abs(after.bars[1] - after.was[1]) < 1e-9 && after.searched[1] === true,
       JSON.stringify(after));
-    // And the slider survives the change, because a drag that rebuilds the
-    // list under the reviewer's thumb loses the thumb.
-    check('the slider the reviewer is holding is still the same element',
-      await page.evaluate(() => {
-        const live = document.querySelectorAll('.templates .rowsens input')[0];
-        return live && Number(live.value) === 55;
-      }));
 
-    // ---------- a knocked slider is undoable ----------
+    // ---------- a setting pressed by accident is undoable ----------
     //
-    // A slider is the easiest control on the panel to move by accident — a
-    // stray drag on a phone, a wheel over it on a laptop — and the way back
-    // used to be remembering the old number and everything the old number had
-    // found.
+    // The way back used to be remembering the old number and everything the
+    // old number had found.
     const knocked = await page.evaluate(async () => {
       const B = window.Blinded;
       const t = B.state.templates[0];
       t.sens = 0.75;
+      t.chosenBar = false;
       t.searched = false;
       await B.runSearch();
       const marks = () => B.state.pages.reduce((n, p) =>
         n + p.imageHits.filter(m => m.templateId === t.id).length, 0);
       const before = { sens: B.sensFor(t), marks: marks(), searched: t.searched };
 
-      const slider = document.querySelector('.templates .rowsens input');
-      slider.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerId: 3 }));
-      slider.value = '99';
-      slider.dispatchEvent(new Event('input', { bubbles: true }));
-      slider.dispatchEvent(new Event('change', { bubbles: true }));
-      const after = { sens: B.sensFor(t), marks: marks(), searched: t.searched,
+      const depth = B.undoStack.length;
+      const other = document.querySelector('.templates .barwheel .barpip:not(.now)');
+      if (other) other.click();
+      await new Promise(r => setTimeout(r, 200));
+      const after = { sens: B.sensFor(t), marks: marks(),
                       offered: document.getElementById('undo').title,
-                      pressable: !document.getElementById('undo').disabled };
+                      pressable: !document.getElementById('undo').disabled,
+                      added: B.undoStack.length - depth };
 
       B.undoLast();
-      const live = document.querySelector('.templates .rowsens input');
-      const back = { sens: B.sensFor(t), marks: marks(), searched: t.searched,
-                     slider: live && live.value,
-                     reading: document.querySelector('.templates .rowsens .v').textContent };
+      const shown = [...document.querySelectorAll('.templates .barwheel')[0]
+        .querySelectorAll('.barpip.now b')].map(b => b.textContent)[0];
+      const back = { sens: B.sensFor(t), marks: marks(), searched: t.searched, shown };
       return { before, after, back };
     });
-    check('moving the slider is offered as something to undo',
+    check('pressing a setting is offered as something to undo',
       /sensitivity/i.test(knocked.after.offered) && knocked.after.pressable,
       JSON.stringify(knocked));
-    check('and it really had thrown the marks away',
-      knocked.before.marks > 0 && knocked.after.marks === 0,
+    check('as one thing to undo, not one per press of the row',
+      knocked.after.added === 1, JSON.stringify(knocked));
+    check('it really did move the bar',
+      Math.abs(knocked.after.sens - knocked.before.sens) > 0.001,
       JSON.stringify(knocked));
     check('undo puts the setting back',
       Math.abs(knocked.back.sens - knocked.before.sens) < 1e-9,
@@ -3494,29 +3495,8 @@ try {
     check('and what that setting had found',
       knocked.back.marks === knocked.before.marks
         && knocked.back.searched === true, JSON.stringify(knocked));
-    check('with the control itself agreeing again',
-      Number(knocked.back.slider) / 100 === knocked.back.sens
-        && knocked.back.reading === knocked.back.sens.toFixed(2),
-      JSON.stringify(knocked));
-
-    // One entry for the gesture, not one per pixel of it: `input` fires
-    // continuously and would bury everything else on the stack.
-    const depth = await page.evaluate(async () => {
-      const B = window.Blinded;
-      const before = B.undoStack.length;
-      const slider = document.querySelector('.templates .rowsens input');
-      slider.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerId: 4 }));
-      for (let v = 76; v <= 92; v += 2) {
-        slider.value = String(v);
-        slider.dispatchEvent(new Event('input', { bubbles: true }));
-      }
-      slider.dispatchEvent(new Event('change', { bubbles: true }));
-      const after = B.undoStack.length;
-      B.undoLast();
-      return { before, after, added: after - before };
-    });
-    check('a whole drag leaves one thing to undo, not one per pixel',
-      depth.added === 1, JSON.stringify(depth));
+    check('with the row itself agreeing again',
+      knocked.back.shown === knocked.back.sens.toFixed(2), JSON.stringify(knocked));
 
     // Put back what the later sections expect to find.
     await page.evaluate(() => { window.Blinded.state.termImages = true; });
@@ -3777,15 +3757,17 @@ try {
 
     const reach = await page.evaluate(() => {
       const B = window.Blinded;
-      const slider = document.querySelector('.templates .rowsens input');
+      // The highest bar the panel will ever stand on, found by asking for one
+      // past the end: whatever comes back is the ceiling.
+      const max = B.sensFor({ sens: 2 });
       return {
-        max: slider ? Number(slider.max) / 100 : null,
+        max,
         // And the clamp lets that setting through rather than pulling it back.
         clamped: B.sensFor({ sens: 0.99 }),
         overshoot: B.sensFor({ sens: 2 }),
       };
     });
-    check('the slider reaches a bar above what the wrong badge scores',
+    check('the settings reach a bar above what the wrong badge scores',
       reach.max !== null && reach.max > scores.E, JSON.stringify({ reach, e: scores.E }));
     check('and that setting survives the clamp',
       Math.abs(reach.clamped - reach.max) < 1e-9, JSON.stringify(reach));
@@ -3947,8 +3929,8 @@ try {
     // use, the one it came from stays on offer, and the number promised is the
     // number delivered.
     const pressed = await page.evaluate(async () => {
-      const read = () => [...document.querySelectorAll('#templates .imgnote')]
-        .flatMap(note => [...note.querySelectorAll('.barpip')].map(pip => ({
+      const read = () => [...document.querySelectorAll('#templates .barwheel')]
+        .flatMap(wheel => [...wheel.querySelectorAll('.barpip')].map(pip => ({
           bar: Number(pip.querySelector('b').textContent),
           count: parseInt(pip.querySelector('i').textContent, 10),
           now: pip.classList.contains('now'),
@@ -3958,7 +3940,7 @@ try {
       const target = before.find(pip => !pip.now);
       if (!target) return null;
       const wasOn = before.find(pip => pip.now);
-      const button = [...document.querySelectorAll('#templates .imgnote .barpip')]
+      const button = [...document.querySelectorAll('#templates .barpip')]
         .find(pip => Number(pip.querySelector('b').textContent) === target.bar
           && pip.tagName === 'BUTTON');
       button.click();
@@ -5109,7 +5091,7 @@ try {
         p.imageHits = p.imageHits.filter(m => m.templateId !== template.id);
       }
       await B.runSearch();
-      const pips = [...document.querySelectorAll('#templates .imgnote .barpip')]
+      const pips = [...document.querySelectorAll('#templates .barpip')]
         .map(pip => ({ now: pip.classList.contains('now'),
                        bar: Number((pip.querySelector('b') || {}).textContent),
                        count: parseInt((pip.querySelector('i') || {}).textContent, 10) }));
@@ -5159,7 +5141,7 @@ try {
       // one mark, and a dismissed one is none.
       const marks = B.state.pages.reduce((n, p) =>
         n + B.liveImageHits(p).filter(m => m.templateId === template.id).length, 0);
-      const pips = [...document.querySelectorAll('#templates .imgnote .barpip')]
+      const pips = [...document.querySelectorAll('#templates .barpip')]
         .map(pip => ({ now: pip.classList.contains('now'),
                        bar: Number((pip.querySelector('b') || {}).textContent),
                        count: parseInt((pip.querySelector('i') || {}).textContent, 10) }));
@@ -9176,9 +9158,10 @@ try {
                         running: B.state.sweepRunning };
 
       // Change a setting while it runs, exactly as a reviewer would.
-      const slider = document.querySelector('.templates .rowsens input');
-      slider.value = String(Math.max(45, Number(slider.value) - 5));
-      slider.dispatchEvent(new Event('input', { bubbles: true }));
+      const other = document.querySelector('.templates .barpip:not(.now)');
+      if (other) other.click();
+      else B.moveBarTo(B.state.templates[0],
+        Math.max(B.AUTO_FLOOR, B.sensFor(B.state.templates[0]) - 0.05));
       await new Promise(r => setTimeout(r, 80));
       const after = { box: !box.hidden, bar: !bar.hidden,
                       searched: B.state.searched, running: B.state.sweepRunning,
@@ -9249,10 +9232,11 @@ try {
 
     // Move a setting: anything that changes what to look for.
     await page.evaluate(() => {
-      const slider = document.querySelector('.templates .rowsens input');
-      slider.value = String(Math.max(45, Number(slider.value) - 5));
-      slider.dispatchEvent(new Event('input', { bubbles: true }));
-      slider.dispatchEvent(new Event('change', { bubbles: true }));
+      const B = window.Blinded;
+      const other = document.querySelector('.templates .barpip:not(.now)');
+      if (other) other.click();
+      else B.moveBarTo(B.state.templates[0],
+        Math.max(B.AUTO_FLOOR, B.sensFor(B.state.templates[0]) - 0.05));
     });
     await page.waitForTimeout(400);
     const afterChange = await page.evaluate(() => {
