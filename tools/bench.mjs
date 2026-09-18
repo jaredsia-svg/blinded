@@ -84,6 +84,35 @@ for (const name of readdirSync(bench).sort()) {
   await page.waitForSelector('#view-review:not([hidden])', { timeout: 180000 });
   await page.waitForTimeout(1200);
 
+  // Each leg of the search timed on its own, not just the whole press.
+  //
+  // "The search took twenty seconds" says nothing about which part of it did:
+  // reading a scanned page and matching a picked logo across it are different
+  // work at different prices, and the question of what a document will cost
+  // before it is opened can only be answered per leg. Watched on the bars the
+  // run draws for itself, which is the same thing the reviewer watches.
+  await page.evaluate(() => {
+    window.__legTimes = { start: Date.now(), legs: {} };
+    const look = () => {
+      for (const row of document.querySelectorAll('[data-leg]')) {
+        const key = row.dataset.leg;
+        const count = row.querySelector('[data-count]');
+        const said = count && /^Page (\d+) of (\d+)$/.exec(count.textContent.trim());
+        if (!said) continue;
+        const at = window.__legTimes.legs[key]
+          || (window.__legTimes.legs[key] = { total: Number(said[2]) });
+        if (at.first === undefined) at.first = Date.now();
+        // How long the bar was up. Waiting for it to read 100% does not work:
+        // the row is taken down the moment the run ends, so the full bar is
+        // often never on screen to be sampled. The last time the row was seen
+        // is the same answer to within one sample.
+        at.done = Date.now();
+        at.reached = Number(said[1]);
+      }
+    };
+    window.__legWatch = setInterval(look, 40);
+  });
+
   const started = Date.now();
   // A restored draft comes back already searched, and its picked images come
   // back already answered, so the search is asked for directly rather than
@@ -116,11 +145,31 @@ for (const name of readdirSync(bench).sort()) {
   // Then the comprehensive check, which is the half that matters on a scanned
   // page: the plain search reads the text layer, and a photographed slide has
   // none. Reported separately because they cost very different amounts.
+  const legTimes = await page.evaluate(() => {
+    clearInterval(window.__legWatch);
+    const out = window.__legTimes;
+    window.__legTimes = { start: Date.now(), legs: {} };
+    window.__legWatch = setInterval(() => {
+      for (const row of document.querySelectorAll('[data-leg]')) {
+        const key = row.dataset.leg;
+        const at = window.__legTimes.legs[key]
+          || (window.__legTimes.legs[key] = {});
+        if (at.first === undefined) at.first = Date.now();
+        at.done = Date.now();
+      }
+    }, 40);
+    return out;
+  });
+
   const swept = Date.now();
   const sweepAdded = await page.evaluate(() => window.Blinded.runSweep());
   await page.waitForFunction(() => document.getElementById('busy').hidden,
     undefined, { timeout: 1800000 });
   const sweepTook = (Date.now() - swept) / 1000;
+  const checkLegs = await page.evaluate(() => {
+    clearInterval(window.__legWatch);
+    return window.__legTimes;
+  });
 
   const out = await page.evaluate(() => {
     const B = window.Blinded;
@@ -209,6 +258,33 @@ for (const name of readdirSync(bench).sort()) {
 
   console.log('==', name, '·', out.pages, 'pages · ' + out.size.join('/') + ' · ' + out.dpi.join('/') + ' dpi · search ' + searchTook.toFixed(1)
     + 's · check ' + sweepTook.toFixed(1) + 's (+' + sweepAdded + ')');
+  // Per page, per leg, so the numbers can be carried to another document.
+  {
+    const mp = out.size.map(one => {
+      const [w, h] = one.split('x').map(Number);
+      return (w * h) / 1e6;
+    });
+    const biggest = Math.max(...mp);
+    const say = (name, at, per) => {
+      if (!at || at.first === undefined || at.done === undefined) return;
+      const took = (at.done - at.first) / 1000;
+      console.log('   ' + (name + ' ').padEnd(24) + took.toFixed(1) + 's total, '
+        + (took / out.pages).toFixed(2) + 's a page'
+        + (per ? ', ' + (took / out.pages / per).toFixed(2) + 's a page a ' + (per === 1 ? 'thing' : 'thing') : '')
+        + ' · ' + biggest.toFixed(1) + 'MP pages');
+    };
+    say('reading the pages', legTimes.legs.read);
+    say('matching picked images', legTimes.legs.search);
+    const check = checkLegs.legs.sweep;
+    if (check && check.first !== undefined && check.done !== undefined) {
+      const took = (check.done - check.first) / 1000;
+      const words = out.terms.length || 1;
+      console.log('   ' + 'the check (first pass) '.padEnd(24) + took.toFixed(1)
+        + 's total, ' + (took / out.pages).toFixed(2) + 's a page, '
+        + (took / out.pages / words).toFixed(2) + 's a page a word'
+        + ' · ' + biggest.toFixed(1) + 'MP pages');
+    }
+  }
   if (out.refused.length) {
     const byTerm = new Map();
     for (const one of out.refused) {
