@@ -142,7 +142,7 @@ for (const name of readdirSync(bench).sort()) {
     undefined, { timeout: 900000 });
   const searchTook = (Date.now() - started) / 1000;
 
-  // Then the comprehensive check, which is the half that matters on a scanned
+  // Then the second check, which is the half that matters on a scanned
   // page: the plain search reads the text layer, and a photographed slide has
   // none. Reported separately because they cost very different amounts.
   const legTimes = await page.evaluate(() => {
@@ -207,7 +207,7 @@ for (const name of readdirSync(bench).sort()) {
         // the check can see it on a scan.
         read: B.state.pages.reduce((n, p) =>
           n + p.hits.filter(hit => hit.term === term).length, 0),
-        // Every mark this word has, not only the comprehensive check's. A word
+        // Every mark this word has, not only the second check's. A word
         // can be found as a picture by the search itself — that is what the
         // typed-word image pass is for — and counting only the check's marks
         // reported four copies of a found word as found nowhere, because the

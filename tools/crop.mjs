@@ -18,7 +18,7 @@ const wantBest = process.argv[4] === 'best';
 const picks = process.argv[4] && !wantBest
   ? process.argv[4].split(',').map(Number) : null;
 const scores = JSON.parse(readFileSync(join(folder, 'scores.json')));
-// Either a picked image by its id, or a word the comprehensive check found.
+// Either a picked image by its id, or a word the second check found.
 const logo = scores.templates.find(t => t.id === wanted)
   || scores.terms.find(t => t.term === wanted)
   || scores.templates[0];

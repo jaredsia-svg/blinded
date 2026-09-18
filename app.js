@@ -213,9 +213,9 @@
     sweepRunning: false,
     sweepStopped: false,
     sweepReached: 0,
-    // True when Comprehensive found nothing left to correlate.
+    // True when the second check found nothing left to correlate.
     sweepSkipped: false,
-    // True once the post-Search Comprehensive offer was shown or skipped
+    // True once the post-Search second-check offer was shown or skipped
     // for the current search, so it does not pop again on redraw.
     sweepOfferShown: false,
     // Spots the thorough check proposed and stood down from, so the note can
@@ -311,7 +311,7 @@
     renderFoot();
   }
 
-  // The same for the comprehensive check, which the reviewer starts from the
+  // The same for the second check, which the reviewer starts from the
   // same bar and waits for in the same place.
   function saidChecked(added) {
     state.footRan = 'check';
@@ -376,7 +376,7 @@
       : 'Initial search complete. Nothing found to redact.');
     if (check) {
       const how = state.footStopped
-        ? 'Comprehensive check stopped. ' : 'Comprehensive check complete. ';
+        ? 'Second check stopped. ' : 'Second check complete. ';
       line('amber', state.footAdded
         ? how + 'Review marks outlined in amber in left panel.'
         : how + 'Nothing further found.');
@@ -415,7 +415,7 @@
   // A leg that has no work is not drawn at all. An empty bar for a search
   // nobody asked for is a bar that will never move.
   // `into` is for a run that reports somewhere other than the current host:
-  // the comprehensive check has its own row in the foot and draws the same
+  // the second check has its own row in the foot and draws the same
   // bars there, so that waiting for it looks like waiting for a search.
   // What a run offers while it is going: Pause for a search, Stop for the
   // check. It is drawn here rather than kept in the markup because every
@@ -1984,7 +1984,7 @@
     button.classList.toggle('hunt', searching && unanswered > 0 && !state.redacting);
     button.classList.toggle('done', !searching && state.applied);
     button.title = !searching && state.applied ? 'Press to uncover and look at the marks again' : '';
-    // Not while the comprehensive check is running: it is a pass over the same
+    // Not while the second check is running: it is a pass over the same
     // pages, and the two cannot both own the document. Stopping it is a button
     // in the panel, not a dialog thrown in front of this one.
     // Nor while a search is running. It used to be impossible to press,
@@ -1995,7 +1995,7 @@
       ? state.kind !== 'text' && !state.pages.length
       : !state.applied && marks === 0 && unsearched === 0);
     if (state.sweepRunning) {
-      button.title = 'The comprehensive check is running  - let it finish, '
+      button.title = 'The second check is running  - let it finish, '
         + 'or stop it at the foot of the page';
     } else if (state.redacting) {
       button.title = 'Searching  - the bar beside this says how far it has got';
@@ -2079,7 +2079,7 @@
   // Runs every search that has not run yet and proposes what it found. This is
   // the first of the three presses; it does not cover anything.
   async function runSearch() {
-    // The comprehensive check and a search are two passes over the same pages,
+    // The second check and a search are two passes over the same pages,
     // and they cannot both own the document. Pressing Search used to put a
     // dialog in the way offering to stop the check — a question asked at the
     // worst moment, about work the reviewer had not been thinking about. The
@@ -2214,7 +2214,7 @@
     applyLabels();
     redrawAll();
     refreshApply();
-    // Offer Comprehensive once the overlay is down so the choice is not
+    // Offer the second check once the overlay is down so the choice is not
     // buried under "Working…". Skip stays available from the panel button.
     offerSweepAfterSearch();
   }
@@ -3763,7 +3763,7 @@
     //
     // In the same colour it was drawn in, which it was not: everything
     // dismissed came out amber, so clicking a green mark off turned it into
-    // something that looked like a find from the comprehensive check. Dashed
+    // something that looked like a find from the second check. Dashed
     // is what says "not going to be covered"; the colour goes on saying where
     // the mark came from.
     //
@@ -5896,7 +5896,7 @@
           template.searched = false;
           template.matches = 0;
           template.rawMatches = 0;
-          // What this image found was found at the old bar. The comprehensive
+          // What this image found was found at the old bar. The second check
           // check's marks are not this slider's to throw away: they cost
           // minutes, and they are not about this image.
           for (const page of state.pages) {
@@ -6170,7 +6170,7 @@
       // rather than by making every row carry a list nobody has looked at.
       // Two circles, not one number.
       //
-      // The reading and the comprehensive check are different kinds of answer
+      // The reading and the second check are different kinds of answer
       // — one recognised the letters, the other matched a shape — and they are
       // already drawn apart on the page in green and amber. Adding them
       // together in the panel asked the reviewer to hold a distinction the
@@ -6197,7 +6197,7 @@
         dot.disabled = places.length === 0 || state.kind === 'text';
         if (!dot.disabled) {
           dot.title = kind === 'shape'
-            ? 'Where the comprehensive check found it'
+            ? 'Where the second check found it'
             : 'Where it is';
           dot.setAttribute('aria-expanded', String(state.openTally === key));
           dot.addEventListener('click', () => {
@@ -7703,12 +7703,48 @@
     }
   }
 
-  // How long a sweep takes, per megapixel of page, per word.
+  // How long the check takes, per page, per word, per megapixel.
   //
-  // Measured, not guessed: 96 pages of 1.94 megapixels for one word took 66.8
-  // seconds on four cores, which is 0.36. It was four times that when the
-  // sweep drew eight typefaces instead of two.
-  const SWEEP_SECONDS_PER_MP = 0.36;
+  // Measured on ten benchmark documents, after the numerator moved into a
+  // transform. Seconds a page a word, divided by the page's megapixels:
+  //
+  //   scanned deck      3.5      photographed slide   1.8
+  //   pre-IPO deck      3.7      teaser               1.9
+  //   drinks group      1.4      investor deck        2.0
+  //   watch catalogue   1.35
+  //
+  // Which is a far tighter spread than it used to be -- 1.35 to 3.7, where
+  // before the transform the same ratio ran 3.5 to 11.5. The cost now follows
+  // the page's area rather than the shape of the word, which is exactly what
+  // a transform does: it stopped caring how big the template is.
+  //
+  // Three is about the middle of that. It is used both to tell the reviewer
+  // how long the wait will be and to decide whether to ask them at all, and
+  // the middle is right for the first; for the second the two thresholds are
+  // far enough apart that a fifth either way does not move the answer.
+  const SWEEP_SECONDS_PER_MP = 3;
+
+  // Page area stops mattering past about four megapixels: the matcher caps
+  // its own working resolution, so a twelve-megapixel photograph costs what a
+  // four-megapixel page costs. Measured -- the photographed slide is the
+  // cheapest per megapixel of the ten for exactly this reason.
+  const SWEEP_MAX_MP = 4;
+
+  // What the check in front of us will cost.
+  function sweepEstimate() {
+    const work = sweepWorkload();
+    const first = state.pages[0];
+    const megapixels = first
+      ? Math.min(SWEEP_MAX_MP, (first.source.width * first.source.height) / 1e6) : 2;
+    const seconds = work.pages * work.terms * megapixels * SWEEP_SECONDS_PER_MP;
+    return {
+      seconds,
+      perPage: work.pages ? seconds / work.pages : 0,
+      pages: work.pages,
+      terms: work.terms,
+    };
+  }
+
 
   // ---------- the thorough sweep ----------
   //
@@ -7745,17 +7781,17 @@
   // Text-layer hits are exact. OCR hits only count when every word box the
   // match touches was read at READER_SURE or above — the same bar the sweep
   // uses to let a confident reading veto a shape guess. Unsure OCR is exactly
-  // what Comprehensive is for, so those pages stay in the queue.
+  // what the second check is for, so those pages stay in the queue.
   function pageHasConfidentTerm(page, term) {
     // Text-layer hits are exact: the page really contains the term, and
-    // Comprehensive has nothing to second-guess there.
+    // The second check has nothing to second-guess there.
     //
     // Only where the reading can say *where*. A finding with no rectangle is a
     // match in the characters that could not be placed on the page — the text
     // layer holds the word but not the boxes for it — so nothing is drawn and
     // nothing is covered. Measured on a slide deck: "Tokenomics" was found in
     // the text at offset 2, given no rectangle, marked nowhere, and the
-    // comprehensive check then skipped the page as already answered. The word
+    // second check then skipped the page as already answered. The word
     // was on the page in plain sight the whole time. A reading that cannot
     // point at the word has not settled anything.
     for (const f of page.findings || []) {
@@ -7763,7 +7799,7 @@
     }
     // OCR hits do NOT settle the page. Measured on a photographed TCC slide
     // where "F&N" was typed: OCR boxed four copies confidently and skipped
-    // Comprehensive, while other copies were read as "Fan" / "FEN" / missed
+    // the second check, while other copies were read as "Fan" / "FEN" / missed
     // on white-on-blue and in "F&N's Financials". One good OCR hit is not
     // proof every copy was read. Shape search is the second look for that.
     return false;
@@ -7773,7 +7809,7 @@
     return state.pages.filter(page => !pageHasConfidentTerm(page, term));
   }
 
-  // How much work a Comprehensive run will actually do (for the time note).
+  // How much work a second-check run will actually do (for the time note).
   function sweepWorkload() {
     let pageSet = new Set();
     let terms = 0;
@@ -7994,7 +8030,7 @@
   // Does the reader already know this is a different word?
   //
   // Measured on a fifteen-page report, looking for "jared": the search found
-  // all fifteen occurrences from the text, and the comprehensive check then
+  // all fifteen occurrences from the text, and the second check then
   // proposed fifty-four more — every single one of them wrong. They were
   // "offered", "scared", "faced", "shared", "paired", "considered",
   // "separate", "hundred", "rigorous", "validated". A five-letter word's
@@ -8177,7 +8213,7 @@
 
 
 
-  // Refuse ≤3-letter Comprehensive shape hits inside logo-grid regions.
+  // Refuse ≤3-letter second-check shape hits inside logo-grid regions.
   function shortAcronymShapeRefused(page, rect, term) {
     const roles = page.roles || rolesForPage(page);
     page.roles = roles;
@@ -8686,7 +8722,7 @@
     // sentence beside it saying which page it was on and that the reviewer
     // could carry on reading — which is true of every run reported down here,
     // and so is not worth a sentence.
-    const want = [{ key: 'sweep', label: 'Comprehensive check', total }];
+    const want = [{ key: 'sweep', label: 'Second check', total }];
     if (deepOf) {
       want.push({ key: 'deep', label: 'Looking again where nothing was found',
         total: deepOf });
@@ -8713,7 +8749,7 @@
   // opinion on that redaction: there is nothing to be thorough about before
   // there is a result to check.
 
-  // After the first Search finishes, offer Comprehensive once — skippable,
+  // After the first Search finishes, offer the second check once — skippable,
   // with the longer explanation collapsed. Runs the same background sweep
   // the panel button uses.
   function shouldOfferSweep() {
@@ -8734,11 +8770,22 @@
 
   function offerSweepAfterSearch() {
     // Only when a second check would actually do work (same gate as the
-    // panel button). Reading already settled → no popout.
+    // panel button). Reading already settled -> no popout.
     if (!shouldOfferSweep()) return;
     state.sweepOfferShown = true;
+    describeSweepOffer();
     el('sweepoffer').hidden = false;
     el('sweepofferx').focus();
+  }
+
+  // What the dialog says, with the wait worked out for this document.
+  function describeSweepOffer() {
+    const body = el('sweepofferbody');
+    if (!body) return;
+    const cost = sweepEstimate();
+    body.textContent = 'Some of the words you seek to redact appear as images'
+      + ' in the document with no underlying text. This requires a second'
+      + ' check (' + describeTime(Math.round(cost.seconds)) + '). Proceed?';
   }
 
   function bindSweepOffer() {
@@ -8931,48 +8978,50 @@
       // nothing on any page resembled the word enough to be worth checking
       // properly, which is what the reviewer needs to know before they decide
       // the document is clean.
-      lead.textContent = 'Not marked anywhere. Nothing resembling it was found'
-        + ' on any page.';
+      lead.textContent = 'Nothing like it was found on any page.';
       return card;
     }
-    lead.textContent = 'Not marked anywhere. This is the closest the check came:';
+    lead.textContent = 'Review low confidence matches:';
     card.append(shot);
 
-    const why = document.createElement('p');
-    why.className = 'offerwhy';
-    why.textContent = 'Page ' + (offer.at.p + 1) + ' \u00b7 scored '
-      + offer.score.toFixed(2) + ', needed ' + offer.bar.toFixed(2)
-      + (offer.part && offer.part !== offer.term
-        ? ' \u00b7 matched on "' + offer.part + '"' : '');
-    card.append(why);
-
+    // One row under the picture: where it is, and the two answers.
+    //
+    // It was three rows -- a sentence of scores, a pair of worded buttons, and
+    // a link to the page -- for a question that is "is this it, yes or no".
+    // The page is the link, a tick is yes and a cross is no.
     const row = document.createElement('div');
     row.className = 'offerrow';
+
+    const where = document.createElement('button');
+    where.type = 'button';
+    where.className = 'offerwhere';
+    where.textContent = 'Page ' + (offer.at.p + 1) + ' · ' + offer.score.toFixed(2);
+    where.title = 'Show me on the page';
+    where.addEventListener('click', () => goToPage(offer.at.p));
+
     const take = document.createElement('button');
     take.type = 'button';
-    take.className = 'ghost offertake';
-    take.textContent = 'That is it \u2013 mark it';
+    take.className = 'offeryes';
+    take.textContent = '\u2713';
+    take.title = 'Yes, redact this';
+    take.setAttribute('aria-label', 'Yes, redact this');
     take.addEventListener('click', () => takeSweepOffer(offer));
+
     const drop = document.createElement('button');
     drop.type = 'button';
-    drop.className = 'ghost offerdrop';
-    drop.textContent = 'Not it';
+    drop.className = 'offerno';
+    drop.textContent = '\u2715';
+    drop.title = 'No, leave it';
+    drop.setAttribute('aria-label', 'No, leave it');
     drop.addEventListener('click', () => {
       state.offersDismissed = state.offersDismissed || new Set();
       state.offersDismissed.add(offer.term);
       renderTermCounts();
       renderSweep();
     });
-    row.append(take, drop);
+
+    row.append(where, take, drop);
     card.append(row);
-
-    const look = document.createElement('button');
-    look.type = 'button';
-    look.className = 'offerlook';
-    look.textContent = 'Show me on the page';
-    look.addEventListener('click', () => goToPage(offer.at.p));
-    card.append(look);
-
     return card;
   }
 
@@ -8995,11 +9044,11 @@
   function renderSweep() {
     renderSweepBody();
     const box = el('sweepbox');
-    const button = el('sweep');
+    // Only the note now. The button that starts the check has moved to the
+    // foot, and asking whether *it* is hidden kept this panel on screen with
+    // nothing in it — an amber strip under the term list saying nothing.
     const note = el('sweepnote');
-    const empty = (!button || button.hidden)
-      && (!note || !note.textContent.trim());
-    if (!box.hidden && empty) box.hidden = true;
+    if (!box.hidden && (!note || !note.textContent.trim())) box.hidden = true;
   }
 
   function renderSweepBody() {
@@ -9033,6 +9082,21 @@
     // this panel and must be right whether the panel is shown or not — it is
     // now hidden while the check runs, and the row that says the check is
     // running was being left behind with it.
+    // The button that starts it lives in the foot, beside the bars it raises
+    // and the report it leaves. So it is decided here, before anything that
+    // depends on whether the panel is on screen at all.
+    const work = swept ? null : sweepWorkload();
+    const canRun = state.searched && !state.sweepRunning && !state.redacting
+      && !swept && state.terms.length > 0 && state.kind !== 'text'
+      && Boolean(work && work.pages && work.terms);
+    button.hidden = !canRun;
+    if (canRun) {
+      // Honest about the cost in the label itself, because that is the whole
+      // reason this is a button rather than something that simply happens.
+      button.textContent = 'Second check ('
+        + describeTime(Math.round(sweepEstimate().seconds)) + ')';
+    }
+
     const running = el('sweeprun');
     running.hidden = !state.sweepRunning;
     if (!state.sweepRunning) {
@@ -9049,29 +9113,18 @@
     if (box.hidden) return;
 
     if (state.sweepRunning) {
-      button.hidden = true;
       note.textContent = '';
       return;
     }
 
     if (!swept) {
-      const work = sweepWorkload();
       // Reading already settled every typed word — nothing for shape to do.
       if (!work.pages || !work.terms) {
-        button.hidden = true;
         setSidebarNote(note,
           'Nothing left for a second check – reading already covered every typed word.');
         return;
       }
-      button.hidden = false;
-      button.textContent = 'Comprehensive Check';
-      // Honest about the cost, because it is the whole reason this is a
-      // button rather than the default.
-      const first = state.pages[0];
-      const megapixels = first ? (first.source.width * first.source.height) / 1e6 : 2;
-      // Cost tracks pages times terms that still need a shape pass, not the whole doc.
-      const seconds = Math.round(
-        work.pages * work.terms * megapixels * SWEEP_SECONDS_PER_MP);
+      const seconds = Math.round(sweepEstimate().seconds);
       if (state.sweepStopped && state.sweepReached) {
         const full = 'Stopped after ' + state.sweepReached
           + ' page' + (state.sweepReached === 1 ? '' : 's') + ' still in doubt'
@@ -9085,18 +9138,10 @@
           + describeTime(seconds) + ' left to finish.', full);
         return;
       }
-      const offerFull = 'The first search may miss lettering in logos, photos '
-        + 'and coloured headers, and can mark the wrong spot. A second check '
-        + 're-inspects by shape where reading missed or was unsure ('
-        + work.pages + (work.pages === 1 ? ' page' : ' pages')
-        + (work.terms !== state.terms.length
-          ? ', ' + work.terms + (work.terms === 1 ? ' word' : ' words')
-          : '')
-        + '), runs in the background, updates the sidebar, and shows new marks '
-        + 'in amber. About ' + describeTime(seconds) + '.';
-      setSidebarNote(note,
-        'Optional second check – about ' + describeTime(seconds) + '.',
-        offerFull);
+      // Nothing here. The button in the foot carries the offer and the wait,
+      // and the panel saying the same thing again in amber is the kind of
+      // repetition this bar has been losing all week.
+      note.textContent = '';
       return;
     }
 
@@ -9105,7 +9150,6 @@
     // bars that were filling a moment ago — the panel was repeating it a
     // second time, in amber, under a term list that already shows the same
     // answer as a number beside each word.
-    button.hidden = true;
     note.textContent = '';
   }
 
@@ -9822,6 +9866,7 @@
     readPages, matchOcr, ocrPending, ocrMatchStale, showWordControls,
     sweepTemplates, sweepCaseOf, runSweep, renderSweep, alreadyCovered, readerContradicts, sweepPartsFor,
     readerSeedsFor, partnerSeedsFrom, markedAt,
+    sweepEstimate, describeSweepOffer,
     pageHasConfidentTerm, pagesNeedingSweep, sweepWorkload,
     READER_SURE, sweepProgress,
     settleSweep,

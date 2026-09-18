@@ -967,7 +967,7 @@ check('an empty term is harmless', TextImage.shapeRelief('') === 0
 
 
 
-// Typed terms: OCR-tolerant connectors and Comprehensive settlement cues.
+// Typed terms: OCR-tolerant connectors and second-check settlement cues.
 (() => {
   check('F&N matches itself',
     Detect.findTerms('F&N is leading', ['F&N']).length === 1);
@@ -1080,7 +1080,7 @@ check('an empty term is harmless', TextImage.shapeRelief('') === 0
     Detect.hostContradictsShapeTerm('', 'KAS') === false);
 })();
 
-// Comprehensive phrase sweeps: content parts + adjacent pairing.
+// Second-check phrase sweeps: content parts + adjacent pairing.
 (() => {
   check('phraseContentParts drops connectors',
     JSON.stringify(TextImage.phraseContentParts('Fraser and Neave')) === JSON.stringify(['Fraser', 'Neave']));

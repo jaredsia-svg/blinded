@@ -31,7 +31,7 @@ const check = (label, ok, detail) => {
 // Running one section of this suite instead of all of it.
 //
 // The whole pass is minutes, because it does the real work: real PDFs
-// rendered, real OCR, real comprehensive checks, in a real browser. That is
+// rendered, real OCR, real second checks, in a real browser. That is
 // the point of it, and it is also the wrong price for checking one small edit.
 // ONLY=<text> runs the sections whose names contain that text, as a regular
 // expression, and skips the rest.
@@ -1193,7 +1193,7 @@ try {
   // ---------- a dismissed mark keeps its own colour ----------
   //
   // Dashed is what says "not going to be covered". Everything dismissed was
-  // also being redrawn amber, which is the colour the comprehensive check
+  // also being redrawn amber, which is the colour the second check
   // uses — so clicking a green mark off turned it into something that looked
   // like a different kind of find.
   await part("a dismissed mark keeps its own colour", async () => {
@@ -1217,7 +1217,7 @@ try {
       const near = (r0, g0, b0) => (red, g, b) =>
         Math.abs(red - r0) < 40 && Math.abs(g - g0) < 40 && Math.abs(b - b0) < 40;
       const isGreen = near(17, 138, 78);     // MARK_GREEN
-      const isAmber = near(217, 139, 31);    // what the comprehensive check uses
+      const isAmber = near(217, 139, 31);    // what the second check uses
       let green = 0, amber = 0;
       for (let i = 0; i < px.length; i += 4) {
         if (isGreen(px[i], px[i + 1], px[i + 2])) green++;
@@ -1245,7 +1245,7 @@ try {
     check('a dismissed mark is outlined in the colour it was found in',
       off && covered && off.green - covered.green > 20,
       JSON.stringify({ off, covered }));
-    check('and adds nothing in the colour the comprehensive check uses',
+    check('and adds nothing in the colour the second check uses',
       off && covered && off.amber === covered.amber,
       JSON.stringify({ off, covered }));
     check('and once Redact is pressed the dashed outline goes',
@@ -2627,7 +2627,7 @@ try {
   check('the list is not there until a circle is pressed',
     where.closed === 0, JSON.stringify(where));
   // Two circles: green for what the reading found, amber for what the
-  // comprehensive check added. Adding them together asked the reviewer to
+  // second check added. Adding them together asked the reviewer to
   // hold a distinction the page is at pains to make.
   check('the green circle counts what the reading found',
     Number(where.counts.green) === where.reading, JSON.stringify(where));
@@ -4201,10 +4201,10 @@ try {
           && card.closest('li').previousElementSibling
             .querySelector('.t').textContent === 'Ghostword'),
         hasShot: Boolean(card && card.querySelector('canvas.offershot')),
-        why: card ? card.querySelector('.offerwhy').textContent : '',
+        where: card ? card.querySelector('.offerwhere').textContent : '',
       };
 
-      card.querySelector('.offertake').click();
+      card.querySelector('.offeryes').click();
       out.marks = only();
       out.amber = (B.state.pages[0].imageHits || [])
         .filter(m => m.term === 'Ghostword').every(m => m.bySweep === true);
@@ -4214,7 +4214,7 @@ try {
       out.marksAfterUndo = only();
       out.backAfterUndo = Boolean(document.querySelector('#termcounts .offer'));
 
-      document.querySelector('#termcounts .offerdrop').click();
+      document.querySelector('#termcounts .offerno').click();
       out.goneAfterDrop = !document.querySelector('#termcounts .offer');
 
       // Nothing verified anywhere is a different answer from a near miss, and
@@ -4225,7 +4225,7 @@ try {
       B.renderTermCounts();
       out.noneText = document.querySelector('#termcounts .offerlead').textContent;
       out.noneHasShot = Boolean(document.querySelector('#termcounts .offer canvas'));
-      out.noneHasTake = Boolean(document.querySelector('#termcounts .offertake'));
+      out.noneHasTake = Boolean(document.querySelector('#termcounts .offeryes'));
 
       B.state.terms = wasTerms;
       B.state.sweptTerms = wasSwept;
@@ -4239,8 +4239,10 @@ try {
 
     check('a word the check placed nowhere is offered as a cut-out',
       offer.shown && offer.cards === 1 && offer.hasShot, JSON.stringify(offer));
-    check('with the score it reached and the bar it had to clear',
-      /scored 0\.61, needed 0\.66/.test(offer.why), JSON.stringify(offer));
+    // One row, not three: where it is, then yes and no. The page is the link
+    // and the score is the only number a reviewer can act on.
+    check('with the page it is on and what it scored',
+      /^Page 1 · 0\.61$/.test(offer.where.trim()), JSON.stringify(offer));
     check('accepting it marks the page in amber',
       offer.marks === 1 && offer.amber === true, JSON.stringify(offer));
     check('and the offer goes once the word has a mark',
@@ -4251,7 +4253,7 @@ try {
     check('turning it down puts the question away',
       offer.goneAfterDrop === true, JSON.stringify(offer));
     check('a word nothing resembled says so, with nothing to accept',
-      /Nothing resembling it/.test(offer.noneText)
+      /Nothing like it was found/.test(offer.noneText)
       && offer.noneHasShot === false && offer.noneHasTake === false,
       JSON.stringify(offer));
   });
@@ -4323,7 +4325,7 @@ try {
       run.stale === 0, JSON.stringify(run));
     check('and the foot says what the check itself did when it finishes',
       run.afterShown && run.runGone
-      && /Comprehensive check (complete|stopped)/.test(run.after),
+      && /Second check (complete|stopped)/.test(run.after),
       JSON.stringify(run));
     // The deeper pass is the one that used to leave its line behind: it adds a
     // second bar part way through, and the run ends from inside it.
@@ -4383,7 +4385,7 @@ try {
       && rules.sameWordAgain.includes('Singapore'), JSON.stringify(rules));
   });
 
-  // ---------- what the comprehensive check draws ----------
+  // ---------- what the second check draws ----------
   //
   // The check looks for a word by drawing it and correlating the picture. What
   // it draws is therefore a real decision, and lower case is the wrong answer:
@@ -4396,7 +4398,7 @@ try {
   // Nothing is lost by capitalising: the letters themselves are found by
   // reading the page, which does not care about case, and this check only runs
   // where the reading could not see.
-  await part("what the comprehensive check draws", async () => {
+  await part("what the second check draws", async () => {
     const drawn = await page.evaluate(() => {
       const B = window.Blinded;
       return {
@@ -7291,7 +7293,7 @@ try {
       B.state.searched = false;
       B.state.sweptTerms = [];
       B.renderSweep();
-      return document.getElementById('sweepbox').hidden;
+      return document.getElementById('sweep').hidden;
     });
     check('the thorough check is not offered before anything has been searched',
       early === true, String(early));
@@ -7307,10 +7309,10 @@ try {
       B.state.searched = true;
       B.state.sweptTerms = [];
       B.renderSweep();
-      const offered = !document.getElementById('sweepbox').hidden;
+      const offered = !document.getElementById('sweep').hidden;
       B.state.searched = false;
       B.renderSweep();
-      const out = { offered, afterChange: !document.getElementById('sweepbox').hidden,
+      const out = { offered, afterChange: !document.getElementById('sweep').hidden,
                     label: document.getElementById('apply').textContent.trim() };
       // Put back what this borrowed: a sweep left recorded here would make
       // the next block think one had already run.
@@ -7329,28 +7331,32 @@ try {
       // second opinion on what the first pass found.
       B.state.searched = true;
       B.renderSweep();
+      const go = document.getElementById('sweep');
       return {
         hidden: document.getElementById('sweepbox').hidden,
-        button: document.getElementById('sweep').hidden,
-        note: document.getElementById('sweepnote').textContent,
+        button: go.textContent,
+        inFoot: !go.hidden && Boolean(go.closest('.exportbar')),
+        note: document.getElementById('sweepnote').textContent.trim(),
       };
     });
-    check('and is offered as soon as a search has run', offered.hidden === false
-      && offered.button === false, JSON.stringify(offered));
+    check('and is offered as soon as a search has run',
+      offered.inFoot === true, JSON.stringify(offered));
     check('without waiting for the redaction to be applied',
       (await page.evaluate(() => window.Blinded.state.applied)) === false);
-    // It is slow enough that springing it on someone would be a trap. The
-    // offer estimates the wait from the work in front of it now, rather than
-    // saying "a couple of minutes" about a one-page document.
-    check('the offer says how long it will take',
-      /about \d+ (second|minute)/i.test(offered.note), JSON.stringify(offered.note));
-    check('and says the document stays usable while it runs',
-      /in the background/i.test(offered.note), JSON.stringify(offered.note));
-    check('and that what it finds is a suggestion, in amber',
-      /amber/i.test(offered.note), JSON.stringify(offered.note));
+    // The offer is the button in the foot, beside the bars it will raise and
+    // the report it will leave. It used to be a button in the panel with a
+    // note under it saying the same thing in amber, three sections away from
+    // anything to do with running.
+    check('the offer is a button in the foot, not a note in the panel',
+      offered.inFoot === true && offered.note === '', JSON.stringify(offered));
     check('the button says what it is',
-      /comprehensive check/i.test(
-        await page.textContent('#sweep')), await page.textContent('#sweep'));
+      /second check/i.test(offered.button), offered.button);
+    // Slow enough that springing it on someone would be a trap, so the wait
+    // is on the button rather than discovered afterwards -- and taken from
+    // the work in front of it, not from "a couple of minutes" about any
+    // document at all.
+    check('and how long it will take, for this document',
+      /\(\d+ (second|minute)s?\)/i.test(offered.button), offered.button);
 
     // The sweep draws every typeface, not the two the old fallback used: the
     // whole reason to run it is that the reading was defeated by unusual type.
@@ -7558,7 +7564,7 @@ try {
     });
     check('the search button is greyed out while the check runs',
       raced.during.disabled === true, JSON.stringify(raced));
-    check('and says why', /comprehensive check is running/i.test(raced.during.title),
+    check('and says why', /second check is running/i.test(raced.during.title),
       raced.during.title);
     // It used to say so in the panel, beside a yellow box holding the bar and
     // the stop button. Both live at the foot of the page now, with the button
@@ -7675,7 +7681,7 @@ try {
     check('and every mark it adds is flagged as its own',
       swept.marks >= 1, JSON.stringify(swept));
     check('afterwards the foot says the check found something',
-      /Comprehensive check complete\. Review marks outlined in amber/
+      /Second check complete\. Review marks outlined in amber/
         .test(swept.note), JSON.stringify(swept.note));
 
     // One report, two lines, one per run, each carrying the colour its marks
@@ -7721,7 +7727,7 @@ try {
     check('both runs are reported, one line each',
       refused.lines.length === 2
       && /^Initial search complete/.test(refused.lines[0])
-      && /^Comprehensive check complete/.test(refused.lines[1]),
+      && /^Second check complete/.test(refused.lines[1]),
       JSON.stringify(refused));
     check('each line wearing the colour its marks wear on the page',
       /green/.test(refused.dots[0]) && /amber/.test(refused.dots[1]),
@@ -9071,6 +9077,54 @@ try {
       !legs.some(l => /reading pages/i.test(l)), JSON.stringify(legs));
   });
 
+  // ---------- what the offer says ----------
+  //
+  // The dialog used to say "a couple of minutes" whatever the document was,
+  // and the panel's estimate came from a constant measured before the sweep
+  // drew two typefaces instead of eight, before the shortlist grew and before
+  // the numerator moved into a transform: it was out by a factor of thirty,
+  // promising three seconds for a check that took ninety-two.
+  await part("what the offer says", async () => {
+    if (await page.isVisible('#view-review')) await newFile();
+    await page.waitForSelector('#view-drop:not([hidden])', { timeout: 15000 });
+    await page.setInputFiles('#file', fixturePath);
+    await page.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
+    await setTerms(page, ['Zzyzx']);
+
+    const said = await page.evaluate(() => {
+      const B = window.Blinded;
+      B.state.searched = true;
+      B.state.sweptTerms = [];
+      const real = B.state.pages;
+      const grow = n => Array.from({ length: n }, (_, i) => ({ ...real[0], index: i }));
+      const at = n => {
+        B.state.pages = grow(n);
+        const cost = B.sweepEstimate();
+        B.describeSweepOffer();
+        return { pages: n, seconds: Math.round(cost.seconds),
+          perPage: +cost.perPage.toFixed(1),
+          words: document.getElementById('sweepofferbody').textContent };
+      };
+      const out = { small: at(1), big: at(90) };
+      B.state.pages = real;
+      return out;
+    });
+
+    check('the offer says why a second check is needed',
+      /appear as images in the document with no underlying text/.test(said.big.words),
+      said.big.words);
+    check('and how long it will take, for this document',
+      /This requires a second check \(.+\)\. Proceed\?/.test(said.big.words),
+      said.big.words);
+    // Not a constant: ninety pages is ninety times one page's work, and the
+    // sentence has to move with it or it is decoration.
+    check('an estimate that grows with the document',
+      said.big.seconds > said.small.seconds * 50,
+      JSON.stringify({ one: said.small.seconds, ninety: said.big.seconds }));
+    check('and is quoted in minutes once it is minutes',
+      /\d+ minutes?\)/.test(said.big.words), said.big.words);
+  });
+
   // ---------- a running check stays on screen ----------
   //
   // Changing a setting puts the document back to un-searched, and that was
@@ -9146,13 +9200,13 @@ try {
       JSON.stringify(during));
   });
 
-  // ---------- what the comprehensive check found outlives a re-search ----------
+  // ---------- what the second check found outlives a re-search ----------
   //
   // Its marks come off the page when a setting changes, like every other
   // found mark: they answered the search that has just been set aside. What
   // they must not do is go for good. Re-running a check that takes minutes to
   // say the same thing is not a reasonable price for moving a slider.
-  await part("what the comprehensive check found outlives a re-search", async () => {
+  await part("what the second check found outlives a re-search", async () => {
     if (await page.isVisible('#view-review')) await newFile();
     await page.waitForSelector('#view-drop:not([hidden])', { timeout: 15000 });
     await page.setInputFiles('#file', fixturePath);
@@ -9165,7 +9219,7 @@ try {
     const planted = await page.evaluate(() => {
       const B = window.Blinded;
       const p = B.state.pages[0];
-      // What a finished comprehensive check leaves behind.
+      // What a finished second check leaves behind.
       p.imageHits.push({ id: 'sweep:kept', term: 'Jane',
         rect: { x: 300, y: 500, w: 90, h: 24 }, score: 1, bySweep: true });
       B.state.sweptTerms = ['Jane'];
