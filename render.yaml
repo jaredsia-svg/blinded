@@ -44,6 +44,34 @@ services:
           object-src 'none';
           base-uri 'none';
           form-action 'none'
+      # The buying page, and only the buying page.
+      #
+      # Taking a card needs a payment processor's script, its frames and its
+      # network calls. Those permissions are granted here, on a page that
+      # never opens a document, and nowhere else -- so the policy over the
+      # page that does hold a document is exactly what it was before there
+      # was anything to buy. A path rule wins over the /* one above it.
+      #
+      # This is the whole reason buying happens in a second window rather
+      # than inside the tool.
+      - path: /unlock.html
+        name: Content-Security-Policy
+        value: >-
+          default-src 'self';
+          script-src 'self' https://cdn.paddle.com;
+          style-src 'self' 'unsafe-inline';
+          img-src 'self' data: https://*.paddle.com;
+          connect-src 'self' https://*.paddle.com;
+          frame-src https://*.paddle.com;
+          frame-ancestors 'none';
+          object-src 'none';
+          base-uri 'none';
+          form-action 'none'
+      # Paddle's overlay opens windows and reads back from them, which a
+      # same-origin opener policy forbids.
+      - path: /unlock.html
+        name: Cross-Origin-Opener-Policy
+        value: same-origin-allow-popups
       # Older browsers that do not read frame-ancestors.
       - path: /*
         name: X-Frame-Options

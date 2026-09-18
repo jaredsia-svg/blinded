@@ -83,7 +83,7 @@
   "isAccessibleForFree": true
 }
 </script>
-<link rel="stylesheet" href="app.css?v=00a410c8">
+<link rel="stylesheet" href="app.css?v=0932644a">
 </head>
 <body>
 
@@ -716,6 +716,10 @@
            search and the report after one are the same sentence in two
            moments, and one of them was over on the right by the buttons. -->
       <span id="exportnote" class="hint"></span>
+      <!-- What this costs, said when the document opens rather than when the
+           file is asked for. A price discovered after the work is done is a
+           bait however small it is. -->
+      <span id="paysays" class="hint paysays" hidden></span>
       <!-- Three buttons in the order the work happens, always all three, each
            greyed until it is its turn. One button that changed its own name
            from Search to Redact to Redacted moved the button beside it every
@@ -793,6 +797,52 @@
     <div class="confirmgo sweepgo">
       <button type="button" id="sweepofferskip" class="ghost confirm-action">Skip</button>
       <button type="button" id="sweepoffergo" class="primary amber confirm-action">Proceed</button>
+    </div>
+  </div>
+</div>
+
+<!-- The one moment money is mentioned. It comes before the Save as box, not
+     after it: being asked to name a file, choose its options and press Save,
+     and only then being told there is a price, is a bait -- the work is done
+     and the answer is "pay or throw it away". -->
+<div id="paybox" class="busy" hidden role="dialog" aria-modal="true"
+  aria-labelledby="payhead">
+  <div class="busy-inner nameinner confirminner sweepoffer-inner">
+    <button type="button" id="payx" class="dialog-x" aria-label="Close">
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <path d="M6 6l12 12M18 6L6 18"/>
+      </svg>
+    </button>
+    <h2 class="namehead" id="payhead">A pass for this one</h2>
+    <p class="confirmbody" id="paybody"></p>
+    <ul class="paylist" id="paylist"></ul>
+    <p class="hint payfine">Buying opens a window on this site. The document
+      stays here, in this tab, and is not part of it.</p>
+    <p class="hint warnhint" id="paynote" hidden></p>
+    <div class="confirmgo sweepgo">
+      <button type="button" id="payskip" class="ghost confirm-action">Not now</button>
+      <button type="button" id="paygo" class="primary confirm-action">Buy a pass</button>
+    </div>
+    <p class="payhave"><button type="button" id="paycode" class="footlink">I
+      already have a pass</button></p>
+  </div>
+</div>
+
+<!-- A pass bought earlier, or on another machine. What was emailed is the
+     pass itself rather than a link to it, so it travels. -->
+<div id="codebox" class="busy" hidden role="dialog" aria-modal="true"
+  aria-labelledby="codehead">
+  <div class="busy-inner nameinner confirminner">
+    <h2 class="namehead" id="codehead">Enter your pass</h2>
+    <label class="namelabel" for="codeinput">Pass</label>
+    <input id="codeinput" type="text" class="nameinput" spellcheck="false"
+      autocomplete="off" placeholder="blinded1.…">
+    <p class="hint">It is checked here, in this tab, against a key built into
+      this page. Nothing is sent anywhere to verify it, and it keeps working
+      offline.</p>
+    <div class="namego">
+      <button type="button" id="codecancel" class="ghost">Cancel</button>
+      <button type="button" id="codego" class="primary">Use it</button>
     </div>
   </div>
 </div>
@@ -973,8 +1023,10 @@
 <script src="lib/textimage.js?v=27484914"></script>
 <script src="lib/pdfwrite.js?v=4b977425"></script>
 <script src="lib/pdfread.js?v=ca229552"></script>
+<script src="lib/pass.js?v=9a72ccda"></script>
+<script src="lib/pay.js?v=2d41e86b"></script>
 <script src="lib/render.js?v=65c3fe76"></script>
-<script src="app.js?v=5d930c07"></script>
+<script src="app.js?v=fc95024e"></script>
 <script type="module" src="lib/boot.mjs?v=8b98ed8f"></script>
 </body>
 </html>

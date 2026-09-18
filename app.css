@@ -2245,3 +2245,46 @@ body.choosing { -webkit-user-select: none; user-select: none; }
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
 .landnav a { color: var(--ink); text-decoration: none; font-size: 13.5px; }
 .landnav a:hover { text-decoration: underline; }
+
+
+/* ---------- the one moment money is mentioned ---------- */
+.paylist { margin: 4px 0 0; padding: 0; list-style: none; }
+.paylist li {
+  display: flex; gap: 8px; align-items: baseline; padding: 7px 0;
+  border-top: 1px solid var(--line); font-size: 13.5px;
+}
+.paylist b { font-size: 15px; }
+.paylist span { color: var(--ink-soft); }
+.payfine { margin: 12px 0 0; }
+.payhave { margin: 14px 0 0; text-align: center; }
+/* Beside the report rather than in front of it: nothing is blocked by it, and
+   the answer is only needed at the very last step. */
+.paysays { color: #8a5a10; font-weight: 600; }
+
+/* ---------- the buying page ---------- */
+.buywrap { max-width: 560px; padding: 34px 20px 60px; }
+.buytitle { font-size: 26px; letter-spacing: -0.02em; margin: 0 0 6px; }
+.buylist { list-style: none; margin: 22px 0; padding: 0; display: grid; gap: 10px; }
+.buylist li { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.buygo {
+  display: flex; align-items: baseline; gap: 8px; flex: none;
+  background: var(--accent); color: #fff; border: 1px solid var(--accent);
+  border-radius: 10px; padding: 11px 18px; font: inherit; font-weight: 600;
+}
+.buygo:hover { background: #1a5fd0; }
+.buygo b { font-size: 16px; }
+.buygo span { font-weight: 500; opacity: .85; font-size: 13px; }
+.buyfine { color: var(--ink-soft); font-size: 13px; }
+.buysays { border-top: 1px solid var(--line); margin-top: 24px; padding-top: 18px; }
+.buysays h2 { font-size: 15px; margin: 0 0 10px; }
+.buysays ul { margin: 0; padding-left: 18px; }
+.buysays li { margin-bottom: 9px; color: var(--ink-soft); line-height: 1.55; font-size: 13.5px; }
+.buysays b { color: var(--ink); }
+.buydone { border-top: 1px solid var(--line); margin-top: 24px; padding-top: 18px; }
+/* The pass, big enough to read off the screen and select in one go, because
+   somebody is going to have to move it to another machine one day. */
+.buypass {
+  font: 500 12.5px/1.5 var(--mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  word-break: break-all; user-select: all; background: #f4f6fa;
+  border: 1px solid var(--line); border-radius: 8px; padding: 12px;
+}

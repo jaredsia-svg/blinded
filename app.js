@@ -449,6 +449,32 @@
     foot.hidden = false;
   }
 
+  // Said when the document opens, not when the file is asked for.
+  //
+  // Everything here is free below a length, and above it the finished file is
+  // paid for. Which of those applies is known the moment the document is
+  // opened, so it is said then -- while the reviewer is deciding whether to
+  // do the work, rather than after they have done it. A price discovered at
+  // the end is a bait however small it is.
+  //
+  // It sits beside the report rather than in front of it, because it is not
+  // an interruption: nothing is blocked, and the answer is only needed at the
+  // very last step.
+  function sayThePrice() {
+    const said = el('paysays');
+    if (!said) return;
+    const Pay = window.BlindedPay;
+    const on = Pay && Pay.on && hasDocument()
+      && Pay.paidFor(state.kind === 'text' ? 1 : Math.max(1, state.pages.length))
+      && !passHeld;
+    said.hidden = !on;
+    if (!on) return;
+    const pages = state.kind === 'text' ? 1 : state.pages.length;
+    const cheapest = Pay.prices[0];
+    said.textContent = pages + ' pages. Everything here is free; the finished '
+      + 'file needs a pass (' + cheapest.price + ').';
+  }
+
   // A line under the bars, for when the wait itself raises the question.
   //
   // Watching a file being worked on for the first time is exactly when someone
@@ -2243,6 +2269,7 @@
       // Said in the foot instead once a run has finished, as one sentence.
       note.textContent = state.footRan ? '' : 'Outlined  - press Redact to cover them.';
     }
+    sayThePrice();
     renderFoot();
   }
 
@@ -7225,7 +7252,191 @@
     });
   }
 
+  // ---------- what is paid for ----------
+  //
+  // Writing the finished file, for a document longer than the free length.
+  // Everything else -- opening, reading, searching, marking, reviewing,
+  // saving a draft -- is free at any length, on purpose: a reviewer has to be
+  // able to see what the tool finds before deciding whether it is worth
+  // paying for, and nobody should discover a price after doing the work.
+  //
+  // The check is local. lib/pass.js verifies a signature against a key in the
+  // page; nothing is asked of a server, because the request that asked would
+  // itself say that this person is redacting something right now -- which is
+  // the one fact this program exists to keep quiet.
+  const Pay = window.BlindedPay;
+  const Pass = window.BlindedPass;
+
+  // The pass in hand, if any. Held rather than re-verified on every call,
+  // because verifying is asynchronous and the answer only changes when the
+  // reviewer comes back from buying one.
+  let passHeld = null;
+
+  async function refreshPass() {
+    if (!Pay || !Pass || !Pay.on) { passHeld = null; return null; }
+    Pass.useKey(Pay.key);
+    const stored = Pass.recall();
+    if (!stored) { passHeld = null; return null; }
+    const answer = await Pass.check(stored);
+    // A pass that has run out is cleared rather than kept: leaving it there
+    // means every check from now on does the work of failing, and the next
+    // one bought cannot be told from the last one that did not work.
+    if (!answer.ok && answer.why !== 'nocrypto') Pass.forget();
+    passHeld = answer.ok ? answer.payload : null;
+    return passHeld;
+  }
+
+  // How long a document this is, for the purpose of the gate. Text and single
+  // images are one page whatever else they are.
+  function documentPages() {
+    return state.kind === 'text' ? 1 : Math.max(1, state.pages.length);
+  }
+
+  function needsPass() {
+    return Boolean(Pay && Pay.paidFor(documentPages())) && !passHeld;
+  }
+
+  // The one moment the reviewer is asked for money.
+  //
+  // It opens a window on a page of this site that carries the payment
+  // processor, and waits for it to come back with a pass. That page is a
+  // separate document on purpose: the one holding the document keeps a
+  // content security policy that cannot reach a payment processor, or
+  // anything else, and widening it for the sake of a checkout would quietly
+  // undo the promise the whole program is built on.
+  //
+  // Nothing is asked of a server here. The window writes the pass into this
+  // origin's own storage and this page reads it -- no message passing, no
+  // callback, and the flow survives the window being closed and reopened.
+  function askForPass() {
+    return new Promise(resolve => {
+      const box = el('paybox');
+      if (!box) { resolve(false); return; }
+      describePay();
+      box.hidden = false;
+      const shut = answer => {
+        box.hidden = true;
+        window.removeEventListener('focus', look);
+        el('paygo').removeEventListener('click', open);
+        el('payskip').removeEventListener('click', no);
+        el('payx').removeEventListener('click', no);
+        el('paycode').removeEventListener('click', typed);
+        resolve(answer);
+      };
+      const no = () => shut(false);
+      const open = () => {
+        // A window rather than this tab: the document is in this tab and only
+        // in this tab, and navigating away from it would throw the work out
+        // to go and pay for it.
+        window.open(Pay.where, 'blinded-pay',
+          'width=520,height=760,noopener=no');
+      };
+      // Every time this tab is looked at again, ask whether a pass turned up.
+      // The buying window is a separate document and cannot call in here.
+      const look = async () => {
+        await refreshPass();
+        if (!passHeld) return;
+        sayThePrice();
+        shut(true);
+      };
+      const typed = async () => {
+        const said = await askPassCode();
+        if (!said) return;
+        Pass.useKey(Pay.key);
+        const answer = await Pass.check(said.trim());
+        if (answer.ok) {
+          Pass.remember(said.trim());
+          passHeld = answer.payload;
+          // The line in the foot says a pass is needed. It is not, now.
+          sayThePrice();
+          shut(true);
+          return;
+        }
+        payNote(answer.why === 'expired'
+          ? 'That pass has run out. Buying again gives you a new one.'
+          : 'That does not look like a pass from here. Check for a missing '
+            + 'character at either end.');
+      };
+      window.addEventListener('focus', look);
+      el('paygo').addEventListener('click', open);
+      el('payskip').addEventListener('click', no);
+      el('payx').addEventListener('click', no);
+      el('paycode').addEventListener('click', typed);
+    });
+  }
+
+  // Typing in a pass bought earlier, or on another machine. The pass is the
+  // thing that was emailed, so it travels; nothing here is tied to a browser
+  // except where it is remembered.
+  function askPassCode() {
+    return new Promise(resolve => {
+      const box = el('codebox');
+      const input = el('codeinput');
+      if (!box || !input) { resolve(null); return; }
+      input.value = '';
+      box.hidden = false;
+      input.focus();
+      const done = value => {
+        box.hidden = true;
+        input.value = '';
+        el('codego').removeEventListener('click', go);
+        el('codecancel').removeEventListener('click', cancel);
+        input.removeEventListener('keydown', key);
+        resolve(value);
+      };
+      const go = () => { if (input.value.trim()) done(input.value); else input.focus(); };
+      const cancel = () => done(null);
+      const key = event => {
+        if (event.key === 'Enter') { event.preventDefault(); go(); }
+        if (event.key === 'Escape') { event.preventDefault(); cancel(); }
+      };
+      el('codego').addEventListener('click', go);
+      el('codecancel').addEventListener('click', cancel);
+      input.addEventListener('keydown', key);
+    });
+  }
+
+  function payNote(text) {
+    const note = el('paynote');
+    if (!note) return;
+    note.textContent = text || '';
+    note.hidden = !text;
+  }
+
+  // What the dialog says, for this document and this deployment's prices.
+  function describePay() {
+    const pages = documentPages();
+    const body = el('paybody');
+    if (body) {
+      body.textContent = 'This document is ' + pages + ' pages. Everything you '
+        + 'have done so far is free and stays free; writing the finished file '
+        + 'needs a pass.';
+    }
+    const list = el('paylist');
+    if (list) {
+      list.textContent = '';
+      for (const price of Pay.prices) {
+        const row = document.createElement('li');
+        const what = document.createElement('b');
+        what.textContent = price.price;
+        const how = document.createElement('span');
+        how.textContent = ' for ' + price.label + '. ' + price.note;
+        row.append(what, how);
+        list.append(row);
+      }
+    }
+    payNote('');
+  }
+
   async function exportFile() {
+    // Asked before the Save as box rather than after it. Being asked to name
+    // a file, choose its options and press Save, and only then being told
+    // there is a price, is a bait -- the work is done and the answer is
+    // "pay or throw it away".
+    if (Pay && Pay.on && Pay.paidFor(documentPages())) {
+      await refreshPass();
+      if (needsPass() && !(await askForPass())) return;
+    }
     const extension = state.kind === 'text' ? 'txt' : state.kind === 'image' ? 'png' : 'pdf';
     const chosen = await askName(redactedName(extension));
     if (!chosen) return;                 // changed their mind; nothing is built

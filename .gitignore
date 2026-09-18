@@ -4,3 +4,7 @@ node_modules/
 # Benchmark documents are real and confidential. The runner reads whatever is
 # here; nothing in it is ever committed.
 bench/
+
+# The pass signing key. This file is the business: it mints every pass ever
+# sold, and a copy of it lets anybody mint their own. Never commit it.
+.pass-key.json

@@ -32,7 +32,7 @@ const check = (label, ok, detail) => {
   else failures.push(label + (detail === undefined ? '' : ' — ' + detail));
 };
 
-for (const file of ['schedule.js', 'detect.js', 'boxes.js', 'pdfwrite.js', 'match.js',
+for (const file of ['pass.js', 'pay.js', 'schedule.js', 'detect.js', 'boxes.js', 'pdfwrite.js', 'match.js',
   'textimage.js', 'pageprep.js', 'pagerole.js', 'imagesearch.js', 'labels.js', 'ocr.js']) {
   runInThisContext(readFileSync(join(root, 'lib', file), 'utf8'), { filename: file });
 }
@@ -44,6 +44,8 @@ const ImageSearch = globalThis.BlindedImageSearch;
 const Labels = globalThis.BlindedLabels;
 const TextImage = globalThis.BlindedTextImage;
 const Ocr = globalThis.BlindedOcr;
+const Pass = globalThis.BlindedPass;
+const Pay = globalThis.BlindedPay;
 const Schedule = globalThis.BlindedSchedule;
 const PagePrep = globalThis.BlindedPagePrep;
 const PageRole = globalThis.BlindedPageRole;
@@ -2539,6 +2541,203 @@ check('no creation date is carried into the output', !meta.info.CreationDate);
 
   check('and robots.txt says where the sitemap is',
     /Sitemap: https:\/\/\S+\/sitemap\.xml/.test(readFileSync(join(root, 'robots.txt'), 'utf8')));
+}
+
+// ---------- the pass ----------
+//
+// The check that decides whether somebody paid. It runs on the buyer's own
+// machine, against a key in the page, and never asks anything of a server --
+// because the request that asked would itself reveal the one fact this
+// program exists to keep quiet: that this person is redacting something right
+// now.
+//
+// Which means the signature is the whole of it. If a pass can be forged, or
+// an expired one accepted, there is nothing behind it.
+{
+  const { webcrypto } = await import('node:crypto');
+  const { mint } = await import('./pass.mjs');
+  const pair = await webcrypto.subtle.generateKey(
+    { name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign', 'verify']);
+  const priv = await webcrypto.subtle.exportKey('jwk', pair.privateKey);
+  const pubFull = await webcrypto.subtle.exportKey('jwk', pair.publicKey);
+  const pub = { kty: pubFull.kty, crv: pubFull.crv, x: pubFull.x, y: pubFull.y };
+  const ask = (pass, now) => {
+    Pass.useKey(pub);
+    return Pass.check(pass, { subtle: webcrypto.subtle, now });
+  };
+
+  const { pass, payload } = await mint(priv, { days: 5 });
+  const good = await ask(pass);
+  check('a pass signed with the key verifies against it', good.ok === true,
+    JSON.stringify(good));
+  check('and says what it is', good.payload && good.payload.plan === 'days'
+    && good.payload.exp === payload.exp, JSON.stringify(good));
+  // What is in it, and what is not. A pass that named its buyer would put
+  // that name in local storage on the machine doing the redacting, which is
+  // the one place this program has promised not to write anything down.
+  check('it carries nothing about who bought it',
+    Object.keys(payload).sort().join() === 'exp,id,plan,v', JSON.stringify(payload));
+
+  // Every way of changing it by one character.
+  const swap = (text, at) => text.slice(0, at)
+    + (text[at] === 'A' ? 'B' : 'A') + text.slice(at + 1);
+  const body = pass.indexOf('.') + 1;
+  const sig = pass.lastIndexOf('.') + 1;
+  check('a pass with a changed payload does not',
+    (await ask(swap(pass, body + 3))).why !== undefined
+      && (await ask(swap(pass, body + 3))).ok === false, 'payload');
+  check('nor one with a changed signature',
+    (await ask(swap(pass, sig + 3))).ok === false, 'signature');
+  check('nor one somebody made up',
+    (await ask('blinded1.abc.def')).ok === false, 'invented');
+  check('nor an empty one', (await ask('')).ok === false, 'empty');
+  // The failure mode that matters most: a pass that is real, and is not ours.
+  const other = await webcrypto.subtle.generateKey(
+    { name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign', 'verify']);
+  const elsewhere = await mint(
+    await webcrypto.subtle.exportKey('jwk', other.privateKey), { days: 5 });
+  const notOurs = await ask(elsewhere.pass);
+  check('nor a properly signed pass from somebody else\'s key',
+    notOurs.ok === false && notOurs.why === 'forged', JSON.stringify(notOurs));
+
+  // Expiry, which is the only thing standing between one payment and forever.
+  const day = 86400 * 1000;
+  check('it works the day it is bought', (await ask(pass, Date.now())).ok === true);
+  check('and four days later', (await ask(pass, Date.now() + 4 * day)).ok === true);
+  const after = await ask(pass, Date.now() + 6 * day);
+  check('and not after it runs out', after.ok === false && after.why === 'expired',
+    JSON.stringify(after));
+  // Told apart, because they need different sentences: one is "buy another",
+  // the other is "that is not a pass".
+  check('an expired pass is not called a forgery',
+    after.why === 'expired' && (await ask('blinded1.abc.def')).why === 'unreadable',
+    after.why);
+  // A machine a few minutes out is common and is not fraud.
+  check('a clock a minute fast does not invalidate a fresh pass',
+    (await ask(pass, Date.now() - 60000)).ok === true);
+  check('and the tolerance is minutes rather than days',
+    Pass.SKEW <= 15 * 60, String(Pass.SKEW));
+
+  // A page with no key must verify nothing rather than everything.
+  Pass.useKey(null);
+  const keyless = await Pass.check(pass, { subtle: webcrypto.subtle });
+  check('a copy with no key in it accepts nothing',
+    keyless.ok === false && keyless.why === 'nokey', JSON.stringify(keyless));
+
+  // ---------- what this deployment charges for ----------
+  check('everything is free below the free length', Pay.paidFor(Pay.freePages) === false
+    && Pay.paidFor(1) === false, String(Pay.freePages));
+  check('and the length is a length somebody would recognise',
+    Pay.freePages >= 10 && Pay.freePages <= 50, String(Pay.freePages));
+  check('what is charged for is writing the file, not opening it',
+    Pay.charge === 'export', Pay.charge);
+  check('there is a price to charge', Pay.prices.length >= 1
+    && Pay.prices.every(one => one.price && one.days > 0 && one.id),
+    JSON.stringify(Pay.prices));
+
+  // The two that must not be got wrong, ever.
+  //
+  // A paywall switched on with the development key is a paywall nobody can
+  // buy their way past: the private half was made in a sandbox that no longer
+  // exists, so no pass can be minted against it. The tool would take money
+  // through Paddle and then refuse the file.
+  check('payment is not switched on with a key nobody can mint against',
+    !(Pay.on && Pay.keyIsDevelopment),
+    'lib/pay.js: on with keyIsDevelopment');
+  // And a paywall switched on with no way to pay is a document held hostage.
+  check('nor switched on with nowhere to buy a pass',
+    !(Pay.on && !(Pay.paddle && Pay.paddle.token)),
+    'lib/pay.js: on with no Paddle token');
+  check('the key in the page can only check a pass, never mint one',
+    Pay.key && Pay.key.kty === 'EC' && Pay.key.d === undefined,
+    JSON.stringify(Object.keys(Pay.key || {})));
+
+  // The split that keeps the promise. The tool's page may not reach a payment
+  // processor; the buying page may, and holds no document.
+  const tool = readFileSync(join(root, 'index.html'), 'utf8');
+  const buy = readFileSync(join(root, 'unlock.html'), 'utf8');
+  const headers = readFileSync(join(root, 'render.yaml'), 'utf8');
+  check('the page holding the document still reaches nothing but itself',
+    /connect-src 'self' blob:;/.test(tool) && !/paddle/i.test(tool),
+    'index.html mentions a payment processor');
+  check('and cannot post anywhere at all',
+    /form-action 'none'/.test(tool));
+  check('the buying page is where the payment processor is allowed',
+    /cdn\.paddle\.com/.test(buy) && /connect-src 'self' https:\/\/\*\.paddle\.com/.test(buy),
+    'unlock.html');
+  check('and it opens no documents',
+    !/id="file"/.test(buy) && !/pdf\.min\.mjs/.test(buy), 'unlock.html');
+  check('the served headers say the same as the page does',
+    /path: \/unlock\.html/.test(headers) && /cdn\.paddle\.com/.test(headers),
+    'render.yaml');
+  // What the site says it costs has to be what it costs. These pages call it
+  // free, which is true while nothing is charged for -- and becomes a lie the
+  // moment payment is switched on and nobody edits them. The guard is cheap
+  // now and is the only thing that will catch it then.
+  if (Pay.on) {
+    const saying = [['faq.html', readFileSync(join(root, 'faq.html'), 'utf8')],
+      ...landers.map(one => [one.slug,
+        readFileSync(join(root, one.slug, 'index.html'), 'utf8')])];
+    for (const [where, page] of saying) {
+      check(where + ': it does not call itself free without saying where that ends',
+        !/\bfree\b/i.test(page) || /twenty pages|free below|needs a pass|pass to/i.test(page),
+        where + ' calls it free with payment on');
+    }
+    check('and the front page says so too',
+      /needs a pass|free below|twenty pages/i.test(
+        readFileSync(join(root, 'index.html'), 'utf8')), 'index.html');
+    check('structured data does not claim it is free to everybody',
+      !/"isAccessibleForFree": true/.test(
+        readFileSync(join(root, 'index.html'), 'utf8')), 'index.html');
+  }
+
+  // The signing key is the business, and a copy of it lets anybody mint.
+  check('the signing key is not in the repository',
+    /^\.pass-key\.json$/m.test(readFileSync(join(root, '.gitignore'), 'utf8')),
+    '.gitignore');
+}
+
+// ---------- the mint ----------
+//
+// The one service this project has. Without the signature check it is "mint a
+// pass for anybody who posts some JSON at it", which is the same as giving
+// them away.
+{
+  const { signatureIsGood, daysFor, readable } = await import('../mint/server.mjs');
+  const { createHmac } = await import('node:crypto');
+  const body = JSON.stringify({ event_type: 'transaction.completed' });
+  const sign = (ts, secret, text) => createHmac('sha256', secret)
+    .update(ts + ':' + text).digest('hex');
+  const now = Date.now();
+  const ts = String(Math.floor(now / 1000));
+
+  check('a webhook Paddle signed is accepted',
+    signatureIsGood('ts=' + ts + ';h1=' + sign(ts, 'shh', body), body, 'shh', now));
+  check('one signed with the wrong secret is not',
+    !signatureIsGood('ts=' + ts + ';h1=' + sign(ts, 'nope', body), body, 'shh', now));
+  check('nor one whose body was changed afterwards',
+    !signatureIsGood('ts=' + ts + ';h1=' + sign(ts, 'shh', body), body + ' ', 'shh', now));
+  check('nor one with no signature at all',
+    !signatureIsGood('', body, 'shh', now) && !signatureIsGood(undefined, body, 'shh', now));
+  // A replay of an hour-old request is not a new payment.
+  const old = String(Math.floor(now / 1000) - 3600);
+  check('nor the same one replayed an hour later',
+    !signatureIsGood('ts=' + old + ';h1=' + sign(old, 'shh', body), body, 'shh', now));
+
+  // A pass handed out for a price this service was not told about is a pass
+  // given away.
+  check('a known price earns its pass',
+    daysFor({ data: { items: [{ price_id: 'pri_a' }] } }, { pri_a: 5 }) === 5);
+  check('an unknown one earns nothing',
+    daysFor({ data: { items: [{ price_id: 'pri_z' }] } }, { pri_a: 5 }) === 0);
+  check('and so does an event with no items',
+    daysFor({ data: {} }, { pri_a: 5 }) === 0 && daysFor({}, { pri_a: 5 }) === 0);
+
+  // The transaction id is thin as a credential, so it stops working.
+  check('a pass is collectable while the buyer is waiting for it',
+    readable({ made: now }, now) === true);
+  check('and not from a receipt found next week',
+    readable({ made: now - 86400000 }, now) === false);
 }
 
 // ---------- report ----------

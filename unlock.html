@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!--
+  A different policy from the rest of the site, deliberately, and this is the
+  only page that has one.
+
+  The tool's policy says connect-src 'self' and form-action 'none': the page
+  holding your document cannot send anything anywhere, and that is the whole
+  claim the program makes. Taking a card needs a payment processor's script,
+  its frames and its network calls -- so those permissions live here, on a
+  page that never opens a document, and not there.
+
+  That is why buying happens in a second window rather than in the tool. The
+  document stays in the tab it was opened in, under a policy that has not
+  moved.
+-->
+<meta http-equiv="Content-Security-Policy" content="
+  default-src 'self';
+  script-src 'self' https://cdn.paddle.com;
+  style-src 'self' 'unsafe-inline';
+  img-src 'self' data: https://*.paddle.com;
+  connect-src 'self' https://*.paddle.com;
+  frame-src https://*.paddle.com;
+  object-src 'none';
+  base-uri 'none';
+  form-action 'none'">
+<title>A pass for Blinded</title>
+<meta name="description" content="Buy a pass to export documents longer than twenty pages. No account, no subscription to cancel.">
+<meta name="robots" content="noindex">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/app.css">
+</head>
+<body class="plainpage buypage">
+
+<!-- The header, because a page asking for a card and wearing no name at all
+     is the shape of a phishing page. It is the same bar as everywhere else,
+     on the same domain, and it says where you are. -->
+<header class="top">
+  <div class="wrap top-inner">
+    <a class="mark" href="/">
+      <svg class="markmark" viewBox="0 0 26 15" aria-hidden="true" focusable="false">
+        <g fill="currentColor">
+          <rect width="26" height="6.4" rx="2"/>
+          <rect y="8.6" width="14" height="6.4" rx="2"/>
+          <rect x="16.6" y="8.6" width="3.6" height="6.4" rx="1.5"/>
+          <rect x="22.2" y="8.6" width="2" height="6.4" rx="1"/>
+        </g>
+      </svg> Blinded</a>
+    <div class="top-actions">
+      <a class="top-link" href="/faq.html">Q&amp;A</a>
+    </div>
+  </div>
+</header>
+
+<main class="wrap buywrap">
+
+  <h1 class="buytitle">A pass for Blinded</h1>
+  <p class="lede">Everything in Blinded is free. A document longer than twenty
+    pages needs a pass to write the finished file.</p>
+
+  <ul class="buylist" id="buylist"></ul>
+
+  <p class="hint" id="buynote" hidden></p>
+
+  <section class="buysays">
+    <h2>What you are buying</h2>
+    <ul>
+      <li><b>A pass, not an account.</b> There is nothing to sign up for and
+        nothing to cancel. When it runs out it stops working, and that is the
+        whole of it.</li>
+      <li><b>It is a string.</b> You get it here and by email. Paste it into
+        Blinded on any machine, as many times as you like, until it expires.</li>
+      <li><b>It is checked on your machine.</b> Blinded holds a key that can
+        verify a pass but cannot make one. Nothing is sent anywhere to check
+        it, so it works offline, and using it tells us nothing — not that you
+        used it, not when, and not what you were redacting.</li>
+      <li><b>Your document is not here.</b> This page is not the tool. It has
+        never seen your file and cannot: the file is in the other tab and
+        never leaves it.</li>
+    </ul>
+  </section>
+
+  <!-- The pass, once there is one. Shown rather than only emailed, because
+       the reviewer is standing in front of a document waiting to be saved. -->
+  <section class="buydone" id="buydone" hidden>
+    <h2>Here it is</h2>
+    <p class="hint">Copied into Blinded automatically. This is also in your
+      email — keep it somewhere, and it will work on any machine until it
+      expires.</p>
+    <p class="buypass" id="buypass"></p>
+    <p><a class="landcta" href="/" id="buyback">Back to the tool</a></p>
+  </section>
+
+  <section class="buysays">
+    <h2>Already have one?</h2>
+    <p class="hint">Press <b>I already have a pass</b> in Blinded and paste it
+      in. You do not need this page.</p>
+  </section>
+
+  <p class="landgo"><a class="landcta" href="/">Back to the tool</a></p>
+
+</main>
+
+<script src="/lib/pass.js"></script>
+<script src="/lib/pay.js"></script>
+<script src="/unlock.js"></script>
+</body>
+</html>

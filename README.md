@@ -670,6 +670,38 @@ vendor/           pdf.js, so the page never fetches code from elsewhere
 tools/            the two test suites, a fixture builder, a static server
 ```
 
+## Paying for it
+
+Off, in this copy. `lib/pay.js` is the only file that decides: `on: false`
+means the whole tool, free, at any length, which is what ships.
+
+Switched on, one thing is charged for — writing the finished file, for a
+document longer than twenty pages. Everything else stays free at any length,
+including the search, the review and saving a draft, because a reviewer has
+to be able to see what the tool finds before deciding whether it is worth
+paying for. The price is said when the document is opened rather than when
+the file is asked for: a price discovered after the work is done is a bait
+however small it is.
+
+A pass is a signed string, checked on the buyer's machine against a public
+key in the page. There is no account, no lookup and no network call — which
+is not a convenience but the point. A licence check that phoned home would
+send a request saying *this person is redacting something right now*, which
+is the one fact this program exists to keep quiet.
+
+- `lib/pass.js` — reads and verifies a pass. ECDSA P-256, via WebCrypto.
+- `lib/pay.js` — what this deployment charges, and the public key.
+- `unlock.html` — the only page allowed to reach a payment processor. It is a
+  separate document so that the page holding your file keeps
+  `connect-src 'self'` exactly as it was. `render.yaml` grants the wider
+  policy to that path and no other.
+- `mint/` — the one server, deployed separately. See `mint/README.md`.
+- `tools/pass.mjs` — make a keypair, mint a pass, check one.
+
+The self-test refuses to pass if payment is switched on with the development
+key, with no way to buy, or while any page still calls the tool free without
+saying where that ends.
+
 ## Licence
 
 PolyForm Noncommercial 1.0.0, in `LICENSE`. Source-available, not open source:

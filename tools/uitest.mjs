@@ -8830,6 +8830,209 @@ try {
     await phone.close();
   });
 
+  // ---------- the one moment money is mentioned ----------
+  //
+  // Off in the copy that ships, so this switches it on at runtime and puts it
+  // back. What is being tested is the shape of the exchange, not the price:
+  // that the reviewer is told before they do the work, asked before they name
+  // the file, never asked twice, and never asked at all for a document short
+  // enough to be free.
+  await part("the one moment money is mentioned", async () => {
+    const paying = await context.newPage();
+    await paying.goto(base);
+    const longEnough = join(tmpdir(), 'blinded-paywall.pdf');
+    writeFileSync(longEnough, buildManyPdf(24));
+
+    // A pass, signed with a key made here, so nothing in the repository has
+    // to hold a private one.
+    const made = await paying.evaluate(async () => {
+      const pair = await crypto.subtle.generateKey(
+        { name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign', 'verify']);
+      const pub = await crypto.subtle.exportKey('jwk', pair.publicKey);
+      const b64 = bytes => btoa(String.fromCharCode(...new Uint8Array(bytes)))
+        .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+      const sign = async days => {
+        const payload = { v: 1, plan: 'days', id: 'test',
+          exp: Math.floor(Date.now() / 1000) + Math.round(days * 86400) };
+        const signed = b64(new TextEncoder().encode(JSON.stringify(payload)));
+        const sig = await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' },
+          pair.privateKey, new TextEncoder().encode(signed));
+        return 'blinded1.' + signed + '.' + b64(sig);
+      };
+      return { key: { kty: pub.kty, crv: pub.crv, x: pub.x, y: pub.y },
+               good: await sign(5), stale: await sign(-2) };
+    });
+
+    const arm = async () => {
+      await paying.evaluate(key => {
+        window.BlindedPay.on = true;
+        window.BlindedPay.key = key;
+        localStorage.removeItem('blinded.pass');
+      }, made.key);
+    };
+
+    // A short document is free, and says nothing about money at all.
+    await paying.setInputFiles('#file', fixturePath);
+    await paying.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
+    await arm();
+    await paying.waitForTimeout(300);
+    const short = await paying.evaluate(async () => {
+      const B = window.Blinded;
+      B.state.pages[0].manual.push({ id: 'x', x: 40, y: 40, w: 120, h: 30 });
+      B.state.searched = true;
+      B.coverMarks();
+      await new Promise(r => setTimeout(r, 250));
+      document.getElementById('export').click();
+      await new Promise(r => setTimeout(r, 400));
+      const out = { asked: !document.getElementById('paybox').hidden,
+                    naming: !document.getElementById('namebox').hidden,
+                    says: !document.getElementById('paysays').hidden,
+                    pages: B.state.pages.length };
+      document.getElementById('namecancel').click();
+      return out;
+    });
+    check('a short document is never asked to pay',
+      short.asked === false && short.naming === true, JSON.stringify(short));
+    check('and is told nothing about money',
+      short.says === false, JSON.stringify(short));
+
+    // A long one says so when it opens -- before the work, not after it.
+    await paying.evaluate(() => window.Blinded.loadFile
+      && document.getElementById('reset-top').click());
+    await paying.waitForSelector('#view-drop:not([hidden])', { timeout: 15000 })
+      .catch(() => {});
+    await paying.goto(base);
+    await paying.setInputFiles('#file', longEnough);
+    await paying.waitForSelector('#view-review:not([hidden])', { timeout: 60000 });
+    await arm();
+    await paying.evaluate(() => window.Blinded.rescan && null);
+    await paying.waitForTimeout(400);
+    const told = await paying.evaluate(async () => {
+      const B = window.Blinded;
+      B.state.pages[0].manual.push({ id: 'x', x: 40, y: 40, w: 120, h: 30 });
+      B.state.searched = true;
+      B.coverMarks();
+      await new Promise(r => setTimeout(r, 300));
+      const line = document.getElementById('paysays');
+      return { shown: !line.hidden, text: line.textContent,
+               pages: B.state.pages.length };
+    });
+    check('a long one says what it costs when it opens',
+      told.shown === true && /\d+ pages/.test(told.text)
+        && /free/.test(told.text) && /pass/.test(told.text), JSON.stringify(told));
+    check('naming the length, so the reviewer can tell why',
+      told.text.startsWith(told.pages + ' pages'), JSON.stringify(told));
+
+    // Asked before the Save as box, not after it. Being asked to name a file,
+    // choose its options and press Save, and only then being told there is a
+    // price, is a bait: the work is done and the answer is "pay or throw it
+    // away".
+    const asked = await paying.evaluate(async () => {
+      document.getElementById('export').click();
+      await new Promise(r => setTimeout(r, 400));
+      return { asked: !document.getElementById('paybox').hidden,
+               naming: !document.getElementById('namebox').hidden,
+               body: document.getElementById('paybody').textContent,
+               prices: document.querySelectorAll('#paylist li').length };
+    });
+    check('a long one is asked to pay', asked.asked === true, JSON.stringify(asked));
+    check('before it is asked to name the file, not after',
+      asked.naming === false, JSON.stringify(asked));
+    check('and told what it is for and what it costs',
+      /free and stays free/.test(asked.body) && asked.prices >= 1,
+      JSON.stringify(asked));
+
+    // Saying no leaves everything where it was. Nothing is lost by declining.
+    const declined = await paying.evaluate(async () => {
+      document.getElementById('payskip').click();
+      await new Promise(r => setTimeout(r, 300));
+      return { gone: document.getElementById('paybox').hidden,
+               naming: !document.getElementById('namebox').hidden,
+               marks: window.Blinded.state.pages[0].manual.length,
+               applied: window.Blinded.state.applied };
+    });
+    check('saying no closes it and builds nothing',
+      declined.gone === true && declined.naming === false, JSON.stringify(declined));
+    check('and loses none of the work',
+      declined.marks === 1 && declined.applied === true, JSON.stringify(declined));
+
+    // A pass that is not ours, then one that is.
+    const wrong = await paying.evaluate(async pass => {
+      document.getElementById('export').click();
+      await new Promise(r => setTimeout(r, 300));
+      document.getElementById('paycode').click();
+      await new Promise(r => setTimeout(r, 150));
+      document.getElementById('codeinput').value = pass;
+      document.getElementById('codego').click();
+      await new Promise(r => setTimeout(r, 400));
+      return { note: document.getElementById('paynote').textContent,
+               stillAsking: !document.getElementById('paybox').hidden,
+               naming: !document.getElementById('namebox').hidden };
+    }, 'blinded1.notreal.notreal');
+    check('a made-up pass is refused', wrong.stillAsking === true
+      && wrong.naming === false, JSON.stringify(wrong));
+    check('and said so in a sentence somebody can act on',
+      /does not look like a pass/.test(wrong.note), wrong.note);
+
+    // One that expired is a different answer: buy another, not "that is not a
+    // pass". Sending somebody to look for a renewal they do not need, or to
+    // check for a typo that is not there, is the same mistake twice.
+    const ran = await paying.evaluate(async pass => {
+      document.getElementById('paycode').click();
+      await new Promise(r => setTimeout(r, 150));
+      document.getElementById('codeinput').value = pass;
+      document.getElementById('codego').click();
+      await new Promise(r => setTimeout(r, 400));
+      return document.getElementById('paynote').textContent;
+    }, made.stale);
+    check('an expired pass is told apart from a forged one',
+      /run out/.test(ran), ran);
+
+    const through = await paying.evaluate(async pass => {
+      document.getElementById('paycode').click();
+      await new Promise(r => setTimeout(r, 150));
+      document.getElementById('codeinput').value = pass;
+      document.getElementById('codego').click();
+      await new Promise(r => setTimeout(r, 600));
+      return { gone: document.getElementById('paybox').hidden,
+               naming: !document.getElementById('namebox').hidden,
+               kept: Boolean(localStorage.getItem('blinded.pass')),
+               says: !document.getElementById('paysays').hidden };
+    }, made.good);
+    check('a real pass lets the file be written',
+      through.gone === true && through.naming === true, JSON.stringify(through));
+    check('and is kept, so it is not asked for again',
+      through.kept === true, JSON.stringify(through));
+    check('and the line saying a pass is needed goes away',
+      through.says === false, JSON.stringify(through));
+
+    const again = await paying.evaluate(async () => {
+      document.getElementById('namecancel').click();
+      await new Promise(r => setTimeout(r, 250));
+      document.getElementById('export').click();
+      await new Promise(r => setTimeout(r, 500));
+      const out = { asked: !document.getElementById('paybox').hidden,
+                    naming: !document.getElementById('namebox').hidden };
+      document.getElementById('namecancel').click();
+      return out;
+    });
+    check('and the next export is not asked at all',
+      again.asked === false && again.naming === true, JSON.stringify(again));
+
+    // The promise the whole split exists to keep: the page holding the
+    // document reaches nothing, whatever is being sold.
+    const reach = await paying.evaluate(() => ({
+      policy: (document.querySelector('meta[http-equiv="Content-Security-Policy"]')
+        || {}).content || '',
+      paddle: /paddle/i.test(document.documentElement.innerHTML),
+    }));
+    check('the page holding the document still reaches nothing but itself',
+      /connect-src 'self' blob:;/.test(reach.policy) && reach.paddle === false,
+      JSON.stringify(reach).slice(0, 200));
+
+    await paying.close();
+  });
+
   // ---------- a way down a long document with a thumb ----------
   //
   // A phone's own scrollbar is a hairline that fades in while a flick is in
