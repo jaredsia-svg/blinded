@@ -646,7 +646,7 @@ textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; border-
 /* The bar itself keeps to the left half of the row. Stretched the whole way
    across it ran up against the buttons, and a progress bar that touches the
    thing it is greying out reads as part of it. */
-.runlegs { flex: 0 1 50%; min-width: 0; margin-right: auto; }
+.runlegs { flex: 0 1 75%; min-width: 0; margin-right: auto; }
 .runlegs .leg { margin: 0; }
 .runlegs .leg + .leg { margin-top: 4px; }
 /* The finished sentence sits at the start of the bar and takes the room it
@@ -1285,11 +1285,16 @@ body.picking .tools {
 /* A card of its own, like a typed word's row: the thumbnail, the settings
    the scores point at, the tally and the way to remove it. Taller than a
    word's row because the settings are circles rather than a number. */
-.templates li {
+/* The card is the picked image's own row, and only that row. Every li in the
+   section was taking the card's background, its border and its 58px of
+   height -- including the list of page numbers a tally opens, which turned
+   five page references into five cards. Those are the same rows the text
+   section draws, and they stay that way. */
+.templates li.imgrow {
   background: #f4f6fa; border: 1px solid var(--line); border-radius: var(--radius);
   padding: 6px 6px 6px 8px; margin-bottom: 6px; gap: 7px; min-height: 58px;
 }
-.templates li:last-child { margin-bottom: 0; }
+.templates li.imgrow:last-child { margin-bottom: 0; }
 .templates canvas {
   width: 42px; height: 28px; object-fit: contain; flex: none;
   border: 1px solid var(--line); border-radius: 4px; background: #fff;
@@ -1587,6 +1592,14 @@ body.reviewing .exportbar { position: static; flex: none; margin: 14px 0 18px; }
   display: flex; flex-direction: column; gap: 10px;
   margin-top: 18px;
 }
+/* One question, two answers, read left to right. */
+.sweepgo { flex-direction: row; }
+.sweepgo .confirm-action { flex: 1; }
+/* The colour of what the check finds. */
+.primary.amber {
+  background: #d98b1f; border-color: #d98b1f; color: #fff;
+}
+.primary.amber:hover { background: #c07a15; border-color: #c07a15; }
 .confirmgo .confirm-action {
   width: 100%; box-sizing: border-box;
   min-height: 44px; justify-content: center; text-align: center;
@@ -1612,9 +1625,12 @@ body.reviewing .exportbar { position: static; flex: none; margin: 14px 0 18px; }
 }
 
 
-/* Post-Search offer to run a second check. */
-#sweepoffergo { order: 1; }
-#sweepofferskip { order: 2; background: #fff; border: 1px solid var(--line); color: var(--ink); }
+/* Post-Search offer to run a second check. The way out on the left, the
+   thing being offered on the right, where the eye finishes -- these were
+   stacked, so the order was set by number rather than by markup, and the
+   numbers stayed behind when the two went side by side. */
+#sweepofferskip { order: 1; background: #fff; border: 1px solid var(--line); color: var(--ink); }
+#sweepoffergo { order: 2; }
 #sweepofferskip:hover { border-color: var(--ink-soft); background: #fafbfc; }
 
 /* Long sidebar notes: short summary, full text on expand. */

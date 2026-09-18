@@ -327,14 +327,21 @@
   // check's own state lives and read where the report is written.
   let sweepOnOffer = false;
 
-  // The question that opens the dialog. Both the offer and a stopped run end
-  // in it, and they mean the same thing: here is what it costs, say yes or no.
+  // The question, and the answer to it. Pressing it starts the check.
+  //
+  // It used to open the dialog again, which asked the same question a second
+  // time: the reviewer has read the line, the line says what it is for, and
+  // being handed the question back instead of the thing is the sort of
+  // politeness that costs a press. The dialog is still how the offer is made
+  // once, unasked, at the end of a search -- there it is interrupting, so it
+  // has to ask.
   function proceedLink() {
     const ask = document.createElement('button');
     ask.type = 'button';
     ask.className = 'checklink';
     ask.textContent = 'Proceed?';
-    ask.addEventListener('click', reopenSweepOffer);
+    ask.title = 'Start the second check';
+    ask.addEventListener('click', () => { runSweep(); });
     return ask;
   }
 
@@ -2012,11 +2019,11 @@
       + (ocrPending() ? 1 : 0);
     const searching = searchPending();
 
-    // Three buttons, in the order the work happens. Redact still says
-    // "Redacted" once it has been pressed, because that is a state the
-    // reviewer can step back out of rather than a dead end -- and it no longer
-    // moves anything, because Search is a button of its own now instead of a
-    // name this one wore for a while.
+    // One of the two at a time, and Export beside it. They are separate
+    // buttons rather than one button that renames itself, so nothing under
+    // the pointer changes meaning mid-press -- but only the one whose turn it
+    // is, because Search and Redact are the same step at two moments and
+    // showing both made the row read as two things to do at once.
     button.textContent = state.applied && !searching ? 'Redacted' : 'Redact';
     // How many red question marks are on the panel right now. A word that no
     // search has counted yet and a picked image nothing has looked for each
@@ -2040,7 +2047,8 @@
     find.classList.toggle('hunt', searching && unanswered > 0 && !state.redacting);
     find.disabled = state.redacting || state.sweepRunning || !searching
       || (state.kind !== 'text' && !state.pages.length);
-    find.title = searching ? '' : 'Everything asked for has been searched for';
+    find.hidden = !searching;
+    button.hidden = searching;
     button.classList.toggle('done', !searching && state.applied);
     button.title = !searching && state.applied ? 'Press to uncover and look at the marks again' : '';
     // Not while the second check is running: it is a pass over the same
@@ -5851,6 +5859,10 @@
 
     for (const template of state.templates) {
       const row = document.createElement('li');
+      // Named, because this section holds more than these rows: the note
+      // under one, the list of pages a tally opens, a card asking about a
+      // near miss. The card's background and height belong to this row only.
+      row.className = 'imgrow';
       // Counted from what survives, not from what the search returned: a
       // match already covered by a text mark is not a second thing found.
       const live = state.pages.reduce((sum, page) =>

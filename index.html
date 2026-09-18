@@ -41,7 +41,7 @@
      origins for one program and two sets of response headers to keep right;
      Pages publishing is off and this says which copy is the copy. -->
 <link rel="canonical" href="https://blinded.onrender.com/">
-<link rel="stylesheet" href="app.css?v=30d389e2">
+<link rel="stylesheet" href="app.css?v=4fdd02bd">
 </head>
 <body>
 
@@ -514,7 +514,7 @@
                  the answer is the same for every row, so it is said once. -->
             <p class="senshead" id="senshead" hidden>
               <span>Sensitivity, per image</span>
-              <button type="button" class="why" aria-label="What does this mean?" data-tip="Each picked image has its own bar. Lower finds more, including things that only resemble it. A scanned signature usually needs to come down; two marks that differ by one letter need to go above 0.95. Click the tally to see what each match scored.">i</button>
+              <button type="button" class="why" aria-label="What does this mean?" data-tip="Each picked image gets up to three settings to choose from, worked out from what the search actually scored on this document. Press one to use it: the number is the bar a match has to clear, and under it is what that setting would find. Lower finds more, including things that only resemble the image; higher keeps only the near-identical. Pick the one that suits the document.">i</button>
             </p>
             <ul id="templates" class="templates"></ul>
           </div>
@@ -817,9 +817,13 @@
     <h2 class="namehead" id="sweepofferhead">Run a second check?</h2>
     <!-- Written from script, because it names the wait for this document. -->
     <p class="confirmbody" id="sweepofferbody"></p>
-    <div class="confirmgo">
-      <button type="button" id="sweepoffergo" class="primary confirm-action">Run second check</button>
-      <button type="button" id="sweepofferskip" class="ghost confirm-action">Skip for now</button>
+    <!-- Side by side, and in the order they are read: the way out on the
+         left, the thing being offered on the right, where the eye finishes.
+         Amber because what the check finds is drawn amber -- the button and
+         its marks are the same colour throughout. -->
+    <div class="confirmgo sweepgo">
+      <button type="button" id="sweepofferskip" class="ghost confirm-action">Skip</button>
+      <button type="button" id="sweepoffergo" class="primary amber confirm-action">Proceed</button>
     </div>
   </div>
 </div>
@@ -1001,7 +1005,7 @@
 <script src="lib/pdfwrite.js?v=4b977425"></script>
 <script src="lib/pdfread.js?v=ca229552"></script>
 <script src="lib/render.js?v=65c3fe76"></script>
-<script src="app.js?v=06f237d7"></script>
+<script src="app.js?v=66dcc13e"></script>
 <script type="module" src="lib/boot.mjs?v=8b98ed8f"></script>
 </body>
 </html>

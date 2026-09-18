@@ -207,10 +207,10 @@ const settled = () => `!window.Blinded || (document.getElementById('busy').hidde
 
 async function redact(page) {
   await dismissSweepOffer(page);
-  // Search and Redact are two buttons now, in the order the work happens, and
-  // each is dead when it is not that button's turn. Only search if there is
-  // something left to search for -- which is what the greyed button says.
-  if (!(await page.isDisabled('#search'))) {
+  // Search and Redact are two buttons, and only the one whose turn it is is
+  // on screen. Search when there is something left to search for -- which is
+  // exactly when that button is the one showing.
+  if (await page.isVisible('#search') && !(await page.isDisabled('#search'))) {
     await page.click('#search');
     await page.waitForFunction(() => window.Blinded.state.searched === true,
       undefined, { timeout: 240000 });
@@ -515,8 +515,12 @@ try {
 
   // ---------- search, redact, export ----------
   //
-  // Three buttons in the order the work happens, each dead until it is its
-  // turn. Marks used to appear the instant a word was typed, which put an
+  // Search or Redact, and Export beside it. They are separate buttons rather
+  // than one that renames itself, so nothing under the pointer changes
+  // meaning mid-press -- but only the one whose turn it is is on screen:
+  // both at once read as two things to do at once, in a row whose whole job
+  // is to say what to do next.
+  // Marks used to appear the instant a word was typed, which put an
   // outline on the page while the reviewer was still typing — showing a
   // half-typed word's matches as if they were an answer.
   await part("search, redact, export", async () => {
@@ -537,6 +541,8 @@ try {
       drawn: window.Blinded.state.pages.reduce(
         (n, p) => n + window.Blinded.activeBoxes(p).length, 0),
       exportOff: document.getElementById('export').disabled,
+      showing: ['search', 'apply', 'export']
+        .filter(id => !document.getElementById(id).hidden),
     }));
 
     await newFile();
@@ -551,6 +557,8 @@ try {
     check('a document opens asking to be searched, not redacted',
       opened.canSearch === true && opened.canRedact === false,
       JSON.stringify(opened));
+    check('and shows the one button whose turn it is, with Export beside it',
+      opened.showing.join() === 'search,export', JSON.stringify(opened));
     // Nothing typed and no detector ticked, so there is no red ? anywhere and
     // nothing for a red button to be about. An alarm raised over nothing
     // teaches the reviewer to stop reading it.
@@ -654,6 +662,10 @@ try {
     check('and Redact is the button that is live now',
       found.canRedact === true && found.canSearch === false && !found.green,
       JSON.stringify(found));
+    // And Search has gone with its turn. A dead Search beside a live Redact
+    // is a row saying "do this, and also do not do that".
+    check('and it has taken Search\'s place rather than sitting beside it',
+      found.showing.join() === 'apply,export', JSON.stringify(found));
     check('the red ? is answered, so neither it nor the red button remains',
       found.marks === 0 && found.red === false, JSON.stringify(found));
     check('the export stays shut until it is redacted',
@@ -7372,8 +7384,70 @@ try {
     // The question is the control: an outlined button among Search, Redact
     // and Export read as a fourth thing to press in a row that already says
     // what to press next.
-    check('and ends in the question that opens the dialog',
+    check('and ends in the question that starts the check',
       offered.link === 'Proceed?', JSON.stringify(offered));
+    // Pressing it runs the check, rather than opening the dialog to ask the
+    // same question a second time. The reviewer has read the line and pressed
+    // the question in it; handing them the question back costs a press and
+    // says nothing they have not just been told.
+    const pressed = await page.evaluate(async () => {
+      const B = window.Blinded;
+      const was = B.runSweep;
+      let started = false;
+      B.runSweepCalled = () => {};
+      // Not the real check, which takes minutes: what is being tested is
+      // which of the two things the press does.
+      const box = document.getElementById('sweepoffer');
+      document.querySelector('.exportbar .checklink').click();
+      await new Promise(r => setTimeout(r, 150));
+      started = B.state.sweepRunning;
+      B.state.sweepStopped = true;
+      await new Promise(r => setTimeout(r, 400));
+      return { started, dialog: !box.hidden };
+    });
+    check('and pressing it starts the check',
+      pressed.started === true, JSON.stringify(pressed));
+    check('without asking again in a dialog',
+      pressed.dialog === false, JSON.stringify(pressed));
+    await page.waitForFunction(() => !window.Blinded.state.sweepRunning,
+      undefined, { timeout: 120000 });
+    await page.evaluate(() => {
+      const B = window.Blinded;
+      // Put the offer back for the checks below: a stopped run leaves the
+      // document un-swept, which is the state they were written against.
+      B.state.sweepStopped = false;
+      B.state.sweptTerms = [];
+      B.state.sweepAdded = 0;
+      B.state.footRan = null;
+      B.renderSweep();
+    });
+    // The way out on the left and the thing being offered on the right, where
+    // the eye finishes. They were stacked, so their order was set by number
+    // rather than by markup, and the numbers stayed behind when the two went
+    // side by side -- which put Proceed on the left, under the reader's eye
+    // before they had read what they were proceeding with.
+    const dialog = await page.evaluate(() => {
+      const go = document.getElementById('sweepoffergo');
+      const skip = document.getElementById('sweepofferskip');
+      const box = go.getBoundingClientRect();
+      const out = skip.getBoundingClientRect();
+      document.getElementById('sweepoffer').hidden = false;
+      const seen = go.getBoundingClientRect();
+      const seenSkip = skip.getBoundingClientRect();
+      const paint = getComputedStyle(go).backgroundColor;
+      document.getElementById('sweepoffer').hidden = true;
+      return { go: go.textContent.trim(), skip: skip.textContent.trim(),
+               goLeft: seen.left, skipLeft: seenSkip.left, paint,
+               hiddenBox: box.width + out.width };
+    });
+    check('the dialog offers two answers, named for what they do',
+      dialog.go === 'Proceed' && dialog.skip === 'Skip', JSON.stringify(dialog));
+    check('with the way out on the left and the offer on the right',
+      dialog.skipLeft < dialog.goLeft, JSON.stringify(dialog));
+    // Amber, because what the check finds is drawn amber: the button and its
+    // marks are the same colour the whole way through.
+    check('and the offer in the colour of what it will find',
+      dialog.paint === 'rgb(217, 139, 31)', JSON.stringify(dialog));
     // Slow enough that springing it on someone would be a trap, so the wait
     // is stated before it starts -- and taken from the work in front of it,
     // not from "a couple of minutes" about any document at all.
@@ -8491,7 +8565,10 @@ try {
         viewport: window.innerHeight,
         panel: seen('.panel'), stage: seen('.stage'),
         peekEdit: seen('#peek-edit'), peekDoc: seen('#peek-doc'),
-        bar: seen('.exportbar'), search: seen('#apply'),
+        // Whichever of the two is the one showing: before a search that is
+        // Search, and this fixture has not run one.
+        bar: seen('.exportbar'),
+        search: seen(document.getElementById('search').hidden ? '#apply' : '#search'),
         tools: seen('.tools'),
         toolCount: document.querySelectorAll('.panel-head .tools .tool').length,
         headOutside: head ? !head.closest('.panel') : null,
