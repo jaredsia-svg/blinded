@@ -524,6 +524,35 @@ function markTemplate(size) {
     check('the transform and the loop agree on every position',
       relative < 1e-5, relative.toExponential(2) + ' relative, over '
         + (outW * outH) + ' positions');
+    // And on a page big enough to be cut into tiles, which the one above is
+    // not. The tiles overlap, they are carried through the transform in pairs,
+    // and an odd number leaves the last one to ride alone: three separate
+    // pieces of arithmetic that the single-tile case never reaches. Nine tiles
+    // here, so all three run.
+    {
+      const BW = 700, BH = 500;
+      const big = blankPage(BW, BH);
+      for (let i = 0; i < 40; i++) {
+        stamp(big, BW, (i * 97) % (BW - S), (i * 61) % (BH - S), S, 0.4 + (i % 5) / 8);
+      }
+      const bigPlane = Match.numeratorPlane(big, BW, BH, tpl);
+      const bw = BW - tpl.width + 1;
+      const bh = BH - tpl.height + 1;
+      let off = 0;
+      let top = 0;
+      for (let y = 0; y < bh; y++) {
+        for (let x = 0; x < bw; x++) {
+          const loop = Match.dotAt(big, BW, tpl, x, y);
+          top = Math.max(top, Math.abs(loop));
+          off = Math.max(off, Math.abs(loop - bigPlane[y * bw + x]));
+        }
+      }
+      const relative = off / (top || 1);
+      check('and agree across every tile of a page that needs several',
+        relative < 1e-5, relative.toExponential(2) + ' relative, over '
+          + (bw * bh) + ' positions');
+    }
+
     // A small window is under the crossover and must still be answered by the
     // loop: the transform's setup costs more than it saves down there.
     check('and the small windows refinement uses stay on the loop',
