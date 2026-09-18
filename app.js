@@ -190,6 +190,9 @@
     // Near misses the reviewer has looked at and said no to. Kept by word, so
     // a "not it" stays answered while they work through the rest of the list.
     offersDismissed: new Set(),
+    // Marks they have answered for, either way, so a card goes once and does
+    // not come back on the next render.
+    reviewed: new Set(),
     // Three states, in order: nothing looked for yet, looked for and proposed,
     // covered.
     //
@@ -372,14 +375,23 @@
     };
 
     line('green', found
-      ? 'Initial search complete. Review marks outlined in green in left panel.'
-      : 'Initial search complete. Nothing found to redact.');
+      ? 'Initial search (text + images) complete.'
+        + ' Review marks outlined in green in left panel.'
+      : 'Initial search (text + images) complete. Nothing found to redact.');
     if (check) {
       const how = state.footStopped
         ? 'Second check stopped. ' : 'Second check complete. ';
+      // Marks are not the only thing to come back with. A word the check
+      // could not place leaves a question under it in the panel, and a run
+      // that found nothing to mark but left three of those has not found
+      // nothing -- saying so sends the reviewer away from work waiting for
+      // them.
+      const toReview = sweepOffers().length;
       line('amber', state.footAdded
         ? how + 'Review marks outlined in amber in left panel.'
-        : how + 'Nothing further found.');
+        : toReview
+          ? how + 'Review left panel results.'
+          : how + 'Nothing further found.');
     }
 
     // The bars are gone, and an empty row where they were takes the width the
@@ -735,6 +747,7 @@
     state.sweepAdded = 0;
     state.footRan = null;
     state.offersDismissed = new Set();
+    state.reviewed = new Set();
     state.sweepStopped = false;
     state.sweepReached = 0;
     state.sweepRefused = 0;
@@ -1961,11 +1974,12 @@
       + (ocrPending() ? 1 : 0);
     const searching = searchPending();
 
-    // One button, three states, and it says which one it is in: Search finds
-    // things and proposes them, Redact covers what was proposed, and Redacted
-    // is a state the reviewer can step back out of rather than a dead end.
-    button.textContent = searching ? 'Search'
-      : state.applied ? 'Redacted' : 'Redact';
+    // Three buttons, in the order the work happens. Redact still says
+    // "Redacted" once it has been pressed, because that is a state the
+    // reviewer can step back out of rather than a dead end -- and it no longer
+    // moves anything, because Search is a button of its own now instead of a
+    // name this one wore for a while.
+    button.textContent = state.applied && !searching ? 'Redacted' : 'Redact';
     // How many red question marks are on the panel right now. A word that no
     // search has counted yet and a picked image nothing has looked for each
     // draw one, and this is the same predicate the circles themselves render
@@ -1981,7 +1995,14 @@
     // which is what it will be for the next press anyway.
     // Not while it is running: red is "there is something here for you to
     // answer", and a button that cannot be pressed is not asking anything.
-    button.classList.toggle('hunt', searching && unanswered > 0 && !state.redacting);
+    const find = el('search');
+    // Red belongs on Search, which is the button that answers a red question
+    // mark. Red with nothing outstanding is an alarm about nothing, and a
+    // button that cannot be pressed is not asking anything.
+    find.classList.toggle('hunt', searching && unanswered > 0 && !state.redacting);
+    find.disabled = state.redacting || state.sweepRunning || !searching
+      || (state.kind !== 'text' && !state.pages.length);
+    find.title = searching ? '' : 'Everything asked for has been searched for';
     button.classList.toggle('done', !searching && state.applied);
     button.title = !searching && state.applied ? 'Press to uncover and look at the marks again' : '';
     // Not while the second check is running: it is a pass over the same
@@ -1991,14 +2012,16 @@
     // because the search put a dialog over the page; now that it reports
     // itself along the foot and leaves the page alone, the button is sitting
     // there, live, next to its own progress bar.
-    button.disabled = state.sweepRunning || state.redacting || (searching
-      ? state.kind !== 'text' && !state.pages.length
-      : !state.applied && marks === 0 && unsearched === 0);
+    // Redact waits for something to cover. Not for the search to be finished
+    // with: a reviewer who has what they need can cover it and go.
+    button.disabled = state.sweepRunning || state.redacting
+      || (!state.applied && marks === 0);
     if (state.sweepRunning) {
-      button.title = 'The second check is running  - let it finish, '
+      find.title = button.title = 'The second check is running  - let it finish, '
         + 'or stop it at the foot of the page';
     } else if (state.redacting) {
-      button.title = 'Searching  - the bar beside this says how far it has got';
+      find.title = button.title =
+        'Searching  - the bar beside this says how far it has got';
     }
 
     el('export').disabled = !state.applied || marks === 0;
@@ -2248,15 +2271,16 @@
   }
 
   // Which of the three the button means this time.
-  async function applyButton() {
-    if (state.applied && !searchPending()) { uncoverMarks(); return; }
-    if (searchPending()) {
-      if (state.applied) markPending();
-      await runSearch();
-      return;
-    }
-    if (state.searched) { coverMarks(); return; }
+  async function searchButton() {
+    // A search over a document that is already covered has to uncover it
+    // first, or it would be looking at its own black boxes.
+    if (state.applied) markPending();
     await runSearch();
+  }
+
+  async function applyButton() {
+    if (state.applied) { uncoverMarks(); return; }
+    coverMarks();
   }
 
   // ---------- searching for every image at once ----------
@@ -6136,6 +6160,15 @@
     host.textContent = '';
     if (!state.terms.length) return;
 
+    // Worked out once for the whole list: the few worth asking about are
+    // chosen across the document, not a few per word, so one word with
+    // everything near its bar cannot fill the panel.
+    const lowByTerm = new Map();
+    for (const one of lowConfidenceMarks()) {
+      if (!lowByTerm.has(one.term)) lowByTerm.set(one.term, []);
+      lowByTerm.get(one.term).push(one);
+    }
+
     for (const term of state.terms) {
       const where = occurrencesFor(term);
       const total = where.length;
@@ -6222,12 +6255,18 @@
         host.append(tallyList(term, byShape));
       }
 
-      // What the check could not place, under the word that asked for it.
+      // What the check could not place, and what it placed but is not sure
+      // of, under the word that asked for it.
+      const asks = [];
       const offer = offerFor(term);
-      if (offer) {
+      if (offer) asks.push(nearMissCard(offer));
+      if (lowByTerm.has(term)) {
+        for (const one of lowByTerm.get(term)) asks.push(lowConfidenceCard(one));
+      }
+      for (const ask of asks) {
         const holder = document.createElement('li');
         holder.className = 'tally offerhost';
-        holder.append(offerCard(offer));
+        holder.append(ask);
         host.append(holder);
       }
     }
@@ -8359,6 +8398,7 @@
     // A new run is a new answer: a word turned down last time is asked about
     // again, because what it found may not be what it found before.
     state.offersDismissed = new Set();
+    state.reviewed = new Set();
     state.sweepDeepened = [];
     // The foot is the check's now. The line the search left there — "Search
     // complete, four marks proposed" — describes a run that finished before
@@ -8449,6 +8489,11 @@
                   + Math.round(hit.x) + ':' + Math.round(hit.y),
                 term, rect, score: hit.score,
                 inverted: Boolean(hit.inverted),
+                // The bar it had to clear, kept with it: how close a match
+                // came to being turned away is the only thing that says how
+                // sure of it the tool is, and it cannot be worked out again
+                // afterwards once a seeded pass has moved the bar.
+                bar: termEntries[0].threshold,
                 bySweep: true,
               });
               added++;
@@ -8463,7 +8508,9 @@
           if (!found) continue;
           for (const hit of found.matches) {
             if (!perPage.has(hit.pageIndex)) perPage.set(hit.pageIndex, []);
-            perPage.get(hit.pageIndex).push(hit);
+            // The bar travels with the hit: the faces are pooled below and
+            // the entry that set it is out of scope by then.
+            perPage.get(hit.pageIndex).push({ ...hit, bar: entry.threshold });
           }
         }
         for (const [pageIndex, hits] of perPage) {
@@ -8493,6 +8540,7 @@
                 + Math.round(hit.x) + ':' + Math.round(hit.y),
               term, rect, score: hit.score,
               inverted: Boolean(hit.inverted),
+              bar: typeof hit.bar === 'number' ? hit.bar : termEntries[0].threshold,
               // What makes it amber on the page and countable in the note.
               bySweep: true,
             });
@@ -8722,25 +8770,23 @@
     // sentence beside it saying which page it was on and that the reviewer
     // could carry on reading — which is true of every run reported down here,
     // and so is not worth a sentence.
+    // One bar, not three.
+    //
+    // The check makes up to three passes -- the sweep, a deeper look where it
+    // found nothing, and the places the page reader can point to -- and each
+    // used to raise a bar of its own, naming itself. That is the tool
+    // explaining its own internals to somebody waiting for an answer. They
+    // are one run and they get one bar; the later passes are short and the
+    // first one is nearly all of it.
     const want = [{ key: 'sweep', label: 'Second check', total }];
-    if (deepOf) {
-      want.push({ key: 'deep', label: 'Looking again where nothing was found',
-        total: deepOf });
-    }
-    if (seededOf) {
-      want.push({ key: 'seed', label: 'Checking what the page reader can point to',
-        total: seededOf });
-    }
-    // Only rebuilt when the shape of the run changes: the later passes appear
-    // part way through, and redrawing the rows on every page would restart
-    // their transitions and make a filling bar stutter. Compared by which rows
-    // they are, not how many: the third pass replaces the second rather than
-    // joining it, and counting alone called that no change at all.
+    // Only rebuilt when the row is not already there: redrawing it on every
+    // page would restart its transition and make a filling bar stutter.
     const have = [...host.querySelectorAll('.leg')].map(row => row.dataset.leg);
     if (have.join() !== want.map(one => one.key).join()) legs(want, host);
-    leg('sweep', done, host);
-    if (deepOf) leg('deep', Math.min(deep + 1, deepOf), host);
-    if (seededOf) leg('seed', Math.min(seeded + 1, seededOf), host);
+    // A later pass holds the bar at the end rather than winding it back: the
+    // run is not over until they are, and a bar that empties and refills
+    // reads as a second run nobody asked for.
+    leg('sweep', deepOf || seededOf ? total : done, host);
   }
 
   // The button, and what it says afterwards.
@@ -9003,26 +9049,87 @@
     take.type = 'button';
     take.className = 'offeryes';
     take.textContent = '\u2713';
-    take.title = 'Yes, redact this';
-    take.setAttribute('aria-label', 'Yes, redact this');
-    take.addEventListener('click', () => takeSweepOffer(offer));
+    take.title = offer.yesSays || 'Yes, redact this';
+    take.setAttribute('aria-label', offer.yesSays || 'Yes, redact this');
+    take.addEventListener('click', offer.onYes);
 
     const drop = document.createElement('button');
     drop.type = 'button';
     drop.className = 'offerno';
     drop.textContent = '\u2715';
-    drop.title = 'No, leave it';
-    drop.setAttribute('aria-label', 'No, leave it');
-    drop.addEventListener('click', () => {
-      state.offersDismissed = state.offersDismissed || new Set();
-      state.offersDismissed.add(offer.term);
-      renderTermCounts();
-      renderSweep();
-    });
+    drop.title = offer.noSays || 'No, leave it';
+    drop.setAttribute('aria-label', offer.noSays || 'No, leave it');
+    drop.addEventListener('click', offer.onNo);
 
     row.append(where, take, drop);
     card.append(row);
     return card;
+  }
+
+  // The near miss: a word the check could not place at all.
+  function nearMissCard(offer) {
+    return offerCard({ ...offer,
+      onYes: () => takeSweepOffer(offer),
+      onNo: () => {
+        state.offersDismissed = state.offersDismissed || new Set();
+        state.offersDismissed.add(offer.term);
+        renderTermCounts();
+        renderSweep();
+      } });
+  }
+
+  // How close to its bar a mark has to be to be worth a second look.
+  //
+  // Measured across the benchmark set: the one confirmed false positive sits
+  // 0.025 over its bar, with true marks at 0.006 and 0.078 either side of it.
+  // The score cannot tell them apart, which is exactly why this asks rather
+  // than decides -- and why it only asks about the ones down at the bar,
+  // where the question is real.
+  const REVIEW_MARGIN = 0.06;
+  // And only a few. A document with forty marks near the bar is not forty
+  // questions; it is a bar set wrong, and forty cards would bury the panel
+  // and the marks it is trying to explain.
+  const REVIEW_MAX = 3;
+
+  // The marks worth putting back to the reviewer, lowest first.
+  //
+  // Only the ones found by shape. A word the page reader read is not in
+  // doubt: it recognised the letters, and asking about it would be the tool
+  // second-guessing its own best evidence.
+  function lowConfidenceMarks() {
+    const seen = state.reviewed || (state.reviewed = new Set());
+    const out = [];
+    for (const page of state.pages) {
+      for (const mark of liveImageHits(page)) {
+        if (!mark.bySweep || !mark.rect || typeof mark.bar !== 'number') continue;
+        if (page.dismissed.has(mark.id) || seen.has(mark.id)) continue;
+        if (!state.terms.includes(mark.term)) continue;
+        if (mark.score >= mark.bar + REVIEW_MARGIN) continue;
+        out.push({ mark, page, term: mark.term, score: mark.score,
+          over: mark.score - mark.bar,
+          at: { p: page.index, x: mark.rect.x, y: mark.rect.y,
+            w: mark.rect.w, h: mark.rect.h } });
+      }
+    }
+    out.sort((a, b) => a.over - b.over);
+    return out.slice(0, REVIEW_MAX);
+  }
+
+  function lowConfidenceCard(one) {
+    return offerCard({ term: one.term, at: one.at, score: one.score,
+      yesSays: 'Yes, keep this mark',
+      noSays: 'No, take it off',
+      onYes: () => {
+        state.reviewed.add(one.mark.id);
+        renderTermCounts();
+        renderSweep();
+      },
+      onNo: () => {
+        state.reviewed.add(one.mark.id);
+        dropMark(one.page.index, one.mark.group || one.mark.id);
+        renderTermCounts();
+        renderSweep();
+      } });
   }
 
   // The offer for one word, if the check left it with nothing and there is
@@ -9204,6 +9311,7 @@
   });
   el('downloadkey').addEventListener('click', downloadKey);
   el('undo').addEventListener('click', undoLast);
+  el('search').addEventListener('click', searchButton);
   el('apply').addEventListener('click', applyButton);
   window.addEventListener('keydown', event => {
     if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'z' && !event.shiftKey) {
@@ -9866,7 +9974,7 @@
     readPages, matchOcr, ocrPending, ocrMatchStale, showWordControls,
     sweepTemplates, sweepCaseOf, runSweep, renderSweep, alreadyCovered, readerContradicts, sweepPartsFor,
     readerSeedsFor, partnerSeedsFrom, markedAt,
-    sweepEstimate, describeSweepOffer,
+    sweepEstimate, describeSweepOffer, lowConfidenceMarks,
     pageHasConfidentTerm, pagesNeedingSweep, sweepWorkload,
     READER_SURE, sweepProgress,
     settleSweep,

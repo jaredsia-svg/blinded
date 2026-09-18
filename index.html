@@ -41,7 +41,7 @@
      origins for one program and two sets of response headers to keep right;
      Pages publishing is off and this says which copy is the copy. -->
 <link rel="canonical" href="https://blinded.onrender.com/">
-<link rel="stylesheet" href="app.css?v=344a5f56">
+<link rel="stylesheet" href="app.css?v=72feae44">
 </head>
 <body>
 
@@ -638,8 +638,17 @@
            all belong to this bar, and the button that begins it was three
            sections away up the left-hand side. -->
       <button type="button" id="sweep" class="ghost" hidden>Second check</button>
+      <!-- On the left, where everything this bar says goes: the note before a
+           search and the report after one are the same sentence in two
+           moments, and one of them was over on the right by the buttons. -->
+      <span id="exportnote" class="hint"></span>
+      <!-- Three buttons in the order the work happens, always all three, each
+           greyed until it is its turn. One button that changed its own name
+           from Search to Redact to Redacted moved the button beside it every
+           time it did, so the thing under the pointer was not the thing that
+           got pressed. -->
       <div class="exportgo">
-        <span id="exportnote" class="hint"></span>
+        <button type="button" id="search" class="primary" disabled>Search</button>
         <button type="button" id="apply" class="primary" disabled>Redact</button>
         <button type="button" id="export" class="primary ghostly" disabled>Export file</button>
       </div>
@@ -929,21 +938,37 @@
     <label class="namelabel" for="savename">File name</label>
     <input id="savename" type="text" class="nameinput" spellcheck="false">
     <p class="hint" id="namenote" hidden></p>
-    <label class="check nameopt" id="losslessrow">
-      <input type="checkbox" id="lossless">
-      Lossless output <span class="namefaint">– larger file, no compression artefacts</span>
-    </label>
-    <label class="check nameopt" id="searchablerow">
-      <input type="checkbox" id="searchable">
-      Searchable text <span class="namefaint">– reads the redacted pages so the text can be found and copied. Slower.</span>
-    </label>
-    <!-- The finished file is not the work. Exporting is the moment somebody
-         discovers they wanted to keep the marks, and the moment they are
-         about to close the tab. -->
-    <label class="check nameopt" id="withdraftrow">
-      <input type="checkbox" id="withdraft">
-      Save a draft too <span class="namefaint">– your marks and the words you typed, to reopen and edit later. Keep it as carefully as the document.</span>
-    </label>
+    <!-- Three options, one shape: the box, the name, and one line under it
+         saying what it costs. They used to be three paragraphs of different
+         lengths wrapping around their own checkboxes. -->
+    <div class="nameopts">
+      <label class="nameopt" id="losslessrow">
+        <input type="checkbox" id="lossless">
+        <span class="nameopt-text">
+          <span class="nameopt-name">Lossless output</span>
+          <span class="namefaint">Larger file, no compression artefacts.</span>
+        </span>
+      </label>
+      <label class="nameopt" id="searchablerow">
+        <input type="checkbox" id="searchable">
+        <span class="nameopt-text">
+          <span class="nameopt-name">Searchable text</span>
+          <span class="namefaint">Reads the redacted pages so the text can be
+            found and copied. Slower.</span>
+        </span>
+      </label>
+      <!-- The finished file is not the work. Exporting is the moment somebody
+           discovers they wanted to keep the marks, and the moment they are
+           about to close the tab. -->
+      <label class="nameopt" id="withdraftrow">
+        <input type="checkbox" id="withdraft">
+        <span class="nameopt-text">
+          <span class="nameopt-name">Save draft</span>
+          <span class="namefaint">Your marks and the words you typed, to reopen
+            and edit later. Keep it as carefully as the document.</span>
+        </span>
+      </label>
+    </div>
     <div class="namego">
       <button type="button" id="namecancel" class="ghost">Cancel</button>
       <button type="button" id="namesave" class="primary">Save</button>
@@ -977,7 +1002,7 @@
 <script src="lib/pdfwrite.js?v=4b977425"></script>
 <script src="lib/pdfread.js?v=ca229552"></script>
 <script src="lib/render.js?v=65c3fe76"></script>
-<script src="app.js?v=c50a6184"></script>
+<script src="app.js?v=986bd662"></script>
 <script type="module" src="lib/boot.mjs?v=8b98ed8f"></script>
 </body>
 </html>

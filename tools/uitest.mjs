@@ -207,9 +207,14 @@ const settled = () => `!window.Blinded || (document.getElementById('busy').hidde
 
 async function redact(page) {
   await dismissSweepOffer(page);
-  await page.click('#apply');
-  await page.waitForFunction(() => window.Blinded.state.searched === true,
-    undefined, { timeout: 240000 });
+  // Search and Redact are two buttons now, in the order the work happens, and
+  // each is dead when it is not that button's turn. Only search if there is
+  // something left to search for -- which is what the greyed button says.
+  if (!(await page.isDisabled('#search'))) {
+    await page.click('#search');
+    await page.waitForFunction(() => window.Blinded.state.searched === true,
+      undefined, { timeout: 240000 });
+  }
   await page.waitForFunction(settled(),
     undefined, { timeout: 240000 });
   await dismissSweepOffer(page);
@@ -508,16 +513,19 @@ try {
       afterDrop.forDropped === 0 && afterDrop.marks > 0, JSON.stringify(afterDrop));
   });
 
-  // ---------- search, redact, redacted ----------
+  // ---------- search, redact, export ----------
   //
-  // One button, three states. Marks used to appear the instant a word was
-  // typed, which put an outline on the page while the reviewer was still
-  // typing — showing a half-typed word's matches as if they were an answer.
-  await part("search, redact, redacted", async () => {
+  // Three buttons in the order the work happens, each dead until it is its
+  // turn. Marks used to appear the instant a word was typed, which put an
+  // outline on the page while the reviewer was still typing — showing a
+  // half-typed word's matches as if they were an answer.
+  await part("search, redact, export", async () => {
     const state = () => page.evaluate(() => ({
       label: document.getElementById('apply').textContent.trim(),
+      canSearch: !document.getElementById('search').disabled,
+      canRedact: !document.getElementById('apply').disabled,
       green: document.getElementById('apply').classList.contains('done'),
-      red: document.getElementById('apply').classList.contains('hunt'),
+      red: document.getElementById('search').classList.contains('hunt'),
       // The circles the red is supposed to be answering — every one of them,
       // the detectors included: each of those wears a red ? until a search
       // has run, and the button is what answers them.
@@ -541,7 +549,8 @@ try {
 
     const opened = await state();
     check('a document opens asking to be searched, not redacted',
-      opened.label === 'Search', JSON.stringify(opened));
+      opened.canSearch === true && opened.canRedact === false,
+      JSON.stringify(opened));
     // Nothing typed and no detector ticked, so there is no red ? anywhere and
     // nothing for a red button to be about. An alarm raised over nothing
     // teaches the reviewer to stop reading it.
@@ -558,7 +567,7 @@ try {
       await new Promise(r => setTimeout(r, 60));
       const out = {
         marks: document.querySelectorAll('.kind .n.unknown').length,
-        red: document.getElementById('apply').classList.contains('hunt'),
+        red: document.getElementById('search').classList.contains('hunt'),
         unknown: window.Blinded.unknownKinds(),
       };
       const again = document.querySelector('.kind input[data-kind="email"]');
@@ -566,7 +575,7 @@ try {
       again.dispatchEvent(new Event('change', { bubbles: true }));
       await new Promise(r => setTimeout(r, 60));
       out.afterUntick = document.querySelectorAll('.kind .n.unknown').length;
-      out.redAfter = document.getElementById('apply').classList.contains('hunt');
+      out.redAfter = document.getElementById('search').classList.contains('hunt');
       return out;
     });
     check('ticking a detector puts a red ? on its row',
@@ -582,8 +591,9 @@ try {
     const typed = await state();
     check('typing a word marks nothing on the page',
       typed.drawn === 0, JSON.stringify(typed));
-    check('and the button still says Search',
-      typed.label === 'Search' && typed.searched === false, JSON.stringify(typed));
+    check('and Search is still the button that is live',
+      typed.canSearch === true && typed.canRedact === false
+      && typed.searched === false, JSON.stringify(typed));
     // The note counts them by showing the mark, not by describing it: "2 red ?
     // marks above" asks the reviewer to translate a sentence back into a thing
     // on the panel.
@@ -633,7 +643,7 @@ try {
     check('and turns the button red to match it',
       typed.red === true, JSON.stringify(typed));
 
-    await page.click('#apply');
+    await page.click('#search');
     await page.waitForFunction(() => window.Blinded.state.searched === true,
       undefined, { timeout: 240000 });
     await page.waitForFunction(settled(),
@@ -641,8 +651,9 @@ try {
     const found = await state();
     check('searching proposes what it found', found.drawn > 0, JSON.stringify(found));
     check('but covers nothing yet', found.applied === false, JSON.stringify(found));
-    check('and the button now offers to redact',
-      found.label === 'Redact' && !found.green, JSON.stringify(found));
+    check('and Redact is the button that is live now',
+      found.canRedact === true && found.canSearch === false && !found.green,
+      JSON.stringify(found));
     check('the red ? is answered, so neither it nor the red button remains',
       found.marks === 0 && found.red === false, JSON.stringify(found));
     check('the export stays shut until it is redacted',
@@ -708,7 +719,8 @@ try {
       await page.mouse.move(5, 300);
       const paint = await page.evaluate(() => {
         const circle = document.querySelector('.termcounts .n.unknown');
-        const button = document.getElementById('apply');
+        // Search wears the red now: it is the button that answers the mark.
+        const button = document.getElementById('search');
         return circle
           ? { ink: getComputedStyle(circle).color,
               fill: getComputedStyle(button).backgroundColor }
@@ -722,8 +734,8 @@ try {
     await setTerms(page, ["Jane", "Amphitheatre"]);
     await page.waitForTimeout(400);
     const changed = await state();
-    check('editing the words puts it back to Search',
-      changed.label === 'Search' && changed.searched === false,
+    check('editing the words puts Search back in play',
+      changed.canSearch === true && changed.searched === false,
       JSON.stringify(changed));
     // The words' marks go; the detectors' stay.
     //
@@ -2200,7 +2212,7 @@ try {
   // A placeholder stands for something a search has actually found. Nothing
   // is labelled before one has run — a legend built out of unsearched guesses
   // would be naming things nobody has looked for yet.
-  await page.click('#apply');
+  await page.click('#search');
   await page.waitForFunction(() => window.Blinded.state.searched === true,
     undefined, { timeout: 240000 });
   await page.waitForFunction(settled(),
@@ -2684,7 +2696,7 @@ try {
     // words typed, search run, marks on the page. A draft that forgets the
     // search comes back looking empty until the reviewer presses Search again,
     // which is the thing this block guards against below.
-    await page.click('#apply');
+    await page.click('#search');
     await page.waitForFunction(() => window.Blinded.state.searched === true,
       undefined, { timeout: 240000 });
     await page.waitForFunction(settled(),
@@ -3172,7 +3184,7 @@ try {
   // proposed it, and an unsearched detector proposes nothing — it is not on
   // the page to be clicked.
   await useDetectors(page);
-  await page.click('#apply');
+  await page.click('#search');
   await page.waitForFunction(() => window.Blinded.state.searched === true,
     undefined, { timeout: 240000 });
   await page.waitForFunction(settled(),
@@ -3224,7 +3236,7 @@ try {
     await page.locator('#textview mark').count() === 0);
 
   await useDetectors(page);
-  await page.click('#apply');
+  await page.click('#search');
   await page.waitForFunction(() => window.Blinded.state.searched === true,
     undefined, { timeout: 120000 });
   await dismissSweepOffer(page);
@@ -3236,7 +3248,7 @@ try {
     marks === 3, String(marks));
 
   await setTerms(page, ["Jane Doe"]);
-  await page.click('#apply');
+  await page.click('#search');
   await page.waitForFunction(() => window.Blinded.state.searched === true,
     undefined, { timeout: 120000 });
   await dismissSweepOffer(page);
@@ -4327,10 +4339,11 @@ try {
       run.afterShown && run.runGone
       && /Second check (complete|stopped)/.test(run.after),
       JSON.stringify(run));
-    // The deeper pass is the one that used to leave its line behind: it adds a
-    // second bar part way through, and the run ends from inside it.
-    check('the deeper pass gets a bar of its own while it runs',
-      run.deepened.includes('Zzyzx') && run.deep > 0, JSON.stringify(run));
+    // The later passes get no bar of their own. They are one run with the
+    // first, and three bars naming themselves is the tool explaining its
+    // internals to somebody waiting for an answer.
+    check('the deeper pass runs without a bar of its own',
+      run.deepened.includes('Zzyzx') && run.deep === 0, JSON.stringify(run));
     check('and nothing of it is left on the page once the check is over',
       run.leftovers === 0 && run.stillSaysChecking === false,
       JSON.stringify(run));
@@ -5970,7 +5983,7 @@ try {
     const armed = await page.evaluate(() => ({
       terms: window.Blinded.state.terms.length,
       pending: window.Blinded.ocrPending(),
-      red: document.getElementById('apply').classList.contains('hunt'),
+      red: document.getElementById('search').classList.contains('hunt'),
       unknown: window.Blinded.unknownKinds(),
     }));
     check('with nothing typed there is still reading to do',
@@ -5986,7 +5999,7 @@ try {
       known: window.Blinded.kindsKnown(),
       unknown: window.Blinded.unknownKinds(),
       found: Object.values(window.Blinded.countsByKind()).reduce((n, v) => n + v, 0),
-      red: document.getElementById('apply').classList.contains('hunt'),
+      red: document.getElementById('search').classList.contains('hunt'),
     }));
     check('a search with nothing typed reads the pages anyway',
       read.ocrRead === true && read.readPages === read.pages, JSON.stringify(read));
@@ -7536,7 +7549,8 @@ try {
 
       const sweeping = B.runSweep();
       await new Promise(r => setTimeout(r, 50));
-      const button = document.getElementById('apply');
+      // Search is a button of its own now; this block is about Search.
+      const button = document.getElementById('search');
       const during = {
         disabled: button.disabled,
         title: button.title,
@@ -7555,7 +7569,7 @@ try {
 
       await B.settleSweep();
       await sweeping;
-      const after = { disabled: document.getElementById('apply').disabled,
+      const after = { disabled: document.getElementById('search').disabled,
                       running: B.state.sweepRunning };
       p.imageHits = [];
       B.state.sweptTerms = [];
@@ -7726,7 +7740,7 @@ try {
     });
     check('both runs are reported, one line each',
       refused.lines.length === 2
-      && /^Initial search complete/.test(refused.lines[0])
+      && /^Initial search \(text \+ images\) complete/.test(refused.lines[0])
       && /^Second check complete/.test(refused.lines[1]),
       JSON.stringify(refused));
     check('each line wearing the colour its marks wear on the page',
@@ -9063,7 +9077,7 @@ try {
         resolve([...seen]);
       }, 25);
     }));
-    await page.click('#apply');
+    await page.click('#search');
     await page.waitForFunction(() => window.Blinded.state.searched === true,
       undefined, { timeout: 240000 });
     const legs = await watched;
@@ -9342,7 +9356,7 @@ try {
         resolve({ seen, spells, searchingSeen, searchingHidden, dialog });
       }, 30);
     }));
-    await page.click('#apply');
+    await page.click('#search');
     await page.waitForFunction(() => window.Blinded.state.searched === true,
       undefined, { timeout: 240000 });
     const overlay = await watched;
@@ -9647,7 +9661,7 @@ try {
         ticked: [...document.querySelectorAll('#kinds .kind input')]
           .every(b => b.checked),
         enabled: window.Blinded.state.enabled.size,
-        red: document.getElementById('apply').classList.contains('hunt'),
+        red: document.getElementById('search').classList.contains('hunt'),
         above: Boolean(first),
       };
       const again = document.querySelector('#kinds .kindall input');
@@ -9657,7 +9671,7 @@ try {
       const off = {
         ticked: [...document.querySelectorAll('#kinds .kind input')]
           .some(b => b.checked),
-        red: document.getElementById('apply').classList.contains('hunt'),
+        red: document.getElementById('search').classList.contains('hunt'),
       };
       // Half on, half off: the switch says so rather than picking a side.
       const one = document.querySelector('#kinds .kind input');
@@ -9710,7 +9724,7 @@ try {
     check('and what the section is for is a hint on it instead',
       before.hint === true, JSON.stringify(before));
 
-    await page.click('#apply');
+    await page.click('#search');
     await page.waitForFunction(() => window.Blinded.state.searched === true,
       null, { timeout: 90000 });
     const after = await readKinds();
