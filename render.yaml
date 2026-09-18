@@ -59,3 +59,11 @@ services:
       - path: /*
         name: Cross-Origin-Resource-Policy
         value: same-origin
+      # Except the picture that stands in for a link to this. It is meant to
+      # be shown by somebody else's page -- that is its whole job -- and
+      # same-origin is an instruction to the browser not to let them. Nothing
+      # about it is confidential: it is two slides from the gallery, already
+      # public, drawn into a card.
+      - path: /og.png
+        name: Cross-Origin-Resource-Policy
+        value: cross-origin

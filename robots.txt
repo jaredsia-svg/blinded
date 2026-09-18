@@ -1,0 +1,16 @@
+# Everything here is meant to be read. There is nothing behind a login and
+# nothing generated per visitor: the tool is one page of markup and the
+# documents it works on never leave the machine that opened them, so there is
+# no such thing as a private URL to keep out of an index.
+User-agent: *
+Allow: /
+
+# Except the parts that are not pages. A crawler spending its budget on a
+# 1.4MB PDF worker or eleven megabytes of recognition data is a crawler not
+# reading the two pages that say what this is.
+Disallow: /vendor/
+Disallow: /lib/
+Disallow: /tools/
+Disallow: /bench/
+
+Sitemap: https://blinded.onrender.com/sitemap.xml

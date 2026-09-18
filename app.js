@@ -626,6 +626,7 @@
     // back. Reset and Home belong beside the document, not on the pages you
     // read instead of it: Reset would offer to throw away work the reviewer is
     // not even looking at, and Home is where they already are.
+    if (name === 'faq') loadFaq();
     const away = name === 'faq' || reading;
     el('faq-open').textContent = away ? 'Back to the tool' : 'Q\u0026A';
     el('home-top').hidden = name !== 'review';
@@ -635,6 +636,52 @@
     // page is an ordinary scrolling page, so the class comes and goes with the
     // view rather than living on the body for good.
     document.body.classList.toggle('reviewing', name === 'review');
+  }
+
+  // The questions, fetched from the page that holds them.
+  //
+  // They live in faq.html: one copy, at an address a reader can send to
+  // somebody and a search engine can index. Here they are pulled in and
+  // dropped into the view, so that opening them never navigates away from a
+  // document that exists nowhere but this tab.
+  //
+  // Same origin, which is what `connect-src 'self'` permits and the only
+  // thing it permits. If it fails -- opened from a file:// URL, or the page
+  // moved -- the view says so and offers the link, rather than being an empty
+  // heading with nothing under it.
+  let faqLoaded = null;
+
+  function loadFaq() {
+    const host = el('faq-here');
+    if (!host || faqLoaded) return faqLoaded;
+    faqLoaded = fetch('faq.html', { credentials: 'omit' })
+      .then(answer => answer.ok ? answer.text()
+        : Promise.reject(new Error('faq.html: ' + answer.status)))
+      .then(text => {
+        // Parsed, not assigned: assigning the markup of a whole page into a
+        // div runs nothing (scripts inserted that way never execute) but does
+        // pull in its header, its title and its own copy of the back link.
+        const page = new DOMParser().parseFromString(text, 'text/html');
+        const asked = page.querySelectorAll('#faq-body .faq, #faq-body .faqlink');
+        if (!asked.length) throw new Error('faq.html: no questions in it');
+        host.textContent = '';
+        for (const one of asked) host.append(document.importNode(one, true));
+      })
+      .catch(() => {
+        host.textContent = '';
+        const said = document.createElement('p');
+        said.className = 'hint';
+        const link = document.createElement('a');
+        link.href = 'faq.html';
+        link.textContent = 'Open the questions';
+        said.append(document.createTextNode('The questions could not be '
+          + 'loaded into this view. '), link, document.createTextNode('.'));
+        host.append(said);
+        // Left unset, so a second visit tries again: a failure that was the
+        // network's is not a failure that has to last the session.
+        faqLoaded = null;
+      });
+    return faqLoaded;
   }
 
   function fail(message) {
@@ -9910,6 +9957,7 @@
     watchPinch, pinching, PINCH_IN, wordSensitivity, wordBarFor,
     setZoom, stepZoom, ZOOM_STEPS,
     MARK_GREEN,
+    loadFaq,
     cleanName, coveredText, askName, askPassword, renderPdf, wordLayerFor,
     confirmCrop, redactedName,
     confirmAction, showTemplate,

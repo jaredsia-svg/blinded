@@ -21,6 +21,17 @@ static folder. It cannot be opened straight off the disk with `file://`,
 because ES modules and pdf.js's worker are blocked there; any static server
 will do, and `npm start` is one.
 
+`faq.html` is the second page: the questions, at an address that can be
+linked to and indexed. The tool fetches it into its own Q&A view rather than
+linking to it, because the document being worked on lives only in the tab and
+following a link would throw it away. Two generated files go with it, and both
+are checked by the self-test rather than kept current by hand:
+
+```sh
+node tools/faq.mjs      # the FAQPage data in faq.html, read out of its markup
+node tools/card.mjs     # og.png, the picture a link to this unfurls as
+```
+
 ## What it does
 
 - **Gone, not covered.** Each page is rebuilt from pixels, so there is nothing

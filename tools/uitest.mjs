@@ -9015,6 +9015,12 @@ try {
 
   await page.click('#faq-open');
   await page.waitForSelector('#view-faq:not([hidden])', { timeout: 15000 });
+  // The questions are fetched from faq.html now -- one copy, at an address a
+  // reader can link to and a crawler can index -- so the view is a heading
+  // and an empty box until they arrive.
+  await page.waitForFunction(
+    () => document.querySelectorAll('#faq-here .faq').length > 0,
+    undefined, { timeout: 15000 });
   // Off the button before measuring it: the click that opened this page left
   // the pointer sitting on it, and hover is not the colour being asserted.
   await page.mouse.move(5, 400);

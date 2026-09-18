@@ -3,6 +3,7 @@
 // The browser-side modules are written as classic scripts attached to a global
 // so that they can be loaded here without a bundler, the same way the page
 // loads them. tools/uitest.mjs covers the parts that need a real canvas.
+import { faqData, faqIsCurrent } from './faq.mjs';
 import { readFileSync, existsSync, statSync, readdirSync } from 'node:fs';
 import { deflateSync } from 'node:zlib';
 import { dirname, join } from 'node:path';
@@ -2362,7 +2363,8 @@ check('no creation date is carried into the output', !meta.info.CreationDate);
 // ---------- the licence it claims to have ----------
 {
   const readme = readFileSync(join(root, 'README.md'), 'utf8');
-  const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  // The questions live in faq.html now, which is where this claim is made.
+  const html = readFileSync(join(root, 'faq.html'), 'utf8');
   const licence = existsSync(join(root, 'LICENSE'))
     ? readFileSync(join(root, 'LICENSE'), 'utf8') : '';
   // The FAQ calls it free and open source. Without a licence file that is a
@@ -2370,6 +2372,58 @@ check('no creation date is carried into the output', !meta.info.CreationDate);
   check('the page calls it open source', /free and open source/.test(html));
   check('so there is a licence to read', licence.length > 0, 'LICENSE is missing');
   check('and the README names it', /MIT, in `LICENSE`/.test(readme));
+}
+
+// ---------- what a search engine is told ----------
+//
+// Structured data is checked against the page it describes: an answer here
+// that has drifted from the answer on the page is read as a claim about a
+// page that does not say that, which costs more than having no data at all.
+// It is generated from the markup, so the only thing worth guarding is that
+// the copy in the file is the copy the markup would produce.
+{
+  const faq = readFileSync(join(root, 'faq.html'), 'utf8');
+  const index = readFileSync(join(root, 'index.html'), 'utf8');
+  check('the questions page says what it would answer',
+    faqIsCurrent(faq), 'stale - run: node tools/faq.mjs');
+  const data = faqData(faq);
+  check('every question on it is in there',
+    data.mainEntity.length === (faq.match(/<section class="faq">/g) || []).length
+      && data.mainEntity.length >= 8,
+    data.mainEntity.length + ' questions');
+  check('and every one of them has an answer under it',
+    data.mainEntity.every(one => one.name.length > 5
+      && one.acceptedAnswer.text.length > 60),
+    JSON.stringify(data.mainEntity.map(o => [o.name.length, o.acceptedAnswer.text.length])));
+
+  // One copy of the questions. They used to be written out in the tool as
+  // well, which is the same eight answers in two files -- and a crawler
+  // finding the same text at two addresses has to pick one and discount the
+  // other.
+  check('the tool does not carry a second copy of them',
+    !/<section class="faq">/.test(index) && /id="faq-here"/.test(index),
+    'index.html still holds the questions');
+
+  // A share of this is a picture, not a bare URL, and the picture has to be
+  // at the address the markup gives for it.
+  for (const page of [['index.html', index], ['faq.html', faq]]) {
+    const card = /<meta property="og:image" content="([^"]+)"/.exec(page[1]);
+    check(page[0] + ' names a picture for a link to it', Boolean(card), page[0]);
+    check('and it is one that exists',
+      Boolean(card) && existsSync(join(root, card[1].replace(/^https?:\/\/[^/]+\//, ''))),
+      card ? card[1] : 'none');
+  }
+  // Relative URLs are not resolved by the scrapers that read these.
+  check('the addresses a scraper is given are absolute',
+    [...index.matchAll(/<meta property="og:(image|url)" content="([^"]+)"/g)]
+      .every(one => /^https:\/\//.test(one[2])), 'a relative og: URL');
+
+  // A crawler that cannot find the second page will not index it.
+  const map = readFileSync(join(root, 'sitemap.xml'), 'utf8');
+  check('both pages are in the sitemap',
+    /<loc>https:\/\/[^<]+\/<\/loc>/.test(map) && /faq\.html<\/loc>/.test(map), map.length + ' bytes');
+  check('and robots.txt says where the sitemap is',
+    /Sitemap: https:\/\/\S+\/sitemap\.xml/.test(readFileSync(join(root, 'robots.txt'), 'utf8')));
 }
 
 // ---------- report ----------
