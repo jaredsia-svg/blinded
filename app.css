@@ -154,8 +154,15 @@ a.mark { color: inherit; text-decoration: none; }
 .drop-icon { width: 34px; height: 34px; color: var(--ink-soft); margin-bottom: 10px; }
 .drop:hover .drop-icon, .drop.over .drop-icon { color: var(--accent); }
 
+/* The same column and the same heading as the section under it, so the front
+   page reads as a set of sections rather than as a stack of loose boxes. */
+.keyfeatures { margin: 20px auto 0; max-width: var(--front-width); }
+/* Tighter than the heading below it, because this one has to earn its room:
+   the four cards under it are the last thing above the fold on a 1366x768
+   screen, and the suite fails the page if they drop below it. */
+.keyfeatures h2 { font-size: 18px; margin: 0 0 2px; }
 .features {
-  list-style: none; padding: 0; margin: 22px auto 0; max-width: var(--front-width);
+  list-style: none; padding: 0; margin: 8px auto 0; max-width: var(--front-width);
   display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
 }
 .features li {
@@ -185,8 +192,8 @@ a.mark { color: inherit; text-decoration: none; }
    of it got how far. */
 .leg { margin-top: 12px; }
 .leg-label {
-  margin: 0 0 5px; display: flex; justify-content: space-between;
-  gap: 12px; font-size: 12.5px; font-weight: 500; color: var(--ink-soft);
+  margin: 0 0 5px; display: flex; align-items: center;
+  gap: 0 12px; font-size: 12.5px; font-weight: 500; color: var(--ink-soft);
 }
 .leg-count { font-variant-numeric: tabular-nums; }
 
@@ -357,7 +364,11 @@ a.mark { color: inherit; text-decoration: none; }
 }
 .sect[open] > summary::before { transform: rotate(45deg); }
 .sect > summary:hover { background: #e2ebf9; }
-.s-title { flex: 1; }
+/* The title takes only the room its words need, so the mark that explains the
+   section sits against it rather than adrift in the middle of the row. What
+   grows is the gap after the mark, which puts the count back on the right. */
+.s-title { flex: none; }
+.sect > summary > .why { margin-right: auto; }
 .s-note {
   font-weight: 500; font-size: 11.5px; color: var(--ink-soft);
   background: #eef1f6; border-radius: 20px; padding: 1px 8px;
@@ -379,8 +390,13 @@ a.mark { color: inherit; text-decoration: none; }
   /* A shade darker than it was: the headings it sits on carry a tint now,
      and the old grey was nearly the same colour as the band under it. */
   background: #dbe2ec; color: var(--ink-soft); border: 0;
-  font-size: 10px; font-weight: 700; line-height: 16px; text-align: center;
-  cursor: help; margin-left: 2px;
+  /* An "i" for information, not a "?" for a question the reviewer is being
+     asked. Serif, because a sans-serif lower-case i in a 16px circle is a
+     bare stroke and a dot, which reads as a stray mark rather than a letter. */
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 11px; font-weight: 700; font-style: italic;
+  line-height: 16px; text-align: center;
+  cursor: help; margin-left: 6px;
 }
 .why:hover, .why[aria-expanded="true"] { background: var(--accent); color: #fff; }
 .why:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
@@ -634,6 +650,28 @@ textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; border-
    needs: nowrap was right for "Reading 4 of 12" and wrong for a sentence,
    which was being pushed into the middle and then run under the buttons. */
 .runbar .hint { margin: 0; margin-right: auto; }
+/* What a run says when it is over: one line per run, each with the colour its
+   marks wear on the page, so the sentence and the outlines match. */
+.ranline { display: flex; align-items: baseline; gap: 7px; }
+.ranline + .ranline { margin-top: 3px; }
+.randot {
+  flex: none; width: 8px; height: 8px; border-radius: 50%;
+  position: relative; top: -1px;
+}
+.randot.green { background: #1a7f37; }
+.randot.amber { background: #d98b1f; }
+/* A run's own control, beside the name of what is running. Quieter than the
+   buttons it shares the bar with: stopping a run is a way out, not the thing
+   the reviewer came here to press. */
+.runctl {
+  flex: none; margin-left: 8px; padding: 1px 7px;
+  background: transparent; border: 1px solid var(--line-strong);
+  border-radius: 999px; color: var(--ink-soft);
+  font: inherit; font-size: 10.5px; font-weight: 500; line-height: 1.5;
+}
+.runctl:hover:not(:disabled) { border-color: var(--ink-soft); color: var(--ink); }
+.runctl:disabled { cursor: default; opacity: .7; }
+.leg-count { margin-left: auto; }
 .runbar .ghost { flex: none; padding: 5px 12px; }
 @media (max-width: 640px) {
   .runbar { flex-wrap: wrap; }
@@ -1422,6 +1460,11 @@ body.reviewing .review { flex: 1; min-height: 0; align-items: stretch; }
 body.reviewing .panel {
   position: static; max-height: none; height: 100%;
   overflow-y: auto; overflow-x: hidden;
+  /* The room for the scrollbar is always there, whether or not there is a
+     scrollbar in it. Expanding a section used to make one appear and pull the
+     whole panel a few pixels left, which moved the tally circle out from under
+     a finger already on its way to it and onto the X beside it. */
+  scrollbar-gutter: stable;
 }
 body.reviewing .stage {
   height: 100%; overflow: auto;

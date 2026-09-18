@@ -270,14 +270,20 @@
     if (foot) foot.hidden = !runsInFoot;
     if (message !== undefined && message !== null) {
       el('busy-text').textContent = message;
+      // Not into the foot once the bars are up. They already name what is
+      // running and say how far it has got, so "Working…" beside them was a
+      // third thing in a row that had two, wedged between the count and the
+      // buttons.
       const said = el('runfoot-text');
-      if (said) said.textContent = message;
+      const bars = el('runfoot-legs');
+      if (said) said.textContent = bars && bars.children.length ? '' : message;
     }
     if (!on) {
       el('busy-pause').hidden = true;
       // Both hosts: the bars may have been raised in one and the run ended
       // from the other, and a stale bar left in the foot reads as a search
       // that never finished.
+      runControl = null;
       legs([]);
       const other = el('runfoot-legs');
       if (other) other.textContent = '';
@@ -332,38 +338,48 @@
       return;
     }
 
-    const check = state.footRan === 'check';
-    const what = check
-      ? (state.footStopped ? 'Comprehensive check stopped' : 'Comprehensive check complete')
-      : 'Search complete';
-    // One sentence, not two, and not three. The foot used to say a run was
-    // complete a few pixels from a second line saying the marks were outlined
-    // and to press Redact, while the panel said in amber how many the check
-    // had added. All of it is the same report, so it is made once, here.
+    // One report, in the order the two runs happen, each line carrying the
+    // colour its marks wear on the page. The reviewer's next move is to look
+    // at what was found, so the line says where to look rather than which
+    // button to press next.
     //
-    // What a run found and what is left to cover are two different counts, and
-    // they have to be read separately: a check can add marks to a document
-    // that is otherwise fully covered, and a search can find nothing while
-    // marks from before are still waiting.
-    const marks = plannedCount();
-    const pending = Boolean(marks) && !state.applied;
-    said.textContent = check
-      ? (state.footAdded
-        ? what + ' \u2013 ' + state.footAdded
-          + (state.footAdded === 1 ? ' more mark' : ' more marks')
-          + (pending ? ' outlined. Press Redact to cover them.' : '.')
-        : what + ' \u2013 nothing further found.')
-      : (pending
-        ? what + ' and outlined. Press Redact to cover them.'
-        : marks
-          ? what + ' \u2013 everything found is covered.'
-          : what + ' \u2013 nothing found to redact.');
-    // The one thing the panel's note said that nothing else does: where the
-    // check stood down because the reader had already read that spot as
-    // something else. It is the answer to "a mark I expected is missing".
-    if (check && state.sweepRefused) {
-      said.textContent = said.textContent.replace(/\.$/, '') + ' \u00b7 '
-        + state.sweepRefused + ' skipped by the reader.';
+    // It used to end with how many places the check had stood down from
+    // because the reader read them as something else. True, and useful to
+    // whoever wrote it, and to a reviewer it was a number with nothing to do:
+    // it named no place and asked for nothing.
+    const check = state.footRan === 'check';
+    // What the search found and what the check added are two different
+    // counts, and each line has to answer for its own run: a check that adds
+    // the only marks on a document must not put them under a green line
+    // saying the search found them.
+    const found = state.kind === 'text' ? plannedCount()
+      : state.pages.reduce((sum, page) => sum
+        + page.hits.filter(hit => !page.dismissed.has(hit.finding.id)
+          && findingAnswered(hit.finding)).length
+        + liveImageHits(page).filter(mark => !page.dismissed.has(mark.id)
+          && imageHitAnswered(mark) && !mark.bySweep).length
+        + page.manual.length, 0);
+    said.textContent = '';
+    const line = (colour, text) => {
+      const row = document.createElement('span');
+      row.className = 'ranline';
+      const dot = document.createElement('span');
+      dot.className = 'randot ' + colour;
+      const words = document.createElement('span');
+      words.textContent = text;
+      row.append(dot, words);
+      said.append(row);
+    };
+
+    line('green', found
+      ? 'Initial search complete. Review marks outlined in green in left panel.'
+      : 'Initial search complete. Nothing found to redact.');
+    if (check) {
+      const how = state.footStopped
+        ? 'Comprehensive check stopped. ' : 'Comprehensive check complete. ';
+      line('amber', state.footAdded
+        ? how + 'Review marks outlined in amber in left panel.'
+        : how + 'Nothing further found.');
     }
 
     // The bars are gone, and an empty row where they were takes the width the
@@ -401,6 +417,12 @@
   // `into` is for a run that reports somewhere other than the current host:
   // the comprehensive check has its own row in the foot and draws the same
   // bars there, so that waiting for it looks like waiting for a search.
+  // What a run offers while it is going: Pause for a search, Stop for the
+  // check. It is drawn here rather than kept in the markup because every
+  // rebuild of these rows empties the host, and a button living in there
+  // would be thrown away with them.
+  let runControl = null;
+
   function legs(list, into) {
     const host = into || legsHost();
     host.textContent = '';
@@ -418,7 +440,9 @@
       const count = document.createElement('span');
       count.className = 'leg-count';
       count.dataset.count = leg.key;
-      count.textContent = '0 of ' + leg.total;
+      // Said the same way `leg` says it, or the first update rewords the row
+      // under the reviewer: a leg that has not started is on its first page.
+      count.textContent = 'Page 1 of ' + leg.total;
       label.append(what, count);
 
       const bar = document.createElement('div');
@@ -439,6 +463,35 @@
       row.dataset.total = String(leg.total);
     }
     host.hidden = !host.children.length;
+    drawRunControl(host);
+    // Once the bars are up they say what is running and how far it has got,
+    // which is the whole of "Working…". Leaving that word beside them put a
+    // third thing in a row that already had two.
+    if (host === el('runfoot-legs') && host.children.length) {
+      const said = el('runfoot-text');
+      if (said) said.textContent = '';
+    }
+  }
+
+  // Beside the name of what is running, not at the far end of the bar: out
+  // there it sat against the Redact button and read as belonging to it.
+  function drawRunControl(host) {
+    if (!runControl || !host || !host.firstElementChild) return;
+    const label = host.firstElementChild.querySelector('.leg-label');
+    if (!label || label.querySelector('.runctl')) return;
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'runctl';
+    if (runControl.id) button.id = runControl.id;
+    button.textContent = runControl.label;
+    button.addEventListener('click', runControl.onPress);
+    label.insertBefore(button, label.querySelector('.leg-count'));
+  }
+
+  function offerRunControl(control) {
+    runControl = control;
+    drawRunControl(legsHost());
+    drawRunControl(el('sweeprun-legs'));
   }
 
   function leg(key, done, into) {
@@ -448,7 +501,11 @@
     const at = Math.max(0, Math.min(total, done));
     row.querySelector('[data-fill]').style.width =
       (total ? (at / total) * 100 : 0).toFixed(1) + '%';
-    row.querySelector('[data-count]').textContent = at + ' of ' + total;
+    // The page being worked on, not the number finished. "0 of 5" is what a
+    // run that has not started looks like, and every one of these counts
+    // pages, so the word belongs in front of it.
+    row.querySelector('[data-count]').textContent =
+      'Page ' + Math.min(total, at + 1) + ' of ' + total;
     row.querySelector('.bar').setAttribute('aria-valuenow', String(at));
   }
 
@@ -464,6 +521,9 @@
     button.hidden = false;
     button.disabled = false;
     button.textContent = 'Pause';
+    // And in the foot, where a search that reports itself down there had no
+    // way to be stopped at all.
+    offerRunControl({ label: 'Pause search', onPress: requestPause });
   }
 
   function requestPause() {
@@ -471,6 +531,10 @@
     const button = el('busy-pause');
     button.disabled = true;
     button.textContent = 'Finishing this page…';
+    for (const one of document.querySelectorAll('.runctl')) {
+      one.disabled = true;
+      one.textContent = 'Finishing this page…';
+    }
   }
 
   // A run with one leg, which is most of them.
@@ -2777,11 +2841,19 @@
       if (include < bar) others.push({ bar: include, count: countAt(include), now: false });
     }
 
+    // A setting that would find exactly what is already found is not a
+    // setting. The gaps in the scores are real, but between two of them there
+    // may be nothing but candidates this image was never going to keep, and
+    // the circle for it then offers the reviewer a choice between eleven
+    // matches and eleven matches. Only what would change the page is worth a
+    // circle.
+    const changes = others.filter(step => step.count !== here.count);
+
     // Which of them the scores actually point at. Ordinarily that is the one
     // the bar is already on, since the search puts it there; it is not, when
     // the reviewer has moved the bar themselves.
     const best = barFromScores(all);
-    const settings = [here].concat(others.slice(0, 2));
+    const settings = [here].concat(changes.slice(0, 2));
     for (const step of settings) {
       step.best = best !== null && Math.abs(step.bar - best) < 0.005;
     }
@@ -6261,7 +6333,13 @@
       if (hit.finding.id === mark) out.push(...(hit.rects || []));
     }
     for (const match of liveImageHits(page)) {
-      if ((match.group || match.id) === mark && match.rect) out.push(match.rect);
+      // Carrying which pass found it, because the fill that lights up when the
+      // panel points at a mark takes its colour from that: an amber outline
+      // was filling green, so hovering a row changed the answer to "which run
+      // found this" while the reviewer was reading it.
+      if ((match.group || match.id) === mark && match.rect) {
+        out.push(match.bySweep ? { ...match.rect, sweep: true } : match.rect);
+      }
     }
     for (const box of page.manual) if (box.id === mark) out.push(box);
     return out;
@@ -7616,12 +7694,14 @@
   el('busy-pause').addEventListener('click', requestPause);
   bindSweepOffer();
   el('sweep').addEventListener('click', runSweep);
-  el('sweepstop').addEventListener('click', () => {
+  function stopTheCheck() {
     state.sweepStopped = true;
     // The sentence beside the bars is gone, so the button says it instead.
-    el('sweepstop').textContent = 'Stopping\u2026';
-    el('sweepstop').disabled = true;
-  });
+    for (const one of document.querySelectorAll('.runctl')) {
+      one.disabled = true;
+      one.textContent = 'Stopping\u2026';
+    }
+  }
 
   // How long a sweep takes, per megapixel of page, per word.
   //
@@ -8178,8 +8258,8 @@
     if (said) said.textContent = '';
     const foot = el('runfoot');
     if (foot) foot.hidden = true;
-    const stop = el('sweepstop');
-    if (stop) { stop.textContent = 'Stop the check'; stop.disabled = false; }
+    offerRunControl({ id: 'sweepstop', label: 'Stop the check',
+      onPress: stopTheCheck });
     sweepProgress(0, pages.length);
     renderSweep();
     // The Search button greys out for as long as this runs, so it has to be
@@ -8773,6 +8853,7 @@
       // and which anything counting bars on the page finds and counts.
       const rows = el('sweeprun-legs');
       if (rows) { rows.textContent = ''; rows.hidden = true; }
+      if (runControl && runControl.id === 'sweepstop') runControl = null;
     }
 
     box.hidden = !((state.searched || state.sweepRunning)

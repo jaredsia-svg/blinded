@@ -7617,24 +7617,24 @@ try {
       swept.added >= 1 && swept.marks === swept.added, JSON.stringify(swept));
     check('and every mark it adds is flagged as its own',
       swept.marks >= 1, JSON.stringify(swept));
-    check('afterwards the foot says what it added',
-      /Comprehensive check complete \u2013 \d+ more mark/.test(swept.note),
-      JSON.stringify(swept.note));
+    check('afterwards the foot says the check found something',
+      /Comprehensive check complete\. Review marks outlined in amber/
+        .test(swept.note), JSON.stringify(swept.note));
 
-    // And what it found and stood down from. The check refuses a spot the
-    // reader has already read as a different word — right far more often than
-    // wrong, but when it is wrong the mark simply never appears, and that is
-    // indistinguishable from the check having found nothing there.
+    // One report, two lines, one per run, each carrying the colour its marks
+    // wear on the page.
+    //
+    // It used to end with how many places the check had stood down from
+    // because the reader read them as something else. That is true, and it is
+    // useful to whoever is working on the matcher, and to a reviewer it was a
+    // number with nothing to do: it named no place and asked for nothing. It
+    // is not reported any more, here or anywhere.
     const refused = await page.evaluate(() => {
       const B = window.Blinded;
       const was = B.state.sweepRefused;
       const swept = B.state.sweptTerms;
       const terms = B.state.terms;
       const ran = B.state.footRan;
-      // A finished check of the words as they stand, reported where every
-      // finished run is reported: the foot of the page. The panel used to say
-      // this a second time, in amber, under a term list that already answers
-      // the same question as a number beside each word.
       B.state.terms = ['Parkway'];
       B.state.sweptTerms = ['Parkway'];
       B.state.searched = true;
@@ -7646,26 +7646,31 @@ try {
       B.state.sweepRefused = 2;
       B.state.sweepRefusedAt = [{ pageIndex: 1, at: 400 }, { pageIndex: 0, at: 120 }];
       B.refreshApply();
-      const withSome = document.getElementById('runfoot-text').textContent;
-      const panel = document.getElementById('sweepnote').textContent.trim();
-      const panelShown = !document.getElementById('sweepbox').hidden;
-      B.state.sweepRefused = 0;
-      B.state.sweepRefusedAt = [];
-      B.refreshApply();
-      const withNone = document.getElementById('runfoot-text').textContent;
+      const foot = document.getElementById('runfoot-text');
+      const out = {
+        lines: [...foot.querySelectorAll('.ranline')].map(row => row.textContent),
+        dots: [...foot.querySelectorAll('.randot')].map(d => d.className),
+        said: foot.textContent,
+        panel: document.getElementById('sweepnote').textContent.trim(),
+        panelShown: !document.getElementById('sweepbox').hidden,
+      };
       B.state.sweepRefused = was;
       B.state.sweptTerms = swept;
       B.state.terms = terms;
       B.state.footRan = ran;
       B.refreshApply();
-      return { withSome, withNone, panel, panelShown };
+      return out;
     });
-    check('a refusal is reported, not silently swallowed',
-      /2 skipped by the reader/.test(refused.withSome), refused.withSome);
-    check('alongside what the check itself added',
-      /1 more mark/.test(refused.withSome), refused.withSome);
-    check('while refusing nothing says nothing',
-      !/skipped/.test(refused.withNone), refused.withNone);
+    check('both runs are reported, one line each',
+      refused.lines.length === 2
+      && /^Initial search complete/.test(refused.lines[0])
+      && /^Comprehensive check complete/.test(refused.lines[1]),
+      JSON.stringify(refused));
+    check('each line wearing the colour its marks wear on the page',
+      /green/.test(refused.dots[0]) && /amber/.test(refused.dots[1]),
+      JSON.stringify(refused));
+    check('and no count of what the reader stood down from',
+      !/skipped|stood down|left alone/.test(refused.said), refused.said);
     // The run's result is reported once. The panel is where the check is
     // offered, not where it is summed up afterwards.
     check('and the panel does not repeat it',
@@ -7817,8 +7822,11 @@ try {
       new Set(seen.widths).size > 1 || new Set(seen.texts).size > 1 || seen.took < 300,
       JSON.stringify({ texts: seen.texts, took: seen.took,
         widths: [...new Set(seen.widths)] }));
+    // "4 of 5" left the reviewer to work out what was being counted. Every
+    // one of these legs counts pages, and the count names the page being
+    // worked on rather than the number already behind it.
     check('and counts them the way every other leg does',
-      seen.texts.every(t => /^\d+ of \d+$/.test(t)), JSON.stringify(seen.texts));
+      seen.texts.every(t => /^Page \d+ of \d+$/.test(t)), JSON.stringify(seen.texts));
     check('the bar only ever moves forward',
       seen.widths.every((w, i) => i === 0 || w >= seen.widths[i - 1]),
       JSON.stringify(seen.widths));
@@ -8023,7 +8031,7 @@ try {
     });
     check('a leg says what it is doing', reported.label === 'Reading pages',
       JSON.stringify(reported));
-    check('and how far through it is', reported.count === '29 of 100',
+    check('and how far through it is', reported.count === 'Page 30 of 100',
       JSON.stringify(reported));
     // The browser normalises the string, so compare the number, not the text.
     check('its bar matches that',
@@ -8080,7 +8088,7 @@ try {
     check('both legs are shown together, not one after the other',
       both.length === 2, JSON.stringify(both));
     check('each carries its own count',
-      both[0].count === '40 of 100' && both[1].count === '0 of 100',
+      both[0].count === 'Page 41 of 100' && both[1].count === 'Page 1 of 100',
       JSON.stringify(both));
     check('so a pause says which part got how far, not just a percentage',
       parseFloat(both[0].width) > 0 && parseFloat(both[1].width) === 0,
@@ -8104,8 +8112,10 @@ try {
       await new Promise(done => {
         const watch = setInterval(() => {
           const row = document.querySelector('[data-leg="read"] [data-count]');
-          const said = row && /^(\d+) of/.exec(row.textContent.trim());
-          if (!said || Number(said[1]) < 1) return;
+          // "Page 3 of 100" names the page being worked on, so the first page
+          // is back once it says page two.
+          const said = row && /^Page (\d+) of/.exec(row.textContent.trim());
+          if (!said || Number(said[1]) < 2) return;
           clearInterval(watch);
           B.requestPause();
           done();
@@ -8320,14 +8330,14 @@ try {
   check('tapping a hint opens it, for screens with no hover', tapped.open, JSON.stringify(tapped));
   check('and tapping it again closes it', tapped.closed, JSON.stringify(tapped));
 
-  // The hints sit inside <label>s. A click that reached the label would
-  // silently toggle the checkbox the hint is explaining.
-  const toggled = await page.evaluate(() => {
-    const box = document.getElementById('labelling');
-    const before = box.checked;
-    document.querySelector('#labelling').closest('label').querySelector('.why').click();
-    return { before, after: box.checked };
-  });
+  // No hint sits inside a <label> any more, which is the only reason one could
+  // ever toggle the checkbox it was explaining: a click that reached the label
+  // would silently flip it. They live on the section headings instead, where
+  // there is nothing to flip.
+  const inLabels = await page.evaluate(() =>
+    [...document.querySelectorAll('.why')].filter(b => b.closest('label')).length);
+  check('no hint is inside a control it would toggle', inLabels === 0,
+    String(inLabels));
   // On a laptop the icon bar explains itself on hover. A phone has no hover,
   // so those six buttons were six unlabelled glyphs. Holding one answers.
   const holding = await page.evaluate(async () => {
@@ -8357,8 +8367,6 @@ try {
     if (bubble) bubble.hidden = true;
   });
 
-  check('asking what a checkbox means does not tick it',
-    toggled.before === toggled.after, JSON.stringify(toggled));
   await page.evaluate(() => {
     const bubble = document.querySelector('.tipbubble');
     if (bubble) bubble.hidden = true;

@@ -41,7 +41,7 @@
      origins for one program and two sets of response headers to keep right;
      Pages publishing is off and this says which copy is the copy. -->
 <link rel="canonical" href="https://blinded.onrender.com/">
-<link rel="stylesheet" href="app.css?v=58b11e12">
+<link rel="stylesheet" href="app.css?v=57260357">
 </head>
 <body>
 
@@ -105,6 +105,8 @@
     <input type="file" id="file" accept=".pdf,.png,.jpg,.jpeg,.txt,.md,.markdown,.csv,.log,.json,application/pdf,image/png,image/jpeg,text/plain,application/json" hidden>
     <p id="drop-error" class="error" hidden></p>
 
+    <section class="keyfeatures">
+    <h2>Key features</h2>
     <ul class="features">
       <li>
         <h3><svg class="ico" viewBox="0 0 20 20" aria-hidden="true"><path d="M10 3l6 2.5v4.2c0 3.4-2.4 6.3-6 7.3-3.6-1-6-3.9-6-7.3V5.5L10 3z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg> Nothing is uploaded</h3>
@@ -125,12 +127,13 @@
           same thing always gets the same label.</p>
       </li>
       <li>
-        <h3><svg class="ico" viewBox="0 0 20 20" aria-hidden="true"><rect x="3" y="7" width="14" height="6" rx="1" fill="currentColor"/></svg> Gone, not covered</h3>
-        <p>Each page is rebuilt from pixels, so there is nothing underneath the
-          bars. No text, no fonts, no annotations – and none of the original
-          author, title or history either.</p>
+        <h3><svg class="ico" viewBox="0 0 20 20" aria-hidden="true"><rect x="3" y="4" width="9" height="12" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M14 7v9h-7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg> A full set of PDF tools</h3>
+        <p>Merge files, pull pages out, turn them, add text, draw on the page.
+          Save a draft and pick the work up later. Works on a phone as well as
+          a desktop.</p>
       </li>
     </ul>
+    </section>
 
     <!-- What people actually open this for.
 
@@ -470,7 +473,7 @@
         <details class="sect" open>
           <summary><span class="s-title">Text</span><button type="button"
               class="why" aria-label="What does this section do?"
-              data-tip="Type a name, a number or a word and every copy of it is covered – in the text, in the lettering of a screenshot, and inside a logo. Case does not matter, and the longest match wins, so &quot;Jane Doe&quot; beats &quot;Jane&quot;.">?</button><span class="s-note" id="term-note"></span></summary>
+              data-tip="Type a name, a number or a word and every copy of it is covered – in the text, in the lettering of a screenshot, and inside a logo. Case does not matter, and the longest match wins, so &quot;Jane Doe&quot; beats &quot;Jane&quot;.">i</button><span class="s-note" id="term-note"></span></summary>
           <div class="s-body">
             <div class="termadd">
               <input type="text" id="termbox" autocomplete="off" spellcheck="false"
@@ -496,7 +499,7 @@
         <details class="sect" id="imagesect" open>
           <summary><span class="s-title">Images</span><button type="button"
               class="why" aria-label="What does this section do?"
-              data-tip="Draw a box around a logo, a signature, a stamp or a face, and every other copy of it in the document is found and covered – at any size, and whatever colour it has been recast in. Use it for marks no search can reach.">?</button><span class="s-note" id="image-note"></span></summary>
+              data-tip="Draw a box around a logo, a signature, a stamp or a face, and every other copy of it in the document is found and covered – at any size, and whatever colour it has been recast in. Use it for marks no search can reach.">i</button><span class="s-note" id="image-note"></span></summary>
           <div class="s-body">
             <button type="button" id="pick" class="pickrow">
               <span class="pickfield" id="picklabel">Select an image to redact</span>
@@ -512,7 +515,7 @@
                  the answer is the same for every row, so it is said once. -->
             <p class="senshead" id="senshead" hidden>
               <span>Sensitivity, per image</span>
-              <button type="button" class="why" aria-label="What does this mean?" data-tip="Each picked image has its own bar. Lower finds more, including things that only resemble it. A scanned signature usually needs to come down; two marks that differ by one letter need to go above 0.95. Click the tally to see what each match scored.">?</button>
+              <button type="button" class="why" aria-label="What does this mean?" data-tip="Each picked image has its own bar. Lower finds more, including things that only resemble it. A scanned signature usually needs to come down; two marks that differ by one letter need to go above 0.95. Click the tally to see what each match scored.">i</button>
             </p>
             <ul id="templates" class="templates"></ul>
           </div>
@@ -521,18 +524,19 @@
         <details class="sect" id="kindsect" open>
           <summary><span class="s-title">Detectors</span><button type="button"
               class="why" aria-label="What does this section do?"
-              data-tip="Things worth covering that nobody had to type: email addresses, phone numbers, web addresses, street addresses, and names read off the layout around them. Only the kinds actually found in this document are listed, with how many of each.">?</button></summary>
+              data-tip="Things worth covering that nobody had to type: email addresses, phone numbers, web addresses, street addresses, and names read off the layout around them. Only the kinds actually found in this document are listed, with how many of each.">i</button></summary>
           <div class="s-body">
             <div id="kinds" class="kinds"></div>
           </div>
         </details>
 
         <details class="sect" open>
-          <summary><span class="s-title">Placeholders</span><span class="s-note" id="label-note">off</span></summary>
+          <summary><span class="s-title">Placeholders</span><button type="button"
+              class="why" aria-label="What does this section do?"
+              data-tip="Writes [P1], [E2] into each bar so a later reader, or a model, can follow the sentence. The same thing always gets the same label.">i</button><span class="s-note" id="label-note">off</span></summary>
           <div class="s-body">
             <label class="check"><input type="checkbox" id="labelling">
               Label each redaction
-              <button type="button" class="why" aria-label="What does this mean?" data-tip="Writes [P1], [E2] into each bar so a later reader, or a model, can follow the sentence. The same thing always gets the same label.">?</button>
             </label>
             <div id="legendbox" hidden>
               <p class="hint" id="legend-empty">Nothing is being covered yet.</p>
@@ -547,7 +551,7 @@
         <details class="sect" id="organisesect">
           <summary><span class="s-title">Organise</span><button type="button"
               class="why" id="sheet-why" aria-label="How to organise pages"
-              data-tip="Tap a page to select it. Shift-click to select a continuous series, and Ctrl-click to select multiple pages. Drag a page by its grip to move it, or drop a PDF or image onto the sheet to slot it in. The selected pages can be kept on their own, thrown away, or turned a quarter at a time. Add a note and tap the page where it should go; tap the note again to change it. Undo if you make a mistake.">?</button></summary>
+              data-tip="Tap a page to select it. Shift-click to select a continuous series, and Ctrl-click to select multiple pages. Drag a page by its grip to move it, or drop a PDF or image onto the sheet to slot it in. The selected pages can be kept on their own, thrown away, or turned a quarter at a time. Add a note and tap the page where it should go; tap the note again to change it. Undo if you make a mistake.">i</button></summary>
           <div class="s-body">
             <!-- The same five actions the words used to spell out. As icons
                  they fit one row instead of three, which is the difference
@@ -629,12 +633,11 @@
            two kinds of waiting is one kind too many. -->
       <div id="sweeprun" class="runbar" hidden>
         <div id="sweeprun-legs" class="runlegs"></div>
-        <button type="button" id="sweepstop" class="ghost">Stop the check</button>
       </div>
       <div class="exportgo">
         <span id="exportnote" class="hint"></span>
         <button type="button" id="apply" class="primary" disabled>Redact</button>
-        <button type="button" id="export" class="primary ghostly" disabled>Export redacted file</button>
+        <button type="button" id="export" class="primary ghostly" disabled>Export file</button>
       </div>
     </div>
   </section>
@@ -974,7 +977,7 @@
 <script src="lib/pdfwrite.js?v=4b977425"></script>
 <script src="lib/pdfread.js?v=ca229552"></script>
 <script src="lib/render.js?v=65c3fe76"></script>
-<script src="app.js?v=52f831dc"></script>
+<script src="app.js?v=f872823a"></script>
 <script type="module" src="lib/boot.mjs?v=8b98ed8f"></script>
 </body>
 </html>
