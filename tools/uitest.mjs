@@ -4063,6 +4063,63 @@ try {
   // the bar was right about: measured, the true miss scored 0.600 and the
   // false one 0.628. A person can tell instantly, but only by looking, so the
   // closest the check came is cut out of the page and shown.
+  // ---------- the places the page reader can point to ----------
+  //
+  // Nomination correlates a shrunken page and proposes where a shape might be.
+  // What it cannot do is see into artwork, or past a neighbour the reader
+  // misread. Measured on a photographed slide: "Middle East (88 stores)" is on
+  // the page in plain lettering, the reader drew a box round "Middle" and read
+  // the word after it as "China", so the phrase matched nothing in its text
+  // and the shape pass never nominated the spot. The reader's box is right
+  // even where its reading is wrong, and it hands over the scale as well as
+  // the place.
+  await part("the places the page reader can point to", async () => {
+    const seeds = await page.evaluate(() => {
+      const B = window.Blinded;
+      const reading = str => ({ str, rect: { x: 100, y: 200, w: 60, h: 14 } });
+      const page0 = { index: 0, ocrPlaced: [
+        reading('Middle'),          // the word itself
+        { str: 'Widdle', rect: { x: 300, y: 400, w: 60, h: 14 } },   // one edit
+        { str: 'South', rect: { x: 500, y: 600, w: 60, h: 14 } },    // not it
+        { str: 'ME', rect: { x: 700, y: 800, w: 20, h: 14 } },       // too short
+      ] };
+      const found = B.readerSeedsFor('Middle', [page0]);
+      // The other half of a phrase, off the half just matched.
+      const partner = B.partnerSeedsFrom(
+        { x: 100, y: 200, w: 60, h: 14 }, 0, 'Middle', 'East');
+      // A place the document already covers is not a place to look again.
+      const covered = { index: 0, hits: [], manual: [],
+        imageHits: [{ rect: { x: 95, y: 195, w: 70, h: 20 } }] };
+      return {
+        saw: found.map(seed => seed.x),
+        partnerRight: partner[0],
+        partnerUnder: partner[1],
+        alreadyThere: B.markedAt(covered, { x: 100, y: 200, w: 60, h: 14 }),
+        somewhereElse: B.markedAt(covered, { x: 900, y: 900, w: 60, h: 14 }),
+      };
+    });
+    check('the reader points at the word and at a one-letter misreading of it',
+      seeds.saw.length === 2 && seeds.saw[0] === 100 && seeds.saw[1] === 300,
+      JSON.stringify(seeds));
+    // "South" is the same length as "Middle" and shares nothing else. A rule
+    // loose enough to take it would seed half the page.
+    check('and not at a word that merely looks about the same size',
+      !seeds.saw.includes(500) && !seeds.saw.includes(700),
+      JSON.stringify(seeds));
+    check('a phrase partner is sought after the word and under it',
+      seeds.partnerRight.x > 160 && seeds.partnerRight.y === 200
+      && seeds.partnerUnder.x === 100 && seeds.partnerUnder.y > 214,
+      JSON.stringify(seeds));
+    // Measured off the matched word rather than off a box the reader drew
+    // round the wrong one: four letters against six, on the same line.
+    check('and sized by how many letters it has',
+      Math.abs(seeds.partnerRight.w - 40) < 1
+      && seeds.partnerRight.h === 14, JSON.stringify(seeds));
+    check('a place the document already covers is not looked at again',
+      seeds.alreadyThere === true && seeds.somewhereElse === false,
+      JSON.stringify(seeds));
+  });
+
   // ---------- a whole heading does not vouch for one word in it ----------
   //
   // The reader can veto a shape hit: where it has read the spot as something

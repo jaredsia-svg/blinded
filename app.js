@@ -7786,6 +7786,80 @@
     return { terms, pages: pageSet.size, pageIndexes: pageSet };
   }
 
+  // Where the page reader can point, for one typed word.
+  //
+  // Its boxes are a second opinion about *where*, and a better one than
+  // correlation on the pages correlation struggles with: even where the reader
+  // reads a word wrongly, the box it drew is in the right place and the right
+  // size. `ocrFuzzyPartMatch` is the same near-miss rule the OCR phrase
+  // matcher uses — one edit, on a word long enough for one edit to mean
+  // something, so "Widdle" still reaches "Middle" and "South" does not.
+  const SEEDS_PER_PART = 8;
+
+  // What the reader's agreement is worth at a seeded place.
+  //
+  // A seed is not a guess. Correlation proposes somewhere the shape might be;
+  // a seed is somewhere the page reader drew a box and read a word one edit
+  // away from this one. That is evidence of a different kind, and the bar is
+  // set for places that have none of it — which is why the panel's own rule
+  // already waives the short-word penalty for a word that has a phrase partner
+  // beside it. Measured on the photographed slide: the third "Middle East",
+  // in the artwork, scores 0.637 where its bar is 0.640, and misses by three
+  // thousandths a place the reader had already named.
+  //
+  // It is deliberately smaller than the relief length alone buys (0.08), and
+  // it reaches nowhere the reader has not pointed.
+  const SEED_RELIEF = 0.06;
+
+  function readerSeedsFor(part, pages) {
+    const out = [];
+    if (!part) return out;
+    for (const page of pages || []) {
+      for (const item of page.ocrPlaced || page.ocrItems || []) {
+        if (!item || !item.rect || !item.str) continue;
+        if (!Detect.ocrFuzzyPartMatch(item.str, part)) continue;
+        out.push({ pageIndex: page.index,
+          x: item.rect.x, y: item.rect.y, w: item.rect.w, h: item.rect.h });
+        if (out.length >= SEEDS_PER_PART) return out;
+      }
+    }
+    return out;
+  }
+
+  // The other half of a phrase, from the half that was just found.
+  //
+  // The shape pass only marks one word of a phrase when its partner sits
+  // beside it, and the reason a phrase was missed is usually that the partner
+  // is what the reader got wrong: on the photographed slide it read "Middle
+  // East" as "Middle China", so there is no box for "East" to seed from. What
+  // there is, once "Middle" has been matched, is the matched rectangle — the
+  // right height, the right baseline, and the partner immediately after it.
+  // Its width is guessed from how many letters each word has, which is what a
+  // line of type makes roughly true.
+  function partnerSeedsFrom(rect, pageIndex, from, to) {
+    const letters = part => String(part || '').replace(/[^A-Za-z0-9]/g, '').length;
+    const ratio = letters(from) ? letters(to) / letters(from) : 1;
+    const w = Math.max(4, rect.w * ratio);
+    const gap = rect.h * 0.3;
+    return [
+      { pageIndex, x: rect.x + rect.w + gap, y: rect.y, w, h: rect.h },
+      // And directly under it, which is the other way a phrase is set.
+      { pageIndex, x: rect.x, y: rect.y + rect.h * 1.1, w, h: rect.h },
+    ];
+  }
+
+  // Whether the document already covers a place. Any mark counts: a seed the
+  // reading has already answered is not a place to look again.
+  function markedAt(page, rect) {
+    if (!page) return true;
+    const boxes = [];
+    for (const hit of page.hits || []) for (const one of hit.rects || []) boxes.push(one);
+    for (const mark of page.imageHits || []) if (mark.rect) boxes.push(mark.rect);
+    for (const box of page.manual || []) boxes.push(box);
+    return boxes.some(box => Match.coveredFraction(rect, box) > 0.5
+      || Match.coveredFraction(box, rect) > 0.5);
+  }
+
   // Words of a typed phrase that are worth drawing as shape templates.
   //
   // A full phrase template misaligns on the space (see TextImage.shapeRelief).
@@ -8468,11 +8542,117 @@
       }
     }
 
+    // A third look, at the places the page reader can point to.
+    //
+    // Nomination correlates a shrunken page and proposes where a shape might
+    // be. Everything above is that, twice, with more of a budget the second
+    // time. What neither can do is see into artwork, or past a neighbour the
+    // reader misread: measured on a photographed slide, "Middle East (88
+    // stores)" is on the page in plain lettering, the reader drew a box round
+    // "Middle" and read the word after it as "China", so the phrase matched
+    // nothing in its text and the shape pass never nominated the spot.
+    //
+    // The reader's boxes answer a different question from its words. Even
+    // where it reads a word wrongly, the box is in the right place and the
+    // right size — which hands over the scale as well as the position. So for
+    // a word the document still holds no mark for, every box whose text is a
+    // near miss of it is offered to the matcher as a place to look.
+    //
+    // It costs one pass over a handful of pages, and it can only add: a seed
+    // never displaces a nomination, and it gets no relief from the bar. What
+    // is found there had to score what anything else would have to score.
+    state.sweepSeeded = [];
+    state.sweepSeedReport = [];
+    let seedEntries = null;
+    let seedResults = null;
+    if (!state.sweepStopped) {
+      // Round one: the places the reader named for a word this document holds
+      // no mark at.
+      const anchors = [];
+      for (const entry of entries) {
+        if (!state.terms.includes(entry.term)) continue;
+        const seeds = readerSeedsFor(entry.part, pagesNeedingSweep(entry.term))
+          .filter(seed => !markedAt(state.pages[seed.pageIndex], seed));
+        if (!seeds.length) continue;
+        anchors.push({ ...entry,
+          key: 'seed:' + entry.key,
+          seeds,
+          threshold: Math.max(0.3, entry.threshold - SEED_RELIEF),
+          pageIndexes: new Set(seeds.map(seed => seed.pageIndex)) });
+      }
+
+      if (anchors.length) {
+        state.sweepSeeded = [...new Set(anchors.map(entry => entry.term))];
+        const seedOpts = { stop: () => state.sweepStopped, seedsOnly: true };
+        const over = indexes => pages.filter(page => indexes.has(page.index));
+        try {
+          const found = await ImageSearch.searchAllParallel(
+            over(new Set(anchors.flatMap(e => [...e.pageIndexes]))), anchors,
+            seedOpts,
+            done => sweepProgress(pages.length, pages.length, null, null,
+              done, pages.length));
+
+          // Round two: the other half of a phrase, measured off the half just
+          // matched rather than off a box the reader drew round the wrong
+          // word. Single-word terms are already answered and skip this.
+          const partners = [];
+          for (const entry of anchors) {
+            const parts = sweepPartsFor(entry.term);
+            if (parts.length < 2) continue;
+            const hits = (found.get(entry.key) || {}).matches || [];
+            if (!hits.length) continue;
+            for (const other of entries) {
+              if (other.term !== entry.term || other.part === entry.part) continue;
+              const seeds = hits.flatMap(hit => partnerSeedsFrom(
+                { x: hit.x, y: hit.y, w: hit.w, h: hit.h },
+                hit.pageIndex, entry.part, other.part));
+              if (!seeds.length) continue;
+              partners.push({ ...other,
+                key: 'pair:' + other.key + ':' + entry.part,
+                seeds,
+                threshold: Math.max(0.3, other.threshold - SEED_RELIEF),
+                pageIndexes: new Set(seeds.map(seed => seed.pageIndex)) });
+            }
+          }
+          let paired = null;
+          if (partners.length) {
+            paired = await ImageSearch.searchAllParallel(
+              over(new Set(partners.flatMap(e => [...e.pageIndexes]))), partners,
+              seedOpts, () => {});
+          }
+
+          // Both rounds answer one question, so they are placed as one: the
+          // phrase rule wants an anchor and its partner in the same answer.
+          const all = anchors.concat(partners);
+          const merged = new Map(found);
+          if (paired) for (const [key, value] of paired) merged.set(key, value);
+          placeResults(all, merged);
+          seedEntries = all;
+          seedResults = merged;
+          // What the seeds were worth, per template: how many places were
+          // offered and the best anything scored at them. Without this a pass
+          // that finds nothing is indistinguishable from one that never ran.
+          state.sweepSeedReport = all.map(entry => {
+            const one = merged.get(entry.key) || {};
+            const scores = (one.matches || []).concat(one.near || [])
+              .map(hit => hit.score);
+            return { term: entry.term, part: entry.part,
+              seeds: entry.seeds.length,
+              bar: entry.threshold,
+              kept: (one.matches || []).length,
+              best: scores.length ? Math.max(...scores) : 0 };
+          });
+        } catch (_) {
+          // As above: a pass that fails leaves the earlier answers standing.
+        }
+      }
+    }
 
     state.sweepRunning = false;
     state.sweepBest = {};
     recordBest(entries, results);
     if (deepResults) recordBest(deepEntries, deepResults);
+    if (seedResults) recordBest(seedEntries, seedResults);
     // A run that was stopped part way has not answered the document, so it
     // does not get to claim it has: the offer stands, and the note says how
     // far it reached.
@@ -8496,7 +8676,7 @@
   // `deep` and `deepOf` describe the second look, which runs over a few pages
   // after the first pass and would otherwise make the bar sit at the end while
   // the check was plainly still working.
-  function sweepProgress(done, total, deep, deepOf) {
+  function sweepProgress(done, total, deep, deepOf, seeded, seededOf) {
     state.sweepDone = done;
     state.sweepTotal = total;
     const host = el('sweeprun-legs');
@@ -8511,12 +8691,20 @@
       want.push({ key: 'deep', label: 'Looking again where nothing was found',
         total: deepOf });
     }
-    // Only rebuilt when the shape of the run changes: the second look appears
+    if (seededOf) {
+      want.push({ key: 'seed', label: 'Checking what the page reader can point to',
+        total: seededOf });
+    }
+    // Only rebuilt when the shape of the run changes: the later passes appear
     // part way through, and redrawing the rows on every page would restart
-    // their transitions and make a filling bar stutter.
-    if (host.querySelectorAll('.leg').length !== want.length) legs(want, host);
+    // their transitions and make a filling bar stutter. Compared by which rows
+    // they are, not how many: the third pass replaces the second rather than
+    // joining it, and counting alone called that no change at all.
+    const have = [...host.querySelectorAll('.leg')].map(row => row.dataset.leg);
+    if (have.join() !== want.map(one => one.key).join()) legs(want, host);
     leg('sweep', done, host);
     if (deepOf) leg('deep', Math.min(deep + 1, deepOf), host);
+    if (seededOf) leg('seed', Math.min(seeded + 1, seededOf), host);
   }
 
   // The button, and what it says afterwards.
@@ -9633,6 +9821,7 @@
     termsNeedingPictures,
     readPages, matchOcr, ocrPending, ocrMatchStale, showWordControls,
     sweepTemplates, sweepCaseOf, runSweep, renderSweep, alreadyCovered, readerContradicts, sweepPartsFor,
+    readerSeedsFor, partnerSeedsFrom, markedAt,
     pageHasConfidentTerm, pagesNeedingSweep, sweepWorkload,
     READER_SURE, sweepProgress,
     settleSweep,

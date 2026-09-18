@@ -134,6 +134,11 @@ for (const name of readdirSync(bench).sort()) {
       // The near misses the panel is putting to the reviewer, read off the
       // panel itself rather than recomputed here: what they are actually
       // shown is the thing worth reporting.
+      // Which words the later passes were spent on, and what the panel
+      // thinks the whole check will cost before it starts.
+      deepened: (B.state.sweepDeepened || []).slice(),
+      seeded: (B.state.sweepSeeded || []).slice(),
+      seedReport: (B.state.sweepSeedReport || []).slice(),
       offers: [...document.querySelectorAll('.termcounts .offer')].map(card => ({
         term: card.dataset.term,
         why: (card.querySelector('.offerwhy') || card.querySelector('.offerlead'))
@@ -212,6 +217,14 @@ for (const name of readdirSync(bench).sort()) {
     }
     console.log('   refused ' + [...byTerm].map(([t, n]) => JSON.stringify(t) + ' x' + n)
       .join(', '));
+  }
+  if ((out.deepened || []).length || (out.seeded || []).length) {
+    console.log('   looked again for ' + JSON.stringify(out.deepened || [])
+      + ', seeded from the reader for ' + JSON.stringify(out.seeded || []));
+  }
+  for (const one of out.seedReport || []) {
+    console.log('      seeded "' + one.part + '" at ' + one.seeds + ' places · best '
+      + one.best.toFixed(3) + ' of ' + one.bar.toFixed(2) + ' · kept ' + one.kept);
   }
   for (const offer of out.offers || []) {
     console.log('   offering "' + offer.term + '" - ' + offer.why
