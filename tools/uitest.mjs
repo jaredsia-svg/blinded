@@ -2614,10 +2614,11 @@ try {
 
     green.click();
     const greenRows = [...document.querySelectorAll('#termcounts .tallyspot')];
+    const colourOf = row => getComputedStyle(row.querySelector('.dot')).backgroundColor;
     const fromReading = { rows: greenRows.length,
       shapes: greenRows.filter(r => r.classList.contains('shape')).length,
       shown: greenRows.map(r => r.textContent.trim()),
-      colour: greenRows[0] && getComputedStyle(greenRows[0].querySelector('.dot')).backgroundColor };
+      colours: [...new Set(greenRows.map(colourOf))] };
     green.click();
 
     amber.click();
@@ -2625,7 +2626,7 @@ try {
     const fromShape = { rows: amberRows.length,
       shapes: amberRows.filter(r => r.classList.contains('shape')).length,
       shown: amberRows.map(r => r.textContent.trim()),
-      colour: amberRows[0] && getComputedStyle(amberRows[0].querySelector('.dot')).backgroundColor };
+      colours: [...new Set(amberRows.map(colourOf))] };
     amber.click();
     const afterSecond = document.querySelectorAll('#termcounts .tallyspot').length;
 
@@ -2647,19 +2648,26 @@ try {
   check('and the amber one counts the check separately',
     Number(where.counts.amber) === where.shape && where.shape > 0,
     JSON.stringify(where));
-  check('the green circle lists only the reading\'s finds',
-    where.fromReading.rows === where.reading && where.fromReading.shapes === 0,
-    JSON.stringify(where.fromReading));
-  check('and the amber one only the check\'s',
-    where.fromShape.rows === where.shape
-      && where.fromShape.shapes === where.shape, JSON.stringify(where.fromShape));
+  // The circles count two things and open one list. Each opened half the
+  // answer, so a reviewer wanting to know where a word is pressed twice and
+  // held the halves apart in their head: "where is this word" has one answer,
+  // and the rows already say which pass found which.
+  check('either circle opens the whole list, both colours in it',
+    where.fromReading.rows === where.reading + where.shape
+      && where.fromReading.shapes === where.shape, JSON.stringify(where.fromReading));
+  check('and the other circle opens the same list',
+    where.fromShape.rows === where.fromReading.rows
+      && where.fromShape.shapes === where.fromReading.shapes,
+    JSON.stringify(where.fromShape));
   check('each one names its page',
     where.fromReading.shown.every(s => /^Page \d+/.test(s))
       && where.fromShape.shown.every(s => /^Page \d+/.test(s)),
     JSON.stringify(where));
-  check('and the two lists are not marked the same colour',
-    where.fromReading.colour !== where.fromShape.colour,
-    JSON.stringify([where.fromReading.colour, where.fromShape.colour]));
+  // Which is what makes one list workable: the row for a mark the reading
+  // found and the row for one the check guessed at are not the same colour,
+  // because they do not deserve equal trust.
+  check('with each row wearing the colour of the pass that found it',
+    where.fromReading.colours.length === 2, JSON.stringify(where.fromReading.colours));
   check('pressing it again puts the list away',
     where.afterSecond === 0, JSON.stringify(where));
 
@@ -4272,17 +4280,21 @@ try {
       // had finished.
       B.state.terms = ['Jane', 'Zzyzx'];
       const seen = { samples: 0, boxEmpty: 0, legs: 0, stale: 0, sentence: 0,
-        deep: 0 };
+        deep: 0, later: new Set() };
       const look = () => {
         seen.samples++;
         const box = document.getElementById('sweepbox');
         if (!box.hidden
-          && document.getElementById('sweep').hidden
+          && !document.querySelector('.exportbar .checklink')
           && !document.getElementById('sweepnote').textContent.trim()
           ) seen.boxEmpty++;
         const rows = document.querySelectorAll('#sweeprun-legs .leg');
         if (rows.length) seen.legs++;
         if (rows.length > 1) seen.deep++;
+        for (const row of rows) {
+          const name = row.querySelector('.leg-label span').textContent;
+          if (name !== 'Second check') seen.later.add(name);
+        }
         const foot = document.getElementById('runfoot');
         const text = document.getElementById('runfoot-text').textContent;
         if (!foot.hidden && /Search complete/.test(text)) seen.stale++;
@@ -4306,6 +4318,8 @@ try {
       seen.stillSaysChecking = /Checking page|Looking again/
         .test(document.body.textContent);
       B.state.terms = was;
+      // A Set does not survive the trip back out of the page.
+      seen.later = [...seen.later];
       return seen;
     });
 
@@ -4321,11 +4335,17 @@ try {
       run.afterShown && run.runGone
       && /Second check (complete|stopped)/.test(run.after),
       JSON.stringify(run));
-    // The later passes get no bar of their own. They are one run with the
-    // first, and three bars naming themselves is the tool explaining its
-    // internals to somebody waiting for an answer.
-    check('the deeper pass runs without a bar of its own',
-      run.deepened.includes('Zzyzx') && run.deep === 0, JSON.stringify(run));
+    // The later passes get a bar. One bar for the whole run sat full while
+    // the check was plainly still working, which is the bar lying -- and the
+    // run can be minutes, so "full but not finished" is a long time to look
+    // at. What they do not get is a bar each, naming itself: "looking again
+    // where nothing was found" is the tool explaining its own internals to
+    // somebody waiting for an answer.
+    check('the deeper pass has a bar of its own',
+      run.deepened.includes('Zzyzx') && run.deep > 0, JSON.stringify(run));
+    check('under one name, whichever later pass is running',
+      run.later.length === 1 && run.later[0] === 'Running final checks',
+      JSON.stringify(run));
     check('and nothing of it is left on the page once the check is over',
       run.leftovers === 0 && run.stillSaysChecking === false,
       JSON.stringify(run));
@@ -7288,7 +7308,7 @@ try {
       B.state.searched = false;
       B.state.sweptTerms = [];
       B.renderSweep();
-      return document.getElementById('sweep').hidden;
+      return !document.querySelector('.exportbar .checklink');
     });
     check('the thorough check is not offered before anything has been searched',
       early === true, String(early));
@@ -7304,10 +7324,11 @@ try {
       B.state.searched = true;
       B.state.sweptTerms = [];
       B.renderSweep();
-      const offered = !document.getElementById('sweep').hidden;
+      const offered = Boolean(document.querySelector('.exportbar .checklink'));
       B.state.searched = false;
       B.renderSweep();
-      const out = { offered, afterChange: !document.getElementById('sweep').hidden,
+      const out = { offered,
+                    afterChange: Boolean(document.querySelector('.exportbar .checklink')),
                     label: document.getElementById('apply').textContent.trim() };
       // Put back what this borrowed: a sweep left recorded here would make
       // the next block think one had already run.
@@ -7326,11 +7347,12 @@ try {
       // second opinion on what the first pass found.
       B.state.searched = true;
       B.renderSweep();
-      const go = document.getElementById('sweep');
+      const go = document.querySelector('.exportbar .checklink');
       return {
         hidden: document.getElementById('sweepbox').hidden,
-        button: go.textContent,
-        inFoot: !go.hidden && Boolean(go.closest('.exportbar')),
+        button: go ? go.closest('.ranline').textContent : '',
+        link: go ? go.textContent.trim() : '',
+        inFoot: Boolean(go),
         note: document.getElementById('sweepnote').textContent.trim(),
       };
     });
@@ -7342,16 +7364,25 @@ try {
     // the report it will leave. It used to be a button in the panel with a
     // note under it saying the same thing in amber, three sections away from
     // anything to do with running.
-    check('the offer is a button in the foot, not a note in the panel',
+    check('the offer is a line in the foot, not a note in the panel',
       offered.inFoot === true && offered.note === '', JSON.stringify(offered));
-    check('the button says what it is',
-      /second check/i.test(offered.button), offered.button);
+    check('the line says what is being offered and why',
+      /appear as images and a second check is recommended/i.test(offered.button),
+      offered.button);
+    // The question is the control: an outlined button among Search, Redact
+    // and Export read as a fourth thing to press in a row that already says
+    // what to press next.
+    check('and ends in the question that opens the dialog',
+      offered.link === 'Proceed?', JSON.stringify(offered));
     // Slow enough that springing it on someone would be a trap, so the wait
-    // is on the button rather than discovered afterwards -- and taken from
-    // the work in front of it, not from "a couple of minutes" about any
-    // document at all.
-    check('and how long it will take, for this document',
-      /\(\d+ (second|minute)s?\)/i.test(offered.button), offered.button);
+    // is stated before it starts -- and taken from the work in front of it,
+    // not from "a couple of minutes" about any document at all.
+    const cost = await page.evaluate(() => {
+      window.Blinded.describeSweepOffer();
+      return document.getElementById('sweepofferbody').textContent;
+    });
+    check('and the dialog it opens says how long it will take',
+      /\(\d+ minutes?\)/i.test(cost), cost);
 
     // The sweep draws every typeface, not the two the old fallback used: the
     // whole reason to run it is that the reading was defeated by unusual type.
@@ -7470,7 +7501,7 @@ try {
         // Reported in the foot, with the bars that were filling a moment
         // ago, rather than a second time in the panel.
         note: document.getElementById('runfoot-text').textContent,
-        buttonGone: document.getElementById('sweep').hidden,
+        buttonGone: !document.querySelector('.exportbar .checklink'),
       };
       p.imageHits = [];
       B.state.sweptTerms = [];

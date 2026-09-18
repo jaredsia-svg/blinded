@@ -643,7 +643,10 @@ textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; border-
   flex: 1 1 260px; min-width: 200px;
   display: flex; align-items: center; gap: 12px;
 }
-.runlegs { flex: 1; min-width: 0; }
+/* The bar itself keeps to the left half of the row. Stretched the whole way
+   across it ran up against the buttons, and a progress bar that touches the
+   thing it is greying out reads as part of it. */
+.runlegs { flex: 0 1 50%; min-width: 0; margin-right: auto; }
 .runlegs .leg { margin: 0; }
 .runlegs .leg + .leg { margin-top: 4px; }
 /* The finished sentence sits at the start of the bar and takes the room it
@@ -673,23 +676,22 @@ textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; border-
 .runctl:disabled { cursor: default; opacity: .7; }
 .leg-count { margin-left: auto; }
 .runbar .ghost { flex: none; padding: 5px 12px; }
-/* The offer to run the second check, beside the buttons it will grey out.
-   Quieter than Redact, because it is optional; amber-edged, because what it
-   finds is amber. */
-.exportbar > #sweep {
-  flex: none; margin-right: auto; padding: 7px 14px;
-  border-color: #d98b1f; color: #8a5a10; background: var(--card);
-  font-size: 13px;
+/* The question at the end of the second-check line. A link rather than a
+   button: it is the last two words of a sentence, and a bordered control
+   there would have been a fourth thing to press in a row of three. */
+.checklink {
+  background: none; border: 0; padding: 0; margin-left: 4px;
+  font: inherit; color: #8a5a10; font-weight: 600;
+  text-decoration: underline; text-underline-offset: 2px;
 }
-.exportbar > #sweep:hover { background: var(--warn-bg); color: var(--warn); }
+.checklink:hover { color: var(--warn); }
 @media (max-width: 640px) {
   .runbar { flex-wrap: wrap; }
 }
 /* Three buttons, each wide enough for the longest thing it ever says, so
    nothing under the pointer moves when a state changes. */
 .exportgo { display: flex; align-items: center; gap: 10px; }
-.exportgo > button { min-width: 104px; justify-content: center; }
-.exportgo > #export { min-width: 132px; }
+.exportgo > button { min-width: 124px; justify-content: center; }
 
 button { font: inherit; cursor: pointer; border-radius: 8px; }
 .primary { background: var(--accent); color: #fff; border: 1px solid var(--accent); padding: 9px 18px; font-weight: 600; }
@@ -1720,10 +1722,26 @@ body.reviewing .exportbar { position: static; flex: none; margin: 14px 0 18px; }
     background: var(--card); margin-bottom: 10px; flex: none;
   }
 
-  .exportbar { padding: 10px 12px; gap: 10px; flex-wrap: nowrap; }
-  .exportbar .exportgo { gap: 10px; }
+  /* Two rows on a phone, not one. Three buttons at their desktop width come
+     to more than the screen is wide, so the row was overflowing to the left
+     with Search cut in half by the edge — and the report above them kept its
+     desktop height whether it said anything or not. Stacked, each part gets
+     the width it needs and the bar is as tall as what is in it. */
+  .exportbar {
+    padding: 10px 12px; gap: 8px; flex-wrap: wrap; align-items: stretch;
+  }
+  .exportbar > * { flex: 1 1 100%; min-width: 0; }
+  .exportbar .exportgo { gap: 8px; display: flex; }
   #exportnote { display: none; }
-  .exportbar .primary { flex: 1; white-space: nowrap; padding: 10px 12px; }
+  /* Equal thirds of whatever the screen is, rather than a fixed width each. */
+  .exportgo > button { flex: 1 1 0; min-width: 0; padding: 10px 6px;
+    white-space: nowrap; }
+  .runbar { flex: 1 1 100%; min-width: 0; }
+  .runlegs { flex: 1 1 auto; min-width: 0; }
+  /* The report wraps to as many lines as it needs and takes no room when it
+     has nothing to say. */
+  #runfoot[hidden] { display: none; }
+  .ranline { align-items: flex-start; }
 
   /* Pinch is how anyone zooms anything on a phone, and on the document it
      means the document. Handing the gesture to the browser zoomed the whole

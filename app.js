@@ -323,6 +323,21 @@
     renderFoot();
   }
 
+  // Whether the foot should offer the second check. Worked out where the
+  // check's own state lives and read where the report is written.
+  let sweepOnOffer = false;
+
+  // The question that opens the dialog. Both the offer and a stopped run end
+  // in it, and they mean the same thing: here is what it costs, say yes or no.
+  function proceedLink() {
+    const ask = document.createElement('button');
+    ask.type = 'button';
+    ask.className = 'checklink';
+    ask.textContent = 'Proceed?';
+    ask.addEventListener('click', reopenSweepOffer);
+    return ask;
+  }
+
   function renderFoot() {
     const said = el('runfoot-text');
     const foot = el('runfoot');
@@ -335,7 +350,7 @@
     // the places that change the question clear this, and here it is only
     // read.
     if (state.redacting || state.sweepRunning) return;
-    if (!state.footRan) {
+    if (!state.footRan && !sweepOnOffer) {
       said.textContent = '';
       foot.hidden = true;
       return;
@@ -372,12 +387,18 @@
       words.textContent = text;
       row.append(dot, words);
       said.append(row);
+      // The words, not the row: what a caller adds is the rest of the
+      // sentence, and appended to the row it became a second flex child that
+      // floated off to the far end of the bar as soon as the line wrapped.
+      return words;
     };
 
-    line('green', found
-      ? 'Initial search (text + images) complete.'
-        + ' Review marks outlined in green in left panel.'
-      : 'Initial search (text + images) complete. Nothing found to redact.');
+    if (state.footRan) {
+      line('green', found
+        ? 'Initial search (text + images) complete.'
+          + ' Review marks outlined in green in left panel.'
+        : 'Initial search (text + images) complete. Nothing found to redact.');
+    }
     if (check) {
       const how = state.footStopped
         ? 'Second check stopped. ' : 'Second check complete. ';
@@ -387,11 +408,28 @@
       // nothing -- saying so sends the reviewer away from work waiting for
       // them.
       const toReview = sweepOffers().length;
-      line('amber', state.footAdded
+      const words = line('amber', state.footAdded
         ? how + 'Review marks outlined in amber in left panel.'
         : toReview
-          ? how + 'Review left panel results.'
+          ? how + 'Review left panel for results.'
           : how + 'Nothing further found.');
+      // A stopped run has not answered the document, and what is left of it
+      // belongs here beside the bar that was filling - not in an amber note
+      // three sections up the panel, where the reviewer was not looking.
+      if (state.footStopped && sweepOnOffer) {
+        const left = document.createElement('span');
+        left.textContent = ' About ' + describeTime(Math.round(sweepEstimate().seconds))
+          + ' left to finish.';
+        words.append(left, proceedLink());
+      }
+    } else if (sweepOnOffer) {
+      // The offer, as the next line of the report rather than a button off to
+      // the side. It is a remark about what the search found - some of these
+      // words are pictures - and the question at the end of it opens the same
+      // dialog the search offered when it finished, so there is one place
+      // where the cost is stated and one pair of answers to give.
+      line('amber', 'Some words appear as images and a second'
+        + ' check is recommended. ').append(proceedLink());
     }
 
     // The bars are gone, and an empty row where they were takes the width the
@@ -2048,8 +2086,18 @@
       // the thing skips the translation.
       note.textContent = '';
       if (unanswered === 0) {
-        note.textContent = 'Press Search to find what is in this document.';
+        note.textContent =
+          'Input text and images in left panel, followed by Search.';
       } else {
+        // What is waiting, in the two kinds the panel is divided into, so
+        // the sentence and the panel are the same list counted the same way.
+        // "2 ? above" asked the reviewer to go and find out which two.
+        const waitingText = state.terms.filter(t => !state.countedTerms.includes(t)).length
+          + unknownKinds();
+        const waitingImages = state.templates.filter(t => !t.searched).length;
+        const said = waitingText + ' text and ' + waitingImages + ' image '
+          + (waitingText + waitingImages === 1 ? 'input' : 'inputs')
+          + ' to search for. Press Search.';
         const mark = document.createElement('span');
         mark.className = 'qmark';
         mark.textContent = '?';
@@ -2058,12 +2106,7 @@
         mark.setAttribute('role', 'img');
         mark.setAttribute('aria-label', unanswered === 1
           ? 'one unanswered mark' : unanswered + ' unanswered marks');
-        note.append(
-          document.createTextNode(unanswered === 1 ? 'One ' : unanswered + ' '),
-          mark,
-          document.createTextNode(unanswered === 1
-            ? ' above. Press Search to find it.'
-            : ' above. Press Search to find them.'));
+        note.append(mark, document.createTextNode(' ' + said));
       }
     } else if (state.applied) {
       note.textContent = marks === 0 ? 'Nothing is covered.' : '';
@@ -6104,8 +6147,13 @@
       const byReading = where.filter(spot => spot.kind !== 'shape');
       const byShape = where.filter(spot => spot.kind === 'shape');
 
+      // Both circles open the same list, and that list is every place the
+      // word was found. Two circles that each opened half the answer made the
+      // reviewer press twice and hold the halves apart in their head: the
+      // question "where is this word" has one answer, and the colours on the
+      // rows already say which pass found which.
       const circle = (kind, places) => {
-        const key = term + '::' + kind;
+        const key = term;
         const dot = document.createElement('button');
         dot.type = 'button';
         dot.className = 'n dot-' + kind;
@@ -6119,9 +6167,7 @@
         dot.textContent = String(places.length);
         dot.disabled = places.length === 0 || state.kind === 'text';
         if (!dot.disabled) {
-          dot.title = kind === 'shape'
-            ? 'Where the second check found it'
-            : 'Where it is';
+          dot.title = 'Where it is';
           dot.setAttribute('aria-expanded', String(state.openTally === key));
           dot.addEventListener('click', () => {
             state.openTally = state.openTally === key ? null : key;
@@ -6138,11 +6184,9 @@
       row.append(drop);
       host.append(row);
 
-      if (state.openTally === term + '::green' && !count.disabled) {
-        host.append(tallyList(term, byReading));
-      }
-      if (shapeCount && state.openTally === term + '::shape' && !shapeCount.disabled) {
-        host.append(tallyList(term, byShape));
+      if (state.openTally === term
+          && !(count.disabled && (!shapeCount || shapeCount.disabled))) {
+        host.append(tallyList(term, where));
       }
 
       // What the check could not place, and what it placed but is not sure
@@ -6188,7 +6232,7 @@
       how.className = 'how';
       // Every row in a picked image's list was found as a picture, so saying
       // so said nothing. What it scored is the thing the reviewer can act on.
-      how.textContent = spot.kind === 'shape' ? 'by shape'
+      how.textContent = spot.kind === 'shape' ? 'as an image'
         : spot.kind === 'refused' ? 'read as something else'
           : spot.kind === 'read' ? 'read off the page'
           : spot.kind === 'image'
@@ -7622,7 +7666,6 @@
 
   el('busy-pause').addEventListener('click', requestPause);
   bindSweepOffer();
-  el('sweep').addEventListener('click', runSweep);
   function stopTheCheck() {
     state.sweepStopped = true;
     // The sentence beside the bars is gone, so the button says it instead.
@@ -8668,15 +8711,33 @@
     // explaining its own internals to somebody waiting for an answer. They
     // are one run and they get one bar; the later passes are short and the
     // first one is nearly all of it.
+    // The later passes get a bar of their own, under one neutral name. One
+    // bar for the whole run left it sitting full while the check was plainly
+    // still working -- a finished bar over unfinished work is the bar lying
+    // -- and naming each pass ("looking again where nothing was found") was
+    // the tool explaining its own internals to somebody waiting for an
+    // answer. "Running final checks" says the only thing the reviewer needs:
+    // it is nearly over.
+    const finalTotal = deepOf || seededOf || 0;
+    const finalDone = deepOf ? deep : seededOf ? seeded : 0;
     const want = [{ key: 'sweep', label: 'Second check', total }];
+    if (finalTotal) want.push({ key: 'final', label: 'Running final checks',
+                                total: finalTotal });
     // Only rebuilt when the row is not already there: redrawing it on every
     // page would restart its transition and make a filling bar stutter.
-    const have = [...host.querySelectorAll('.leg')].map(row => row.dataset.leg);
-    if (have.join() !== want.map(one => one.key).join()) legs(want, host);
-    // A later pass holds the bar at the end rather than winding it back: the
-    // run is not over until they are, and a bar that empties and refills
+    // Keyed by name and length both: the two final passes share one bar, and
+    // the second is a different number of pages from the first, so the row
+    // has to be rebuilt when the length changes or the bar would be measuring
+    // against the wrong total.
+    const have = [...host.querySelectorAll('.leg')]
+      .map(row => row.dataset.leg + ':' + row.dataset.total);
+    const now = want.map(one => one.key + ':' + one.total);
+    if (have.join() !== now.join()) legs(want, host);
+    // The first bar holds at the end rather than winding it back: the run is
+    // not over until the later passes are, and a bar that empties and refills
     // reads as a second run nobody asked for.
-    leg('sweep', deepOf || seededOf ? total : done, host);
+    leg('sweep', finalTotal ? total : done, host);
+    if (finalTotal) leg('final', finalDone, host);
   }
 
   // The button, and what it says afterwards.
@@ -8709,6 +8770,14 @@
     // panel button). Reading already settled -> no popout.
     if (!shouldOfferSweep()) return;
     state.sweepOfferShown = true;
+    describeSweepOffer();
+    el('sweepoffer').hidden = false;
+    el('sweepofferx').focus();
+  }
+
+  // Opened again from the foot, for a reviewer who skipped it the first time.
+  // Same dialog, same two answers: the cost is stated in one place only.
+  function reopenSweepOffer() {
     describeSweepOffer();
     el('sweepoffer').hidden = false;
     el('sweepofferx').focus();
@@ -9051,12 +9120,15 @@
     // nothing in it — an amber strip under the term list saying nothing.
     const note = el('sweepnote');
     if (!box.hidden && (!note || !note.textContent.trim())) box.hidden = true;
+    // The offer lives in the foot's report now, and this is what decides
+    // whether there is one, so the foot is redrawn from here rather than
+    // waiting for whatever happens to call it next.
+    renderFoot();
   }
 
   function renderSweepBody() {
     const box = el('sweepbox');
     const note = el('sweepnote');
-    const button = el('sweep');
     const swept = state.sweptTerms.length
       && state.sweptTerms.length === state.terms.length
       && state.sweptTerms.every((t, i) => t === state.terms[i]);
@@ -9087,17 +9159,16 @@
     // The button that starts it lives in the foot, beside the bars it raises
     // and the report it leaves. So it is decided here, before anything that
     // depends on whether the panel is on screen at all.
+    // Whether a second check is worth offering at all. The offer itself is a
+    // line in the foot's report now rather than a button beside the other
+    // three: an outlined button among them read as a fourth thing to press in
+    // a row that already says what to press next, and what it actually is, is
+    // a remark about what the search found.
     const work = swept ? null : sweepWorkload();
     const canRun = state.searched && !state.sweepRunning && !state.redacting
       && !swept && state.terms.length > 0 && state.kind !== 'text'
       && Boolean(work && work.pages && work.terms);
-    button.hidden = !canRun;
-    if (canRun) {
-      // Honest about the cost in the label itself, because that is the whole
-      // reason this is a button rather than something that simply happens.
-      button.textContent = 'Second check ('
-        + describeTime(Math.round(sweepEstimate().seconds)) + ')';
-    }
+    sweepOnOffer = canRun;
 
     const running = el('sweeprun');
     running.hidden = !state.sweepRunning;
@@ -9126,23 +9197,11 @@
           'Nothing left for a second check – reading already covered every typed word.');
         return;
       }
-      const seconds = Math.round(sweepEstimate().seconds);
-      if (state.sweepStopped && state.sweepReached) {
-        const full = 'Stopped after ' + state.sweepReached
-          + ' page' + (state.sweepReached === 1 ? '' : 's') + ' still in doubt'
-          + (state.sweepAdded
-            ? ', having added ' + state.sweepAdded
-              + (state.sweepAdded === 1 ? ' mark' : ' marks') + ' in amber. '
-            : ', having found nothing new. ')
-          + 'Start it again to finish the rest - about '
-          + describeTime(seconds) + '.';
-        setSidebarNote(note, 'Second check stopped – about '
-          + describeTime(seconds) + ' left to finish.', full);
-        return;
-      }
-      // Nothing here. The button in the foot carries the offer and the wait,
-      // and the panel saying the same thing again in amber is the kind of
-      // repetition this bar has been losing all week.
+      // Nothing here. The foot carries the offer, the wait, and what is left
+      // of a run that was stopped, beside the bar that was filling a moment
+      // ago. The panel saying the same thing again in amber, three sections
+      // away from anything to do with running, is the kind of repetition this
+      // bar has been losing all week.
       note.textContent = '';
       return;
     }
@@ -9869,7 +9928,7 @@
     readPages, matchOcr, ocrPending, ocrMatchStale, showWordControls,
     sweepTemplates, sweepCaseOf, runSweep, renderSweep, alreadyCovered, readerContradicts, sweepPartsFor,
     readerSeedsFor, partnerSeedsFrom, markedAt,
-    sweepEstimate, describeSweepOffer, lowConfidenceMarks,
+    sweepEstimate, describeSweepOffer, reopenSweepOffer, lowConfidenceMarks,
     pageHasConfidentTerm, pagesNeedingSweep, sweepWorkload,
     READER_SURE, sweepProgress,
     settleSweep,
