@@ -500,6 +500,35 @@ function markTemplate(size) {
 
   const raw = Match.correlate(page, W, H, tpl);
   const hits = Match.suppress(raw);
+
+  // The two ways of computing the numerator are the same numbers.
+  //
+  // Above a few thousand positions the sum of products comes from a Fourier
+  // transform of the whole page instead of a loop at every position. That is
+  // an identity, not an approximation, and this is where it is held to it:
+  // every position, both ways, worst disagreement against the largest value.
+  {
+    const plane = Match.numeratorPlane(page, W, H, tpl);
+    const outW = W - tpl.width + 1;
+    const outH = H - tpl.height + 1;
+    let worst = 0;
+    let biggest = 0;
+    for (let y = 0; y < outH; y++) {
+      for (let x = 0; x < outW; x++) {
+        const loop = Match.dotAt(page, W, tpl, x, y);
+        biggest = Math.max(biggest, Math.abs(loop));
+        worst = Math.max(worst, Math.abs(loop - plane[y * outW + x]));
+      }
+    }
+    const relative = worst / (biggest || 1);
+    check('the transform and the loop agree on every position',
+      relative < 1e-5, relative.toExponential(2) + ' relative, over '
+        + (outW * outH) + ' positions');
+    // A small window is under the crossover and must still be answered by the
+    // loop: the transform's setup costs more than it saves down there.
+    check('and the small windows refinement uses stay on the loop',
+      Match.FFT_MIN_POSITIONS >= 1000, String(Match.FFT_MIN_POSITIONS));
+  }
   check('a mark stamped three times is found three times', hits.length === 3,
     hits.length + ' found');
   // At the default threshold a mark also scores above the bar one pixel off
