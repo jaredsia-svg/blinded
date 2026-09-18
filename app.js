@@ -7931,6 +7931,41 @@
     return out;
   }
 
+  // How much wider than the shape hit a host may be and still be allowed to
+  // *agree* with it.
+  //
+  // The text layer hands over runs, not words: one item can be a whole
+  // heading. A run that contains the word somewhere says nothing about the
+  // fifty pixels the shape matched. Measured on a teaser deck looking for
+  // "Victory": the run "Victory's Monthly Performance in SEA (Ex-Vietnam)"
+  // spans the line, and it was granting agreement to a shape hit sitting on
+  // "(Ex-Vietnam)" at the far end of it — while the reader's own word box
+  // there said "(Ex-Vietnam)" at confidence 71 and contradicted. "Vietnam"
+  // scores 0.69 against "Victory", over its bar of 0.636, so nothing else
+  // was going to stop it.
+  //
+  // So agreement has to be positional: a host vouches for the hit only if the
+  // word it contains sits where the hit is. Characters are not all one width,
+  // so where that is can only be estimated from the run's own text — which is
+  // enough, because the question is only which end of the line the word is at.
+  // The estimate is given a third of the run's width either side, so a run
+  // that really is about the hit is never disqualified by the arithmetic.
+  const HOST_SLACK = 3;
+
+  function hostSaysItHere(host, term, rect) {
+    const spans = Detect.findTerms(host.text, [term]);
+    if (!spans.length) return false;
+    const box = host.rect;
+    if (!box || !(box.w > 0) || !host.text.length) return true;
+    const slack = box.w / HOST_SLACK;
+    for (const span of spans) {
+      const from = box.x + box.w * (span.start / host.text.length) - slack;
+      const to = box.x + box.w * (span.end / host.text.length) + slack;
+      if (to > rect.x && from < rect.x + rect.w) return true;
+    }
+    return false;
+  }
+
   function readerContradicts(page, rect, term) {
     const hosts = [];
 
@@ -7939,11 +7974,11 @@
       for (const item of placed) {
         if (!item.rect || !hostOverlapsHit(item.rect, rect)) continue;
         if (!(typeof item.confidence === 'number' && item.confidence >= READER_SURE)) continue;
-        hosts.push(page.ocrText.slice(item.start, item.end));
+        hosts.push({ text: page.ocrText.slice(item.start, item.end), rect: item.rect });
       }
       // Short acronyms: also try same-line merges (TEXAS split across tokens).
       if (Detect.lettersOf(term).length <= 4) {
-        for (const text of mergedOcrLineHosts(page, rect)) hosts.push(text);
+        for (const text of mergedOcrLineHosts(page, rect)) hosts.push({ text, rect: null });
       }
     }
 
@@ -7954,7 +7989,7 @@
       if (item.w <= 0 || item.h <= 0) continue;
       const hostRect = textItemRect(item);
       if (!hostOverlapsHit(hostRect, rect)) continue;
-      hosts.push(item.str);
+      hosts.push({ text: item.str, rect: hostRect });
     }
 
     if (!hosts.length) return false;
@@ -7970,17 +8005,18 @@
     // the answer came back "contradicted". A veto is for when nothing there
     // says the word. If anything there does, there is nothing to contradict.
     for (const host of hosts) {
-      if (!Detect.hostContradictsShapeTerm(host, term)) {
-        const letters = Detect.lettersOf(host);
-        if (letters && Detect.findTerms(host, [term]).length > 0) return false;
+      if (!Detect.hostContradictsShapeTerm(host.text, term)) {
+        const letters = Detect.lettersOf(host.text);
+        if (letters && hostSaysItHere(host, term, rect)) return false;
       }
     }
 
     // Prefer longer hosts so a misread "KAS" crumb next to a real "TEXAS"
     // does not keep the false mark alive.
-    hosts.sort((a, b) => Detect.lettersOf(b).length - Detect.lettersOf(a).length);
+    hosts.sort((a, b) =>
+      Detect.lettersOf(b.text).length - Detect.lettersOf(a.text).length);
     for (const host of hosts) {
-      if (Detect.hostContradictsShapeTerm(host, term)) return true;
+      if (Detect.hostContradictsShapeTerm(host.text, term)) return true;
     }
     return false;
   }

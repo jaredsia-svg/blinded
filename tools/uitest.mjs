@@ -28,6 +28,34 @@ const check = (label, ok, detail) => {
   else failures.push(label + (detail === undefined ? '' : ' — ' + detail));
 };
 
+// Running one section of this suite instead of all of it.
+//
+// The whole pass is minutes, because it does the real work: real PDFs
+// rendered, real OCR, real comprehensive checks, in a real browser. That is
+// the point of it, and it is also the wrong price for checking one small edit.
+// ONLY=<text> runs the sections whose names contain that text, as a regular
+// expression, and skips the rest.
+//
+// A filtered run is a convenience, never the answer. The sections share a
+// browser and, in places, a loaded document, so one run alone can fail for
+// want of something a section before it did. Both the banner at the start and
+// the count at the end say the run was partial, so a green filtered run can
+// never be mistaken for a green suite. Push on the full one.
+const ONLY = process.env.ONLY ? new RegExp(process.env.ONLY, 'i') : null;
+let skippedParts = 0;
+const partNames = [];
+
+async function part(name, body) {
+  partNames.push(name);
+  if (ONLY && !ONLY.test(name)) { skippedParts++; return; }
+  await body();
+}
+
+if (ONLY) {
+  console.log('\nONLY=' + process.env.ONLY + ' - running part of the suite.'
+    + ' The full pass is the one that counts.\n');
+}
+
 const TYPES = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
   '.mjs': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
@@ -322,7 +350,7 @@ try {
   // covered, which is more ink, not less; what it must not do is keep its own
   // name. On a PDF the reading happened to find the word anyway; on a text
   // file there is no such second chance, which is what this checks.
-  {
+  await part("a typed word is never lost to a detector", async () => {
     if (await page.isVisible('#view-review')) await newFile();
     await page.waitForSelector('#view-drop:not([hidden])', { timeout: 15000 });
     await page.setInputFiles('#file', textPath);
@@ -374,14 +402,14 @@ try {
       !/Amphitheatre/.test(text), text.slice(0, 200));
     check('while the rest of the file survives',
       /nothing sensitive here/.test(text), text.slice(0, 200));
-  }
+  });
 
   // ---------- adding a word ----------
   //
   // The list used to be a textarea read on every keystroke, so a name being
   // typed was searched for at every prefix. A word joins the list when the
   // reviewer says so.
-  {
+  await part("adding a word", async () => {
     await newFile();
     await page.setInputFiles('#file', fixturePath);
     await page.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
@@ -478,14 +506,14 @@ try {
       afterDrop.numbers === 1, JSON.stringify(afterDrop));
     check('and only the removed word loses its marks',
       afterDrop.forDropped === 0 && afterDrop.marks > 0, JSON.stringify(afterDrop));
-  }
+  });
 
   // ---------- search, redact, redacted ----------
   //
   // One button, three states. Marks used to appear the instant a word was
   // typed, which put an outline on the page while the reviewer was still
   // typing — showing a half-typed word's matches as if they were an answer.
-  {
+  await part("search, redact, redacted", async () => {
     const state = () => page.evaluate(() => ({
       label: document.getElementById('apply').textContent.trim(),
       green: document.getElementById('apply').classList.contains('done'),
@@ -720,7 +748,7 @@ try {
       whatWent.words === 0, JSON.stringify(whatWent));
     check('while what the detectors found stays where it is',
       whatWent.kinds > 0, JSON.stringify(whatWent));
-  }
+  });
 
   // ---------- marked in red, then covered in black ----------
   //
@@ -1168,7 +1196,7 @@ try {
   // also being redrawn amber, which is the colour the comprehensive check
   // uses — so clicking a green mark off turned it into something that looked
   // like a different kind of find.
-  {
+  await part("a dismissed mark keeps its own colour", async () => {
     // Counts the outline colours in the band along a box's edge, read back
     // off the canvas, because the colour of a line is not in any variable.
     const band = () => page.evaluate(() => {
@@ -1235,7 +1263,7 @@ try {
       window.Blinded.state.searched = false;
       window.Blinded.redrawAll();
     });
-  }
+  });
 
   const restored = await page.evaluate(() => {
     // Driving the pointer at a page is about marking, so it asks for the
@@ -1279,7 +1307,7 @@ try {
   // offers to stop it. Opening another file does not: it discards the
   // document without navigating anywhere, so nothing fires and the browser
   // has nothing to offer. The tool has to ask for itself.
-  {
+  await part("asking before the document is thrown away", async () => {
     const pagesOpen = () => page.evaluate(() => window.Blinded.state.pages.length);
     const opened = await pagesOpen();
     check('a document is open to be lost', opened > 0, String(opened));
@@ -1389,7 +1417,7 @@ try {
     // Put a document back for the tests that follow.
     await page.setInputFiles('#file', fixturePath);
     await page.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
-  }
+  });
 
   // ---------- naming the file on the way out ----------
   //
@@ -2342,7 +2370,7 @@ try {
   // layer, one spot carrying eleven copies of itself. Every copy is a true
   // find, so none is wrong — but they are one occurrence, and the reviewer got
   // one box drawn eleven times and eleven identical page numbers to check.
-  {
+  await part("one mark per place, however often the page says it", async () => {
     const place = await page.evaluate(() => {
       const B = window.Blinded;
       const box = (x, y, w, h) => ({ x, y, w, h });
@@ -2382,7 +2410,7 @@ try {
       place.nested === 2, JSON.stringify(place));
     check('and a finding with no box on the page is never dropped',
       place.boxless === 2, JSON.stringify(place));
-  }
+  });
 
   // ---------- but a bigger mark is not a duplicate of a smaller one ----------
   //
@@ -2393,7 +2421,7 @@ try {
   // overlap, so all four logo matches were dropped as duplicates of the word.
   // The panel said "4 matches" and the tally said 0, and on the page the
   // wordmark was covered while the red triangle beside it stayed showing.
-  {
+  await part("but a bigger mark is not a duplicate of a smaller one", async () => {
     const both = await page.evaluate(() => {
       const B = window.Blinded;
       const p = B.state.pages[0];
@@ -2426,7 +2454,7 @@ try {
       check('while one drawn on top of that word is still the same find',
         both.same === true, JSON.stringify(both));
     }
-  }
+  });
 
   // The tally beside the word is the count now, and a duplicate suppressed on
   // the page must not reappear as a number in the panel.
@@ -2643,7 +2671,7 @@ try {
   // it a few kilobytes and, the reason that matters, means it carries nothing
   // confidential. A draft with the document inside would be a file that looks
   // like a redaction and is the opposite of one.
-  {
+  await part("drafts", async () => {
     // Started from a known file, so that reopening is the same document and
     // the mismatch guard is exercised deliberately below rather than by
     // accident here.
@@ -2828,7 +2856,7 @@ try {
     }));
     check('and declining leaves that document untouched',
       declined.manual === 0 && declined.terms === 0, JSON.stringify(declined));
-  }
+  });
 
   // ---------- one pass, spread across cores ----------
   //
@@ -3320,7 +3348,7 @@ try {
   // over: a clean wordmark that matches at 0.85 and a scanned signature that
   // needs 0.60 cannot both be set right by one number, and moving it to tune
   // the stubborn one threw away the finished results for all the others.
-  {
+  await part("each picked image keeps its own bar", async () => {
     if (await page.isVisible('#view-review')) await newFile();
     await page.waitForSelector('#view-drop:not([hidden])', { timeout: 15000 });
     await page.setInputFiles('#file', logoPath);
@@ -3480,7 +3508,7 @@ try {
 
     // Put back what the later sections expect to find.
     await page.evaluate(() => { window.Blinded.state.termImages = true; });
-  }
+  });
 
   // ---------- the two lists of page numbers are one list ----------
   //
@@ -3490,7 +3518,7 @@ try {
   // the image's list was taller with a rule between every line; and
   // `.templates button` was restyling every button under it to 15px, the
   // page numbers included.
-  {
+  await part("the two lists of page numbers are one list", async () => {
     if (await page.isVisible('#view-review')) await newFile();
     await page.waitForSelector('#view-drop:not([hidden])', { timeout: 15000 });
     await page.setInputFiles('#file', logoPath);
@@ -3597,7 +3625,7 @@ try {
       && badges.image.round === true,
     JSON.stringify(badges));
 
-  }
+  });
 
   // ---------- what stays usable while a box is being drawn ----------
   //
@@ -3605,7 +3633,7 @@ try {
   // needed a closer look at a small logo had to leave picking, zoom, and start
   // again. Zooming is the one thing picking needs; the other four would each
   // take them somewhere else mid-pick.
-  {
+  await part("what stays usable while a box is being drawn", async () => {
     const live = await page.evaluate(() => {
       const B = window.Blinded;
       const read = () => {
@@ -3656,14 +3684,14 @@ try {
     check('a laptop is not given a second way out on top of the document',
       live.before.escape === false && live.during.escape === false
         && live.after.escape === false, JSON.stringify(live));
-  }
+  });
 
   // ---------- picking on a phone ----------
   //
   // The panel and the document take turns on a narrow screen, and the box has
   // to be drawn on the document. Tapping the button left the reviewer in the
   // panel with nothing they could reach: picking was impossible.
-  {
+  await part("picking on a phone", async () => {
     const phone = await page.evaluate(() => {
       const B = window.Blinded;
       if (!B.onPhone()) return { narrow: false };
@@ -3684,7 +3712,7 @@ try {
       check('and finishing brings the panel back',
         phone.came === 'edit', JSON.stringify(phone));
     }
-  }
+  });
 
   // ---------- a bar high enough to tell one letter from another ----------
   //
@@ -3693,7 +3721,7 @@ try {
   // Measured here on the same shape — the circle is most of the tile and only
   // the glyph differs, so the E scores very nearly what the F does. The whole
   // range that separates them was above the old ceiling of 0.95.
-  {
+  await part("a bar high enough to tell one letter from another", async () => {
     const scores = await page.evaluate(async () => {
       const LETTERS = ['A', 'B', 'C', 'D', 'E', 'F'];
       const R = 18, GAP = 70;
@@ -3751,7 +3779,7 @@ try {
       Math.abs(reach.clamped - reach.max) < 1e-9, JSON.stringify(reach));
     check('while anything past the end is still held to it',
       Math.abs(reach.overshoot - reach.max) < 1e-9, JSON.stringify(reach));
-  }
+  });
 
   // ---------- the bar comes down when it finds nothing ----------
   //
@@ -3761,7 +3789,7 @@ try {
   // exchange. Every candidate has already been verified at full resolution,
   // so lowering the bar costs nothing: the answer is in hand, on the wrong
   // side of a number.
-  {
+  await part("the bar comes down when it finds nothing", async () => {
     // Where the bar wants to be, given a set of scores. Two clumps with a gap
     // between them is what a picked mark actually produces.
     const chosen = await page.evaluate(() => {
@@ -3873,7 +3901,7 @@ try {
       moved.steps.length >= 2 && moved.steps[0].count === 2
       && moved.steps.every(step => step.bar >= 0.62 && step.count > 0),
       JSON.stringify(moved.steps));
-  }
+  });
 
   // ---------- pressing a setting does not search again ----------
   //
@@ -3881,7 +3909,7 @@ try {
   // resolution, above and below the bar alike. Moving the bar within that set
   // is a filter, not a search, and a reviewer comparing two settings should
   // not be made to wait twice for an answer the tool already has.
-  {
+  await part("pressing a setting does not search again", async () => {
     const swapped = await page.evaluate(async () => {
       const B = window.Blinded;
       const template = B.state.templates[0];
@@ -3954,7 +3982,7 @@ try {
         Math.abs(swapped.after.bar - swapped.before.bar) < 0.005
         && swapped.after.marks === swapped.before.marks, JSON.stringify(swapped));
     }
-  }
+  });
 
   // ---------- looking again where nothing was found ----------
   //
@@ -3970,7 +3998,7 @@ try {
   // document. What stays here for a word with no mark anywhere is the gate
   // itself: dropping it to 0.22 is what roughly doubles the work, so it is
   // spent only where there is nothing to lose and something to find.
-  {
+  await part("looking again where nothing was found", async () => {
     const deep = await page.evaluate(async () => {
       const B = window.Blinded;
       const was = B.state.terms.slice();
@@ -3986,7 +4014,7 @@ try {
       deep.deepened.includes('Qzzxwvunlikely'), JSON.stringify(deep));
     check('and a word that was found is left alone',
       !deep.deepened.includes('Jane') || deep.found === 0, JSON.stringify(deep));
-  }
+  });
 
   // ---------- how long a shortlist each pass works from ----------
   //
@@ -3995,7 +4023,7 @@ try {
   // shortlist and never be verified. The check works from a longer one. A
   // picked image does not: raising it there was tried on real documents and
   // made image matching worse, so the two must not drift back together.
-  {
+  await part("how long a shortlist each pass works from", async () => {
     const budgets = await page.evaluate(async () => {
       const IS = window.BlindedImageSearch;
       const real = IS.searchAllParallel;
@@ -4027,7 +4055,7 @@ try {
       !picked || (picked.maxCandidates === undefined
         && picked.perScale === undefined && picked.verifyLimit === undefined),
       JSON.stringify(budgets));
-  }
+  });
 
   // ---------- the near miss, offered as a picture under its word ----------
   //
@@ -4035,7 +4063,58 @@ try {
   // the bar was right about: measured, the true miss scored 0.600 and the
   // false one 0.628. A person can tell instantly, but only by looking, so the
   // closest the check came is cut out of the page and shown.
-  {
+  // ---------- a whole heading does not vouch for one word in it ----------
+  //
+  // The reader can veto a shape hit: where it has read the spot as something
+  // else, the shape matcher does not get to mark it. A host that agrees ends
+  // the argument -- asked about "confidential" where the page says
+  // CONFIDENTIAL, there is nothing to contradict.
+  //
+  // But the text layer hands over runs, not words. Measured on a teaser deck
+  // looking for "Victory": the run "Victory's Monthly Performance in SEA
+  // (Ex-Vietnam)" spans the line, and it was vouching for a shape hit sitting
+  // on "(Ex-Vietnam)" at the far end of it, while the reader's own word box
+  // there said "(Ex-Vietnam)" at confidence 71 and contradicted. "Vietnam"
+  // scores 0.69 against "Victory", over its bar of 0.636, so nothing else was
+  // going to stop it: the word was redacted on the page twice.
+  await part("a whole heading does not vouch for one word in it", async () => {
+    const veto = await page.evaluate(() => {
+      const B = window.Blinded;
+      const hit = { x: 452, y: 602, w: 55, h: 16 };
+      const heading = "Victory\u2019s Monthly Performance in SEA (Ex-Vietnam)";
+      const spread = {
+        ocrText: '(Ex-Vietnam)',
+        ocrPlaced: [{ str: '(Ex-Vietnam)', start: 0, end: 12, confidence: 71,
+          rect: { x: 450, y: 600, w: 64, h: 18 } }],
+        // One run for the whole line, which is what pdf.js hands over.
+        items: [{ str: heading, x: 120, y: 618, w: 400, h: 16 }],
+      };
+      // The same run with no word-level reading under it: nothing contradicts,
+      // so nothing is refused. A veto needs someone to say otherwise.
+      const quiet = { ocrText: '', ocrPlaced: [], items: spread.items };
+      // And the case the agreement rule exists for: a host the same size as
+      // the hit, saying the word, with a longer line across the same spot.
+      const agrees = { ocrText: '', ocrPlaced: [], items: [
+        { str: 'CONFIDENTIAL', x: 100, y: 118, w: 120, h: 16 },
+        { str: 'a longer line of type that crosses the very same place',
+          x: 50, y: 118, w: 600, h: 16 },
+      ] };
+      return {
+        spread: B.readerContradicts(spread, hit, 'Victory'),
+        quiet: B.readerContradicts(quiet, hit, 'Victory'),
+        agrees: B.readerContradicts(agrees,
+          { x: 100, y: 102, w: 120, h: 16 }, 'confidential'),
+      };
+    });
+    check('a word the reader read as something else is refused',
+      veto.spread === true, JSON.stringify(veto));
+    check('even though a run across the line contains the word elsewhere',
+      veto.quiet === false, JSON.stringify(veto));
+    check('while a host the size of the hit still vouches for it',
+      veto.agrees === false, JSON.stringify(veto));
+  });
+
+  await part("the near miss, offered as a picture under its word", async () => {
     const offer = await page.evaluate(async () => {
       const B = window.Blinded;
       const wasTerms = B.state.terms.slice();
@@ -4118,7 +4197,7 @@ try {
       /Nothing resembling it/.test(offer.noneText)
       && offer.noneHasShot === false && offer.noneHasTake === false,
       JSON.stringify(offer));
-  }
+  });
 
   // ---------- what the check looks like while it runs ----------
   //
@@ -4130,7 +4209,7 @@ try {
   // while a second one worked; and the check drew a bar of its own with a
   // sentence beside it, which is a second kind of progress bar for the same
   // kind of waiting.
-  {
+  await part("what the check looks like while it runs", async () => {
     const run = await page.evaluate(async () => {
       const B = window.Blinded;
       const was = B.state.terms.slice();
@@ -4196,7 +4275,7 @@ try {
     check('and nothing of it is left on the page once the check is over',
       run.leftovers === 0 && run.stillSaysChecking === false,
       JSON.stringify(run));
-  }
+  });
 
   // ---------- what counts as already covered ----------
   //
@@ -4211,7 +4290,7 @@ try {
   // same word, which is correct — but the rule that let it would equally have
   // let a large mark for one word bury a small candidate for another, because
   // it measured the overlap against whichever box was smaller.
-  {
+  await part("what counts as already covered", async () => {
     const rules = await page.evaluate(() => {
       const B = window.Blinded;
       const page0 = B.state.pages[0];
@@ -4245,7 +4324,7 @@ try {
     check('and what accounts for it is named, not just flagged',
       typeof rules.sameWordAgain === 'string'
       && rules.sameWordAgain.includes('Singapore'), JSON.stringify(rules));
-  }
+  });
 
   // ---------- what the comprehensive check draws ----------
   //
@@ -4260,7 +4339,7 @@ try {
   // Nothing is lost by capitalising: the letters themselves are found by
   // reading the page, which does not care about case, and this check only runs
   // where the reading could not see.
-  {
+  await part("what the comprehensive check draws", async () => {
     const drawn = await page.evaluate(() => {
       const B = window.Blinded;
       return {
@@ -4277,7 +4356,7 @@ try {
       drawn.already === 'Rolex' && drawn.mixed === 'iPhone', JSON.stringify(drawn));
     check('and an acronym is left alone, having plenty of shape already',
       drawn.acronym === 'TDTC' && drawn.empty === '', JSON.stringify(drawn));
-  }
+  });
 
   // ---------- the sample slide on the front page ----------
   //
@@ -4285,7 +4364,7 @@ try {
   // able to see what it produces without handing one over first. At thumbnail
   // size the labels — which are the whole point — are not readable, so it
   // opens.
-  {
+  await part("the sample slide on the front page", async () => {
     if (await page.isVisible('#view-review')) await newFile();
     await page.waitForSelector('#view-drop:not([hidden])', { timeout: 15000 });
 
@@ -4775,7 +4854,7 @@ try {
       bare.cross === true && bare.corner === true, JSON.stringify(bare));
     check('and a click on the frame around it closes it too',
       bare.frameCloses === true, JSON.stringify(bare));
-  }
+  });
 
   // ---------- pinching the document, and only the document ----------
   //
@@ -4784,7 +4863,7 @@ try {
   // in the viewport tag now, and two fingers on the document drive the
   // document's own zoom instead — the same ladder the buttons use, so a pinch
   // and a button press leave it in the same state.
-  {
+  await part("pinching the document, and only the document", async () => {
     if (await page.isVisible('#view-review')) await newFile();
     await page.waitForSelector('#view-drop:not([hidden])', { timeout: 15000 });
     await page.setInputFiles('#file', fixturePath);
@@ -4916,7 +4995,7 @@ try {
       /user-scalable\s*=\s*no/.test(viewport) && /maximum-scale\s*=\s*1/.test(viewport),
       viewport);
     await page.evaluate(() => window.Blinded.setZoom(1));
-  }
+  });
 
   // ---------- what the bar turned away ----------
   //
@@ -4925,7 +5004,7 @@ try {
   // one nudge of the slider away. The panel could only describe what it found,
   // which is the half that does not help — so the reviewer guessed the bar
   // downwards and re-ran until something appeared.
-  {
+  await part("what the bar turned away", async () => {
     if (await page.isVisible('#view-review')) await newFile();
     await page.waitForSelector('#view-drop:not([hidden])', { timeout: 15000 });
     await page.setInputFiles('#file', logoPath);
@@ -5019,7 +5098,7 @@ try {
       Boolean(standing) && standing.count === quiet.marks, JSON.stringify(quiet));
     check('and offers nothing below it, because there is nothing down there',
       quiet.pips.every(pip => pip.now || pip.bar > quiet.bar), JSON.stringify(quiet));
-  }
+  });
 
   // ---------- a searchable redacted file ----------
   //
@@ -5031,7 +5110,7 @@ try {
   // word under a bar is not in those pixels, so it cannot come back as text.
   // That is the whole safety argument for the feature, and it is what these
   // checks are about.
-  {
+  await part("a searchable redacted file", async () => {
     if (await page.isVisible('#view-review')) await newFile();
     await page.waitForSelector('#view-drop:not([hidden])', { timeout: 15000 });
     await page.setInputFiles('#file', fixturePath);
@@ -5098,7 +5177,7 @@ try {
     })();
     check('and without the option the file has no text layer of its own',
       !/Parkway/i.test(plain), plain.slice(0, 200));
-  }
+  });
 
   // ---------- organising the pages ----------
   //
@@ -5107,7 +5186,7 @@ try {
   // document agree afterwards — a sheet that reorders itself while the pages
   // underneath stay put is the failure that would ship silently, because the
   // thumbnails would look right either way.
-  {
+  await part("organising the pages", async () => {
     if (await page.isVisible('#view-review')) await newFile();
     await page.waitForSelector('#view-drop:not([hidden])', { timeout: 15000 });
     await page.setInputFiles('#file', manyPath);
@@ -5691,7 +5770,7 @@ try {
       for (const sect of document.querySelectorAll('details.sect')) sect.open = true;
       document.getElementById('organisesect').open = false;
     });
-  }
+  });
 
   // ---------- not inside somebody else's page ----------
   //
@@ -5702,7 +5781,7 @@ try {
   // that never leaves the tab either way — it is the chrome around the one
   // decision this tool exists to make, which button the finger lands on and
   // what the screen says is happening.
-  {
+  await part("not inside somebody else's page", async () => {
     // From a page of its own, because the app's own policy says frame-src
     // 'none' — it will not frame anything, this included, so the frame has to
     // be built somewhere that is not Blinded. Driven through Playwright's
@@ -5730,7 +5809,7 @@ try {
       wired.blinded === 'undefined' && wired.drop === false, JSON.stringify(wired));
     check('with a way out to the canonical copy',
       away === 'https://blinded.onrender.com/', String(away));
-  }
+  });
 
   // ---------- one section from the next ----------
   //
@@ -5739,7 +5818,7 @@ try {
   // and Images began. Two cues now, measured rather than eyeballed — the
   // heading sits on a tint, and the rule between sections is darker than the
   // one round the panel.
-  {
+  await part("one section from the next", async () => {
     const bands = await page.evaluate(() => {
       const luminance = colour => {
         const [r, g, b] = colour.match(/\d+/g).map(Number);
@@ -5758,7 +5837,7 @@ try {
       JSON.stringify(bands));
     check('and the rule between sections is darker than the panel’s own edge',
       bands.rule < bands.edge - 8, JSON.stringify(bands));
-  }
+  });
 
   // ---------- a text layer that says it more than once ----------
   //
@@ -5768,7 +5847,7 @@ try {
   // or six times at identical coordinates, so the text layer really did hold
   // twenty-one copies of the name — and the count was reading the file's
   // duplicates as places in the document.
-  {
+  await part("a text layer that says it more than once", async () => {
     if (await page.isVisible('#view-review')) await newFile();
     await page.waitForSelector('#view-drop:not([hidden])', { timeout: 15000 });
     await page.setInputFiles('#file', stackedPath);
@@ -5810,7 +5889,7 @@ try {
     check('the tally says what the page shows', listed.said === '2',
       JSON.stringify(listed));
     check('and its list has a row for each', listed.rows === 2, JSON.stringify(listed));
-  }
+  });
 
   // ---------- the reading is not only for typed words ----------
   //
@@ -5823,7 +5902,7 @@ try {
   // The reading is one job with two customers: a word to find inside the
   // pictures, and every detector, which can only read what the page says once
   // something has read it.
-  {
+  await part("the reading is not only for typed words", async () => {
     if (await page.isVisible('#view-review')) await newFile();
     await page.waitForSelector('#view-drop:not([hidden])', { timeout: 15000 });
     await page.setInputFiles('#file', readablePath);
@@ -5857,7 +5936,7 @@ try {
       JSON.stringify(read));
     check('and the button stops being red once nothing is outstanding',
       read.red === false, JSON.stringify(read));
-  }
+  });
 
   // ---------- a tally row is the mark, not just its page number ----------
   //
@@ -5865,7 +5944,7 @@ try {
   // can carry a dozen marks and the row is about one of them. Hovering the
   // row fills that one on the page, and a cross on the row says no to it
   // without travelling there.
-  {
+  await part("a tally row is the mark, not just its page number", async () => {
     if (await page.isVisible('#view-review')) await newFile();
     await page.waitForSelector('#view-drop:not([hidden])', { timeout: 15000 });
     await page.setInputFiles('#file', fixturePath);
@@ -5946,7 +6025,7 @@ try {
       dropped.dismissedAfter === dropped.dismissedBefore, JSON.stringify(dropped));
 
     await page.evaluate(() => { window.Blinded.state.openTally = null; });
-  }
+  });
 
   // ---------- the sheet under the arrow keys ----------
   //
@@ -5955,7 +6034,7 @@ try {
   // reviewer with nothing selected in the middle of a job: they are working
   // through a document, and an empty selection asks them to find their place
   // again before they can throw away the next one.
-  {
+  await part("the sheet under the arrow keys", async () => {
     if (await page.isVisible('#view-review')) await newFile();
     await page.waitForSelector('#view-drop:not([hidden])', { timeout: 15000 });
     await page.setInputFiles('#file', manyPath);
@@ -6060,7 +6139,7 @@ try {
       window.Blinded.renderSheet();
       document.getElementById('organisesect').open = false;
     });
-  }
+  });
 
   // ---------- turning a page ----------
   //
@@ -6069,7 +6148,7 @@ try {
   // is blind on. The turn has to be real — the pixels themselves — and
   // everything measured against those pixels has to move with them or be
   // withdrawn.
-  {
+  await part("turning a page", async () => {
     if (await page.isVisible('#view-review')) await newFile();
     await page.waitForSelector('#view-drop:not([hidden])', { timeout: 15000 });
     await page.setInputFiles('#file', fixturePath);
@@ -6163,14 +6242,14 @@ try {
       B.state.picked = new Set();
       B.renderSheet();
     });
-  }
+  });
 
   // ---------- notes written on the page ----------
   //
   // One button, and after that the note is its own control: nothing is on
   // screen unless a note is in hand. The checks below are as much about what
   // is absent as about what works.
-  {
+  await part("notes written on the page", async () => {
     const armed = await page.evaluate(() => {
       document.getElementById('page-text').click();
       const tip = document.getElementById('tip');
@@ -6404,7 +6483,7 @@ try {
       for (const sect of document.querySelectorAll('details.sect')) sect.open = true;
       document.getElementById('organisesect').open = false;
     });
-  }
+  });
 
   // ---------- drawing on the page by hand ----------
   //
@@ -6412,7 +6491,7 @@ try {
   // the thing looks appear beside the thing once it exists. Nothing is offered
   // before the first stroke, because before the first stroke there is nothing
   // to offer it about.
-  {
+  await part("drawing on the page by hand", async () => {
     const armed = await page.evaluate(() => {
       document.getElementById('page-draw').click();
       const tip = document.getElementById('tip');
@@ -6695,7 +6774,7 @@ try {
       B.selectInk(null);
       B.renderNotes(B.state.pages[0]);
     });
-  }
+  });
 
   // ---------- zooming keeps you where you were ----------
   //
@@ -6703,7 +6782,7 @@ try {
   // in pixels means something different afterwards. Reported from a real
   // document: on page nine, zoom in, and you are looking at page seven —
   // leaning in to see something closer takes you somewhere else entirely.
-  {
+  await part("zooming keeps you where you were", async () => {
     if (await page.isVisible('#view-review')) await newFile();
     await page.waitForSelector('#view-drop:not([hidden])', { timeout: 15000 });
     await page.setInputFiles('#file', manyPath);
@@ -6743,13 +6822,13 @@ try {
     check('zooming in leaves you on the page you were reading',
       held.zoomedIn === held.before, JSON.stringify(held));
     check('and zooming out too', held.zoomedOut === held.before, JSON.stringify(held));
-  }
+  });
 
   // ---------- a page at a time ----------
   //
   // Scrolling lands somewhere in a page; these land on one, which is what is
   // wanted when the job is "check the next one".
-  {
+  await part("a page at a time", async () => {
     const paging = await page.evaluate(async () => {
       const B = window.Blinded;
       const host = document.getElementById('pages');
@@ -6866,10 +6945,10 @@ try {
       onDown.down !== hovered.rest.down, JSON.stringify({ rest: hovered.rest, onDown }));
     check('and leaves the top half alone',
       onDown.up === hovered.rest.up, JSON.stringify({ rest: hovered.rest, onDown }));
-  }
+  });
 
   // ---------- starting over, from the header ----------
-  {
+  await part("starting over, from the header", async () => {
     const reset = await page.evaluate(() => {
       const button = document.getElementById('reset-top');
       const faq = document.getElementById('faq-open');
@@ -6887,7 +6966,7 @@ try {
     check('on the left of the questions', reset.leftOfTheQuestions === true,
       JSON.stringify(reset));
     check('and it says Reset', reset.says === 'Reset', reset.says);
-  }
+  });
 
   // ---------- a locked file ----------
   //
@@ -6896,7 +6975,7 @@ try {
   // one of these used to be told the file could not be opened, and left to go
   // and strip the password somewhere else — which for a confidential document
   // means uploading it to a stranger, the one thing this tool exists to avoid.
-  {
+  await part("a locked file", async () => {
     if (await page.isVisible('#view-review')) await newFile();
     await page.waitForSelector('#view-drop:not([hidden])', { timeout: 15000 });
     await page.setInputFiles('#file', lockedPath);
@@ -6960,7 +7039,7 @@ try {
     check('without reporting a fault',
       (await page.isVisible('#drop-error')) === false,
       await page.textContent('#drop-error'));
-  }
+  });
 
   // ---------- one control, not two ----------
   //
@@ -7066,7 +7145,7 @@ try {
   // matcher. This is the path a reviewer actually gets, and it has to be
   // exercised end to end: the engine really loads, really reads a rendered
   // page, and the words it read really become marks in the right places.
-  {
+  await part("reading a page, which is now the default", async () => {
     // Earlier sections may have left the document closed, so ask for the drop
     // view rather than assuming which one is showing.
     if (await page.isVisible('#view-review')) await newFile();
@@ -7109,13 +7188,13 @@ try {
     // Not a benchmark, a tripwire: this was eight to ten seconds a page before
     // the engine build was pinned and the reading was split across engines.
     check('reading a page is not pathologically slow', took < 60000, took + 'ms');
-  }
+  });
 
   // ---------- what a reviewer gets without touching anything ----------
   //
   // The markup and the state each used to assert a default of their own, which
   // is two places to disagree about the same thing.
-  {
+  await part("what a reviewer gets without touching anything", async () => {
     if (await page.isVisible('#view-review')) await newFile();
     await page.waitForSelector('#view-drop:not([hidden])');
     await page.setInputFiles('#file', fixturePath);
@@ -7133,7 +7212,7 @@ try {
     check('and there is no way to turn it off', fresh.box === null,
       JSON.stringify(fresh));
     check('reading is what does it', fresh.reading === true, JSON.stringify(fresh));
-  }
+  });
 
   // ---------- the thorough sweep ----------
   //
@@ -7141,7 +7220,7 @@ try {
   // more; instead the whole document can be searched for the shape of each
   // word, and whatever that turns up beyond what the reading found is added as
   // a mark and drawn amber.
-  {
+  await part("the thorough sweep", async () => {
     if (await page.isVisible('#view-review')) await newFile();
     await page.waitForSelector('#view-drop:not([hidden])');
     await page.setInputFiles('#file', readablePath);
@@ -7627,14 +7706,14 @@ try {
       kept.afterRescan === 1, JSON.stringify(kept));
     check('but not the deletion of the word it belongs to',
       kept.afterDelete === 0, JSON.stringify(kept));
-  }
+  });
 
   // ---------- every long pass reports the same way ----------
   //
   // Rendering the pages, reading them, searching them and flattening them for
   // export are four passes over the same document. Each used to announce
   // itself differently, and only one of them had a bar.
-  {
+  await part("every long pass reports the same way", async () => {
     if (await page.isVisible('#view-review')) await newFile();
     await page.waitForSelector('#view-drop:not([hidden])');
 
@@ -7687,7 +7766,7 @@ try {
     check('and no pass announces itself in the old wording',
       !sample.texts.some(t => /Rendering page|Flattening page|Searching for/.test(t)),
       JSON.stringify([...new Set(sample.texts)].slice(0, 4)));
-  }
+  });
 
   // ---------- one bar for both passes ----------
   //
@@ -7695,7 +7774,7 @@ try {
   // but they are two passes over the same document, one after the other. Two
   // bars filling in sequence reads as the first one having lied, so the work
   // is counted once and both legs report into it.
-  {
+  await part("one bar for both passes", async () => {
     if (await page.isVisible('#view-review')) await newFile();
     await page.waitForSelector('#view-drop:not([hidden])');
     await page.setInputFiles('#file', logoPath);
@@ -7743,7 +7822,7 @@ try {
     check('the bar only ever moves forward',
       seen.widths.every((w, i) => i === 0 || w >= seen.widths[i - 1]),
       JSON.stringify(seen.widths));
-  }
+  });
 
   // ---------- the Images hint belongs to the Images section ----------
   //
@@ -7752,7 +7831,7 @@ try {
   // times" underneath a button they had never pressed — a count of something
   // else entirely, in the one place it could only be read as being about an
   // image.
-  {
+  await part("the Images hint belongs to the Images section", async () => {
     if (await page.isVisible('#view-review')) await newFile();
     await page.waitForSelector('#view-drop:not([hidden])');
     await page.setInputFiles('#file', readablePath);
@@ -7786,7 +7865,7 @@ try {
     // What the word search found is reported where words are listed.
     check('the term list is where the word count appears',
       /Jane/.test(after.termCounts), JSON.stringify(after.termCounts));
-  }
+  });
 
   // ---------- changing the terms after a run ----------
   //
@@ -7795,7 +7874,7 @@ try {
   // after a run — or during a pause — has to be matched against every page
   // already read, but those pages must not be read again: on a hundred-page
   // document that would turn a change of mind into another minute of waiting.
-  {
+  await part("changing the terms after a run", async () => {
     if (await page.isVisible('#view-review')) await newFile();
     await page.waitForSelector('#view-drop:not([hidden])');
     await page.setInputFiles('#file', readablePath);
@@ -7842,7 +7921,7 @@ try {
     check('and both terms are now accounted for',
       second.byTerm.every(t => t.marks >= 0) && second.terms.length === 2,
       JSON.stringify(second));
-  }
+  });
 
   // ---------- pages that cannot hide anything ----------
   //
@@ -7852,7 +7931,7 @@ try {
   // it skips nothing, because every page has images, and the asking costs
   // about half a second. That is why the asking stops at the first page that
   // has to be read.
-  {
+  await part("pages that cannot hide anything", async () => {
     if (await page.isVisible('#view-review')) await newFile();
     await page.waitForSelector('#view-drop:not([hidden])');
     await page.setInputFiles('#file', fixturePath);
@@ -7891,7 +7970,7 @@ try {
     const drawn = await page.evaluate(() => window.Blinded.state.pages.map(p => p.couldHideText));
     check('a page with pictures on it is always read',
       drawn.every(v => v === true), JSON.stringify(drawn));
-  }
+  });
 
   // ---------- progress, and stopping to look ----------
   //
@@ -7901,7 +7980,7 @@ try {
   // between pages: what has been read is kept, and carrying on resumes rather
   // than starting again — re-reading would make pausing cost more than
   // waiting, which is no pause at all.
-  {
+  await part("progress, and stopping to look", async () => {
     if (await page.isVisible('#view-review')) await newFile();
     await page.waitForSelector('#view-drop:not([hidden])');
     // Eight pages, because stopping happens between them and the reader runs
@@ -8071,7 +8150,7 @@ try {
       resumed.read === resumed.total, JSON.stringify(resumed));
     check('and finishes the redaction', resumed.applied === true, JSON.stringify(resumed));
     check('which is then recorded as read', resumed.ocrRead === true, JSON.stringify(resumed));
-  }
+  });
 
   // ---------- a second document is a second document ----------
   //
@@ -8082,7 +8161,7 @@ try {
   // came back with the words still on it and no sign that anything was wrong.
   // It took a page refresh to clear, which is not something a reviewer would
   // think to do.
-  {
+  await part("a second document is a second document", async () => {
     if (await page.isVisible('#view-review')) await newFile();
     await page.waitForSelector('#view-drop:not([hidden])');
     await page.setInputFiles('#file', readablePath);
@@ -8114,7 +8193,7 @@ try {
       (window.Blinded.state.pages[0].ocrItems || []).length);
     check('the first document was read', first > 0, String(first));
     check('and so is the second, without a refresh', second > 0, String(second));
-  }
+  });
 
   // ---------- slanted lettering ----------
   //
@@ -8293,7 +8372,7 @@ try {
   // tapped or swiped to trade places. And the frame was built to 100vh, which
   // on a phone is taller than what you can see for as long as the browser's
   // own bar is showing — so the Search and Export buttons sat underneath it.
-  {
+  await part("a phone shows one thing at a time", async () => {
     const phone = await context.newPage();
     await phone.setViewportSize({ width: 390, height: 844 });
     await phone.goto(base);
@@ -8544,7 +8623,7 @@ try {
     }
 
     await phone.close();
-  }
+  });
 
   // And none of it on a screen with room for both.
   {
@@ -8585,7 +8664,7 @@ try {
   // Measured on a sixty page document that was 888 MB of bitmap from a PDF of
   // nineteen kilobytes. Neither fix may touch `source`: that canvas is what a
   // redaction is measured against and what the export flattens.
-  {
+  await part("what is held in memory", async () => {
     if (await page.isVisible('#view-review')) await newFile();
     await page.waitForSelector('#view-drop:not([hidden])', { timeout: 15000 });
     await page.setInputFiles('#file', doublePath);
@@ -8673,7 +8752,7 @@ try {
     });
     check('and giving it up does not collapse the page under the scroll',
       shape.tall === shape.stillTall && shape.tall > 0, JSON.stringify(shape));
-  }
+  });
 
   // ---------- the promise, enforced ----------
   //
@@ -8878,7 +8957,7 @@ try {
   // images". On a document already read there is nothing to read, but every
   // page is still walked to match the word against it, and a bar that names
   // only half of what was asked for reads as the other half being ignored.
-  {
+  await part("the bar names the text work too", async () => {
     if (await page.isVisible('#view-review')) await newFile();
     await page.waitForSelector('#view-drop:not([hidden])', { timeout: 15000 });
     await page.setInputFiles('#file', logoPath);
@@ -8925,7 +9004,7 @@ try {
     // which is the tool's business and not the reviewer's.
     check('and never by the old name for the method',
       !legs.some(l => /reading pages/i.test(l)), JSON.stringify(legs));
-  }
+  });
 
   // ---------- a running check stays on screen ----------
   //
@@ -8937,7 +9016,7 @@ try {
   // On screen now means the foot of the page, where the bars are. The amber
   // panel is where the check is offered and where it reports afterwards; while
   // it runs it has nothing to say, and it used to stay up empty.
-  {
+  await part("a running check stays on screen", async () => {
     if (await page.isVisible('#view-review')) await newFile();
     await page.waitForSelector('#view-drop:not([hidden])', { timeout: 15000 });
     await page.setInputFiles('#file', fixturePath);
@@ -9000,7 +9079,7 @@ try {
     check('and pressing it leaves the check running and on screen',
       during.declined.running === true && during.declined.bar === true,
       JSON.stringify(during));
-  }
+  });
 
   // ---------- what the comprehensive check found outlives a re-search ----------
   //
@@ -9008,7 +9087,7 @@ try {
   // found mark: they answered the search that has just been set aside. What
   // they must not do is go for good. Re-running a check that takes minutes to
   // say the same thing is not a reasonable price for moving a slider.
-  {
+  await part("what the comprehensive check found outlives a re-search", async () => {
     if (await page.isVisible('#view-review')) await newFile();
     await page.waitForSelector('#view-drop:not([hidden])', { timeout: 15000 });
     await page.setInputFiles('#file', fixturePath);
@@ -9083,7 +9162,7 @@ try {
       window.Blinded.state.pages[0].imageHits.filter(m => m.bySweep).length);
     check('deleting the word it belongs to does remove it',
       afterDelete === 0, String(afterDelete));
-  }
+  });
 
   // ---------- the overlay covers the whole search ----------
   //
@@ -9091,7 +9170,7 @@ try {
   // overlay used to be raised inside the reading pass, which lowers it on its
   // way out — so a run that read the pages and then searched them spent the
   // whole second half with nothing on screen at all.
-  {
+  await part("the overlay covers the whole search", async () => {
     if (await page.isVisible('#view-review')) await newFile();
     await page.waitForSelector('#view-drop:not([hidden])', { timeout: 15000 });
     await page.setInputFiles('#file', logoPath);
@@ -9160,7 +9239,7 @@ try {
     // search is not a reason to stop reading the document.
     check('while the dialog never went up over the document',
       overlay.dialog === 0, JSON.stringify(overlay));
-  }
+  });
 
   // ---------- the front page on a laptop ----------
   //
@@ -9220,7 +9299,7 @@ try {
   // stay honest as it is edited. Every peer column keeps a real answer in
   // every row: a blank cell in a comparison reads as "cannot do it", which
   // would be a claim nobody checked.
-  {
+  await part("how it compares", async () => {
     const versus = await page.evaluate(() => {
       const table = document.querySelector('.versus-table');
       if (!table) return null;
@@ -9280,14 +9359,14 @@ try {
       versus && versus.longest <= 60, JSON.stringify(versus && versus.worst));
     check('and does not push the page sideways',
       versus && versus.pageWide <= 0, JSON.stringify(versus && versus.pageWide));
-  }
+  });
 
   // ---------- the front page, read alongside an open document ----------
   //
   // The same page, minus the one thing it must not offer: somewhere to drop a
   // file. An invitation to open a document, shown to someone who has one open,
   // is an invitation to throw their work away.
-  {
+  await part("the front page, read alongside an open document", async () => {
     if (!(await page.isVisible('#view-review'))) {
       await page.setInputFiles('#file', fixturePath);
       await page.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
@@ -9355,7 +9434,7 @@ try {
     const fresh = { drop: await page.isVisible('#drop'), faq: await link('#faq-open') };
     check('with nothing open the drop zone is back',
       fresh.drop === true && fresh.faq.says === 'Q&A', JSON.stringify(fresh));
-  }
+  });
 
   // ---------- Back means back to the tool ----------
   //
@@ -9363,7 +9442,7 @@ try {
   // left the site — and the document lives in the tab and nowhere else, so
   // leaving the site is losing it. Every way out of the tool pushes an entry
   // now, and Back is one of the ways home.
-  {
+  await part("Back means back to the tool", async () => {
     if (!(await page.isVisible('#view-review'))) {
       await page.setInputFiles('#file', fixturePath);
       await page.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
@@ -9404,7 +9483,7 @@ try {
     check('and leaving by the button takes it out again',
       JSON.stringify(home) === JSON.stringify(depth),
       JSON.stringify({ depth, away, home }));
-  }
+  });
 
   // ---------- the detectors, before and after the search ----------
   //
@@ -9416,7 +9495,7 @@ try {
   // And they are off until asked for, so this block asks: every row listed,
   // every one of them a question, which is the state a reviewer who has just
   // ticked the lot is looking at.
-  {
+  await part("the detectors, before and after the search", async () => {
     const readKinds = () => page.evaluate(() => {
       const section = document.getElementById('kindsect');
       const rows = [...document.querySelectorAll('#kinds .kind')];
@@ -9652,10 +9731,10 @@ try {
       bare.hidden === false, JSON.stringify(bare));
     check('and is still there when there is something again',
       bare.backAgain === false, JSON.stringify(bare));
-  }
+  });
 
   // ---------- the foot of the page ----------
-  {
+  await part("the foot of the page", async () => {
     await page.evaluate(() => window.Blinded.state.pages.length
       && document.getElementById('home-top').click());
     await page.waitForSelector('#view-drop:not([hidden])', { timeout: 15000 });
@@ -9706,7 +9785,7 @@ try {
     await page.waitForSelector('#view-review:not([hidden])', { timeout: 15000 });
     check('and so does the browser\u2019s own Back button',
       (await page.isVisible('#view-review')) === true);
-  }
+  });
 
   check('nothing threw in the page', consoleErrors.length === 0, consoleErrors.join(' | '));
 } finally {
@@ -9715,10 +9794,18 @@ try {
 }
 
 console.log('\nBlinded UI test');
+// Said on every run, not only the filtered ones: a suite that quietly stopped
+// running sixty of its sections is the one failure a test suite must not have.
+const partial = skippedParts
+  ? '  ' + skippedParts + ' of ' + partNames.length + ' sections SKIPPED (ONLY='
+    + process.env.ONLY + ') - this is not a full pass'
+  : null;
 if (failures.length) {
   console.error('  ' + failures.length + ' FAILED:');
   for (const f of failures) console.error('    - ' + f);
+  if (partial) console.error(partial);
   console.error('\n  ' + passed + ' checks passed');
   process.exit(1);
 }
+if (partial) console.log(partial);
 console.log('  ' + passed + ' checks passed');
