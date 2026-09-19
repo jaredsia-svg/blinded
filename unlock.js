@@ -142,11 +142,40 @@
 
     priceRows();
 
-    if (!Pay.on) {
+    // Rehearsing a purchase before payment is switched on.
+    //
+    // With `on: false` there is nothing to buy, so the prices are hidden and
+    // Paddle is never loaded. That is right for a visitor and it leaves no
+    // way at all to find out whether buying works -- and the only other way
+    // to find out is to switch payment on, which points every real visitor at
+    // a sandbox checkout and puts a paywall in front of a tool that is still
+    // free. So: the same page, drawn the same way, behind a query nobody
+    // arrives at by accident, saying plainly what it is.
+    //
+    // Somebody who found this and bought a pass would get a working one, for
+    // something they did not need. That is the whole exposure, and it is
+    // smaller than the alternative.
+    const rehearsing = new URLSearchParams(location.search).has('rehearse');
+
+    if (!Pay.on && !rehearsing) {
       say('Blinded is free at every length in this copy. There is nothing to '
         + 'buy.', false);
       el('buylist').hidden = true;
       return;
+    }
+    if (!Pay.on) {
+      // Its own line above the prices rather than the notice slot, because
+      // everything else that happens on this page writes to that slot -- the
+      // Paddle script failing to load was enough to wipe it -- and this one
+      // has to stay on screen for as long as the prices it is explaining.
+      document.body.dataset.rehearsing = 'yes';
+      const note = document.createElement('p');
+      note.className = 'hint warnhint';
+      note.id = 'buyrehearse';
+      note.textContent = 'A rehearsal of the buying page. Blinded is free at '
+        + 'every length in this copy and nobody needs a pass — this is here '
+        + 'so that buying one can be tested before it is switched on.';
+      el('buylist').before(note);
     }
     if (!Pay.paddle.token) {
       say('Buying is not switched on yet.', true);
