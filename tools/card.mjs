@@ -9,6 +9,7 @@
 import { chromium } from 'playwright';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { PITCH } from '../content/pages.mjs';
 
 const root = resolve(new URL('..', import.meta.url).pathname);
 const as64 = name =>
@@ -42,8 +43,8 @@ const html = `<!doctype html><meta charset="utf-8"><style>
     <rect x="16.6" y="8.6" width="3.6" height="6.4" rx="1.5"/>
     <rect x="22.2" y="8.6" width="2" height="6.4" rx="1"/>
   </g></svg> Blinded</div>
-  <p class="claim">Redaction for confidential documents.
-    <b>Nothing is uploaded.</b></p>
+  <p class="claim">${PITCH.card.replace(/ Never uploads\./,
+    ' <b>Never uploads.</b>')}</p>
 </div>
 <div class="pair">
   <div class="one"><div class="cap">Before</div>

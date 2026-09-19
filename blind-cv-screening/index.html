@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="
+  default-src 'self';
+  script-src 'self' 'unsafe-eval';
+  style-src 'self' 'unsafe-inline';
+  img-src 'self' data: blob:;
+  connect-src 'self' blob:;
+  worker-src 'self' blob:;
+  frame-src 'none';
+  object-src 'none';
+  base-uri 'none';
+  form-action 'none'">
+<title>Redact CVs for blind screening – Blinded</title>
+<meta name="description" content="Remove names, photographs, addresses and universities from a pile of CVs so a panel scores the work rather than the person. In the browser, with nothing uploaded.">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="canonical" href="https://blinded.dev/blind-cv-screening/">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Blinded">
+<meta property="og:title" content="Redact CVs for blind screening">
+<meta property="og:description" content="Remove names, photographs, addresses and universities from a pile of CVs so a panel scores the work rather than the person. In the browser, with nothing uploaded.">
+<meta property="og:url" content="https://blinded.dev/blind-cv-screening/">
+<meta property="og:image" content="https://blinded.dev/og.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="stylesheet" href="/app.css">
+<script type="application/ld+json">
+[
+  {
+    "@context": "https://schema.org",
+    "@type": "Article",
+    "headline": "Redact CVs for blind screening",
+    "description": "Remove names, photographs, addresses and universities from a pile of CVs so a panel scores the work rather than the person. In the browser, with nothing uploaded.",
+    "mainEntityOfPage": "https://blinded.dev/blind-cv-screening/",
+    "image": "https://blinded.dev/og.png",
+    "about": {
+      "@type": "SoftwareApplication",
+      "name": "Blinded",
+      "url": "https://blinded.dev/"
+    }
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": [
+      {
+        "@type": "Question",
+        "name": "Do the CVs get uploaded?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "No – which matters more here than almost anywhere, because a CV is somebody’s personal data and you did not ask their permission to send it to a third party. Nothing leaves the machine."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Does it find the name in a designed header?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Yes. Pages are read in the tab, so lettering that exists only as artwork is searched too, and words the reading cannot make out are looked for by shape."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Can I do forty of them?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "One at a time. The terms stay as you go from one file to the next, but each CV names a different person, so each needs its own name typed – which is the part that cannot be automated without guessing who somebody is."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "How do we unblind at the end?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Keep the originals. The labels are consistent within a document, and whoever runs the process holds the mapping – not this tool, which keeps nothing."
+        }
+      }
+    ]
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    "itemListElement": [
+      {
+        "@type": "ListItem",
+        "position": 1,
+        "name": "Blinded",
+        "item": "https://blinded.dev/"
+      },
+      {
+        "@type": "ListItem",
+        "position": 2,
+        "name": "Redact CVs for blind screening",
+        "item": "https://blinded.dev/blind-cv-screening/"
+      }
+    ]
+  }
+]
+</script>
+</head>
+<body class="plainpage">
+
+<header class="top">
+  <div class="wrap top-inner">
+    <a class="mark" href="/">
+      <svg class="markmark" viewBox="0 0 26 15" aria-hidden="true" focusable="false">
+        <g fill="currentColor">
+          <rect width="26" height="6.4" rx="2"/>
+          <rect y="8.6" width="14" height="6.4" rx="2"/>
+          <rect x="16.6" y="8.6" width="3.6" height="6.4" rx="1.5"/>
+          <rect x="22.2" y="8.6" width="2" height="6.4" rx="1"/>
+        </g>
+      </svg> Blinded</a>
+    <p class="claim">Efficient redaction for your most sensitive documents, all done locally.</p>
+    <div class="top-actions">
+      <a class="top-link" href="/premium/">Premium</a>
+      <a class="top-link" href="/faq.html">Q&amp;A</a>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+<article class="view faqmain lander">
+
+  <h1 class="faqtitle">Redact CVs for blind screening</h1>
+  <p class="lede">Blind screening works, and the reason it is rare is that somebody has to do it. Forty CVs, forty different layouts, and every one of them puts the name somewhere else.</p>
+
+  <p class="landgo"><a class="landcta" href="/">Open the tool</a>
+    <span class="landfree">Free, in your browser. Nothing is uploaded.</span></p>
+
+  <figure class="landshot">
+    <div class="landpair">
+      <span><b>Before</b><img src="/gallery/slide-1-original.jpg"
+        alt="Before redaction." loading="lazy" width="1280" height="720"></span>
+      <span><b>After</b><img src="/gallery/slide-1-redacted.jpg"
+        alt="A page before and after: the name, the contact block and the photograph are gone." loading="lazy" width="1280" height="720"></span>
+    </div>
+    <figcaption>A page before and after: the name, the contact block and the photograph are gone.</figcaption>
+  </figure>
+
+  <section class="faq">
+    <h2>Why it is usually done by hand</h2>
+    <p>A CV is a design document. The name is 24-point type in a header, or white on a coloured band, or inside a graphic exported from a design tool with no text in it at all. The photograph is a picture. The address is three lines in a sidebar. A search-and-replace over a folder of PDFs finds some of that and quietly leaves the rest.</p>
+    <p>And the point of the exercise is defeated by one miss. A panel that sees one name has seen a name.</p>
+  </section>
+
+  <section class="faq">
+    <h2>What to take out, and what the panel keeps</h2>
+    <p>Type the candidate’s name once and it goes from the header, the footer, the sidebar and the lettering of any graphic. Tick the detectors for email addresses, phone numbers and street addresses. Draw a box round the photograph.</p>
+    <p>What stays is the work: the employers, the dates, the projects, the results. You decide whether the university and the school stay too – they are the usual argument in blind screening, and this takes no position on it. Type them if you want them gone.</p>
+  </section>
+
+  <section class="faq">
+    <h2>A consistent code, so the panel can still refer to somebody</h2>
+    <p>Turn on labels and each removed name becomes a stable placeholder. The panel can say &quot;[P3] has the stronger delivery record&quot; and the person running the process can map that back afterwards. Without it, forty anonymous CVs are forty documents nobody can discuss.</p>
+  </section>
+
+  <section class="faq">
+    <h2>What blinding cannot do, and should not pretend to</h2>
+    <p>Removing a name removes one signal. A CV still carries a career shape, a set of employers, the language somebody writes in and often a gap that has a reason behind it. Blind screening narrows the gap between candidates; it does not close it, and a process that believes it has been made objective is a process that has stopped watching itself.</p>
+    <p>It is also the easiest half. The hard half is the scoring rubric agreed before anybody reads anything, and no tool supplies that.</p>
+    <p>What this does is make the easy half cheap enough to actually do. The usual reason a panel sees names is not principle, it is that somebody had forty PDFs and an afternoon.</p>
+  </section>
+
+  <section class="faq">
+    <h2>How to do it, in four steps</h2>
+    <ol class="landsteps">
+      <li>Open a CV. Everything happens in the tab.</li>
+      <li>Type the name, and tick the detectors for email, phone and address.</li>
+      <li>Draw a box round the photograph and any personal logo or crest.</li>
+      <li>Turn on labels so the panel can refer to candidates, then Redact and export.</li>
+    </ol>
+  </section>
+
+  <section class="faq">
+    <h2>Who it is for</h2>
+    <p>Hiring managers and recruiters running a structured process, university admissions, grant panels, and anybody who has been asked to score work without knowing whose it is.</p>
+    <p class="landgo"><a class="landcta" href="/">Open the tool</a></p>
+  </section>
+
+  <section class="faq">
+    <h2>Questions</h2>
+    <h3>Do the CVs get uploaded?</h3>
+    <p>No – which matters more here than almost anywhere, because a CV is somebody’s personal data and you did not ask their permission to send it to a third party. Nothing leaves the machine.</p>
+    <h3>Does it find the name in a designed header?</h3>
+    <p>Yes. Pages are read in the tab, so lettering that exists only as artwork is searched too, and words the reading cannot make out are looked for by shape.</p>
+    <h3>Can I do forty of them?</h3>
+    <p>One at a time. The terms stay as you go from one file to the next, but each CV names a different person, so each needs its own name typed – which is the part that cannot be automated without guessing who somebody is.</p>
+    <h3>How do we unblind at the end?</h3>
+    <p>Keep the originals. The labels are consistent within a document, and whoever runs the process holds the mapping – not this tool, which keeps nothing.</p>
+  </section>
+
+  <section class="faq">
+    <h2>Also</h2>
+    <ul class="landalso">
+        <li><a href="/redact-cim/">Redact a CIM without uploading it</a></li>
+        <li><a href="/redact-logos-pitch-deck/">Redact logos in a pitch deck</a></li>
+        <li><a href="/foia-redaction/">FOIA redaction without sending the records anywhere</a></li>
+        <li><a href="/de-identify-scanned-records/">De-identify scanned records</a></li>
+        <li><a href="/redacted-text-still-extractable/">Your redacted text is still extractable. Here is why</a></li>
+        <li><a href="/redact-before-ai/">Redact a PDF before you paste it into ChatGPT or Claude</a></li>
+        <li><a href="/redact-data-room-index/">Redact a data room index</a></li>
+        <li><a href="/redact-board-pack/">Redact a board pack</a></li>
+        <li><a href="/remove-names-photos-reports/">Remove names and faces from photographs in a report</a></li>
+        <li><a href="/redact-bank-statement/">Redact a bank statement</a></li>
+        <li><a href="/faq.html">How it works, in full</a></li>
+        <li><a href="/premium/">What it costs, and what stays free</a></li>
+        <li><a href="https://github.com/jaredsia-svg/blinded" rel="noopener">Read the source on GitHub</a></li>
+        <li><a href="mailto:support@blinded.dev">support@blinded.dev</a></li>
+    </ul>
+  </section>
+
+  <p class="faqback"><a class="faqbackbtn" href="/">Open the tool</a></p>
+
+</article>
+</main>
+
+</body>
+</html>

@@ -73,6 +73,61 @@ pages, this list and the sitemap together.
 - safe to paste into ChatGPT
 - redact before Claude
 
+## [Redact a data room index](https://blinded.dev/redact-data-room-index/)
+
+`/redact-data-room-index/` · 707 words · 4 questions
+
+- redact data room index
+- redact a file list
+- anonymise data room folder structure
+- VDR index redaction
+- redact folder names
+- diligence index redaction
+
+## [Redact a board pack](https://blinded.dev/redact-board-pack/)
+
+`/redact-board-pack/` · 659 words · 4 questions
+
+- redact board pack
+- redact board minutes
+- board papers redaction
+- redact a board deck
+- company filing redaction
+- redact before filing
+
+## [Redact CVs for blind screening](https://blinded.dev/blind-cv-screening/)
+
+`/blind-cv-screening/` · 629 words · 4 questions
+
+- blind CV screening
+- anonymise CVs
+- redact resumes
+- blind recruitment redaction
+- remove names from CVs
+- anonymous shortlisting
+
+## [Remove names and faces from photographs in a report](https://blinded.dev/remove-names-photos-reports/)
+
+`/remove-names-photos-reports/` · 661 words · 4 questions
+
+- remove faces from a report
+- redact photographs in a PDF
+- redact site photos
+- blur faces in a report
+- redact badges and plates
+- anonymise images in a document
+
+## [Redact a bank statement](https://blinded.dev/redact-bank-statement/)
+
+`/redact-bank-statement/` · 675 words · 4 questions
+
+- redact a bank statement
+- hide transactions on a statement
+- redact account number
+- black out bank statement
+- proof of income redaction
+- redact statement for landlord
+
 ## Still to write
 
 Kept here rather than in a head, so the next round starts from a list instead

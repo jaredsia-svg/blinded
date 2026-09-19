@@ -4,7 +4,7 @@
 // so that they can be loaded here without a bundler, the same way the page
 // loads them. tools/uitest.mjs covers the parts that need a real canvas.
 import { faqData, faqIsCurrent } from './faq.mjs';
-import { pages as landers } from '../content/pages.mjs';
+import { pages as landers, PITCH } from '../content/pages.mjs';
 import { renderPage, renderSitemap, renderKeywords } from './pages.mjs';
 
 // The same two answers tools/pages.mjs gives, asked here so a stale page
@@ -2450,6 +2450,26 @@ check('no creation date is carried into the output', !meta.info.CreationDate);
       Boolean(card) && existsSync(join(root, card[1].replace(/^https?:\/\/[^/]+\//, ''))),
       card ? card[1] : 'none');
   }
+  // The one sentence the whole site is sold on, in the two places a search
+  // result and a shared link show it. It lives in content/pages.mjs; these
+  // files are hand-written, so this is what keeps them in step with it.
+  {
+    const said = /<meta name="description" content="([^"]*)"/.exec(index);
+    const shared = /<meta property="og:description" content="([^"]*)"/.exec(index);
+    const unescape = text => text.replace(/&amp;/g, '&').replace(/&quot;/g, '"');
+    check('the front page describes what is distinctive about this',
+      said && unescape(said[1]) === PITCH.short, said ? said[1] : 'none');
+    check('and a shared link says the same thing',
+      shared && unescape(shared[1]) === PITCH.social, shared ? shared[1] : 'none');
+    // Which has to be the three things it actually does, or it is a sentence
+    // about some other product.
+    for (const part of ['by sight', 'completely', 'uploaded']) {
+      check('the claim names "' + part + '"', PITCH.short.includes(part), PITCH.short);
+    }
+    check('and the share card carries it too', PITCH.card.length > 20
+      && /Never uploads/.test(PITCH.card), PITCH.card);
+  }
+
   // Relative URLs are not resolved by the scrapers that read these.
   check('the addresses a scraper is given are absolute',
     [...index.matchAll(/<meta property="og:(image|url)" content="([^"]+)"/g)]

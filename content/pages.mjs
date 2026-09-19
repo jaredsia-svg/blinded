@@ -14,6 +14,30 @@
 
 export const SITE = 'https://blinded.dev';
 
+// The one sentence, in the one place it is written.
+//
+// What is distinctive is not "redacts PDFs" and not "runs in your browser" --
+// plenty of things do each. It is the conjunction: it finds every copy of a
+// thing by sight, including copies no search can reach, and it does that
+// without the file leaving the machine. Anything shorter than that describes
+// something else.
+//
+// The word "only" is a claim about every other product, which is a claim
+// nobody here has checked. It is used where the site sells and avoided where
+// the site explains.
+export const PITCH = {
+  // For a share card, where there is room for one line.
+  card: 'Finds every copy by sight. Deletes it completely. Never uploads.',
+  // For a meta description, where there is room for two sentences and the
+  // first fifteen words are what shows.
+  short: 'The only redactor that finds every copy of a name, a logo or a face '
+    + 'by sight \u2013 in the text, in scans, inside images \u2013 and deletes it '
+    + 'completely. Nothing is uploaded: it all runs in your browser.',
+  // For a social card's subtitle, where the picture carries the proof.
+  social: 'The only redactor that finds every copy of a name, a logo or a face '
+    + 'by sight and deletes it completely. Nothing is uploaded.',
+};
+
 export const pages = [
   {
     slug: 'redact-cim',
@@ -556,4 +580,440 @@ export const pages = [
           + 'all. The reading and matching run in your browser.' },
     ],
   },
-];
+
+  {
+    slug: 'redact-data-room-index',
+    title: 'Redact a data room index',
+    h1: 'Redact a data room index',
+    description: 'A file list gives away the deal before anyone opens a '
+      + 'document. Strip the names out of an index, a folder tree or a '
+      + 'screenshot of one, in your browser.',
+    keywords: ['redact data room index', 'redact a file list',
+      'anonymise data room folder structure', 'VDR index redaction',
+      'redact folder names', 'diligence index redaction'],
+    shot: { slide: 3, alt: 'A list page before and after: the repeated party '
+      + 'name is gone from every line.' },
+    lede: 'The index is the one document in a data room that nobody thinks to '
+      + 'redact, and the one that gives the most away. Four hundred filenames, '
+      + 'each beginning with the target’s name, and a folder tree that spells '
+      + 'out the structure of the deal before a single file is opened.',
+    sections: [
+      { h: 'A file list is four hundred copies of the same word',
+        p: ['Every line begins the same way: the company name, the subsidiary, '
+          + 'the counterparty on a contract, the law firm in a folder of '
+          + 'advice. Redacting that by hand is four hundred rectangles, and '
+          + 'the one you miss is on the page nobody scrolled to.',
+          'It is also rarely a clean PDF. An index is usually exported from '
+          + 'the room as a report, or screenshotted from the browser, which '
+          + 'means the text is a picture and a search finds nothing at all.'] },
+      { h: 'One word, every line, every page',
+        p: ['Type the name once. It is found in the text and in the lettering '
+          + 'of a screenshot, on every page of the list, and counted before '
+          + 'you commit – so you can see whether "Project Falcon" is on nine '
+          + 'lines or nine hundred.',
+          'Turn labels on and each removed name becomes a consistent code. An '
+          + 'index still works as an index: the reader can see that eleven '
+          + 'files belong to the same entity without being told which entity '
+          + 'it is.'] },
+      { h: 'The folder tree, which is a picture',
+        p: ['A screenshot of the room’s own navigation has no text in it '
+          + 'anywhere. It is read here, in the tab, so the names in it are '
+          + 'found the same way as the names in the list – and the room’s logo '
+          + 'in the corner of every screenshot is picked out once with a box '
+          + 'and removed from all of them.'] },
+      { h: 'Check it against the room before you send it',
+        p: ['An index is a promise about what is in the room, and a redacted '
+          + 'index that no longer matches the folders is worse than none: the '
+          + 'first thing anybody does is look for file 214 and find something '
+          + 'else. Export it, open it, and read it as the recipient will – the '
+          + 'line numbers, the dates and the counts should all still be there, '
+          + 'because only the names were asked for.',
+          'Then test it the way a recipient might. Select across a bar and '
+          + 'paste: nothing comes out, because the page was rebuilt rather '
+          + 'than covered. Search the file for one of the names you removed. '
+          + 'That is a two-minute check and it is worth doing on any tool, '
+          + 'including this one.',
+          'Save a draft first. An index goes round more than once – the room '
+          + 'grows, a party drops out, a new adviser is added – and a draft '
+          + 'means the second version is a re-export rather than the whole job '
+          + 'again.'] },
+    ],
+    steps: [
+      'Open the index, the folder listing, or the screenshots of them.',
+      'Type the names: the target, the sponsor, the counterparties, the '
+        + 'advisers.',
+      'Pick out the data room’s own logo or header if it appears on every '
+        + 'page.',
+      'Turn on labels if the list has to stay followable, then Redact and '
+        + 'export.',
+    ],
+    who: 'Bankers preparing a staple or a vendor process, lawyers producing a '
+      + 'privilege log, and anybody sending a contents page to a party who is '
+      + 'not yet allowed to know whose contents they are.',
+    faq: [
+      { q: 'Does the index get uploaded anywhere?',
+        a: 'No. There is no server, and the browser is not permitted to send '
+          + 'the file anywhere at all. It works with the network '
+          + 'disconnected.' },
+      { q: 'Will it find the name in a screenshot of the file tree?',
+        a: 'Yes. Pages are read in the tab, so a name typed once is found in '
+          + 'the lettering of a picture as well as in any real text.' },
+      { q: 'Can I keep the structure but lose the names?',
+        a: 'Yes. Turn on labels and each removed name carries a consistent '
+          + 'code, so the shape of the index survives while the identities do '
+          + 'not.' },
+      { q: 'What about the filenames of the documents themselves?',
+        a: 'Those are in the room rather than in this file. What this handles '
+          + 'is the index, the listing and any screenshot of them – and the '
+          + 'exported file can be renamed on the way out, since a filename is '
+          + 'often the last place a name survives.' },
+    ],
+  },
+
+  {
+    slug: 'redact-board-pack',
+    title: 'Redact a board pack',
+    h1: 'Redact a board pack',
+    description: 'Take the names, the photographs and the customer logos out '
+      + 'of a board pack before it goes to the registrar, an auditor or a new '
+      + 'director. In your browser; nothing is uploaded.',
+    keywords: ['redact board pack', 'redact board minutes',
+      'board papers redaction', 'redact a board deck',
+      'company filing redaction', 'redact before filing'],
+    shot: { slide: 2, alt: 'A page of people before and after: the names and '
+      + 'titles under each photograph are replaced with labelled bars.' },
+    lede: 'A board pack is two hundred pages assembled from eight teams, and '
+      + 'the version that goes outside the room – to a registrar, an auditor, '
+      + 'a prospective director, a regulator – is not the version that went '
+      + 'in.',
+    sections: [
+      { h: 'The problem is that it is eight documents',
+        p: ['A finance deck, a sales deck, an HR paper, the minutes, an '
+          + 'appendix of contracts, the customer slide. Each was made by '
+          + 'somebody else in a different program, and by the time they are '
+          + 'one PDF the text layers are a mixture of real text, exported '
+          + 'artwork and scanned signatures on the resolutions at the back.',
+          'So a search covers some of it and silently misses the rest, and '
+          + 'what it misses is not random – it is precisely the artwork, the '
+          + 'photographs and the signatures.'] },
+      { h: 'One pass over all of it',
+        p: ['A name typed once is found in the minutes, in the lettering of a '
+          + 'chart exported from a spreadsheet, and in the header art of the '
+          + 'section divider. Directors’ photographs, customer logos and the '
+          + 'signature on a resolution are each picked out once with a box and '
+          + 'found everywhere else they appear.',
+          'The detectors catch what nobody thinks to type: the personal mobile '
+          + 'numbers in the contact appendix, the home addresses on a director '
+          + 'consent, the email addresses in a forwarded thread.'] },
+      { h: 'A version you can file',
+        p: ['Each page is rebuilt from pixels on export, so what is covered is '
+          + 'gone rather than hidden – no selecting, no copying, nothing to '
+          + 'recover from the content stream. That is the property a filed '
+          + 'document needs and the one a rectangle drawn over the text does '
+          + 'not have.',
+          'Save a draft before you export. A pack goes round three times '
+          + 'before anybody agrees what leaves, and a draft holds your marks '
+          + 'so the second round is a review rather than a repeat.'] },
+      { h: 'What it will not decide for you',
+        p: ['It does not know what is privileged, what is market-sensitive, or '
+          + 'what your registrar requires to be visible. Those are judgements '
+          + 'about your company and your filing, and the tool takes no view: '
+          + 'it finds and removes what you ask for, and shows you everything '
+          + 'it proposes before a single thing is covered.',
+          'It does not read the minutes for meaning either. A decision '
+          + 'described without naming anybody is a decision that stays in, '
+          + 'however sensitive it is, because nothing here is guessing at '
+          + 'sense. What it is good at is the failure that actually happens in '
+          + 'a two-hundred-page pack: the fourth copy of a name, in the footer '
+          + 'of an appendix somebody else wrote.',
+          'And it keeps nothing. Close the tab and there is no record of the '
+          + 'pack, the names, or that a pack was opened at all.'] },
+    ],
+    steps: [
+      'Open the assembled pack. Every page is rendered in the tab.',
+      'Type the names, and tick the detectors for phone numbers, addresses '
+        + 'and email addresses.',
+      'Pick out the photographs, the customer logos and the signatures.',
+      'Review every mark, save a draft for the next round, then Redact and '
+        + 'export.',
+    ],
+    who: 'Company secretaries, general counsel, and anybody preparing the '
+      + 'version of a board pack that leaves the boardroom.',
+    faq: [
+      { q: 'Is anything sent to a server?',
+        a: 'No. There is no server to send it to, and the page is forbidden by '
+          + 'the browser from sending anything anywhere.' },
+      { q: 'Will it find a name inside a chart or a section divider?',
+        a: 'Yes. Words are searched for in the text, in the lettering of '
+          + 'pictures, and by shape where the reading was defeated by an '
+          + 'unusual typeface.' },
+      { q: 'Can I redact the photographs?',
+        a: 'Yes. Draw a box round one and every other copy of it in the pack '
+          + 'is found, at any size. A photograph that appears once is covered '
+          + 'by drawing on it.' },
+      { q: 'Can I come back to it tomorrow?',
+        a: 'Save a draft: your marks and the words you typed, as a file on '
+          + 'your own machine. It holds the same sensitive material as the '
+          + 'pack, so keep it as carefully.' },
+    ],
+  },
+
+  {
+    slug: 'blind-cv-screening',
+    title: 'Redact CVs for blind screening',
+    h1: 'Redact CVs for blind screening',
+    description: 'Remove names, photographs, addresses and universities from a '
+      + 'pile of CVs so a panel scores the work rather than the person. In the '
+      + 'browser, with nothing uploaded.',
+    keywords: ['blind CV screening', 'anonymise CVs', 'redact resumes',
+      'blind recruitment redaction', 'remove names from CVs',
+      'anonymous shortlisting'],
+    shot: { slide: 1, alt: 'A page before and after: the name, the contact '
+      + 'block and the photograph are gone.' },
+    lede: 'Blind screening works, and the reason it is rare is that somebody '
+      + 'has to do it. Forty CVs, forty different layouts, and every one of '
+      + 'them puts the name somewhere else.',
+    sections: [
+      { h: 'Why it is usually done by hand',
+        p: ['A CV is a design document. The name is 24-point type in a header, '
+          + 'or white on a coloured band, or inside a graphic exported from a '
+          + 'design tool with no text in it at all. The photograph is a '
+          + 'picture. The address is three lines in a sidebar. A '
+          + 'search-and-replace over a folder of PDFs finds some of that and '
+          + 'quietly leaves the rest.',
+          'And the point of the exercise is defeated by one miss. A panel that '
+          + 'sees one name has seen a name.'] },
+      { h: 'What to take out, and what the panel keeps',
+        p: ['Type the candidate’s name once and it goes from the header, the '
+          + 'footer, the sidebar and the lettering of any graphic. Tick the '
+          + 'detectors for email addresses, phone numbers and street '
+          + 'addresses. Draw a box round the photograph.',
+          'What stays is the work: the employers, the dates, the projects, the '
+          + 'results. You decide whether the university and the school stay '
+          + 'too – they are the usual argument in blind screening, and this '
+          + 'takes no position on it. Type them if you want them gone.'] },
+      { h: 'A consistent code, so the panel can still refer to somebody',
+        p: ['Turn on labels and each removed name becomes a stable '
+          + 'placeholder. The panel can say "[P3] has the stronger delivery '
+          + 'record" and the person running the process can map that back '
+          + 'afterwards. Without it, forty anonymous CVs are forty documents '
+          + 'nobody can discuss.'] },
+      { h: 'What blinding cannot do, and should not pretend to',
+        p: ['Removing a name removes one signal. A CV still carries a career '
+          + 'shape, a set of employers, the language somebody writes in and '
+          + 'often a gap that has a reason behind it. Blind screening narrows '
+          + 'the gap between candidates; it does not close it, and a process '
+          + 'that believes it has been made objective is a process that has '
+          + 'stopped watching itself.',
+          'It is also the easiest half. The hard half is the scoring rubric '
+          + 'agreed before anybody reads anything, and no tool supplies that.',
+          'What this does is make the easy half cheap enough to actually do. '
+          + 'The usual reason a panel sees names is not principle, it is that '
+          + 'somebody had forty PDFs and an afternoon.'] },
+    ],
+    steps: [
+      'Open a CV. Everything happens in the tab.',
+      'Type the name, and tick the detectors for email, phone and address.',
+      'Draw a box round the photograph and any personal logo or crest.',
+      'Turn on labels so the panel can refer to candidates, then Redact and '
+        + 'export.',
+    ],
+    who: 'Hiring managers and recruiters running a structured process, '
+      + 'university admissions, grant panels, and anybody who has been asked '
+      + 'to score work without knowing whose it is.',
+    faq: [
+      { q: 'Do the CVs get uploaded?',
+        a: 'No – which matters more here than almost anywhere, because a CV is '
+          + 'somebody’s personal data and you did not ask their permission to '
+          + 'send it to a third party. Nothing leaves the machine.' },
+      { q: 'Does it find the name in a designed header?',
+        a: 'Yes. Pages are read in the tab, so lettering that exists only as '
+          + 'artwork is searched too, and words the reading cannot make out '
+          + 'are looked for by shape.' },
+      { q: 'Can I do forty of them?',
+        a: 'One at a time. The terms stay as you go from one file to the next, '
+          + 'but each CV names a different person, so each needs its own name '
+          + 'typed – which is the part that cannot be automated without '
+          + 'guessing who somebody is.' },
+      { q: 'How do we unblind at the end?',
+        a: 'Keep the originals. The labels are consistent within a document, '
+          + 'and whoever runs the process holds the mapping – not this tool, '
+          + 'which keeps nothing.' },
+    ],
+  },
+
+  {
+    slug: 'remove-names-photos-reports',
+    title: 'Remove names and faces from photographs in a report',
+    h1: 'Remove names and faces from photographs in a report',
+    description: 'Site photographs, screenshots and scanned evidence carry '
+      + 'names, faces, badges and number plates. Find and remove them across a '
+      + 'whole report, in your browser.',
+    keywords: ['remove faces from a report', 'redact photographs in a PDF',
+      'redact site photos', 'blur faces in a report',
+      'redact badges and plates', 'anonymise images in a document'],
+    shot: { slide: 6, alt: 'A page of images before and after, with the '
+      + 'identifying marks removed from each.' },
+    lede: 'An inspection report, an incident file or a site survey is mostly '
+      + 'photographs. Every one of them can carry a face, a name badge, a '
+      + 'number plate, a company logo on a van, or a screen with somebody’s '
+      + 'account open on it.',
+    sections: [
+      { h: 'None of it is text',
+        p: ['A photograph has no text layer, so every tool that works by '
+          + 'searching finds nothing. The work is done by eye, page by page, '
+          + 'and a two-hundred-page survey has four hundred photographs in it.',
+          'Worse, the same thing recurs. The same contractor’s logo is on a '
+          + 'van in thirty photographs; the same badge is on the same person '
+          + 'in twelve; the same screen is photographed from three angles.'] },
+      { h: 'Pick it once, find it everywhere',
+        p: ['Draw a box round the logo on the van and every other copy of it '
+          + 'in the report is found – at any size, and at whatever angle the '
+          + 'photograph presents it, so long as it is recognisably the same '
+          + 'mark. The same for a badge design, a letterhead photographed on a '
+          + 'desk, or a recurring watermark.',
+          'Where something appears once, draw on it. A face, a plate, a '
+          + 'handwritten note on a whiteboard: a box drawn by hand is covered '
+          + 'the same way as one the tool proposed, and is removed from the '
+          + 'pixels the same way on export.'] },
+      { h: 'And the text around the pictures',
+        p: ['The captions, the location, the contractor in the paragraph '
+          + 'underneath: typed once, found everywhere, including in the '
+          + 'lettering of any screenshot pasted in beside the photographs. The '
+          + 'detectors catch the phone numbers and email addresses that arrive '
+          + 'with a photographed business card.'] },
+      { h: 'Check the export, because pictures fail quietly',
+        p: ['Text either matches or it does not. A picture can be matched at '
+          + 'eleven of twelve sizes, and the twelfth is on page 140. So the '
+          + 'list of what was found is the thing to read, not the pages: each '
+          + 'match is listed with the page it is on, and a count per picked '
+          + 'mark, so a logo that turned up thirty times and then stopped is '
+          + 'visible as a number rather than as a page you did not reach.',
+          'When it is exported, open it and scroll it. That sounds like doing '
+          + 'the job twice and is not: you are checking four hundred '
+          + 'photographs for one kind of mistake, having already had the tool '
+          + 'find the thirty copies it was sure about.',
+          'And what is covered really is covered. Select across a bar and '
+          + 'paste – nothing comes out, because the page was rebuilt from '
+          + 'pixels rather than covered with a rectangle laid on top.'] },
+    ],
+    steps: [
+      'Open the report. Every page and every photograph is rendered in the '
+        + 'tab.',
+      'Pick out anything that recurs: a logo, a badge, a watermark, a '
+        + 'letterhead.',
+      'Draw by hand on anything that appears once – a face, a plate, a screen.',
+      'Type the names and tick the detectors for the text around them, then '
+        + 'Redact and export.',
+    ],
+    who: 'Surveyors, inspectors and investigators, insurers handling claim '
+      + 'photographs, journalists publishing evidence, and anybody whose '
+      + 'report is mostly pictures of a real place with real people in it.',
+    faq: [
+      { q: 'Does it find faces on its own?',
+        a: 'No, and it does not claim to. Faces are covered by drawing on '
+          + 'them, or by picking one out if the same person recurs. What is '
+          + 'found automatically is anything that repeats as a recognisable '
+          + 'mark – a logo, a badge, a watermark.' },
+      { q: 'Is the face really removed, or blurred?',
+        a: 'Removed. The page is rebuilt from pixels with the bar drawn into '
+          + 'them, so there is no original underneath. A blur can sometimes be '
+          + 'reversed; this cannot, because the pixels are gone.' },
+      { q: 'What about the photographs’ own metadata?',
+        a: 'The exported file is written fresh from rebuilt pages rather than '
+          + 'edited, so the embedded photographs and whatever they carried do '
+          + 'not travel into it.' },
+      { q: 'Are the images uploaded to be analysed?',
+        a: 'No. Nothing is uploaded and no model is called. The matching runs '
+          + 'in your browser, on your machine.' },
+    ],
+  },
+
+  {
+    slug: 'redact-bank-statement',
+    title: 'Redact a bank statement',
+    h1: 'Redact a bank statement',
+    description: 'Share proof of income or balance without sharing your '
+      + 'account number, your address and every transaction. Done in your '
+      + 'browser – a statement is the last file you should upload.',
+    keywords: ['redact a bank statement', 'hide transactions on a statement',
+      'redact account number', 'black out bank statement',
+      'proof of income redaction', 'redact statement for landlord'],
+    shot: { slide: 3, alt: 'A statement page before and after, with the '
+      + 'account number and the transaction lines covered.' },
+    lede: 'A landlord wants proof you can pay the rent. A lender wants three '
+      + 'months of statements. Neither of them needs your account number, your '
+      + 'card number, or a line-by-line record of where you were every '
+      + 'Saturday night.',
+    sections: [
+      { h: 'This is the worst file to upload',
+        p: ['A bank statement is an account number, a sort code, a full name '
+          + 'and address, and a complete record of somebody’s movements and '
+          + 'habits. Handing that to a free online redaction site – which is a '
+          + 'server you have never heard of, in a country you did not choose – '
+          + 'is a worse exposure than the one you were trying to prevent.',
+          'Nothing here is uploaded. There is no server, the browser is '
+          + 'forbidden from sending the file anywhere, and you can watch that '
+          + 'in the network panel or confirm it by pulling the cable out.'] },
+      { h: 'What to take out',
+        p: ['Type the account number and the sort code once and they go from '
+          + 'the header of every page. The detectors cover the address, the '
+          + 'phone number and any email address. The bank’s own logo stays, '
+          + 'because it is the thing that makes the statement credible.',
+          'For the transactions, draw. A box over a line, or a run of lines, '
+          + 'or a whole column – what is left is the dates, the balance and '
+          + 'the salary credits, which is what was actually asked for.'] },
+      { h: 'Give them the least that answers the question',
+        p: ['Before covering anything, decide what is actually being asked. '
+          + '"Can this person pay the rent" needs the salary credits, the '
+          + 'closing balance and the dates. It does not need the account '
+          + 'number, and it does not need eleven weeks of shopping.',
+          'A lender asking for three months of statements usually does need '
+          + 'the transactions, because they are assessing outgoings – in which '
+          + 'case cover the account number and the address and leave the rest, '
+          + 'rather than sending a document so thoroughly redacted that they '
+          + 'ask for the original.',
+          'If you are not sure, ask them what they need before you start. It '
+          + 'is a better use of five minutes than redacting twice, and a '
+          + 'statement that comes back rejected is one you have to send again '
+          + '– usually less carefully.'] },
+      { h: 'And it has to still look like a statement',
+        p: ['The point of the document is that somebody believes it. Each page '
+          + 'is rebuilt with the bars drawn into the pixels, so the layout, '
+          + 'the bank’s branding and the running balance are exactly as they '
+          + 'were – it reads as a statement with things covered, not as a '
+          + 'document that has been through a machine.',
+          'And what is covered is gone. Whoever receives it cannot select the '
+          + 'bar and read your account number out of the file, which is what '
+          + 'happens with a black rectangle drawn in a PDF editor.'] },
+    ],
+    steps: [
+      'Open the statement. It is read in the tab; nothing is sent anywhere.',
+      'Type the account number and sort code, and tick the detectors for '
+        + 'address and phone number.',
+      'Draw over the transaction lines you are not being asked to prove.',
+      'Check the balance and the dates are still legible, then Redact and '
+        + 'export.',
+    ],
+    who: 'Anybody asked for a statement by a landlord, a lender, an accountant '
+      + 'or a court – and small firms sending statements to a bookkeeper or as '
+      + 'part of a grant application.',
+    faq: [
+      { q: 'Is my statement uploaded?',
+        a: 'No. There is no server. Everything happens in this tab, on your '
+          + 'machine, and the browser is not permitted to send the file '
+          + 'anywhere at all.' },
+      { q: 'Can the recipient recover what I covered?',
+        a: 'No. The page is rebuilt from pixels rather than covered with a '
+          + 'rectangle, so the account number under a bar is not in the file '
+          + 'to recover.' },
+      { q: 'Will it still look like a genuine statement?',
+        a: 'Yes. The layout and the bank’s branding are untouched; only what '
+          + 'you marked is gone.' },
+      { q: 'Can I redact one transaction and keep the rest?',
+        a: 'Yes. Draw a box over any line, or any part of the page, by hand. '
+          + 'Every mark is visible before anything is covered and can be '
+          + 'removed with a click.' },
+    ],
+  },
+]
