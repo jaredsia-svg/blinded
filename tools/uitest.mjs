@@ -8968,11 +8968,21 @@ try {
       return { shown: !line.hidden, text: line.textContent,
                pages: B.state.pages.length };
     });
+    // It used to open with this document's own page count -- "34 pages." --
+    // which told the reviewer a number they could already see and left them
+    // to work out what it meant. What is worth saying is the rule: where the
+    // line is, both prices, and that nothing is asked for until the work is
+    // finished. That last clause is the one that stops the whole thing
+    // reading as a bait.
     check('a long one says what it costs when it opens',
-      told.shown === true && /\d+ pages/.test(told.text)
-        && /free/.test(told.text) && /pass/.test(told.text), JSON.stringify(told));
-    check('naming the length, so the reviewer can tell why',
-      told.text.startsWith(told.pages + ' pages'), JSON.stringify(told));
+      told.shown === true && /pass/i.test(told.text), JSON.stringify(told));
+    check('naming the length the line sits at',
+      told.text.includes('over 20 pages'), JSON.stringify(told));
+    check('and both prices, so neither is a surprise later',
+      told.text.includes('USD 2.99') && told.text.includes('USD 6.99'),
+      JSON.stringify(told));
+    check('and says the money comes after the work, not before it',
+      /before exporting/i.test(told.text), JSON.stringify(told));
 
     // Asked before the Save as box, not after it. Being asked to name a file,
     // choose its options and press Save, and only then being told there is a
@@ -8992,6 +9002,35 @@ try {
     check('and told what it is for and what it costs',
       /free and stays free/.test(asked.body) && asked.prices >= 1,
       JSON.stringify(asked));
+
+    // Choosing the price is the decision, so pressing it is the whole of it.
+    // It used to be: press a price to read it, press Buy a pass, then read
+    // the same two prices on the page that opened and press one again. Three
+    // presses to spend three dollars, and the second reading invited the
+    // reviewer to wonder whether the first one had counted.
+    const oneclick = await paying.evaluate(async () => {
+      const was = window.open;
+      let asked = null;
+      window.open = (url, name) => { asked = { url, name }; return null; };
+      const go = document.querySelector('#paylist button[data-price]');
+      const count = document.querySelectorAll('#paylist button[data-price]').length;
+      if (go) go.click();
+      await new Promise(r => setTimeout(r, 200));
+      window.open = was;
+      return { asked, count, gone: !document.getElementById('paygo'),
+               label: go ? go.textContent : null };
+    });
+    check('every price in the dialog is the button that buys it',
+      oneclick.count >= 2, JSON.stringify(oneclick));
+    check('and there is no second button asking the same question',
+      oneclick.gone === true, JSON.stringify(oneclick));
+    check('pressing one opens the buying page on the price that was pressed',
+      oneclick.asked && /unlock/.test(oneclick.asked.url)
+        && /[?&]price=/.test(oneclick.asked.url), JSON.stringify(oneclick));
+    check('in a window, so the document is not navigated away from',
+      oneclick.asked && oneclick.asked.name === 'blinded-pay',
+      JSON.stringify(oneclick));
+
 
     // Saying no leaves everything where it was. Nothing is lost by declining.
     const declined = await paying.evaluate(async () => {

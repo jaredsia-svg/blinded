@@ -2310,11 +2310,24 @@ body.choosing { -webkit-user-select: none; user-select: none; }
 /* ---------- the one moment money is mentioned ---------- */
 .paylist { margin: 4px 0 0; padding: 0; list-style: none; }
 .paylist li {
-  display: flex; gap: 8px; align-items: baseline; padding: 7px 0;
+  display: flex; gap: 12px; align-items: center; padding: 7px 0;
   border-top: 1px solid var(--line); font-size: 13.5px;
 }
 .paylist b { font-size: 15px; }
 .paylist span { color: var(--ink-soft); }
+/* Each price is the button that buys it, and it is the same button the
+   buying page shows, so the two read as one offer rather than as an offer
+   and then a second offer asking whether you meant it. */
+.payprice {
+  display: flex; align-items: baseline; gap: 8px; flex: none;
+  background: var(--accent); color: #fff; border: 1px solid var(--accent);
+  border-radius: 10px; padding: 10px 16px; font: inherit; font-weight: 600;
+  cursor: pointer;
+}
+.payprice:hover { background: #1a5fd0; }
+.payprice b { font-size: 15px; }
+.payprice span { color: #fff; font-weight: 500; opacity: .85; font-size: 12.5px; }
+.payrowfine { color: var(--ink-soft); font-size: 13px; }
 .payfine { margin: 12px 0 0; }
 .payhave { margin: 14px 0 0; text-align: center; }
 /* Beside the report rather than in front of it: nothing is blocked by it, and
@@ -2335,6 +2348,9 @@ body.choosing { -webkit-user-select: none; user-select: none; }
 .buygo b { font-size: 16px; }
 .buygo span { font-weight: 500; opacity: .85; font-size: 13px; }
 .buyfine { color: var(--ink-soft); font-size: 13px; }
+/* The two lines this page has left, now that the explaining lives on
+   /premium/ where somebody who has not decided yet can find it. */
+.buyaside { margin: 18px 0 0; padding-top: 14px; border-top: 1px solid var(--line); }
 .buysays { border-top: 1px solid var(--line); margin-top: 24px; padding-top: 18px; }
 .buysays h2 { font-size: 15px; margin: 0 0 10px; }
 .buysays ul { margin: 0; padding-left: 18px; }

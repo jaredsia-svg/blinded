@@ -470,10 +470,15 @@
       && !passHeld;
     said.hidden = !on;
     if (!on) return;
-    const pages = state.kind === 'text' ? 1 : state.pages.length;
-    const cheapest = Pay.prices[0];
-    said.textContent = pages + ' pages. Everything here is free; the finished '
-      + 'file needs a pass (' + cheapest.price + ').';
+    // The rule rather than this document's arithmetic. "34 pages" told a
+    // reviewer what they already knew and left them working out what it
+    // implied; the useful sentence is where the line is, what it costs on
+    // either side of it, and -- the part that stops anybody feeling led on --
+    // that nothing is asked for until the work is done.
+    said.textContent = 'Documents over ' + Pay.freePages + ' pages need a '
+      + 'Premium Pass to write the finished file: '
+      + Pay.prices.map(one => one.price + ' for ' + one.label).join(', ')
+      + '. Pay once the redaction is done, just before exporting.';
   }
 
   // A line under the bars, for when the wait itself raises the question.
@@ -7435,19 +7440,27 @@
       const shut = answer => {
         box.hidden = true;
         window.removeEventListener('focus', look);
-        el('paygo').removeEventListener('click', open);
+        el('paylist').removeEventListener('click', buy);
         el('payskip').removeEventListener('click', no);
         el('payx').removeEventListener('click', no);
         el('paycode').removeEventListener('click', typed);
         resolve(answer);
       };
       const no = () => shut(false);
-      const open = () => {
+      // Delegated, because describePay builds these buttons afresh every time
+      // the dialog opens and a listener bound to the old ones would be bound
+      // to nothing.
+      const buy = event => {
+        const go = event.target.closest('button[data-price]');
+        if (!go) return;
         // A window rather than this tab: the document is in this tab and only
         // in this tab, and navigating away from it would throw the work out
         // to go and pay for it.
-        window.open(Pay.where, 'blinded-pay',
-          'width=520,height=760,noopener=no');
+        //
+        // The chosen price travels with it, so the page that opens goes
+        // straight to the checkout instead of asking the same question again.
+        window.open(Pay.where + '?price=' + encodeURIComponent(go.dataset.price),
+          'blinded-pay', 'width=520,height=760,noopener=no');
       };
       // Every time this tab is looked at again, ask whether a pass turned up.
       // The buying window is a separate document and cannot call in here.
@@ -7476,7 +7489,7 @@
             + 'character at either end.');
       };
       window.addEventListener('focus', look);
-      el('paygo').addEventListener('click', open);
+      el('paylist').addEventListener('click', buy);
       el('payskip').addEventListener('click', no);
       el('payx').addEventListener('click', no);
       el('paycode').addEventListener('click', typed);
@@ -7530,16 +7543,31 @@
         + 'have done so far is free and stays free; writing the finished file '
         + 'needs a pass.';
     }
+    // Each price is the button that buys it.
+    //
+    // It used to be a list of prices and then one Buy a pass button, which
+    // opened a page that listed the same two prices and asked again. Three
+    // presses and two readings of the same pair of numbers to spend three
+    // dollars. Choosing the price is the decision; pressing it should be the
+    // whole of it.
     const list = el('paylist');
     if (list) {
       list.textContent = '';
       for (const price of Pay.prices) {
         const row = document.createElement('li');
+        const go = document.createElement('button');
+        go.type = 'button';
+        go.className = 'primary payprice';
+        go.dataset.price = price.id;
         const what = document.createElement('b');
         what.textContent = price.price;
         const how = document.createElement('span');
-        how.textContent = ' for ' + price.label + '. ' + price.note;
-        row.append(what, how);
+        how.textContent = price.label;
+        go.append(what, how);
+        const why = document.createElement('span');
+        why.className = 'payrowfine';
+        why.textContent = price.note;
+        row.append(go, why);
         list.append(row);
       }
     }
