@@ -250,9 +250,10 @@ export const pages = [
           + 'signature, a letterhead or a stamp is picked out with a box and '
           + 'found everywhere else it appears.',
           'There are detectors for the things that leak and that nobody thinks '
-          + 'to type: email addresses, phone numbers, web addresses, street '
-          + 'addresses and postal codes, and dates of birth. Each says how '
-          + 'many it can see before you switch it on.'] },
+          + 'to type: email addresses, phone numbers, web addresses, and '
+          + 'street addresses and postal codes. After a search, one you never '
+          + 'ticked still shows what it found, so the number is there before '
+          + 'you decide to cover it.'] },
       { h: 'Checked before it is committed, and again afterwards',
         p: ['Every proposal is on screen before anything is covered, with the '
           + 'page it is on and a count per term, so a release is reviewed as a '
@@ -345,11 +346,12 @@ export const pages = [
           'Repeating furniture is picked out with a box: the letterhead, the '
           + 'signature, the hospital stamp. One pick finds every copy in the '
           + 'file.',
-          'Dates of birth, phone numbers, addresses and email addresses have '
-          + 'detectors of their own, and names are found by reading the layout '
-          + 'around them -- a title under a name, a "Name:" before it, a '
-          + 'sign-off above it -- rather than by guessing which capitalised '
-          + 'words are people.'] },
+          'Phone numbers, addresses and email addresses have detectors of '
+          + 'their own, and names are found by reading the layout around them '
+          + '-- a title under a name, a "Name:" before it, a sign-off above it '
+          + '-- rather than by guessing which capitalised words are people. A '
+          + 'date is typed rather than detected: written eleven ways across a '
+          + 'chart and a form, it cannot be told from the figures around it.'] },
       { h: 'What it does not do, and why that matters here',
         p: ['It does not decide what counts as an identifier. De-identification '
           + 'standards differ, a study protocol is not a records request, and '
@@ -374,8 +376,8 @@ export const pages = [
     ],
     steps: [
       'Open the record. It is read in the tab, page by page.',
-      'Type the identifiers you know, and tick the detectors for dates of '
-        + 'birth, addresses and phone numbers.',
+      'Type the identifiers you know, dates among them, and tick the '
+        + 'detectors for addresses and phone numbers.',
       'Pick out the signature, the letterhead and any stamp with a box.',
       'Turn on labels if the set has to stay followable, then Redact and '
         + 'export.',

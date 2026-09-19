@@ -2921,6 +2921,50 @@ check('no creation date is carried into the output', !meta.info.CreationDate);
     readable({ made: now - 86400000 }, now) === false);
 }
 
+// ---------- what the writing claims the detectors are ----------
+//
+// The pages said there was a detector for dates of birth. There never was --
+// it went the way of card numbers and bank accounts, for the reason set out
+// in lib/detect.js -- and nobody noticed for months, because a claim in prose
+// has nothing holding it to the code. A reviewer de-identifying a record
+// would have read that, looked for the tick box, and either lost faith in the
+// rest of the page or assumed it was covered. The second one is the dangerous
+// one.
+//
+// So: no sentence anywhere on the site may name a detector that does not
+// exist. Postal codes are deliberately not in this list -- they are not a
+// detector of their own, but the address detector does use one as its anchor,
+// so the pages are right to mention them.
+{
+  const GONE = ['date of birth', 'dates of birth', 'card number', 'card numbers',
+    'bank account', 'bank accounts', 'IP address', 'IP addresses',
+    'national insurance', 'passport number', 'passport numbers'];
+  const site = [['index.html', 'index.html'], ['faq.html', 'faq.html'],
+    ['premium/index.html', 'premium/index.html'],
+    ...landers.map(one => [one.slug, one.slug + '/index.html'])];
+  for (const [where, file] of site) {
+    const path = join(root, file);
+    if (!existsSync(path)) continue;
+    const prose = readFileSync(path, 'utf8')
+      .replace(/<script[\s\S]*?<\/script>/g, ' ')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/\s+/g, ' ');
+    const bad = prose.split(/(?<=[.?!])\s+/)
+      .filter(one => /detector/i.test(one))
+      .filter(one => GONE.some(gone => one.toLowerCase().includes(gone)));
+    check(where + ': claims no detector that does not exist',
+      bad.length === 0, bad.join(' | ').slice(0, 300));
+  }
+
+  // And the other way round: the five that do exist are named on the page
+  // that sets out to list them.
+  const faq = readFileSync(join(root, 'faq.html'), 'utf8').toLowerCase();
+  for (const row of Detect.KINDS) {
+    check('the questions page names the ' + row.kind + ' detector',
+      faq.includes(row.label.toLowerCase().split(' ')[0]), row.label);
+  }
+}
+
 // ---------- report ----------
 
 console.log('\nBlinded self-test');

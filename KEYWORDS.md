@@ -31,7 +31,7 @@ pages, this list and the sitemap together.
 
 ## [FOIA redaction without sending the records anywhere](https://blinded.dev/foia-redaction/)
 
-`/foia-redaction/` · 701 words · 4 questions
+`/foia-redaction/` · 709 words · 4 questions
 
 - local FOIA redaction
 - FOIA redaction software
@@ -42,7 +42,7 @@ pages, this list and the sitemap together.
 
 ## [De-identify scanned records](https://blinded.dev/de-identify-scanned-records/)
 
-`/de-identify-scanned-records/` · 673 words · 4 questions
+`/de-identify-scanned-records/` · 695 words · 4 questions
 
 - de-identify scanned records
 - de-identify medical records
