@@ -1,4 +1,4 @@
-// The prices on the Premium page, written from lib/pay.js.
+// The prices on the License page, written from lib/pay.js.
 //
 // Not typed into the markup. A price list that is edited in one place and not
 // the other is a page that quotes one number and charges another, which is
@@ -10,8 +10,8 @@
   const Pass = window.BlindedPass;
   const el = id => document.getElementById(id);
 
-  function rows() {
-    Pay.renderPrices(el('premprices'));
+  function rows(buyable) {
+    Pay.renderPrices(el('premprices'), { buyable });
   }
 
   async function held() {
@@ -24,7 +24,7 @@
   }
 
   async function start() {
-    rows();
+    rows(Pay.on);
 
     // Nothing is being charged for yet. Saying so is not modesty: a price
     // list on a page for something that is currently free is a page that
@@ -33,23 +33,24 @@
     if (!Pay.on) {
       const now = el('premnow');
       now.textContent = 'Right now every length is free, including export. '
-        + 'The prices below are what a pass will cost when that changes.';
+        + 'The prices below are what a license will cost when that changes.';
       now.hidden = false;
-      // And no button. "Get a pass" for something nobody is charging for is a
-      // button that cannot do what it says.
-      el('prembuy').closest('.landgo').hidden = true;
+      // And the prices are drawn as cards rather than as buttons: a price
+      // that cannot be acted on must not look like it can be pressed.
       return;
     }
 
-    const pass = await held();
-    if (!pass) return;
+    const license = await held();
+    if (!license) return;
     const now = el('premnow');
-    const left = Pass.daysLeft(pass);
-    now.textContent = 'You have a pass' + (left
+    const left = Pass.daysLeft(license);
+    now.textContent = 'You have a license' + (left
       ? ', good for ' + left + (left === 1 ? ' more day.' : ' more days.')
       : '.') + ' Nothing to do.';
     now.hidden = false;
-    el('prembuy').closest('.landgo').hidden = true;
+    // Somebody who already holds one is not shown two buttons offering to
+    // sell them another.
+    rows(false);
   }
 
   start();

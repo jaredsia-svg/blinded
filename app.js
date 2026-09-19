@@ -794,7 +794,10 @@
           heading.replaceWith(demoted);
         }
         const Pay = window.BlindedPay;
-        if (Pay) Pay.renderPrices(host.querySelector('#premprices'));
+        if (Pay) {
+          Pay.renderPrices(host.querySelector('#premprices'),
+            { buyable: Pay.on });
+        }
         // The page's own note and button are decided by its script. Here the
         // same two decisions are made from the same settings.
         const note = host.querySelector('#premnow');
@@ -807,6 +810,21 @@
           go.addEventListener('click', event => {
             event.preventDefault();
             window.open(go.getAttribute('href') || Pay.where, 'blinded-pay',
+              'width=520,height=760,noopener=no');
+          });
+        }
+        // And the prices, which are links on the page this markup came from
+        // and must not behave like links in here. Delegated, because they are
+        // rebuilt every time this view is opened. Without this a reviewer who
+        // pressed a price would watch their document disappear on the way to
+        // the checkout, which is the one thing this view exists to prevent.
+        const prices = host.querySelector('#premprices');
+        if (prices) {
+          prices.addEventListener('click', event => {
+            const go = event.target.closest('a[data-price]');
+            if (!go) return;
+            event.preventDefault();
+            window.open(go.getAttribute('href'), 'blinded-pay',
               'width=520,height=760,noopener=no');
           });
         }

@@ -10604,12 +10604,14 @@ try {
     }
     await page.click('#prem-open');
     await page.waitForSelector('#view-premium:not([hidden])', { timeout: 15000 });
+    // .payprice, shared with the dialog: a row is a link when payment is on
+    // and a plain card when it is not, and both wear the same class.
     await page.waitForFunction(
-      () => document.querySelectorAll('#prem-here .premcard').length > 0,
+      () => document.querySelectorAll('#prem-here .payprice').length > 0,
       undefined, { timeout: 15000 });
     const price = await page.evaluate(() => ({
       says: document.getElementById('prem-open').textContent.trim(),
-      cards: [...document.querySelectorAll('#prem-here .premcard b')]
+      cards: [...document.querySelectorAll('#prem-here .payprice .paycost')]
         .map(one => one.textContent),
       heading: (document.querySelector('#prem-here h1, #prem-here h2') || {}).textContent,
       // Its own page opens with an h1; here it must not, because this is a
@@ -10684,22 +10686,34 @@ try {
     // The one link on that page that goes somewhere. Followed in this tab it
     // closes the document to go and pay for it, which is the exact thing
     // fetching the page in here was meant to avoid -- so it opens a window.
+    // The prices are the way to buy now -- there is no separate Get a
+    // license button -- so payment has to be on before the view is drawn:
+    // a price nobody can act on is rendered as a card, not a link.
+    await page.evaluate(() => { window.BlindedPay.on = true; });
+    await page.evaluate(() => window.Blinded.loadPremium());
+    await page.waitForTimeout(600);
     const buying = await page.evaluate(async () => {
       const B = window.Blinded;
       const was = window.open;
       let asked = null;
       window.open = (url, name) => { asked = { url, name }; return null; };
-      window.BlindedPay.on = true;
-      const go = document.querySelector('#prem-here #prembuy');
+      const go = document.querySelector('#prem-here #premprices a[data-price]');
+      const count = document.querySelectorAll('#prem-here #premprices a[data-price]').length;
       if (go) go.click();
-      await new Promise(r => setTimeout(r, 150));
+      await new Promise(r => setTimeout(r, 200));
       window.open = was;
-      return { asked, here: !document.getElementById('view-premium').hidden,
+      return { asked, count, here: !document.getElementById('view-premium').hidden,
                pages: B.state.pages.length,
                href: go ? go.getAttribute('href') : null };
     });
+    check('each price on the licence page is the button that buys it',
+      buying.count >= 2, JSON.stringify(buying));
     check('the way to buy opens a window rather than navigating',
       buying.asked && /unlock/.test(buying.asked.url), JSON.stringify(buying));
+    // With the price in the URL, so the buying page opens the checkout on it
+    // rather than asking a question that was answered by the press.
+    check('carrying the price that was pressed',
+      buying.asked && /[?&]price=/.test(buying.asked.url), JSON.stringify(buying));
     check('so the document is still open and still on screen',
       buying.here === true && buying.pages > 0, JSON.stringify(buying));
 

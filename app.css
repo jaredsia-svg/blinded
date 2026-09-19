@@ -2436,20 +2436,15 @@ body.choosing { -webkit-user-select: none; user-select: none; }
 }
 /* The two prices, side by side, because the only thing anybody is doing here
    is comparing them. */
-.premcards {
-  display: grid; gap: 12px; margin: 20px 0 12px;
-  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
-}
-.premcard {
-  background: #f4f6fa; border: 1px solid var(--line);
-  border-radius: var(--radius); padding: 16px 18px;
-}
-.premcard b { display: block; font-size: 24px; letter-spacing: -0.02em; }
-.premcard span { display: block; margin-top: 2px; font-size: 13.5px; font-weight: 600; }
-.premcard i {
-  display: block; margin-top: 8px; font-style: normal;
-  font-size: 12.5px; color: var(--ink-soft);
-}
+/* One under the other, the full width of the column, because each one is
+   now the button that buys it rather than a card to be compared and then
+   acted on somewhere else. Side by side they were two things to read before
+   finding the thing to press. */
+.premcards { display: grid; gap: 10px; margin: 20px 0 12px; }
+/* The rows are .payprice, shared with the tool's dialog. A link rather than
+   a button here, so it behaves like one: the tool intercepts it and opens a
+   window, because there a document is open and must not be navigated from. */
+a.payprice { text-decoration: none; color: var(--ink); }
 .premfree { margin: 0 0 18px; font-size: 13px; color: var(--ink-soft); max-width: 60ch; }
 /* Three things worth knowing, read across rather than down a list. */
 .premfacts {
