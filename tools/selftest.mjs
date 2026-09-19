@@ -2470,6 +2470,29 @@ check('no creation date is carried into the output', !meta.info.CreationDate);
       && /Never uploads/.test(PITCH.card), PITCH.card);
   }
 
+  // What a search result actually has room for.
+  //
+  // A description of 194 characters is a description of 160 characters
+  // followed by a sentence nobody sees, and the part that gets cut is the
+  // end -- which is where the second half of the claim was.
+  {
+    const TITLE = 62;
+    const DESC = 160;
+    const shown = [['index.html', index], ['faq.html', readFileSync(join(root, 'faq.html'), 'utf8')],
+      ...landers.map(one => [one.slug,
+        readFileSync(join(root, one.slug, 'index.html'), 'utf8')])];
+    for (const [where, page] of shown) {
+      const title = /<title>([^<]*)<\/title>/.exec(page);
+      const desc = /<meta name="description" content="([^"]*)"/.exec(page);
+      check(where + ': its title fits in a search result',
+        title && title[1].length <= TITLE,
+        title ? title[1].length + ' chars: ' + title[1] : 'no title');
+      check(where + ': and so does its description',
+        desc && desc[1].length <= DESC,
+        desc ? desc[1].length + ' chars' : 'no description');
+    }
+  }
+
   // Relative URLs are not resolved by the scrapers that read these.
   check('the addresses a scraper is given are absolute',
     [...index.matchAll(/<meta property="og:(image|url)" content="([^"]+)"/g)]

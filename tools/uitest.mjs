@@ -10415,12 +10415,19 @@ try {
       says: document.getElementById('prem-open').textContent.trim(),
       cards: [...document.querySelectorAll('#prem-here .premcard b')]
         .map(one => one.textContent),
-      heading: (document.querySelector('#prem-here h1') || {}).textContent,
+      heading: (document.querySelector('#prem-here h1, #prem-here h2') || {}).textContent,
+      // Its own page opens with an h1; here it must not, because this is a
+      // view of a document that already has one and two h1s are two answers
+      // to "what is this page".
+      ownH1: document.querySelectorAll('#prem-here h1').length,
+      pageH1s: document.querySelectorAll('h1').length,
       // Nothing about the document went anywhere to get this.
       pages: window.Blinded.state.pages.length,
     }));
     check('the header opens what a pass costs', price.says === 'Premium'
       && /Premium/.test(price.heading || ''), JSON.stringify(price));
+    check('and it does not bring a second top-level heading with it',
+      price.ownH1 === 0 && price.pageH1s === 1, JSON.stringify(price));
 
     // The wordmark. It is the way to the front page from everywhere else, and
     // on the front page it is the name of the thing rather than a way to it.

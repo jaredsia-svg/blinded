@@ -30,9 +30,12 @@ export const PITCH = {
   card: 'Finds every copy by sight. Deletes it completely. Never uploads.',
   // For a meta description, where there is room for two sentences and the
   // first fifteen words are what shows.
+  // Under 160 characters, because that is where a search result stops and
+  // the rest is a sentence nobody reads. The two claims have to both survive
+  // the cut: found by sight, and never uploaded.
   short: 'The only redactor that finds every copy of a name, a logo or a face '
-    + 'by sight \u2013 in the text, in scans, inside images \u2013 and deletes it '
-    + 'completely. Nothing is uploaded: it all runs in your browser.',
+    + 'by sight and deletes it completely. Nothing is uploaded \u2013 it runs in '
+    + 'your browser.',
   // For a social card's subtitle, where the picture carries the proof.
   social: 'The only redactor that finds every copy of a name, a logo or a face '
     + 'by sight and deletes it completely. Nothing is uploaded.',
@@ -45,7 +48,7 @@ export const pages = [
     h1: 'Redact a CIM without uploading it',
     description: 'Strip names, logos and signatures out of a confidential '
       + 'information memorandum in your browser. The file never leaves your '
-      + 'machine, so nothing goes to a server you would have to explain.',
+      + 'machine.',
     keywords: ['redact CIM', 'redact CIM without uploading',
       'confidential information memorandum redaction', 'teaser redaction',
       'redact a deal document', 'diligence pack redaction'],
@@ -129,8 +132,8 @@ export const pages = [
     title: 'Redact logos in a pitch deck',
     h1: 'Redact logos in a pitch deck',
     description: 'Remove a customer logo wall, a sponsor mark or a partner '
-      + 'badge from every slide at once. Pick one, and every other copy is '
-      + 'found at any size or colour, in the browser.',
+      + 'badge from every slide at once. Pick one; every other copy is found, '
+      + 'at any size.',
     keywords: ['redact logos in a pitch deck', 'logo redaction without upload',
       'remove logos from a presentation', 'customer logo wall redaction',
       'anonymise a deck'],
@@ -404,9 +407,9 @@ export const pages = [
     slug: 'redacted-text-still-extractable',
     title: 'Redacted text is still extractable. Here is why',
     h1: 'Your redacted text is still extractable. Here is why',
-    description: 'A black rectangle drawn over a PDF is a drawing on top of '
-      + 'the words, not a removal of them. What went wrong, how to check your '
-      + 'own file, and what actually works.',
+    description: 'A black rectangle drawn over a PDF sits on top of the '
+      + 'words rather than removing them. What went wrong, and how to check '
+      + 'your own file.',
     keywords: ['redacted text still selectable', 'black box PDF still copyable',
       'Acrobat redaction still extractable', 'redaction failure PDF',
       'how to properly redact a PDF', 'recover redacted text'],
@@ -490,11 +493,11 @@ export const pages = [
 
   {
     slug: 'redact-before-ai',
-    title: 'Redact a PDF before you paste it into ChatGPT or Claude',
+    title: 'Redact a PDF before you paste it into ChatGPT',
     h1: 'Redact a PDF before you paste it into ChatGPT or Claude',
     description: 'Strip names, logos and personal data out of a document '
       + 'before it goes to a model, with labels that keep the sentence '
-      + 'readable. Done in your browser, so the unredacted file never leaves.',
+      + 'readable. Nothing is uploaded.',
     keywords: ['redact PDF before ChatGPT', 'redact document before AI',
       'anonymise a document for an LLM', 'remove PII before uploading to AI',
       'safe to paste into ChatGPT', 'redact before Claude'],
@@ -675,8 +678,8 @@ export const pages = [
     title: 'Redact a board pack',
     h1: 'Redact a board pack',
     description: 'Take the names, the photographs and the customer logos out '
-      + 'of a board pack before it goes to the registrar, an auditor or a new '
-      + 'director. In your browser; nothing is uploaded.',
+      + 'of a board pack before it goes to a registrar, an auditor or a new '
+      + 'director. Nothing is uploaded.',
     keywords: ['redact board pack', 'redact board minutes',
       'board papers redaction', 'redact a board deck',
       'company filing redaction', 'redact before filing'],
@@ -762,9 +765,9 @@ export const pages = [
     slug: 'blind-cv-screening',
     title: 'Redact CVs for blind screening',
     h1: 'Redact CVs for blind screening',
-    description: 'Remove names, photographs, addresses and universities from a '
-      + 'pile of CVs so a panel scores the work rather than the person. In the '
-      + 'browser, with nothing uploaded.',
+    description: 'Remove names, photographs and addresses from a pile of CVs '
+      + 'so a panel scores the work rather than the person. Nothing is '
+      + 'uploaded.',
     keywords: ['blind CV screening', 'anonymise CVs', 'redact resumes',
       'blind recruitment redaction', 'remove names from CVs',
       'anonymous shortlisting'],
@@ -846,9 +849,9 @@ export const pages = [
     slug: 'remove-names-photos-reports',
     title: 'Remove names and faces from photographs in a report',
     h1: 'Remove names and faces from photographs in a report',
-    description: 'Site photographs, screenshots and scanned evidence carry '
-      + 'names, faces, badges and number plates. Find and remove them across a '
-      + 'whole report, in your browser.',
+    description: 'Site photographs and scanned evidence carry names, faces, '
+      + 'badges and number plates. Find and remove them across a whole report, '
+      + 'in your browser.',
     keywords: ['remove faces from a report', 'redact photographs in a PDF',
       'redact site photos', 'blur faces in a report',
       'redact badges and plates', 'anonymise images in a document'],
@@ -934,8 +937,8 @@ export const pages = [
     title: 'Redact a bank statement',
     h1: 'Redact a bank statement',
     description: 'Share proof of income or balance without sharing your '
-      + 'account number, your address and every transaction. Done in your '
-      + 'browser – a statement is the last file you should upload.',
+      + 'account number, your address and every transaction. Nothing is '
+      + 'uploaded.',
     keywords: ['redact a bank statement', 'hide transactions on a statement',
       'redact account number', 'black out bank statement',
       'proof of income redaction', 'redact statement for landlord'],

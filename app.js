@@ -807,6 +807,16 @@
         for (const one of [...article.children]) {
           host.append(document.importNode(one, true));
         }
+        // Its heading is an h1 on its own page and must not be one here:
+        // this is a view of a document that already has a heading, and two
+        // h1s are two answers to "what is this page".
+        const heading = host.querySelector('h1');
+        if (heading) {
+          const demoted = document.createElement('h2');
+          demoted.className = heading.className;
+          demoted.textContent = heading.textContent;
+          heading.replaceWith(demoted);
+        }
         const Pay = window.BlindedPay;
         if (Pay) Pay.renderPrices(host.querySelector('#premprices'));
         // The page's own note and button are decided by its script. Here the

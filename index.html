@@ -34,8 +34,8 @@
   object-src 'none';
   base-uri 'none';
   form-action 'none'">
-<title>Blinded – Efficient redaction for your most sensitive documents, all done locally</title>
-<meta name="description" content="The only redactor that finds every copy of a name, a logo or a face by sight – in the text, in scans, inside images – and deletes it completely. Nothing is uploaded: it all runs in your browser.">
+<title>Blinded – redact a PDF without uploading it</title>
+<meta name="description" content="The only redactor that finds every copy of a name, a logo or a face by sight and deletes it completely. Nothing is uploaded – it runs in your browser.">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <!-- One address. The app was also being served from GitHub Pages, which is two
      origins for one program and two sets of response headers to keep right;
@@ -72,7 +72,7 @@
   "url": "https://blinded.dev/",
   "applicationCategory": "SecurityApplication",
   "operatingSystem": "Any browser",
-  "description": "The only redactor that finds every copy of a name, a logo or a face by sight – in the text, in scans, inside images – and deletes it completely. Nothing is uploaded: it all runs in your browser.",
+  "description": "The only redactor that finds every copy of a name, a logo or a face by sight and deletes it completely. Nothing is uploaded – it runs in your browser.",
   "featureList": [
     "Runs entirely in the browser; the document is never uploaded",
     "Finds a typed word in the text and inside pictures and scans",
@@ -546,7 +546,10 @@
         <!-- Stands in for the four sections while the sheet has the panel.
              Filled from their own headings in script, so renaming one does
              not leave this saying something that is no longer true. -->
+        <!-- Its words are written when it is shown, and it is hidden until
+             then; the label is what names it in the meantime. -->
         <button type="button" id="sectroll" class="sectroll" hidden
+          aria-label="Show the other sections again"
           aria-controls="organisesect"></button>
 
         <details class="sect" id="textsect" open>
@@ -763,7 +766,10 @@
 
 <section id="view-faq" class="view faqmain" hidden>
 
-  <h1 class="faqtitle">Q&amp;A</h1>
+  <!-- An h2, not an h1. These are views of one document and it already has a
+       heading; two h1s in one page is two answers to "what is this page".
+       faq.html, which is a document of its own, keeps its own h1. -->
+  <h2 class="faqtitle">Q&amp;A</h2>
 
   <!-- Filled from faq.html, which is the page a search engine reads and the
        page a reader can link to. The questions used to be written out here as
@@ -941,7 +947,8 @@
           <path d="M15 5l-7 7 7 7"/>
         </svg>
       </button>
-      <div class="samplestage"><img id="samplebig" src="gallery/slide-1-redacted.jpg" alt="" draggable="false"></div>
+      <div class="samplestage"><img id="samplebig" src="gallery/slide-1-redacted.jpg" draggable="false"
+        alt="A slide after redaction: the names and logos on it are gone."></div>
       <button type="button" class="bigedge right" id="big-on" aria-label="The next slide">
         <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
           <path d="M9 5l7 7-7 7"/>
@@ -1054,7 +1061,7 @@
 <script src="lib/pass.js?v=9a72ccda"></script>
 <script src="lib/pay.js?v=0c605ea5"></script>
 <script src="lib/render.js?v=65c3fe76"></script>
-<script src="app.js?v=a5e23c76"></script>
+<script src="app.js?v=98f6c2f9"></script>
 <script type="module" src="lib/boot.mjs?v=8b98ed8f"></script>
 </body>
 </html>
