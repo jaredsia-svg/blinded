@@ -83,13 +83,14 @@
   "isAccessibleForFree": true
 }
 </script>
-<link rel="stylesheet" href="app.css?v=5b35a258">
+<link rel="stylesheet" href="app.css?v=f40783d9">
 </head>
 <body>
 
 <header class="top">
   <div class="wrap top-inner">
-    <div class="mark">
+    <button type="button" class="mark" id="home-mark"
+      title="Back to the front page" aria-label="Back to the front page">
       <!-- Two lines of a redacted paragraph, the second coming apart at its
            end: what a bar covers here is taken away rather than hidden, so the
            line does not end in a neat block. Solid shapes only – a fade made
@@ -101,23 +102,25 @@
           <rect x="16.6" y="8.6" width="3.6" height="6.4" rx="1.5"/>
           <rect x="22.2" y="8.6" width="2" height="6.4" rx="1"/>
         </g>
-      </svg> Blinded</div>
+      </svg> Blinded</button>
     <p class="claim" id="claim">Efficient redaction for your most sensitive documents, all done locally.</p>
     <div class="top-actions">
-      <!-- Only once there is something to start over from. -->
+      <!-- Two shapes of header, and which one you get is whether a document
+           is open.
+
+           With none, these are the pages of a site and you move between them:
+           Premium, Q&A, and the mark at the top left to come back. There is
+           nothing to go "back to the tool" to.
+
+           With a document open, everything else is a detour, and the only
+           thing worth offering is the way back to it. Reset stays while the
+           document is actually on screen; Home is gone, because the mark does
+           that and a header with two ways home is a header explaining
+           itself. -->
       <button type="button" class="top-link" id="reset-top" hidden>Reset</button>
-      <!-- The front page, read while a document is open. It is the same page
-           without the place to drop one, since there is already a document and
-           an invitation to replace it is the last thing this should offer. -->
-      <button type="button" class="top-link" id="home-top" hidden>Home</button>
-      <!-- A page, not a view: what a pass costs is something somebody sends
-           to a colleague or reads before they ever open a document, so it
-           needs an address. It is a link rather than a button for the same
-           reason, and it opens in its own tab so a document already open in
-           this one is not thrown away to go and read about pricing. -->
-      <a class="top-link" href="/premium/" target="_blank" rel="noopener"
-        id="prem-open">Premium</a>
+      <button type="button" class="top-link" id="prem-open">Premium</button>
       <button type="button" class="top-link" id="faq-open">Q&amp;A</button>
+      <button type="button" class="top-link" id="back-top" hidden>Back to the tool</button>
     </div>
   </div>
 </header>
@@ -742,6 +745,14 @@
     </div>
   </section>
 
+<!-- What a pass costs, pulled in from /premium/ the same way the questions
+     are: one copy of the words, at an address that can be linked to and
+     indexed, and opening it never navigates away from a document that exists
+     nowhere but this tab. -->
+<section id="view-premium" class="view faqmain lander" hidden>
+  <div id="prem-here"></div>
+</section>
+
 <section id="view-faq" class="view faqmain" hidden>
 
   <h1 class="faqtitle">Q&amp;A</h1>
@@ -1033,9 +1044,9 @@
 <script src="lib/pdfwrite.js?v=4b977425"></script>
 <script src="lib/pdfread.js?v=ca229552"></script>
 <script src="lib/pass.js?v=9a72ccda"></script>
-<script src="lib/pay.js?v=2d41e86b"></script>
+<script src="lib/pay.js?v=ae367196"></script>
 <script src="lib/render.js?v=65c3fe76"></script>
-<script src="app.js?v=fc95024e"></script>
+<script src="app.js?v=aacbc91b"></script>
 <script type="module" src="lib/boot.mjs?v=8b98ed8f"></script>
 </body>
 </html>

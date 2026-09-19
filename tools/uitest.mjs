@@ -256,6 +256,13 @@ page.click = async (selector, options) => {
   return rawClick(selector, options);
 };
 
+// Which button opens or closes the questions depends on whether a document is
+// open. With one, the pages are out of the header and the only thing in it is
+// the way back -- so a suite that always presses the same button is a suite
+// that presses a hidden one and waits thirty seconds to say so.
+const toggleFaq = async () =>
+  page.click(await page.isVisible('#back-top') ? '#back-top' : '#faq-open');
+
 const consoleErrors = [];
 page.on('pageerror', e => consoleErrors.push(String(e)));
 page.on('console', m => { if (m.type() === 'error') consoleErrors.push(m.text()); });
@@ -9355,7 +9362,7 @@ try {
   check('it is a button, not a link that would unload the document',
     headerLink && headerLink.tag === 'BUTTON', JSON.stringify(headerLink));
 
-  await page.click('#faq-open');
+  await toggleFaq();
   await page.waitForSelector('#view-faq:not([hidden])', { timeout: 15000 });
   // The questions are fetched from faq.html now -- one copy, at an address a
   // reader can link to and a crawler can index -- so the view is a heading
@@ -9385,17 +9392,25 @@ try {
       openSource: /source-available rather than open source/i.test(document.body.textContent)
         && /PolyForm Noncommercial License 1\.0\.0/.test(document.body.textContent)
         && !/free and open source/i.test(document.body.textContent),
-      back: !!document.getElementById('faq-back-bottom'),
-      header: document.getElementById('faq-open').textContent.trim(),
+      back: !document.querySelector('.faqback').hidden
+        && !!document.getElementById('faq-back-bottom'),
+      header: (document.getElementById('back-top').hidden
+        ? document.getElementById('faq-open')
+        : document.getElementById('back-top')).textContent.trim(),
       title: (document.querySelector('.faqtitle') || {}).textContent,
       // Every policy directive the answer quotes at the reader, so the prose
       // can be held to what the browser is actually told.
       quoted: [...document.querySelectorAll('.faq .ph')]
         .map(el => el.textContent.trim())
         .filter(text => /^[a-z-]+ /.test(text)),
-      // Both doors wear the header's coat.
-      doors: [document.getElementById('faq-open'),
-              document.querySelector('.faqbackbtn')].map(el => {
+      // Both doors wear the header's coat. Which header button is the door
+      // depends on whether a document is open: with one, everything else is
+      // out of the way and the only thing offered is the way back.
+      doors: [document.getElementById('back-top').hidden
+                ? document.getElementById('faq-open')
+                : document.getElementById('back-top'),
+              document.querySelector('.faqback[hidden] .faqbackbtn')
+                ? null : document.querySelector('.faqbackbtn')].map(el => {
         if (!el) return null;
         const s = getComputedStyle(el);
         return { bg: s.backgroundColor, color: s.color, weight: s.fontWeight };
@@ -9435,8 +9450,10 @@ try {
     /back to the tool/i.test(faq.header), faq.header);
 
   // Closing them returns to whatever was open before, which here is whatever
-  // the previous block left behind.
-  await page.click('#faq-open');
+  // the previous block left behind. Which button closes them depends on the
+  // same thing: with a document open the pages are out of the way and the
+  // way back is the only thing in the header.
+  await toggleFaq();
   await page.waitForFunction(
     () => document.getElementById('view-faq').hidden, undefined, { timeout: 15000 });
   check('closing the answers puts the previous view back',
@@ -9458,7 +9475,7 @@ try {
         (n, p) => n + window.Blinded.activeBoxes(p).length, 0),
     }));
 
-    await page.click('#faq-open');
+    await toggleFaq();
     await page.waitForSelector('#view-faq:not([hidden])', { timeout: 15000 });
     check('the review goes out of sight while the answers are open',
       (await page.isVisible('#view-review')) === false);
@@ -9957,63 +9974,87 @@ try {
     }, sel);
 
     const reviewing = {
-      home: await link('#home-top'), reset: await link('#reset-top'),
-      faq: await link('#faq-open'),
+      back: await link('#back-top'), reset: await link('#reset-top'),
+      faq: await link('#faq-open'), prem: await link('#prem-open'),
     };
-    check('with a document open the header offers Home',
-      reviewing.home.hidden === false && reviewing.home.says === 'Home',
-      JSON.stringify(reviewing));
-    check('beside Reset and the questions',
-      reviewing.reset.hidden === false && reviewing.faq.says === 'Q&A',
+    // Home is gone. The mark at the top left does that, and a header carrying
+    // two ways home is a header explaining itself.
+    check('with the document on screen the header offers the pages',
+      reviewing.faq.hidden === false && reviewing.faq.says === 'Q&A'
+        && reviewing.prem.hidden === false, JSON.stringify(reviewing));
+    check('beside Reset, and no way back to where you already are',
+      reviewing.reset.hidden === false && reviewing.back.hidden === true,
       JSON.stringify(reviewing));
 
-    await page.click('#home-top');
+    await page.evaluate(() => document.getElementById('home-mark').click());
     await page.waitForSelector('#view-drop:not([hidden])', { timeout: 15000 });
     const home = {
       drop: await page.isVisible('#drop'),
       pages: await page.evaluate(() => window.Blinded.state.pages.length),
-      home: await link('#home-top'), reset: await link('#reset-top'),
-      faq: await link('#faq-open'),
+      back: await link('#back-top'), reset: await link('#reset-top'),
+      faq: await link('#faq-open'), prem: await link('#prem-open'),
       // The page itself is still there to read.
       versus: await page.isVisible('.versus'),
     };
-    check('Home shows the front page without closing the document',
+    check('the mark shows the front page without closing the document',
       home.pages > 0 && home.versus === true, JSON.stringify(home));
     check('and without a place to drop another one',
       home.drop === false, JSON.stringify(home));
+    // Away from a document that is open, everything else is a detour, and the
+    // one thing worth a place in the header is the way back to it.
     check('the only thing offered there is the way back',
-      home.faq.says === 'Back to the tool' && home.faq.hidden === false,
+      home.back.says === 'Back to the tool' && home.back.hidden === false,
       JSON.stringify(home));
-    check('with no Reset and no Home beside it',
-      home.reset.hidden === true && home.home.hidden === true,
-      JSON.stringify(home));
+    check('with the pages and Reset out of the way',
+      home.reset.hidden === true && home.faq.hidden === true
+        && home.prem.hidden === true, JSON.stringify(home));
 
-    await page.click('#faq-open');
+    await page.click('#back-top');
     await page.waitForSelector('#view-review:not([hidden])', { timeout: 15000 });
     check('and it goes back to the document',
       (await page.isVisible('#view-review')) === true);
 
-    // The questions page answers the same way.
-    await page.click('#faq-open');
-    await page.waitForSelector('#view-faq:not([hidden])', { timeout: 15000 });
-    const asking = {
-      home: await link('#home-top'), reset: await link('#reset-top'),
-      faq: await link('#faq-open'),
-    };
-    check('the questions page offers only the way back too',
-      asking.faq.says === 'Back to the tool' && asking.reset.hidden === true
-        && asking.home.hidden === true, JSON.stringify(asking));
-    await page.click('#faq-open');
-    await page.waitForSelector('#view-review:not([hidden])', { timeout: 15000 });
+    // The questions and the price page answer the same way.
+    for (const [button, view] of [['#faq-open', '#view-faq'],
+                                  ['#prem-open', '#view-premium']]) {
+      await page.click(button);
+      await page.waitForSelector(view + ':not([hidden])', { timeout: 15000 });
+      const asking = {
+        back: await link('#back-top'), reset: await link('#reset-top'),
+        faq: await link('#faq-open'), prem: await link('#prem-open'),
+      };
+      check(view + ' offers only the way back too',
+        asking.back.says === 'Back to the tool' && asking.back.hidden === false
+          && asking.reset.hidden === true && asking.faq.hidden === true
+          && asking.prem.hidden === true, JSON.stringify(asking));
+      await page.click('#back-top');
+      await page.waitForSelector('#view-review:not([hidden])', { timeout: 15000 });
+    }
 
-    // And with no document at all, the front page is the way in again.
+    // And with no document at all, there is nothing to go back to: the pages
+    // are the pages of a site, and the mark is the way between them.
     await page.click('#reset-top');
     await page.waitForSelector('#confirmbox:not([hidden])', { timeout: 15000 });
     await page.click('#confirmyes');
     await page.waitForSelector('#view-drop:not([hidden])', { timeout: 15000 });
-    const fresh = { drop: await page.isVisible('#drop'), faq: await link('#faq-open') };
+    const fresh = { drop: await page.isVisible('#drop'),
+                    faq: await link('#faq-open'), prem: await link('#prem-open'),
+                    back: await link('#back-top') };
     check('with nothing open the drop zone is back',
       fresh.drop === true && fresh.faq.says === 'Q&A', JSON.stringify(fresh));
+    check('and the pages are offered rather than a way back to nothing',
+      fresh.prem.hidden === false && fresh.back.hidden === true,
+      JSON.stringify(fresh));
+
+    // Reading the questions with nothing open is still just reading a page.
+    await toggleFaq();
+    await page.waitForSelector('#view-faq:not([hidden])', { timeout: 15000 });
+    const reading = { back: await link('#back-top'), faq: await link('#faq-open') };
+    check('and reading them offers no way back to a tool nobody has opened',
+      reading.back.hidden === true && reading.faq.says === 'Q&A',
+      JSON.stringify(reading));
+    await toggleFaq();
+    await page.waitForSelector('#view-drop:not([hidden])', { timeout: 15000 });
   });
 
   // ---------- Back means back to the tool ----------
@@ -10029,14 +10070,14 @@ try {
     }
     const opened = await page.evaluate(() => window.Blinded.state.pages.length);
 
-    await page.click('#faq-open');
+    await toggleFaq();
     await page.waitForSelector('#view-faq:not([hidden])', { timeout: 15000 });
     await page.goBack();
     await page.waitForSelector('#view-review:not([hidden])', { timeout: 15000 });
     check('Back from the questions returns to the document',
       (await page.evaluate(() => window.Blinded.state.pages.length)) === opened);
 
-    await page.click('#home-top');
+    await page.evaluate(() => document.getElementById('home-mark').click());
     await page.waitForSelector('#view-drop:not([hidden])', { timeout: 15000 });
     await page.goBack();
     await page.waitForSelector('#view-review:not([hidden])', { timeout: 15000 });
@@ -10052,10 +10093,10 @@ try {
     // test did press it, walked the browser off the page, and left every check
     // after it reading a blank document.
     const depth = await page.evaluate(() => history.state);
-    await page.click('#faq-open');
+    await toggleFaq();
     await page.waitForSelector('#view-faq:not([hidden])', { timeout: 15000 });
     const away = await page.evaluate(() => history.state);
-    await page.click('#faq-open');
+    await toggleFaq();
     await page.waitForSelector('#view-review:not([hidden])', { timeout: 15000 });
     const home = await page.evaluate(() => history.state);
     check('going away puts an entry in history',
@@ -10316,7 +10357,7 @@ try {
   // ---------- the foot of the page ----------
   await part("the foot of the page", async () => {
     await page.evaluate(() => window.Blinded.state.pages.length
-      && document.getElementById('home-top').click());
+      && document.getElementById('home-mark').click());
     await page.waitForSelector('#view-drop:not([hidden])', { timeout: 15000 });
     const foot = await page.evaluate(() => {
       const row = document.querySelector('.foot');
@@ -10353,21 +10394,73 @@ try {
     // an address. And it opens in its own tab -- the document lives in this
     // one and nowhere else, and navigating away to read about pricing would
     // throw it out.
-    const price = await page.evaluate(() => {
-      const link = document.getElementById('prem-open');
-      return link ? { href: link.getAttribute('href'),
-                      tab: link.getAttribute('target'),
-                      safe: (link.getAttribute('rel') || '').includes('noopener'),
-                      says: link.textContent.trim(),
-                      tag: link.tagName } : null;
-    });
-    check('the header offers the price page', price && price.href === '/premium/'
-      && price.says === 'Premium', JSON.stringify(price));
-    check('as a link, so it can be sent to somebody', price && price.tag === 'A',
+    // What a pass costs opens as a view, fetched from /premium/ -- the same
+    // arrangement as the questions, and for the same reason: the words live
+    // once, at an address a crawler can index and somebody can send, and
+    // opening them never navigates away from a document that exists nowhere
+    // but this tab.
+    // From the document, because that is where the pages are offered from:
+    // away from it the header carries the way back and nothing else, which is
+    // the behaviour the block above has just been checking.
+    if (await page.isVisible('#back-top')) {
+      await page.click('#back-top');
+      await page.waitForSelector('#view-review:not([hidden])', { timeout: 15000 });
+    }
+    await page.click('#prem-open');
+    await page.waitForSelector('#view-premium:not([hidden])', { timeout: 15000 });
+    await page.waitForFunction(
+      () => document.querySelectorAll('#prem-here .premcard').length > 0,
+      undefined, { timeout: 15000 });
+    const price = await page.evaluate(() => ({
+      says: document.getElementById('prem-open').textContent.trim(),
+      cards: [...document.querySelectorAll('#prem-here .premcard b')]
+        .map(one => one.textContent),
+      heading: (document.querySelector('#prem-here h1') || {}).textContent,
+      // Nothing about the document went anywhere to get this.
+      pages: window.Blinded.state.pages.length,
+    }));
+    check('the header opens what a pass costs', price.says === 'Premium'
+      && /Premium/.test(price.heading || ''), JSON.stringify(price));
+    // Drawn here rather than taken from the fetched markup: /premium/ writes
+    // its own prices when its script runs, and a script in parsed markup
+    // never runs, so the cards would have arrived empty.
+    check('with the prices actually in it',
+      price.cards.length >= 1 && price.cards.every(one => /\d/.test(one)),
       JSON.stringify(price));
-    check('opening in its own tab, so an open document is not thrown away',
-      price && price.tab === '_blank' && price.safe === true, JSON.stringify(price));
+    check('and the document still open behind it', price.pages > 0,
+      JSON.stringify(price));
 
+    // The one link on that page that goes somewhere. Followed in this tab it
+    // closes the document to go and pay for it, which is the exact thing
+    // fetching the page in here was meant to avoid -- so it opens a window.
+    const buying = await page.evaluate(async () => {
+      const B = window.Blinded;
+      const was = window.open;
+      let asked = null;
+      window.open = (url, name) => { asked = { url, name }; return null; };
+      window.BlindedPay.on = true;
+      const go = document.querySelector('#prem-here #prembuy');
+      if (go) go.click();
+      await new Promise(r => setTimeout(r, 150));
+      window.open = was;
+      return { asked, here: !document.getElementById('view-premium').hidden,
+               pages: B.state.pages.length,
+               href: go ? go.getAttribute('href') : null };
+    });
+    check('the way to buy opens a window rather than navigating',
+      buying.asked && /unlock/.test(buying.asked.url), JSON.stringify(buying));
+    check('so the document is still open and still on screen',
+      buying.here === true && buying.pages > 0, JSON.stringify(buying));
+
+    await page.click('#back-top');
+    await page.waitForSelector('#view-review:not([hidden])', { timeout: 15000 });
+    await page.evaluate(() => { window.BlindedPay.on = false; });
+
+    // Back to the front page, which is where the foot being tested is: the
+    // block above went to the document to reach the header's pages, and the
+    // bug below is specifically about reaching the questions from down here.
+    await page.evaluate(() => document.getElementById('home-mark').click());
+    await page.waitForSelector('#view-drop:not([hidden])', { timeout: 15000 });
     await page.click('#foot-faq');
     await page.waitForSelector('#view-faq:not([hidden])', { timeout: 15000 });
     check('the FAQ link opens the questions',
@@ -10378,7 +10471,7 @@ try {
     // nothing visible, because it went back one entry to the front page,
     // where the button says Back to the tool again. Away is one place now, so
     // one press lands on the document.
-    await page.click('#faq-open');
+    await toggleFaq();
     // Waited for by what becomes visible, not by what becomes hidden: a
     // selector that matches a hidden element still waits for it to be seen,
     // which it never will be.
@@ -10388,7 +10481,7 @@ try {
 
     // And the browser's own Back agrees with the button: one entry to unwind,
     // not two.
-    await page.evaluate(() => document.getElementById('home-top').click());
+    await page.evaluate(() => document.getElementById('home-mark').click());
     await page.waitForSelector('#view-drop:not([hidden])', { timeout: 15000 });
     await page.click('#foot-faq');
     await page.waitForSelector('#view-faq:not([hidden])', { timeout: 15000 });

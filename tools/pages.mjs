@@ -114,7 +114,6 @@ ${mark()} Blinded</a>
     <div class="top-actions">
       <a class="top-link" href="/premium/">Premium</a>
       <a class="top-link" href="/faq.html">Q&amp;A</a>
-      <a class="top-link" href="/">Open the tool</a>
     </div>
   </div>
 </header>

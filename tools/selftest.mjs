@@ -2739,7 +2739,24 @@ check('no creation date is carried into the output', !meta.info.CreationDate);
       ...landers.map(one => [one.slug,
         readFileSync(join(root, one.slug, 'index.html'), 'utf8')])];
     for (const [where, page] of every) {
-      check(where + ': links to the price page', /href="\/premium\/"/.test(page), where);
+      // index.html opens it as a view rather than navigating to it, so what it
+      // carries is the button that does that; everything else links.
+      check(where + ': offers the price page',
+        where === 'index.html' ? /id="prem-open"/.test(page)
+          : /href="\/premium\/"/.test(page), where);
+    }
+
+    // Nowhere offers to open a tool nobody has opened. With no document these
+    // are the pages of a site, and the mark at the top left is the way back;
+    // "Open the tool" in the header of a page somebody landed on from a search
+    // is a button whose meaning depends on state that page cannot see.
+    for (const [where, page] of every) {
+      if (where === 'index.html') continue;
+      const nav = /<div class="top-actions">([\s\S]*?)<\/div>/.exec(page);
+      check(where + ': its header offers pages, not a way back',
+        nav && !/Open the tool|Back to the tool/.test(nav[1]), where);
+      check(where + ': and the mark is the way to the front page',
+        /<a class="mark" href="\/?"/.test(page), where);
     }
 
     // One way to reach a person, on every page that could raise a question.

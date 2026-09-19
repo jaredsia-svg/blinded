@@ -60,7 +60,8 @@
   const Ocr = window.BlindedOcr;
 
   const el = id => document.getElementById(id);
-  const views = { drop: el('view-drop'), review: el('view-review'), faq: el('view-faq') };
+  const views = { drop: el('view-drop'), review: el('view-review'),
+                  faq: el('view-faq'), premium: el('view-premium') };
 
   // A dismissed detection still has to be visible, or the reviewer cannot
   // change their mind — it becomes a dashed outline they can click again.
@@ -678,16 +679,43 @@
     el('drop').hidden = reading;
     if (reading) el('drop-error').hidden = true;
 
-    // Away from the tool — on the questions page or on the front page while a
-    // document waits — there is one thing worth offering, which is the way
-    // back. Reset and Home belong beside the document, not on the pages you
-    // read instead of it: Reset would offer to throw away work the reviewer is
-    // not even looking at, and Home is where they already are.
     if (name === 'faq') loadFaq();
-    const away = name === 'faq' || reading;
-    el('faq-open').textContent = away ? 'Back to the tool' : 'Q\u0026A';
-    el('home-top').hidden = name !== 'review';
+    if (name === 'premium') loadPremium();
+
+    // Two shapes of header, and which one you get is whether a document is
+    // open.
+    //
+    // With none, these are the pages of a site: Premium and Q&A move between
+    // them, the mark at the top left comes back, and there is nothing to go
+    // "back to the tool" to -- offering it would be offering to return
+    // somewhere nobody has been.
+    //
+    // With a document open, everything else is a detour. The one thing worth
+    // a place in the header is the way back to the document, so that is the
+    // only thing in it. Reset stays while the document is actually on screen,
+    // because it acts on what you are looking at; on a page you are reading
+    // instead of it, it would offer to throw away work you cannot see.
+    const holding = hasDocument();
+    const away = name !== 'review';
+    const backOnly = holding && away;
+    el('back-top').hidden = !backOnly;
+    // The same rule at the foot of the questions. With nothing open there is
+    // nothing to go back to, and a button offering to return somewhere nobody
+    // has been is a button that has to be pressed to find out it means the
+    // front page.
+    const bottom = el('faq-back-bottom');
+    if (bottom) bottom.closest('.faqback').hidden = !holding;
+    el('prem-open').hidden = backOnly;
+    el('faq-open').hidden = backOnly;
     el('reset-top').hidden = name !== 'review';
+    // Which page you are on, said on the button that opens it. Without this
+    // the pair reads as two things to go to, one of which you already are.
+    for (const [id, view] of [['prem-open', 'premium'], ['faq-open', 'faq']]) {
+      const button = el(id);
+      if (name === view) button.setAttribute('aria-current', 'page');
+      else button.removeAttribute('aria-current');
+      button.classList.toggle('here', name === view);
+    }
     // Reviewing is a fixed-height layout: the header and the export bar stay
     // put and the panel and the document each scroll on their own. The front
     // page is an ordinary scrolling page, so the class comes and goes with the
@@ -739,6 +767,71 @@
         faqLoaded = null;
       });
     return faqLoaded;
+  }
+
+  // What a pass costs, fetched the same way and for the same reason.
+  //
+  // The prices are drawn here rather than copied out of the fetched markup,
+  // because /premium/ writes its own from lib/pay.js when its script runs --
+  // and a script in parsed markup never runs. Taking the cards as they came
+  // would mean taking two empty boxes.
+  let premLoaded = null;
+
+  function loadPremium() {
+    const host = el('prem-here');
+    if (!host || premLoaded) return premLoaded;
+    premLoaded = fetch('premium/', { credentials: 'omit' })
+      .then(answer => answer.ok ? answer.text()
+        : Promise.reject(new Error('premium/: ' + answer.status)))
+      .then(text => {
+        const page = new DOMParser().parseFromString(text, 'text/html');
+        const article = page.querySelector('article');
+        if (!article) throw new Error('premium/: nothing in it');
+        host.textContent = '';
+        for (const one of [...article.children]) {
+          host.append(document.importNode(one, true));
+        }
+        const Pay = window.BlindedPay;
+        if (Pay) Pay.renderPrices(host.querySelector('#premprices'),
+                                  host.querySelector('#premfree'));
+        // The page's own note and button are decided by its script. Here the
+        // same two decisions are made from the same settings.
+        const note = host.querySelector('#premnow');
+        const go = host.querySelector('#prembuy');
+        // Buying opens a window; it does not navigate. Followed in this tab
+        // that link closes the document to go and pay for it, which is the
+        // exact thing this view exists to avoid -- and the reason the whole
+        // page is fetched in here rather than linked to.
+        if (go) {
+          go.addEventListener('click', event => {
+            event.preventDefault();
+            window.open(go.getAttribute('href') || Pay.where, 'blinded-pay',
+              'width=520,height=760,noopener=no');
+          });
+        }
+        if (Pay && !Pay.on) {
+          if (note) {
+            note.textContent = 'Right now every length is free, including '
+              + 'export. The prices below are what a pass will cost when that '
+              + 'changes.';
+            note.hidden = false;
+          }
+          if (go && go.closest('.landgo')) go.closest('.landgo').hidden = true;
+        }
+      })
+      .catch(() => {
+        host.textContent = '';
+        const said = document.createElement('p');
+        said.className = 'hint';
+        const link = document.createElement('a');
+        link.href = 'premium/';
+        link.textContent = 'Open the page';
+        said.append(document.createTextNode('What it costs could not be '
+          + 'loaded into this view. '), link, document.createTextNode('.'));
+        host.append(said);
+        premLoaded = null;
+      });
+    return premLoaded;
   }
 
   function fail(message) {
@@ -10271,16 +10364,22 @@
     show(away || (hasDocument() ? 'review' : 'drop'));
   });
 
-  el('faq-open').addEventListener('click', () => {
-    // Three jobs, one button, and the label always says which one it is doing:
-    // open the questions, close them, or leave the front page for the document
-    // it was being read alongside.
-    if (!views.faq.hidden) comeBack();
-    else if (views.drop.hidden === false && hasDocument()) comeBack();
-    else goAway('faq');
+  // Each opens its page, or closes it again if you are already there. With a
+  // document open these are not on screen at all -- "Back to the tool" is --
+  // so the only job left here is the toggle.
+  const pageButton = (id, view) => el(id).addEventListener('click', () => {
+    if (!views[view].hidden) comeBack();
+    else goAway(view);
   });
+  pageButton('faq-open', 'faq');
+  pageButton('prem-open', 'premium');
+  el('back-top').addEventListener('click', comeBack);
   el('faq-back-bottom').addEventListener('click', comeBack);
-  el('home-top').addEventListener('click', () => goAway('drop'));
+  // The mark is the way to the front page. It was a Home button beside the
+  // others, which is a header carrying two ways home and explaining neither.
+  el('home-mark').addEventListener('click', () => {
+    if (views.drop.hidden) goAway('drop');
+  });
   el('foot-faq').addEventListener('click', () => goAway('faq'));
 
   el('page-prev').addEventListener('click', () => stepPage(-1));
@@ -10426,7 +10525,7 @@
     watchPinch, pinching, PINCH_IN, wordSensitivity, wordBarFor,
     setZoom, stepZoom, ZOOM_STEPS,
     MARK_GREEN,
-    loadFaq, refreshScrub,
+    loadFaq, loadPremium, refreshScrub,
     cleanName, coveredText, askName, askPassword, renderPdf, wordLayerFor,
     confirmCrop, redactedName,
     confirmAction, showTemplate,

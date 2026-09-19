@@ -93,6 +93,21 @@ a.mark { color: inherit; text-decoration: none; }
    header's black, white, bold. In the header it reads as part of the bar; at
    the foot of a white page it is the one dark thing on it, which is where the
    eye goes looking for the way back. */
+/* The mark is the way to the front page, on every page and in the tool. It
+   is a button in one and a link in the others, and it has to read the same in
+   both -- which it did not, because a button brings its own font, its own
+   border and its own background. */
+.mark {
+  font: inherit; background: none; border: 0; padding: 0;
+  color: inherit; text-decoration: none; cursor: pointer;
+}
+.mark:hover { opacity: .85; }
+.mark:focus-visible { outline: 2px solid #fff; outline-offset: 3px; border-radius: 4px; }
+/* Which page you are on. Without it the pair reads as two places to go, one
+   of which you are already standing in. */
+.top-link.here, .top-link[aria-current="page"] {
+  background: #2a3340; border-color: #3a4554;
+}
 .top-link, .faqbackbtn {
   font: inherit; font-size: 13px; font-weight: 700;
   background: #0d1117; color: #fff; border: 1px solid #0d1117;

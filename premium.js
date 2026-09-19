@@ -11,23 +11,7 @@
   const el = id => document.getElementById(id);
 
   function rows() {
-    const host = el('premprices');
-    host.textContent = '';
-    for (const price of Pay.prices) {
-      const card = document.createElement('div');
-      card.className = 'premcard';
-      const what = document.createElement('b');
-      what.textContent = price.price;
-      const how = document.createElement('span');
-      how.textContent = price.label;
-      const why = document.createElement('i');
-      why.textContent = price.note;
-      card.append(what, how, why);
-      host.append(card);
-    }
-    el('premfree').textContent = 'Free below ' + Pay.freePages
-      + ' pages. Always, and at any length: opening, searching, marking, '
-      + 'reviewing and saving a draft.';
+    Pay.renderPrices(el('premprices'), el('premfree'));
   }
 
   async function held() {
@@ -51,8 +35,9 @@
       now.textContent = 'Right now every length is free, including export. '
         + 'The prices below are what a pass will cost when that changes.';
       now.hidden = false;
-      el('prembuy').textContent = 'Open the tool';
-      el('prembuy').href = '/';
+      // And no button. "Get a pass" for something nobody is charging for is a
+      // button that cannot do what it says.
+      el('prembuy').closest('.landgo').hidden = true;
       return;
     }
 
@@ -64,8 +49,7 @@
       ? ', good for ' + left + (left === 1 ? ' more day.' : ' more days.')
       : '.') + ' Nothing to do.';
     now.hidden = false;
-    el('prembuy').textContent = 'Open the tool';
-    el('prembuy').href = '/';
+    el('prembuy').closest('.landgo').hidden = true;
   }
 
   start();
