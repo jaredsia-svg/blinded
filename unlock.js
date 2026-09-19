@@ -113,7 +113,29 @@
     }
   }
 
+  // Waking the mint before anybody is waiting on it.
+  //
+  // A small instance sleeps after a quarter of an hour of quiet and takes the
+  // better part of a minute to get up. The forty seconds this page waits for
+  // a pass does not cover that, so the buyer pays and sees nothing -- the
+  // worst minute this page has.
+  //
+  // What covers it is the buyer: they spend a minute finding a card and
+  // typing it in. So the mint is knocked on when this page opens and again
+  // when the overlay does, and by the time Paddle says the payment completed
+  // it has been awake for a while. The reply does not matter -- a 404 wakes a
+  // sleeping service exactly as well as a 200 -- and nothing waits for it or
+  // reports it. It is a knock, not a request.
+  function wake() {
+    if (!Pay.mint) return;
+    try {
+      fetch(Pay.mint + '/pass?txn=wake', { credentials: 'omit', cache: 'no-store' })
+        .catch(() => { /* asleep, blocked, unreachable: all the same here */ });
+    } catch { /* and a browser that will not even make the call */ }
+  }
+
   function buy(price) {
+    wake();
     const id = Pay.paddle.priceIds[price.id];
     if (!window.Paddle || !id) {
       say('Buying is not switched on for this copy of Blinded yet.', true);
@@ -193,6 +215,10 @@
       say('Buying is not switched on yet.', true);
       return;
     }
+
+    // The first knock: the buyer is reading prices, which is the cheapest
+    // lead time there is.
+    wake();
 
     const script = document.createElement('script');
     script.src = 'https://cdn.paddle.com/paddle/v2/paddle.js';

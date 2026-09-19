@@ -10672,6 +10672,29 @@ try {
         && /free at every length/i.test(rehearsal.standing),
       JSON.stringify(rehearsal));
 
+    // The mint sleeps on a small instance and takes most of a minute to wake,
+    // which is longer than this page will wait for a pass. The buyer's own
+    // typing is what covers it, so the knock has to go out while they are
+    // still reading prices -- not when the pass is wanted, by which time it
+    // is too late to help.
+    const knocks = [];
+    const knocker = await browser.newPage();
+    await knocker.route('**/pass?txn=wake', route => {
+      knocks.push(route.request().url());
+      route.fulfill({ status: 404, body: '{}' });
+    });
+    await knocker.goto(base + 'unlock.html?rehearse');
+    await knocker.waitForTimeout(400);
+    check('the mint is woken while the prices are being read',
+      knocks.length >= 1, JSON.stringify(knocks));
+
+    const before = knocks.length;
+    await knocker.click('#buylist .buygo');
+    await knocker.waitForTimeout(400);
+    check('and again when the checkout is opened',
+      knocks.length > before, JSON.stringify(knocks));
+    await knocker.close();
+
     await buy.close();
   });
 
