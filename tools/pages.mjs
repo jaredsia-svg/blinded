@@ -12,6 +12,7 @@ import { mkdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { SITE, pages } from '../content/pages.mjs';
+import { pages as legal } from '../content/legal.mjs';
 
 // Through fileURLToPath rather than .pathname. On Windows a file URL's
 // pathname is "/C:/Users/..." -- with a leading slash -- and resolve() reads
@@ -176,6 +177,9 @@ ${alsoLinks(page)}
         <li><a href="/faq.html">How it works, in full</a></li>
         <li><a href="/premium/">What it costs, and what stays free</a></li>
         <li><a href="https://github.com/jaredsia-svg/blinded" rel="noopener">Read the source on GitHub</a></li>
+        <li><a href="/privacy/">Privacy and security</a></li>
+        <li><a href="/terms/">Terms of service</a></li>
+        <li><a href="/refunds/">Refunds and cancellation</a></li>
         <li><a href="mailto:support@blinded.dev">support@blinded.dev</a></li>
     </ul>
   </section>
@@ -197,6 +201,11 @@ export function renderSitemap() {
     { loc: SITE + '/premium/', freq: 'monthly', pri: '0.8' },
     ...pages.map(one => ({ loc: SITE + '/' + one.slug + '/',
                            freq: 'monthly', pri: '0.7' })),
+    // Last, and low. They have to be crawlable -- a refund policy nobody can
+    // find is not a refund policy -- but nobody arrives at this site looking
+    // for them.
+    ...legal.map(one => ({ loc: SITE + '/' + one.slug + '/',
+                           freq: 'yearly', pri: '0.3' })),
   ];
   return `<?xml version="1.0" encoding="UTF-8"?>
 <!-- Written by tools/pages.mjs. Every page of the site and nothing else: a

@@ -3151,6 +3151,81 @@ check('no creation date is carried into the output', !meta.info.CreationDate);
   }
 }
 
+// ---------- the pages a buyer is entitled to ----------
+//
+// Three of them, and they are not optional once money is being taken: a
+// payment processor expects to find them before it will approve a domain, and
+// a reviewer deciding whether to put a confidential document into a tool they
+// have never heard of looks for them first. Generated from content/legal.mjs,
+// so they are checked the way every other generated page here is.
+{
+  const { pages: legal, REFUND_HOURS, CONTACT, JURISDICTION } =
+    await import('../content/legal.mjs');
+  const { renderLegal } = await import('./legal.mjs');
+
+  check('there are three of them',
+    legal.length === 3 && ['privacy', 'terms', 'refunds']
+      .every(slug => legal.some(one => one.slug === slug)),
+    legal.map(one => one.slug).join(', '));
+
+  for (const one of legal) {
+    const file = join(root, one.slug, 'index.html');
+    check(one.slug + ': the page is written out', existsSync(file), file);
+    if (!existsSync(file)) continue;
+    const page = readFileSync(file, 'utf8');
+    check(one.slug + ': and is what the generator would write now',
+      page === renderLegal(one), 'run: node tools/legal.mjs');
+    check(one.slug + ': says where to ask', page.includes(CONTACT), CONTACT);
+    const said = one.sections.flatMap(bit => [bit.h, ...bit.p])
+      .join(' ').split(/\s+/).filter(Boolean).length;
+    check(one.slug + ': is long enough to be worth reading',
+      said >= 250, said + ' words');
+    // Every one of them carries the other two. Somebody reading the refund
+    // policy is very often about to want the terms.
+    for (const other of legal) {
+      if (other.slug === one.slug) continue;
+      check(one.slug + ': points at ' + other.slug,
+        page.includes('href="/' + other.slug + '/"'), other.slug);
+    }
+  }
+
+  // Reachable without knowing they exist. A policy that is only at a URL
+  // somebody has to guess is not published.
+  const foot = readFileSync(join(root, 'index.html'), 'utf8');
+  for (const one of legal) {
+    check('the front page foot links ' + one.slug,
+      foot.includes('href="/' + one.slug + '/"'), one.slug);
+    check('and the sitemap lists it',
+      readFileSync(join(root, 'sitemap.xml'), 'utf8')
+        .includes('/' + one.slug + '/'), one.slug);
+  }
+  for (const one of landers.slice(0, 3)) {
+    const page = readFileSync(join(root, one.slug, 'index.html'), 'utf8');
+    check(one.slug + ': carries them too',
+      legal.every(l => page.includes('href="/' + l.slug + '/"')), one.slug);
+  }
+
+  // The refund window is quoted in two places by two different people --
+  // whoever writes the sales page and whoever writes the policy -- and the
+  // day they disagree is the day somebody is told two different things about
+  // their own money.
+  const prem = readFileSync(join(root, 'premium', 'index.html'), 'utf8');
+  const said = /Refunds within (\d+) hours/.exec(prem);
+  check('the premium page quotes a refund window', Boolean(said), 'premium');
+  if (said) {
+    check('and the refund policy quotes the same one',
+      Number(said[1]) === REFUND_HOURS,
+      'premium says ' + said[1] + ', content/legal.mjs says ' + REFUND_HOURS);
+  }
+
+  // Not a failure -- nobody here can answer it -- but it must not be quietly
+  // forgotten either, so it is said on every run until somebody decides.
+  if (!JURISDICTION) {
+    console.log('  note: content/legal.mjs names no governing law. A lawyer '
+      + 'should choose one.');
+  }
+}
+
 // ---------- report ----------
 
 console.log('\nBlinded self-test');
