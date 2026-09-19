@@ -1201,6 +1201,14 @@ body.picking .tools {
 .pickstop { display: none; }
 @media (max-width: 900px) {
 .pickstop[data-show="yes"] { display: flex; }
+/* And the Images section stays under the dimming on a phone.
+   Lighting it is right on a laptop, where it sits beside the document and
+   holds the Cancel that ends the pick. On a phone the panel is a 46-pixel
+   strip, so what came up through the dimming was a sliver of a card with two
+   clipped words on it -- unreadable, unusable, and the only thing on screen
+   competing with the page you are being asked to draw on. The way out here
+   is the red cross above, which is why that exists. */
+body.picking #imagesect { position: static; z-index: auto; background: none; }
 }
 .pickstop {
   position: fixed; z-index: 45; top: calc(var(--top-h) + 12px); left: 14px;
@@ -2191,8 +2199,16 @@ body.choosing { -webkit-user-select: none; user-select: none; }
    -- it is an overlay on the pages, not a column beside them.
 */
 .scrub {
-  position: sticky; top: 0; z-index: 6;
-  height: 0; pointer-events: none;
+  /* Stuck in both directions, not just down the page. Zoomed in, the document
+     is wider than the view and scrolls sideways too; with only `top` pinned
+     this went with the content, and by the right-hand edge of a zoomed page
+     the thumb was sitting in the middle of the screen.
+
+     The width is what makes `left` work: 100% of a child of the scroller is
+     the width of the view, not of the content inside it, so the thumb's
+     `right: 4px` is four pixels from the edge of what can be seen. */
+  position: sticky; top: 0; left: 0; z-index: 6;
+  width: 100%; height: 0; pointer-events: none;
 }
 .scrub[hidden] { display: none; }
 .scrub-thumb {

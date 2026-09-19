@@ -3717,6 +3717,50 @@ try {
         && live.after.escape === false, JSON.stringify(live));
   });
 
+  // ---------- what the dimming leaves lit on a phone ----------
+  //
+  // On a laptop the Images section comes up through the dimming, because it
+  // sits beside the document and holds the Cancel that ends the pick. On a
+  // phone the panel is a 46-pixel strip, so what came up was a sliver of a
+  // card with two clipped words on it: unreadable, unusable, and the only
+  // thing competing with the page you are being asked to draw on.
+  await part("what the dimming leaves lit on a phone", async () => {
+    const phone = await context.newPage();
+    await phone.setViewportSize({ width: 390, height: 844 });
+    await phone.goto(base);
+    await phone.setInputFiles('#file', logoPath);
+    await phone.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
+    await phone.evaluate(() => {
+      window.Blinded.setPane('doc');
+      window.Blinded.setMode('pick');
+    });
+    await phone.waitForTimeout(300);
+
+    const lit = await phone.evaluate(() => {
+      const sect = document.getElementById('imagesect');
+      const s = getComputedStyle(sect);
+      const cross = document.querySelector('.pickstop');
+      const stage = getComputedStyle(document.querySelector('.stage'));
+      return {
+        picking: document.body.classList.contains('picking'),
+        sectRaised: s.position !== 'static' && s.zIndex !== 'auto',
+        sectCarded: s.backgroundColor !== 'rgba(0, 0, 0, 0)',
+        stageRaised: Number(stage.zIndex) > 0,
+        crossShown: cross ? getComputedStyle(cross).display !== 'none' : false,
+        crossAbove: cross ? Number(getComputedStyle(cross).zIndex) : 0,
+      };
+    });
+    check('picking on a phone still dims and lights the document',
+      lit.picking === true && lit.stageRaised === true, JSON.stringify(lit));
+    check('and leaves the strip of panel under the dimming',
+      lit.sectRaised === false && lit.sectCarded === false, JSON.stringify(lit));
+    // Which is only right because there is another way out, and it is the
+    // reason that cross exists.
+    check('because the way out is the cross over the document',
+      lit.crossShown === true && lit.crossAbove >= 41, JSON.stringify(lit));
+    await phone.close();
+  });
+
   // ---------- picking on a phone ----------
   //
   // The panel and the document take turns on a narrow screen, and the box has
@@ -9131,6 +9175,33 @@ try {
       /^Page \d+ of \d+$/.test(dragged.during.said || ''), JSON.stringify(dragged));
     check('and letting go puts that away again', dragged.after === true,
       JSON.stringify(dragged));
+
+    // Zoomed in, the document is wider than the view and scrolls sideways as
+    // well. The thumb belongs to the view, not to the page: pinned only
+    // downwards it went with the content, and at the right-hand edge of a
+    // zoomed page it was sitting in the middle of the screen.
+    const sideways = await phone.evaluate(async () => {
+      const B = window.Blinded;
+      const stage = document.querySelector('.stage');
+      const gap = () => {
+        const t = document.getElementById('scrub-thumb').getBoundingClientRect();
+        return Math.round(stage.getBoundingClientRect().right - t.right);
+      };
+      const before = gap();
+      B.setZoom(2);
+      await new Promise(r => setTimeout(r, 500));
+      stage.scrollLeft = 99999;
+      await new Promise(r => setTimeout(r, 200));
+      const after = { gap: gap(), scrolled: Math.round(stage.scrollLeft),
+                      wider: stage.scrollWidth > stage.clientWidth };
+      B.setZoom(1);
+      await new Promise(r => setTimeout(r, 300));
+      return { before, after };
+    });
+    check('zooming in makes the document scroll sideways', sideways.after.wider
+      && sideways.after.scrolled > 0, JSON.stringify(sideways));
+    check('and the thumb stays against the right of the view, not the page',
+      Math.abs(sideways.after.gap - sideways.before) <= 1, JSON.stringify(sideways));
 
     // It belongs to the document half. While the controls are open that half
     // is a 46-pixel strip, and a thumb down the side of that is a thumb over
