@@ -699,12 +699,16 @@ textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; border-
    the left of the row and lets the buttons keep the right. */
 .runbar {
   flex: 1 1 260px; min-width: 200px;
-  display: flex; align-items: center; gap: 12px;
+  display: flex; align-items: center; gap: 8px;
 }
 /* The bar itself keeps to the left half of the row. Stretched the whole way
    across it ran up against the buttons, and a progress bar that touches the
    thing it is greying out reads as part of it. */
-.runlegs { flex: 0 1 75%; min-width: 0; margin-right: auto; }
+.runlegs { flex: 0 1 75%; min-width: 0; }
+/* No auto margin here any more. It used to eat every spare pixel between
+   the bars and the button that stops them, so the control sat a hand's width
+   from the thing it controls. What it stops is the run, so it stands at the
+   end of the run's own bars and the spare room falls after it. */
 .runlegs .leg + .leg { margin-top: 4px; }
 /* The finished sentence sits at the start of the bar and takes the room it
    needs: nowrap was right for "Reading 4 of 12" and wrong for a sentence,
@@ -2346,6 +2350,22 @@ body.choosing { -webkit-user-select: none; user-select: none; }
    compete with the two prices above it. */
 #paybox .confirmgo { justify-content: center; }
 #paybox #payskip { flex: none; width: auto; min-width: 130px; }
+
+/* A notice rather than a question. Nothing is being lost, there is one way
+   on, and it is centred because there is nothing to weigh against anything
+   else -- the shape of a warning, with its full-width red button and its
+   left-aligned body, was telling the reviewer to brace for something. */
+#confirmbox.noticebox .namehead,
+#confirmbox.noticebox .confirmbody { text-align: center; }
+#confirmbox.noticebox .confirmbody { line-height: 1.65; margin-top: 8px; }
+/* align-items, not justify-content: .confirmgo is a column, so the main axis
+   is vertical and centring on it does nothing. What made the button full
+   width was stretch on the cross axis, which is the horizontal one here. */
+#confirmbox.noticebox .confirmgo { align-items: center; margin-top: 20px; }
+#confirmbox.noticebox #confirmyes {
+  width: auto; flex: none; min-width: 132px;
+  min-height: 38px; padding: 8px 22px; font-size: 13.5px;
+}
 .payfine { margin: 12px 0 0; }
 .payhave { margin: 14px 0 0; text-align: center; }
 /* Beside the report rather than in front of it: nothing is blocked by it, and

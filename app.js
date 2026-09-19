@@ -1006,13 +1006,16 @@
     // steps aside the same way just above.
     busy(false);
     await confirmAction({
-      title: 'This one needs a pass to export',
+      title: 'Premium pass required',
       body: 'Documents over ' + Pay.freePages + ' pages need a Premium Pass '
-        + 'to write the finished file: '
+        + 'to export the finished file: '
         + Pay.prices.map(one => one.price + ' for ' + one.label).join(', ')
-        + '. Everything else is free, at any length. Pay once the redaction '
-        + 'is done, just before exporting.',
-      confirmLabel: 'Got it',
+        + '. Pay once the redaction is done, just before exporting.',
+      confirmLabel: 'Understood',
+      // Nothing is being lost here and there is one way on, so the button is
+      // the ordinary blue rather than the red that means "this throws work
+      // away", and it is sized to its word rather than to the dialog.
+      notice: true,
     });
   }
 
@@ -7212,6 +7215,10 @@
       el('confirmhead').textContent = opts.title || 'Are you sure?';
       el('confirmbody').textContent = opts.body || '';
       yes.textContent = opts.confirmLabel || 'Discard';
+      // Red is for the ones that lose something. A notice that borrows it
+      // makes every red button on the site mean a little less.
+      yes.classList.toggle('danger', !opts.notice);
+      box.classList.toggle('noticebox', Boolean(opts.notice));
       // A way to keep the work, offered beside the way to lose it rather than
       // left for the reviewer to remember on their own. Most confirmations
       // have nothing to save and do not ask for it.

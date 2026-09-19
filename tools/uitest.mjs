@@ -9131,6 +9131,10 @@ try {
       head: document.getElementById('confirmhead').textContent,
       body: document.getElementById('confirmbody').textContent,
       yes: document.getElementById('confirmyes').textContent,
+      red: document.getElementById('confirmyes').classList.contains('danger'),
+      wide: Math.round(document.getElementById('confirmyes').getBoundingClientRect().width)
+        >= Math.round(document.querySelector('#confirmbox .confirminner')
+          .getBoundingClientRect().width) - 60,
       reading: !document.getElementById('busy').hidden,
       here: !document.getElementById('view-review').hidden,
     }));
@@ -9146,8 +9150,14 @@ try {
     // Over the document, not over the reading overlay.
     check('with the document already behind it',
       notice.here === true && notice.reading === false, JSON.stringify(notice));
-    check('and one way out of it', /got it/i.test(notice.yes),
+    check('and one way out of it', /understood/i.test(notice.yes),
       JSON.stringify(notice));
+    // Red is for the dialogs that throw work away. Nothing is lost here, and
+    // a notice wearing the warning colour makes every real warning on the
+    // site count for a little less.
+    check('which is not dressed as a warning', notice.red === false,
+      JSON.stringify(notice));
+    check('nor sized like one', notice.wide === false, JSON.stringify(notice));
 
     await paying.click('#confirmyes');
     await paying.waitForTimeout(250);
