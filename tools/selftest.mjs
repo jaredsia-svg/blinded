@@ -2720,6 +2720,35 @@ check('no creation date is carried into the output', !meta.info.CreationDate);
   check('nor switched on with nowhere to buy a pass',
     !(Pay.on && !(Pay.paddle && Pay.paddle.token)),
     'lib/pay.js: on with no Paddle token');
+
+// Which token, though. Paddle hands out two on the same screen and only one
+// of them may be published.
+{
+  const token = (Pay.paddle && Pay.paddle.token) || '';
+  const env = (Pay.paddle && Pay.paddle.environment) || '';
+
+  // The API key. It can read customers, issue refunds and cancel
+  // subscriptions, and lib/pay.js is served to everybody who opens the site.
+  // Pasting the wrong one of the two is a single mis-click in a dashboard and
+  // there is nothing in the string itself to warn you, so it is checked here.
+  check('the key in the page is not the secret one',
+    !/^pdl_/.test(token) && !/apikey/i.test(token),
+    'lib/pay.js is public and that looks like a Paddle API key -- roll it');
+
+  // A sandbox token against production, or the reverse, opens a checkout that
+  // fails with nothing useful said about why. The prefix names which one it
+  // is, so the two can simply be held to each other.
+  if (token) {
+    const want = env === 'production' ? 'live_' : 'test_';
+    check('the Paddle token is the one for the ' + (env || 'sandbox') + ' environment',
+      token.startsWith(want), token.slice(0, 5) + '... with environment ' + env);
+  }
+
+  // Sandbox is for trying it out; money cannot arrive there. Switching
+  // payment on against it would be a paywall that refuses every real card.
+  check('payment is not switched on against the sandbox',
+    !(Pay.on && env !== 'production'), 'lib/pay.js: on with environment ' + env);
+}
   check('the key in the page can only check a pass, never mint one',
     Pay.key && Pay.key.kty === 'EC' && Pay.key.d === undefined,
     JSON.stringify(Object.keys(Pay.key || {})));
@@ -2772,10 +2801,13 @@ check('no creation date is carried into the output', !meta.info.CreationDate);
   // here instead.
   if (Pay.mint) {
     const origin = new URL(Pay.mint).origin;
-    const reaches = where => {
-      const rule = /connect-src ([^;]*)/.exec(where);
-      return Boolean(rule) && rule[1].includes(origin);
-    };
+    // Every connect-src in the file, not the first one: unlock.html explains
+    // its own policy in prose above the meta tag, and that sentence is the
+    // first match. Any one of them naming the origin will do -- the real
+    // directive is the only one a browser reads, and a comment that happened
+    // to name it could not make the page reach anything.
+    const reaches = where => (where.match(/connect-src ([^;"]*)/g) || [])
+      .some(rule => rule.includes(origin));
     check('the buying page is allowed to reach the mint', reaches(buy),
       'unlock.html connect-src does not include ' + origin);
     check('and so say the served headers',

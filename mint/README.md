@@ -64,9 +64,10 @@ node server.mjs
 2. Developer tools → Notifications → a destination pointing at
    `https://<this service>/paddle`, subscribed to `transaction.completed`
    only. Copy the secret it gives you.
-3. Developer tools → Authentication → a **client-side token** (`pll_…`).
-   That one is publishable and goes in `lib/pay.js`. The API key (`pdl_…`)
-   does not, and is not needed here at all.
+3. Developer tools → Authentication → a **client-side token** (`test_…` in
+   sandbox, `live_…` in production). That one is publishable and goes in
+   `lib/pay.js`. The API key on the same screen (`pdl_…`) does not, and is
+   not needed here at all.
 4. Website approval: Paddle checks the domain before it will take live
    payments. Do that before switching `on`.
 
