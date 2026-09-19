@@ -2739,17 +2739,14 @@ check('no creation date is carried into the output', !meta.info.CreationDate);
     // Read as one line, because the markup wraps and a sentence this one
     // matters is not worth missing over an indent.
     const said = prem.replace(/\s+/g, ' ');
-    check('it says the line is length, not quality',
-      /line is length, not quality/i.test(said)
-        && /remove exactly the same things, exactly as thoroughly/.test(said),
-      'premium/index.html');
-    // Named, because it is the expensive one and therefore the one a future
-    // version would be tempted to put behind the pass.
-    check('and that the second check is on the free side of it',
-      /the second check included/.test(said), 'premium/index.html');
-    check('and says why that line is where it is',
-      /selling safety/.test(said) && /must not be metered/.test(said),
-      'premium/index.html');
+    // The claim the pricing has to be held to. It was a section of its own
+    // and is one sentence now, which is enough for the guard and is the
+    // point: the day a paid version redacts better than the free one is the
+    // day this is selling safety, and a change that does it has to delete
+    // this line and argue with this test.
+    check('it says a pass buys length rather than a better redaction',
+      /pass buys length, not a better redaction/.test(said)
+        && /remove exactly the same things/.test(said), 'premium/index.html');
 
     // Reachable from everywhere, or it is a page nobody finds when the
     // question occurs to them.

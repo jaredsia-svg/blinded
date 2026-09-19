@@ -11,7 +11,7 @@
   const el = id => document.getElementById(id);
 
   function rows() {
-    Pay.renderPrices(el('premprices'), el('premfree'));
+    Pay.renderPrices(el('premprices'));
   }
 
   async function held() {

@@ -747,7 +747,10 @@
         // div runs nothing (scripts inserted that way never execute) but does
         // pull in its header, its title and its own copy of the back link.
         const page = new DOMParser().parseFromString(text, 'text/html');
-        const asked = page.querySelectorAll('#faq-body .faq, #faq-body .faqlink');
+        // The sections, and only the sections. The link to the source sits
+        // inside one of them, so asking for it separately imported it twice
+        // and the answer ended with the same button under itself.
+        const asked = page.querySelectorAll('#faq-body .faq');
         if (!asked.length) throw new Error('faq.html: no questions in it');
         host.textContent = '';
         for (const one of asked) host.append(document.importNode(one, true));
@@ -792,8 +795,7 @@
           host.append(document.importNode(one, true));
         }
         const Pay = window.BlindedPay;
-        if (Pay) Pay.renderPrices(host.querySelector('#premprices'),
-                                  host.querySelector('#premfree'));
+        if (Pay) Pay.renderPrices(host.querySelector('#premprices'));
         // The page's own note and button are decided by its script. Here the
         // same two decisions are made from the same settings.
         const note = host.querySelector('#premnow');

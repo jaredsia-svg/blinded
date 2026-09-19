@@ -2263,13 +2263,24 @@ body.choosing { -webkit-user-select: none; user-select: none; }
 /* A list of ways in, not a feature of the page. It sits under everything else
    and its job is to be there when somebody is looking for it -- so it is set
    small and tight, six lines of a list rather than six rows of a grid. */
-.landnav { margin: 26px 0 8px; }
+/* Two columns, the width of the sections above it, and tight. It is a list
+   of ways in rather than a feature of the page: what it has to do is be
+   there, in one glance, when somebody is looking for their own job in it. */
+.landnav { margin: 26px auto 8px; max-width: var(--front-width); }
 .landnav h2 { margin: 0 0 6px; font-size: 13px; color: var(--ink-soft); }
-.landnav ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 0;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
-.landnav li { line-height: 1.5; }
+.landnav ul {
+  margin: 0; padding: 0 0 0 18px; list-style: disc;
+  columns: 2; column-gap: 28px;
+}
+.landnav li {
+  line-height: 1.45; margin: 0; padding: 0;
+  /* A row that breaks across the column boundary reads as two half-rows. */
+  break-inside: avoid;
+}
+.landnav li::marker { color: var(--line-strong); }
 .landnav a { color: var(--ink-soft); text-decoration: none; font-size: 12.5px; }
 .landnav a:hover { color: var(--ink); text-decoration: underline; }
+@media (max-width: 640px) { .landnav ul { columns: 1; } }
 
 
 /* ---------- the one moment money is mentioned ---------- */
@@ -2349,7 +2360,20 @@ body.choosing { -webkit-user-select: none; user-select: none; }
   grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
   border-top: 1px solid var(--line); padding-top: 20px;
 }
-.premfacts h2 { margin: 0 0 5px; font-size: 13.5px; }
+/* The icon sits on the heading rather than above it: three columns each with
+   a picture over a title is a row of badges, and what these are is three
+   short things to read. */
+.premfacts h2 {
+  margin: 0 0 6px; font-size: 13.5px;
+  display: flex; align-items: center; gap: 7px;
+}
+.premico {
+  width: 19px; height: 19px; flex: none;
+  fill: none; stroke: var(--accent); stroke-width: 1.7;
+  stroke-linecap: round; stroke-linejoin: round;
+}
+/* The stroke through the two that are about something not happening. */
+.premico .premslash { stroke: var(--accent); }
 .premfacts p { margin: 0; font-size: 12.5px; line-height: 1.55; color: var(--ink-soft); }
 .premline p { max-width: 62ch; }
 .premfoot {

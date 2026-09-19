@@ -54,8 +54,8 @@
 <main class="wrap">
 <article class="view faqmain lander">
 
-  <h1 class="faqtitle">Premium</h1>
-  <p class="lede">Almost all of Blinded is free. What is paid for is length.</p>
+  <h1 class="faqtitle">Premium features</h1>
+  <p class="lede">Free for documents below 20 pages.</p>
 
   <!-- Written from lib/pay.js at load, so the prices here and the prices at
        the checkout cannot drift apart. -->
@@ -63,38 +63,40 @@
 
   <div class="premcards" id="premprices"></div>
 
-  <p class="premfree" id="premfree"></p>
   <p class="landgo"><a class="landcta" href="/unlock.html" id="prembuy">Get a pass</a></p>
 
   <div class="premfacts">
     <div>
-      <h2>No account</h2>
+      <h2><svg class="premico" viewBox="0 0 24 24" aria-hidden="true">
+        <circle cx="12" cy="8" r="3.4"/>
+        <path d="M5 20c0-3.9 3.1-7 7-7s7 3.1 7 7"/>
+        <path d="M3.5 3.5l17 17" class="premslash"/>
+      </svg>No account</h2>
       <p>Nothing to sign up for, nothing to cancel. A pass is a string. When it
         runs out it stops working, and that is the end of it.</p>
     </div>
     <div>
-      <h2>Works offline</h2>
+      <h2><svg class="premico" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M2.5 9.5a13 13 0 0 1 19 0"/>
+        <path d="M6 13.5a8 8 0 0 1 12 0"/>
+        <path d="M9.5 17.5a3.5 3.5 0 0 1 5 0"/>
+        <path d="M3.5 3.5l17 17" class="premslash"/>
+      </svg>Works offline</h2>
       <p>Verified on your own machine against a key that can check a pass and
         cannot make one. Using it tells us nothing — not that you used it, not
         when, not what you were redacting.</p>
     </div>
     <div>
-      <h2>Your file is not involved</h2>
+      <h2><svg class="premico" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/>
+        <path d="M14 3v5h5"/>
+        <path d="M9.5 14.5l5 0"/>
+      </svg>Your file is not involved</h2>
       <p>Buying happens on a separate page, in a separate window. The page
         holding your document still cannot reach a payment processor, or
         anything else.</p>
     </div>
   </div>
-
-  <section class="faq premline">
-    <h2>The line is length, not quality</h2>
-    <p>A pass buys one thing: writing the finished file for a document longer
-      than twenty pages. There is no feature behind it — no better matcher, no
-      faster search. The free version and the paid version remove exactly the
-      same things, exactly as thoroughly, the second check included.</p>
-    <p>That is deliberate. A redaction tool that redacts better if you pay is
-      selling safety, and safety is the one thing that must not be metered.</p>
-  </section>
 
   <p class="premfoot">
     <a href="/faq.html">How it works</a>
@@ -103,7 +105,13 @@
     <span aria-hidden="true">·</span>
     <a href="mailto:support@blinded.dev">support@blinded.dev</a>
     <span aria-hidden="true">·</span>
-    <span class="premrefund">Refunds within 14 days, any reason.</span>
+    <span class="premrefund">Refunds within 72 hours, any reason.</span>
+    <!-- One sentence of what used to be a section of its own. It is the claim
+         the pricing has to be held to, and the self-test fails if it goes:
+         the day a paid version redacts better than the free one is the day
+         this is selling safety. -->
+    <span class="premrefund">A pass buys length, not a better redaction — the
+      free and the paid versions remove exactly the same things.</span>
   </p>
 
   <!-- No second "Open the tool" at the foot. The page is short enough that
