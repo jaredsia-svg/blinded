@@ -123,8 +123,20 @@
       items: [{ priceId: id, quantity: 1 }],
       settings: {
         displayMode: 'overlay',
-        // Paddle sends the receipt; the pass is fetched here and shown above.
-        showAddDiscounts: false,
+        // The discount field is on, which is the only way a code can be used:
+        // Paddle draws it inside its own overlay or not at all.
+        //
+        // It is also how somebody is given a pass without paying -- a
+        // reviewer, a journalist, a customer owed one. A hundred percent off
+        // still makes a transaction, Paddle still says it completed, and the
+        // mint still signs a pass against it, so the free route and the paid
+        // route are the same route and there is no second code path minting
+        // passes for nothing.
+        //
+        // Which is also the warning: a code that takes the price to zero is a
+        // password for free passes, and it travels. Put a usage limit and an
+        // expiry on every one of them in Paddle.
+        showAddDiscounts: true,
       },
     });
   }
@@ -196,6 +208,20 @@
         eventCallback(event) {
           if (event.name === 'checkout.completed') {
             bought(event.data && event.data.transaction_id);
+            return;
+          }
+          // Paddle's overlay says "Something went wrong" and nothing else,
+          // whatever the reason -- a price that is not published, a domain
+          // the account has not approved, a currency it will not sell in.
+          // The reason is in the event, so it is put where somebody can read
+          // it rather than left in a dialog that cannot say it.
+          if (event.name === 'checkout.error') {
+            console.error('Paddle refused the checkout:', event);
+            const why = event.error
+              && (event.error.detail || event.error.message || event.error.code);
+            say('The payment window would not open'
+              + (why ? ': ' + why : '. Its reason is in the browser console.'),
+              true);
           }
         },
       });
