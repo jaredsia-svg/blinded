@@ -83,7 +83,7 @@
   "isAccessibleForFree": true
 }
 </script>
-<link rel="stylesheet" href="app.css?v=0932644a">
+<link rel="stylesheet" href="app.css?v=43b45c6c">
 </head>
 <body>
 
@@ -110,6 +110,13 @@
            without the place to drop one, since there is already a document and
            an invitation to replace it is the last thing this should offer. -->
       <button type="button" class="top-link" id="home-top" hidden>Home</button>
+      <!-- A page, not a view: what a pass costs is something somebody sends
+           to a colleague or reads before they ever open a document, so it
+           needs an address. It is a link rather than a button for the same
+           reason, and it opens in its own tab so a document already open in
+           this one is not thrown away to go and read about pricing. -->
+      <a class="top-link" href="/premium/" target="_blank" rel="noopener"
+        id="prem-open">Premium</a>
       <button type="button" class="top-link" id="faq-open">Q&amp;A</button>
     </div>
   </div>
@@ -124,9 +131,7 @@
       <h1>Redaction for confidential documents.</h1>
       <p class="lede">Select a name, a logo or an image <em>once</em> – every
         copy gets deleted, at any size or colour, even inside a scanned
-        document. CIMs, board decks, contracts, diligence packs, discovery
-        productions, FOIA releases, and de-identified medical records – in
-        under a minute.</p>
+        document in under a minute.</p>
     </div>
 
     <div id="drop" class="drop" tabindex="0" role="button" aria-label="Choose a document to redact">
@@ -447,7 +452,11 @@
       <span class="foot-dot" aria-hidden="true">·</span>
       <button type="button" class="footlink" id="foot-faq">FAQ</button>
       <span class="foot-dot" aria-hidden="true">·</span>
+      <a class="footlink" href="/premium/">Premium</a>
+      <span class="foot-dot" aria-hidden="true">·</span>
       <a class="footlink" href="https://github.com/jaredsia-svg/blinded" rel="noopener">Source code on GitHub</a>
+      <span class="foot-dot" aria-hidden="true">·</span>
+      <a class="footlink" href="mailto:support@blinded.dev">support@blinded.dev</a>
     </p>
   </section>
 

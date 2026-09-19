@@ -2691,6 +2691,65 @@ check('no creation date is carried into the output', !meta.info.CreationDate);
         readFileSync(join(root, 'index.html'), 'utf8')), 'index.html');
   }
 
+  // ---------- the page that says what it costs ----------
+  {
+    const prem = existsSync(join(root, 'premium', 'index.html'))
+      ? readFileSync(join(root, 'premium', 'index.html'), 'utf8') : '';
+    check('there is a page saying what it costs', prem.length > 0,
+      'premium/index.html');
+    check('canonical to its own address',
+      prem.includes('<link rel="canonical" href="https://blinded.dev/premium/">'));
+    check('and in the sitemap',
+      readFileSync(join(root, 'sitemap.xml'), 'utf8')
+        .includes('https://blinded.dev/premium/'));
+
+    // The prices are written from lib/pay.js at load. A price list typed into
+    // the markup as well is a page that quotes one number and charges
+    // another, and nobody notices until a customer does.
+    const figures = Pay.prices.map(one => one.price.replace(/[^0-9.]/g, ''));
+    check('the prices are not typed into the page',
+      figures.every(figure => !prem.includes(figure)),
+      'premium/index.html has a price in it: ' + figures.join());
+    check('they are read from the one file that sets them',
+      /premium\.js/.test(prem) && /lib\/pay\.js/.test(prem), 'premium/index.html');
+
+    // The claim this page exists to make. If the paid version ever redacts
+    // better than the free one, this sentence becomes the lie that sinks the
+    // product -- so it is written down where a change has to argue with it.
+    // Read as one line, because the markup wraps and a sentence this one
+    // matters is not worth missing over an indent.
+    const said = prem.replace(/\s+/g, ' ');
+    check('it says the line is length, not quality',
+      /drawn at length rather than at quality/.test(said)
+        && /remove exactly the same things/.test(said), 'premium/index.html');
+    check('and that the second check is on the free side of it',
+      /free, at any length[\s\S]*second check/.test(said), 'premium/index.html');
+
+    // Reachable from everywhere, or it is a page nobody finds when the
+    // question occurs to them.
+    const every = [['index.html', readFileSync(join(root, 'index.html'), 'utf8')],
+      ['faq.html', readFileSync(join(root, 'faq.html'), 'utf8')],
+      ['unlock.html', readFileSync(join(root, 'unlock.html'), 'utf8')],
+      ...landers.map(one => [one.slug,
+        readFileSync(join(root, one.slug, 'index.html'), 'utf8')])];
+    for (const [where, page] of every) {
+      check(where + ': links to the price page', /href="\/premium\/"/.test(page), where);
+    }
+
+    // One way to reach a person, on every page that could raise a question.
+    const CONTACT = 'support@blinded.dev';
+    for (const [where, page] of every) {
+      if (where === 'index.html' || where === 'faq.html'
+          || where === 'unlock.html' || landers.some(one => one.slug === where)) {
+        check(where + ': says how to reach somebody', page.includes(CONTACT), where);
+      }
+    }
+    check('and the price page does too', prem.includes(CONTACT), 'premium/index.html');
+    // A support address that is a picture of an address helps nobody.
+    check('as an address that can be written to',
+      new RegExp('href="mailto:' + CONTACT + '"').test(prem), 'premium/index.html');
+  }
+
   // The signing key is the business, and a copy of it lets anybody mint.
   check('the signing key is not in the repository',
     /^\.pass-key\.json$/m.test(readFileSync(join(root, '.gitignore'), 'utf8')),

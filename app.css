@@ -1563,7 +1563,13 @@ body.reviewing .exportbar { position: static; flex: none; margin: 14px 0 18px; }
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px;
   background: #eef1f6; border-radius: 4px; padding: 1px 5px; color: var(--ink);
 }
-.faqlink a, .faqback a { color: var(--accent); text-decoration: none; font-weight: 600; }
+/* Not the button itself. This was written when the way back was a <button>
+   inside .faqback and the rule only had to colour the links beside it; now
+   the way back is an anchor, and a selector of two parts beats the one-class
+   rule that paints it -- so it came out dark with blue text on it. */
+.faqlink a, .faqback a:not(.faqbackbtn) {
+  color: var(--accent); text-decoration: none; font-weight: 600;
+}
 .faqlink a:hover, .faqback a:hover { text-decoration: underline; }
 .faqlink a { display: inline-flex; align-items: center; gap: 7px; }
 .faqback { margin-top: 28px; border-top: 1px solid var(--line); padding-top: 20px; }
@@ -2239,12 +2245,16 @@ body.choosing { -webkit-user-select: none; user-select: none; }
 .landalso li { margin-bottom: 5px; }
 
 /* The jobs people arrive with, at the foot of the front page. */
+/* A list of ways in, not a feature of the page. It sits under everything else
+   and its job is to be there when somebody is looking for it -- so it is set
+   small and tight, six lines of a list rather than six rows of a grid. */
 .landnav { margin: 26px 0 8px; }
-.landnav h2 { margin: 0 0 10px; font-size: 15px; }
-.landnav ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 7px;
+.landnav h2 { margin: 0 0 6px; font-size: 13px; color: var(--ink-soft); }
+.landnav ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 0;
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
-.landnav a { color: var(--ink); text-decoration: none; font-size: 13.5px; }
-.landnav a:hover { text-decoration: underline; }
+.landnav li { line-height: 1.5; }
+.landnav a { color: var(--ink-soft); text-decoration: none; font-size: 12.5px; }
+.landnav a:hover { color: var(--ink); text-decoration: underline; }
 
 
 /* ---------- the one moment money is mentioned ---------- */
@@ -2288,3 +2298,22 @@ body.choosing { -webkit-user-select: none; user-select: none; }
   word-break: break-all; user-select: all; background: #f4f6fa;
   border: 1px solid var(--line); border-radius: 8px; padding: 12px;
 }
+
+
+/* ---------- what it costs, and what stays free ---------- */
+.premnow {
+  margin: 0 0 16px; padding: 10px 14px; border-radius: 8px;
+  background: var(--warn-bg); border: 1px solid #e6cd9a;
+  color: #8a5a10; font-size: 13.5px; font-weight: 600;
+}
+.premprices { list-style: none; margin: 18px 0 0; padding: 0; }
+.premprices li {
+  display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;
+  padding: 10px 0; border-top: 1px solid var(--line);
+}
+.premprices b { font-size: 18px; }
+.premprices span { font-size: 14px; }
+.premprices i { color: var(--ink-soft); font-size: 13px; font-style: normal; margin-left: auto; }
+.premlist { margin: 0; padding-left: 18px; max-width: 62ch; }
+.premlist li { margin-bottom: 10px; color: var(--ink-soft); line-height: 1.6; }
+.premlist b { color: var(--ink); }

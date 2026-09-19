@@ -112,6 +112,7 @@ ${structured(page)}
 ${mark()} Blinded</a>
     <p class="claim">Efficient redaction for your most sensitive documents, all done locally.</p>
     <div class="top-actions">
+      <a class="top-link" href="/premium/">Premium</a>
       <a class="top-link" href="/faq.html">Q&amp;A</a>
       <a class="top-link" href="/">Open the tool</a>
     </div>
@@ -166,7 +167,9 @@ ${page.faq.map(one => `    <h3>${esc(one.q)}</h3>
     <ul class="landalso">
 ${alsoLinks(page)}
         <li><a href="/faq.html">How it works, in full</a></li>
+        <li><a href="/premium/">What it costs, and what stays free</a></li>
         <li><a href="https://github.com/jaredsia-svg/blinded" rel="noopener">Read the source on GitHub</a></li>
+        <li><a href="mailto:support@blinded.dev">support@blinded.dev</a></li>
     </ul>
   </section>
 
@@ -184,6 +187,7 @@ export function renderSitemap() {
   const rows = [
     { loc: SITE + '/', freq: 'weekly', pri: '1.0' },
     { loc: SITE + '/faq.html', freq: 'monthly', pri: '0.8' },
+    { loc: SITE + '/premium/', freq: 'monthly', pri: '0.8' },
     ...pages.map(one => ({ loc: SITE + '/' + one.slug + '/',
                            freq: 'monthly', pri: '0.7' })),
   ];

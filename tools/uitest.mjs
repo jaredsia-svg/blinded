@@ -10321,21 +10321,52 @@ try {
     const foot = await page.evaluate(() => {
       const row = document.querySelector('.foot');
       if (!row) return null;
-      const link = row.querySelector('a.footlink');
+      // By where it goes, not by being the first one in the row: the foot has
+      // grown a price page and a way to reach somebody since this was
+      // written, and the first link is no longer the one meant here.
+      const link = [...row.querySelectorAll('a.footlink')]
+        .find(one => /github\.com/.test(one.getAttribute('href') || ''));
+      const write = [...row.querySelectorAll('a.footlink')]
+        .find(one => /^mailto:/.test(one.getAttribute('href') || ''));
       return {
         says: row.textContent.replace(/\s+/g, ' ').trim(),
         source: link ? link.getAttribute('href') : null,
         // The source link leaves the tab, so it must not hand the new page a
         // handle back to this one.
         safe: link ? (link.getAttribute('rel') || '').includes('noopener') : false,
+        write: write ? write.getAttribute('href') : null,
       };
     });
     check('the page ends with its name, the questions and the source',
-      foot && /Blinded · FAQ · Source code on GitHub/.test(foot.says),
+      foot && /Blinded · FAQ · Premium · Source code on GitHub/.test(foot.says),
       JSON.stringify(foot));
     check('and the source link points at the repository',
       foot && /github\.com\/.+\/blinded/.test(foot.source) && foot.safe === true,
       JSON.stringify(foot));
+    // Somewhere to write, on the page somebody is looking at when the
+    // question occurs to them.
+    check('and there is a way to reach somebody',
+      foot && foot.write === 'mailto:support@blinded.dev', JSON.stringify(foot));
+
+    // What a pass costs is a page, not a view: it is something somebody sends
+    // to a colleague, or reads before they ever open a document, so it needs
+    // an address. And it opens in its own tab -- the document lives in this
+    // one and nowhere else, and navigating away to read about pricing would
+    // throw it out.
+    const price = await page.evaluate(() => {
+      const link = document.getElementById('prem-open');
+      return link ? { href: link.getAttribute('href'),
+                      tab: link.getAttribute('target'),
+                      safe: (link.getAttribute('rel') || '').includes('noopener'),
+                      says: link.textContent.trim(),
+                      tag: link.tagName } : null;
+    });
+    check('the header offers the price page', price && price.href === '/premium/'
+      && price.says === 'Premium', JSON.stringify(price));
+    check('as a link, so it can be sent to somebody', price && price.tag === 'A',
+      JSON.stringify(price));
+    check('opening in its own tab, so an open document is not thrown away',
+      price && price.tab === '_blank' && price.safe === true, JSON.stringify(price));
 
     await page.click('#foot-faq');
     await page.waitForSelector('#view-faq:not([hidden])', { timeout: 15000 });
