@@ -16,6 +16,7 @@ function landerWords(page) {
 }
 import { readFileSync, existsSync, statSync, readdirSync } from 'node:fs';
 import { deflateSync } from 'node:zlib';
+import { createHash } from 'node:crypto';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { runInThisContext } from 'node:vm';
@@ -2962,6 +2963,84 @@ check('no creation date is carried into the output', !meta.info.CreationDate);
   for (const row of Detect.KINDS) {
     check('the questions page names the ' + row.kind + ' detector',
       faq.includes(row.label.toLowerCase().split(' ')[0]), row.label);
+  }
+}
+
+// ---------- the picture beside the search result ----------
+//
+// A favicon is the one piece of the page that is judged by a machine before
+// anybody sees it. Google will show one beside the result only if it is
+// square, a multiple of 48 a side, at an address it is allowed to fetch, and
+// pointed at from the head of the home page -- and if any of that is wrong it
+// does not complain, it just draws a grey globe instead. So the conditions
+// are checked here rather than discovered months later in a search result.
+{
+  const icons = readFileSync(join(root, 'content', 'icons.json'), 'utf8');
+  const stamp = JSON.parse(icons);
+  const svg = readFileSync(join(root, 'icon.svg'), 'utf8');
+
+  // The rasters are drawn from the vector by a browser, which this suite has
+  // not got, so it cannot redraw them to compare. What it can do is notice
+  // that the logo has moved on and they have not.
+  check('the icons were drawn from the logo as it stands',
+    stamp.sha256 === createHash('sha256').update(svg).digest('hex'),
+    'icon.svg has changed since tools/icon.mjs last ran');
+
+  // width and height are the two big-endian words of a PNG's IHDR, which
+  // begins at a fixed offset in every PNG there is.
+  const pngSize = buf => [buf.readUInt32BE(16), buf.readUInt32BE(20)];
+  for (const name of ['icon-192.png', 'apple-touch-icon.png']) {
+    const buf = readFileSync(join(root, name));
+    const [w, h] = pngSize(buf);
+    check(name + ': is a PNG', buf.subarray(1, 4).toString() === 'PNG');
+    check(name + ': is square', w === h, w + 'x' + h);
+    check(name + ': its side is a multiple of 48', w % 48 === 0 && w >= 48, w);
+  }
+
+  // An .ico is a directory of images. Google and every browser pick the size
+  // they want out of it, so what matters is that 48 is among them -- and that
+  // each one really is the size the directory claims, since the directory is
+  // what gets read and a lie there is drawn as a smear.
+  {
+    const buf = readFileSync(join(root, 'favicon.ico'));
+    const count = buf.readUInt16LE(4);
+    check('favicon.ico says it is an icon', buf.readUInt16LE(2) === 1);
+    const sizes = [];
+    for (let i = 0; i < count; i++) {
+      const e = 6 + i * 16;
+      const said = buf.readUInt8(e) || 256;
+      const at = buf.readUInt32LE(e + 12);
+      const len = buf.readUInt32LE(e + 8);
+      const img = buf.subarray(at, at + len);
+      const [w] = pngSize(img);
+      check('favicon.ico: its ' + said + ' really is ' + said + ' across',
+        img.subarray(1, 4).toString() === 'PNG' && w === said, w);
+      sizes.push(said);
+    }
+    check('favicon.ico carries the size a search result wants',
+      sizes.includes(48), sizes.join(', '));
+  }
+
+  // Nothing may keep a crawler out of them, and every page has to say where
+  // they are -- the home page above all, which is the only one Google is
+  // documented to read the icon from.
+  const robots = readFileSync(join(root, 'robots.txt'), 'utf8');
+  const links = ['/favicon.ico', '/icon.svg', '/icon-192.png', '/apple-touch-icon.png'];
+  for (const href of links) {
+    check('robots.txt lets a crawler reach ' + href,
+      !robots.split('\n').some(line => /^\s*Disallow:/i.test(line)
+        && href.startsWith(line.split(':')[1].trim()) && line.split(':')[1].trim() !== '/'),
+      href);
+    check('and the file is there', existsSync(join(root, href.slice(1))), href);
+  }
+  const wearing = [['index.html', 'index.html'], ['faq.html', 'faq.html'],
+    ['unlock.html', 'unlock.html'], ['premium/index.html', 'premium/index.html'],
+    ...landers.map(one => [one.slug, one.slug + '/index.html'])];
+  for (const [where, file] of wearing) {
+    const head = readFileSync(join(root, file), 'utf8').split('</head>')[0];
+    for (const href of links) {
+      check(where + ': points at ' + href, head.includes('href="' + href + '"'), file);
+    }
   }
 }
 

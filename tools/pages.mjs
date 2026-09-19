@@ -95,7 +95,10 @@ export function renderPage(page) {
 ${policy()}
 <title>${esc(page.title)} – Blinded</title>
 <meta name="description" content="${esc(page.description)}">
+<link rel="icon" href="/favicon.ico" sizes="48x48">
 <link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="icon" href="/icon-192.png" type="image/png" sizes="192x192">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="canonical" href="${url}">
 <meta property="og:type" content="article">
 <meta property="og:site_name" content="Blinded">
