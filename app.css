@@ -98,10 +98,18 @@ a.mark { color: inherit; text-decoration: none; }
    both -- which it did not, because a button brings its own font, its own
    border and its own background. */
 .mark {
-  font: inherit; background: none; border: 0; padding: 0;
+  /* The family only. `font: inherit` is a shorthand, so it reset the size,
+     the weight and the letter-spacing set above as well -- and this rule is
+     the later of the two, so the wordmark came out at the button's own
+     13px rather than at 17px and 650. What a button actually brings that is
+     unwanted here is the system UI family and its chrome. */
+  font-family: inherit; background: none; border: 0; padding: 0;
   color: inherit; text-decoration: none; cursor: pointer;
 }
 .mark:hover { opacity: .85; }
+/* On the front page it is the name of the thing rather than a way to it. */
+.mark.still { cursor: default; }
+.mark.still:hover { opacity: 1; }
 .mark:focus-visible { outline: 2px solid #fff; outline-offset: 3px; border-radius: 4px; }
 /* Which page you are on. Without it the pair reads as two places to go, one
    of which you are already standing in. */

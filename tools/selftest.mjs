@@ -2782,6 +2782,9 @@ check('no creation date is carried into the output', !meta.info.CreationDate);
         nav && !/Open the tool|Back to the tool/.test(nav[1]), where);
       check(where + ': and the mark is the way to the front page',
         /<a class="mark" href="\/?"/.test(page), where);
+      // A link on these, a button in the tool, one rule for the type of it.
+      check(where + ': carrying no type of its own to fight that rule',
+        !/<a class="mark"[^>]*style=/.test(page), where);
     }
 
     // One way to reach a person, on every page that could raise a question.

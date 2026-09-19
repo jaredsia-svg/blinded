@@ -10421,6 +10421,51 @@ try {
     }));
     check('the header opens what a pass costs', price.says === 'Premium'
       && /Premium/.test(price.heading || ''), JSON.stringify(price));
+
+    // The wordmark. It is the way to the front page from everywhere else, and
+    // on the front page it is the name of the thing rather than a way to it.
+    // Its type must not change between the two: it is a button in the tool
+    // and a link on every other page, and a button brings a family, a size
+    // and a weight of its own -- `font: inherit` once reset the size and the
+    // weight this rule sets, and the name came out at 13px.
+    const wordmark = await page.evaluate(() => {
+      const n = document.getElementById('home-mark');
+      const s = getComputedStyle(n);
+      return { away: { still: n.classList.contains('still'), cursor: s.cursor },
+               type: s.fontSize + '/' + s.fontWeight + '/' + s.letterSpacing };
+    });
+    check('away from the front page the mark is a way back to it',
+      wordmark.away.still === false && wordmark.away.cursor === 'pointer',
+      JSON.stringify(wordmark));
+    check('and it is set at the size and weight the header gives it',
+      wordmark.type === '17px/650/-0.17px', wordmark.type);
+
+    await page.click('#back-top');
+    await page.waitForSelector('#view-review:not([hidden])', { timeout: 15000 });
+    await page.evaluate(() => document.getElementById('home-mark').click());
+    await page.waitForSelector('#view-drop:not([hidden])', { timeout: 15000 });
+    const arrived = await page.evaluate(() => {
+      const n = document.getElementById('home-mark');
+      const s = getComputedStyle(n);
+      const was = document.getElementById('view-drop').hidden;
+      n.click();
+      return { still: n.classList.contains('still'), cursor: s.cursor,
+               says: n.getAttribute('aria-disabled'),
+               type: s.fontSize + '/' + s.fontWeight + '/' + s.letterSpacing,
+               unmoved: was === document.getElementById('view-drop').hidden };
+    });
+    check('on the front page it is not offered as a way to anywhere',
+      arrived.still === true && arrived.cursor === 'default'
+        && arrived.says === 'true', JSON.stringify(arrived));
+    check('and pressing it there does nothing', arrived.unmoved === true,
+      JSON.stringify(arrived));
+    // The whole point of the two states being one element.
+    check('and it is the same wordmark either way',
+      arrived.type === wordmark.type, JSON.stringify([arrived.type, wordmark.type]));
+    await page.evaluate(() => document.getElementById('back-top').click());
+    await page.waitForSelector('#view-review:not([hidden])', { timeout: 15000 });
+    await page.click('#prem-open');
+    await page.waitForSelector('#view-premium:not([hidden])', { timeout: 15000 });
     // Drawn here rather than taken from the fetched markup: /premium/ writes
     // its own prices when its script runs, and a script in parsed markup
     // never runs, so the cards would have arrived empty.

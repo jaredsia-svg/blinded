@@ -705,6 +705,19 @@
     // front page.
     const bottom = el('faq-back-bottom');
     if (bottom) bottom.closest('.faqback').hidden = !holding;
+
+    // The mark is the way to the front page, and on the front page it is not
+    // a way to anywhere. It stays exactly as it looks -- it is the name of
+    // the thing, not a control -- but it stops offering a pointer and a hover
+    // for a press that would do nothing.
+    const mark = el('home-mark');
+    if (mark) {
+      const arrived = name === 'drop';
+      mark.classList.toggle('still', arrived);
+      mark.setAttribute('aria-disabled', String(arrived));
+      if (arrived) mark.removeAttribute('title');
+      else mark.title = 'Back to the front page';
+    }
     el('prem-open').hidden = backOnly;
     el('faq-open').hidden = backOnly;
     el('reset-top').hidden = name !== 'review';
@@ -8282,6 +8295,11 @@
   // The box and the state start from the same value, rather than each
   // asserting a default of its own.
   showWordControls();
+  // And the header starts in the shape the first view is in. The opening view
+  // is set by the markup rather than by show(), so without this the mark on
+  // the front page offered a pointer and a hover for a press that does
+  // nothing until something else happens to redraw it.
+  show('drop');
 
   el('busy-pause').addEventListener('click', requestPause);
   bindSweepOffer();
