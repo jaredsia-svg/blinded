@@ -10616,74 +10616,94 @@ try {
 
   check('nothing threw in the page', consoleErrors.length === 0, consoleErrors.join(' | '));
 } finally {
-  // ---------- rehearsing a purchase ----------
+  // ---------- the buying page, in whichever state it is in ----------
   //
-  // Payment ships off, which hides the prices and never loads Paddle. That
-  // leaves the buying page untestable by the only means that matter -- a
-  // person clicking it -- unless payment is switched on, which would put a
-  // paywall in front of every visitor and point them at a sandbox. The
-  // rehearsal query is the way through, and it has two halves that both have
-  // to hold: a visitor sees nothing, and whoever is testing sees everything.
-  await part("rehearsing a purchase before payment is on", async () => {
+  // This page has two lives and the suite has to follow it between them.
+  //
+  // With payment off it hides its prices and never loads Paddle, which is
+  // right for a visitor and leaves the page untestable by the only means that
+  // matters -- a person clicking it. The rehearsal query is the way through,
+  // and it has two halves: a visitor sees nothing, whoever is testing sees
+  // everything, and nobody is misled about which of the two they are.
+  //
+  // With payment on the prices are simply the page, and the rehearsal has
+  // nothing left to do. Asserting the free-copy behaviour here would fail the
+  // day the paywall went live, which is the one day a test suite must not
+  // start crying wolf.
+  await part("the buying page, in whichever state it is in", async () => {
     const buy = await browser.newPage();
 
     await buy.goto(base + 'unlock.html');
     await buy.waitForTimeout(250);
-    const visitor = await buy.evaluate(() => ({
-      hidden: document.getElementById('buylist').hidden,
-      note: document.getElementById('buynote').textContent,
-      buttons: document.querySelectorAll('#buylist .buygo').length,
-      paddle: document.querySelectorAll('script[src*="paddle.com"]').length,
-      marked: document.body.dataset.rehearsing || '',
-    }));
-    check('a visitor is told there is nothing to buy',
-      visitor.hidden === true && /nothing to buy/i.test(visitor.note),
-      JSON.stringify(visitor));
-    check('and Paddle is not loaded for them at all',
-      visitor.paddle === 0, JSON.stringify(visitor));
-    check('nor is the rehearsal notice anywhere near them',
-      visitor.marked === '', JSON.stringify(visitor));
-
-    await buy.goto(base + 'unlock.html?rehearse');
-    await buy.waitForTimeout(250);
-    const rehearsal = await buy.evaluate(() => ({
+    const plain = await buy.evaluate(() => ({
+      on: window.BlindedPay.on === true,
       hidden: document.getElementById('buylist').hidden,
       note: document.getElementById('buynote').textContent,
       buttons: [...document.querySelectorAll('#buylist .buygo')]
         .map(one => one.textContent),
       prices: window.BlindedPay.prices.length,
       marked: document.body.dataset.rehearsing || '',
-      standing: (document.getElementById('buyrehearse') || {}).textContent || '',
     }));
-    check('rehearsing shows a button for each price',
-      rehearsal.hidden !== true && rehearsal.prices > 0
-        && rehearsal.buttons.length === rehearsal.prices,
-      JSON.stringify(rehearsal));
-    check('with the price written on it',
-      rehearsal.buttons.every(one => /\d/.test(one)), JSON.stringify(rehearsal));
-    // It must never read as a paywall. Somebody who lands here by accident is
-    // owed the truth: this copy is free and they need none of it.
-    // Beside the prices and staying there. It used to go in the notice slot,
-    // where the very next thing the page said -- Paddle failing to load, on a
-    // machine with no route to it -- wiped the one sentence explaining why a
-    // free tool was showing somebody a price list.
-    check('and says plainly that nobody needs a pass yet',
-      rehearsal.marked === 'yes' && /rehearsal/i.test(rehearsal.standing)
-        && /free at every length/i.test(rehearsal.standing),
-      JSON.stringify(rehearsal));
 
-    // The mint sleeps on a small instance and takes most of a minute to wake,
-    // which is longer than this page will wait for a pass. The buyer's own
-    // typing is what covers it, so the knock has to go out while they are
-    // still reading prices -- not when the pass is wanted, by which time it
-    // is too late to help.
+    if (plain.on) {
+      check('with payment on, the prices are the page',
+        plain.hidden !== true && plain.buttons.length === plain.prices
+          && plain.prices > 0, JSON.stringify(plain));
+      check('with the price written on each one',
+        plain.buttons.every(one => /\d/.test(one)), JSON.stringify(plain));
+      // Nobody is rehearsing any more. Leaving that line up would tell a
+      // paying customer the thing they are being charged for is free.
+      check('and nothing calls it a rehearsal',
+        plain.marked === '', JSON.stringify(plain));
+    } else {
+      check('with payment off, a visitor is told there is nothing to buy',
+        plain.hidden === true && /nothing to buy/i.test(plain.note),
+        JSON.stringify(plain));
+      check('and Paddle is not loaded for them at all',
+        await buy.evaluate(() =>
+          document.querySelectorAll('script[src*="paddle.com"]').length === 0),
+        JSON.stringify(plain));
+      check('nor is the rehearsal notice anywhere near them',
+        plain.marked === '', JSON.stringify(plain));
+
+      await buy.goto(base + 'unlock.html?rehearse');
+      await buy.waitForTimeout(250);
+      const rehearsal = await buy.evaluate(() => ({
+        hidden: document.getElementById('buylist').hidden,
+        buttons: [...document.querySelectorAll('#buylist .buygo')]
+          .map(one => one.textContent),
+        prices: window.BlindedPay.prices.length,
+        marked: document.body.dataset.rehearsing || '',
+        standing: (document.getElementById('buyrehearse') || {}).textContent || '',
+      }));
+      check('rehearsing shows a button for each price',
+        rehearsal.hidden !== true && rehearsal.prices > 0
+          && rehearsal.buttons.length === rehearsal.prices,
+        JSON.stringify(rehearsal));
+      check('with the price written on it',
+        rehearsal.buttons.every(one => /\d/.test(one)), JSON.stringify(rehearsal));
+      // Beside the prices and staying there. It used to go in the notice
+      // slot, where the very next thing the page said -- Paddle failing to
+      // load, on a machine with no route to it -- wiped the one sentence
+      // explaining why a free tool was showing somebody a price list.
+      check('and says plainly that nobody needs a pass yet',
+        rehearsal.marked === 'yes' && /rehearsal/i.test(rehearsal.standing)
+          && /free at every length/i.test(rehearsal.standing),
+        JSON.stringify(rehearsal));
+    }
+
+    // The knock, which both states owe. The mint sleeps on a small instance
+    // and takes most of a minute to wake, which is longer than this page will
+    // wait for a pass. The buyer's own typing is what covers it, so it has to
+    // go out while they are still reading prices -- not when the pass is
+    // wanted, by which time it is too late to help.
     const knocks = [];
     const knocker = await browser.newPage();
     await knocker.route('**/pass?txn=wake', route => {
       knocks.push(route.request().url());
       route.fulfill({ status: 404, body: '{}' });
     });
-    await knocker.goto(base + 'unlock.html?rehearse');
+    await knocker.goto(base + 'unlock.html' + (plain.on ? '' : '?rehearse'));
     await knocker.waitForTimeout(400);
     check('the mint is woken while the prices are being read',
       knocks.length >= 1, JSON.stringify(knocks));
