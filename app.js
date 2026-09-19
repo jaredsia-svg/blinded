@@ -10381,6 +10381,7 @@
     if (views.drop.hidden) goAway('drop');
   });
   el('foot-faq').addEventListener('click', () => goAway('faq'));
+  el('foot-prem').addEventListener('click', () => goAway('premium'));
 
   el('page-prev').addEventListener('click', () => stepPage(-1));
   el('page-next').addEventListener('click', () => stepPage(1));

@@ -2764,6 +2764,14 @@ check('no creation date is carried into the output', !meta.info.CreationDate);
       check(where + ': offers the price page',
         where === 'index.html' ? /id="prem-open"/.test(page)
           : /href="\/premium\/"/.test(page), where);
+      // And the tool offers it the way it offers the questions: as a view of
+      // itself. A link would close the document to go and read about the
+      // thing the reader was in the middle of doing.
+      if (where === 'index.html') {
+        check('and nothing in the tool navigates away to reach it',
+          !/href="\/premium\/"/.test(page) && /id="foot-prem"/.test(page),
+          'index.html has a link to /premium/');
+      }
     }
 
     // Nowhere offers to open a tool nobody has opened. With no document these
