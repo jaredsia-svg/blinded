@@ -72,6 +72,14 @@ services:
       - path: /unlock.html
         name: Cross-Origin-Opener-Policy
         value: same-origin-allow-popups
+      # Once a browser has seen this it will not be talked into http for a
+      # year, which closes the one window where a document could be read off
+      # the wire: the first plain request a typed address makes, before the
+      # redirect. Render serves this over TLS on every hostname it answers on,
+      # so there is nothing left that needs http.
+      - path: /*
+        name: Strict-Transport-Security
+        value: max-age=31536000; includeSubDomains
       # Older browsers that do not read frame-ancestors.
       - path: /*
         name: X-Frame-Options
