@@ -2762,6 +2762,26 @@ check('no creation date is carried into the output', !meta.info.CreationDate);
   check('the served headers say the same as the page does',
     /path: \/unlock\.html/.test(headers) && /cdn\.paddle\.com/.test(headers),
     'render.yaml');
+
+  // The mint is on a hostname of its own -- that is the whole point of it --
+  // so the buying page reaching it is a cross-origin request, and the policy
+  // that lets this page talk to Paddle says nothing about it. Set `mint` and
+  // forget this and the pass is fetched, blocked, and never shown: the buyer
+  // pays, sees nothing, and is told to wait for an email. It fails quietly,
+  // in the one place where quiet failure costs a sale, so it fails loudly
+  // here instead.
+  if (Pay.mint) {
+    const origin = new URL(Pay.mint).origin;
+    const reaches = where => {
+      const rule = /connect-src ([^;]*)/.exec(where);
+      return Boolean(rule) && rule[1].includes(origin);
+    };
+    check('the buying page is allowed to reach the mint', reaches(buy),
+      'unlock.html connect-src does not include ' + origin);
+    check('and so say the served headers',
+      reaches(headers.split('path: /unlock.html')[1] || ''),
+      'render.yaml /unlock.html connect-src does not include ' + origin);
+  }
   // What the site says it costs has to be what it costs. These pages call it
   // free, which is true while nothing is charged for -- and becomes a lie the
   // moment payment is switched on and nobody edits them. The guard is cheap
