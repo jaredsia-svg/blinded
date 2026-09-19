@@ -45,7 +45,10 @@
   // just completed. Paddle's webhook and this request race, and the webhook
   // usually loses, so this asks a few times before giving up on it.
   //
-  // Giving up is not failure: the same pass is emailed, and the page says so.
+  // Giving up has to say something true. There is no emailer: the mint signs
+  // a pass and files it, and that is the whole of it -- so the way to a pass
+  // this page could not fetch is a person, and the page says so rather than
+  // promising a message nothing will send.
   async function collect(transaction) {
     if (!Pay.mint) return null;
     const until = Date.now() + 40000;
@@ -69,8 +72,9 @@
     say('Payment taken. Making your pass…');
     const pass = await collect(transaction);
     if (!pass) {
-      say('Payment taken. Your pass is on its way by email — it can take '
-        + 'a minute. Paste it into Blinded with "I already have a pass".', true);
+      say('Payment taken, and your pass was made — this page could not fetch '
+        + 'it in time. Write to support@blinded.dev with your Paddle receipt '
+        + 'and we will send it straight back.', true);
       return;
     }
     // Checked before it is shown. A pass that does not verify is a bug at our

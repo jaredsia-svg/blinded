@@ -113,7 +113,8 @@ export function daysFor(event, table) {
 // not afterwards. The transaction id is the only thing standing between a
 // request and a pass, which is thin -- it is enough for the page that is
 // waiting right now, and worth nothing to somebody who finds the id in a
-// receipt next week. After that the email is the way to it.
+// receipt next week. After that it is a note to support and a pass sent by
+// hand, which at this volume is the right amount of machinery.
 const READABLE_FOR = 10 * 60 * 1000;
 
 export function readable(row, now) {
@@ -177,7 +178,9 @@ const server = createServer((req, res) => {
     const txn = url.searchParams.get('txn');
     const row = txn && passes.get(txn);
     if (!row) return send(res, 404, { error: 'not yet' });
-    if (!readable(row)) return send(res, 410, { error: 'too late; check your email' });
+    if (!readable(row)) {
+      return send(res, 410, { error: 'too late; write to support with your receipt' });
+    }
     return send(res, 200, { pass: row.pass });
   }
 

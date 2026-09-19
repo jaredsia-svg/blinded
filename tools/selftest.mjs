@@ -2744,6 +2744,20 @@ check('no creation date is carried into the output', !meta.info.CreationDate);
       token.startsWith(want), token.slice(0, 5) + '... with environment ' + env);
   }
 
+  // A price, not a product. Paddle gives a product a pro_ id and each of its
+  // prices a pri_ one, they are shown a line apart in the same dashboard, and
+  // the wrong one is accepted everywhere except where it matters: the
+  // checkout will not open, and the webhook cannot tell which pass was
+  // bought, so a payment would be taken and nothing minted against it.
+  for (const [which, id] of Object.entries((Pay.paddle && Pay.paddle.priceIds) || {})) {
+    if (!id) continue;
+    check('the ' + which + ' id is a price, not a product',
+      id.startsWith('pri_'),
+      id.startsWith('pro_')
+        ? id + ' is a product id -- open it in Paddle and copy the pri_ under it'
+        : id);
+  }
+
   // Sandbox is for trying it out; money cannot arrive there. Switching
   // payment on against it would be a paywall that refuses every real card.
   check('payment is not switched on against the sandbox',
@@ -3093,6 +3107,42 @@ check('no creation date is carried into the output', !meta.info.CreationDate);
     for (const href of links) {
       check(where + ': points at ' + href, head.includes('href="' + href + '"'), file);
     }
+  }
+}
+
+// ---------- it may only promise what it can do ----------
+//
+// The buying page used to say the pass was also emailed. Nothing emails it:
+// the mint signs a pass, files it for ten minutes, and has no idea who bought
+// it -- deliberately, because a service that knows the buyer's address is a
+// customer database and this one is not allowed to become one. So a buyer
+// whose page could not fetch the pass in time was told to wait for a message
+// that was never going to arrive, at the moment they had just been charged.
+//
+// If an emailer is ever added this guard stops applying by itself, which is
+// the point: it holds the writing to what the service actually does rather
+// than to a decision made once.
+{
+  // On a word boundary. Looking for 'ses' anywhere in the file found it
+  // inside 'passes', decided the mint could send mail, and switched this
+  // whole section off -- a guard that passes by not running is worse than
+  // no guard, because it reads as a green tick.
+  const sends = /\b(?:nodemailer|sendgrid|postmark|mailgun|resend|smtp|ses|sendMail)\b/i;
+  const mint = readFileSync(join(root, 'mint', 'server.mjs'), 'utf8');
+  const canSend = sends.test(mint);
+  if (!canSend) {
+    const promises = /(?:by|via|in your|check your) e-?mail|e-?mailed\b/i;
+    for (const file of ['unlock.html', 'unlock.js', 'mint/server.mjs']) {
+      const text = readFileSync(join(root, file), 'utf8');
+      const said = text.split(/(?<=[.?!])\s+/).filter(one => promises.test(one));
+      check(file + ': does not promise an email nothing sends',
+        said.length === 0, said.join(' | ').slice(0, 200));
+    }
+    // And the way to a pass that went astray has to be on the page that
+    // sells it, since that is where somebody who has just paid is standing.
+    const buying = readFileSync(join(root, 'unlock.html'), 'utf8');
+    check('the buying page says how to get a pass that did not arrive',
+      buying.includes('support@blinded.dev'), 'unlock.html');
   }
 }
 
