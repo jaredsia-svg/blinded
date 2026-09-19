@@ -11,8 +11,13 @@
 //   node tools/faq.mjs --check  say whether it is already current
 import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const FILE = resolve(new URL('..', import.meta.url).pathname, 'faq.html');
+// Through fileURLToPath rather than .pathname. On Windows a file URL's
+// pathname is "/C:/Users/..." -- with a leading slash -- and resolve() reads
+// that as a path rooted at the current drive, so it hands back "C:\\C:\\Users".
+// fileURLToPath is the conversion that knows about drive letters.
+const FILE = resolve(fileURLToPath(new URL('..', import.meta.url)), 'faq.html');
 
 // The few entities the questions actually use. A full HTML parser for eight
 // headings and their paragraphs would be a dependency for nothing.

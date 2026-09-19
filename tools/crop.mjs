@@ -10,8 +10,13 @@ import { chromium } from 'playwright';
 import { createServer } from 'node:http';
 import { createReadStream, statSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { extname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const root = resolve(new URL('..', import.meta.url).pathname);
+// Through fileURLToPath rather than .pathname. On Windows a file URL's
+// pathname is "/C:/Users/..." -- with a leading slash -- and resolve() reads
+// that as a path rooted at the current drive, so it hands back "C:\\C:\\Users".
+// fileURLToPath is the conversion that knows about drive letters.
+const root = fileURLToPath(new URL('..', import.meta.url));
 const folder = resolve(process.argv[2]);
 const wanted = process.argv[3];
 const wantBest = process.argv[4] === 'best';

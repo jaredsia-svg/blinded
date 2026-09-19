@@ -9,9 +9,14 @@
 import { chromium } from 'playwright';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { PITCH } from '../content/pages.mjs';
 
-const root = resolve(new URL('..', import.meta.url).pathname);
+// Through fileURLToPath rather than .pathname. On Windows a file URL's
+// pathname is "/C:/Users/..." -- with a leading slash -- and resolve() reads
+// that as a path rooted at the current drive, so it hands back "C:\\C:\\Users".
+// fileURLToPath is the conversion that knows about drive letters.
+const root = fileURLToPath(new URL('..', import.meta.url));
 const as64 = name =>
   'data:image/jpeg;base64,' + readFileSync(resolve(root, name)).toString('base64');
 

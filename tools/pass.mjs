@@ -13,12 +13,17 @@
 //
 // The private key is read from BLINDED_PASS_KEY (a JWK, as JSON) or from
 // .pass-key.json beside the repo, which is in .gitignore and must stay there.
-// `keys` prints the public half in the shape lib/passkey.js wants.
+// `keys` prints the public half in the shape lib/pay.js wants.
 import { webcrypto } from 'node:crypto';
 import { readFileSync, existsSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const root = resolve(new URL('..', import.meta.url).pathname);
+// Through fileURLToPath rather than .pathname. On Windows a file URL's
+// pathname is "/C:/Users/..." -- with a leading slash -- and resolve() reads
+// that as a path rooted at the current drive, so it hands back "C:\\C:\\Users".
+// fileURLToPath is the conversion that knows about drive letters.
+const root = fileURLToPath(new URL('..', import.meta.url));
 const KEY_FILE = resolve(root, '.pass-key.json');
 const subtle = webcrypto.subtle;
 
@@ -103,8 +108,11 @@ if (what === 'imported') {
   writeFileSync(KEY_FILE, JSON.stringify(keys, null, 2) + '\n', { mode: 0o600 });
   console.log('wrote ' + KEY_FILE + ' — this file is the business. Back it up '
     + 'somewhere safe, and never commit it.\n');
-  console.log('Put this in lib/passkey.js:\n');
-  console.log('window.BlindedPass.useKey(' + JSON.stringify(keys.pub) + ');');
+  console.log('Now edit lib/pay.js. Replace the `key:` line with this, and\n'
+    + 'delete the `keyIsDevelopment: true` line beneath it:\n');
+  console.log('    key: ' + JSON.stringify(keys.pub) + ',');
+  console.log('\nThe self-test refuses to let payment be switched on while\n'
+    + 'keyIsDevelopment is still there, so it will tell you if you forget.');
 } else if (what === 'mint') {
   const days = Number(flag('days', 5));
   const { pass, payload } = await mint(privateKeyJwk(),

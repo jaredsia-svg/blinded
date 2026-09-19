@@ -2563,6 +2563,34 @@ check('no creation date is carried into the output', !meta.info.CreationDate);
     /Sitemap: https:\/\/\S+\/sitemap\.xml/.test(readFileSync(join(root, 'robots.txt'), 'utf8')));
 }
 
+// ---------- paths that work on somebody else's machine ----------
+//
+// A file URL's pathname is "/C:/Users/..." on Windows -- with a leading
+// slash -- and resolve() reads that as a path rooted at the current drive,
+// so it hands back "C:\\C:\\Users" and every tool fails on the first read.
+// Reported from a Windows checkout, where `node tools/pass.mjs keys` could
+// not write its own key file.
+//
+// fileURLToPath is the conversion that knows about drive letters. There is no
+// way to catch this from here, because here is Linux and the two agree.
+{
+  const tools = readdirSync(join(root, 'tools'))
+    .filter(name => name.endsWith('.mjs'));
+  check('there are tools to check', tools.length >= 8, String(tools.length));
+  for (const name of tools) {
+    const source = readFileSync(join(root, 'tools', name), 'utf8');
+    check(name + ': turns its own URL into a path the way Windows needs',
+      !/import\.meta\.url\)?\.pathname/.test(source)
+        && !/new URL\([^)]*import\.meta\.url[^)]*\)\.pathname/.test(source),
+      name + ' uses .pathname, which breaks on Windows');
+  }
+  for (const name of ['server.mjs']) {
+    const source = readFileSync(join(root, 'mint', name), 'utf8');
+    check('mint/' + name + ': the same',
+      !/import\.meta\.url\)?\.pathname/.test(source), name);
+  }
+}
+
 // ---------- the pass ----------
 //
 // The check that decides whether somebody paid. It runs on the buyer's own

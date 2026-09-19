@@ -10,9 +10,14 @@
 //   node tools/pages.mjs --check  say whether they are current
 import { mkdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { SITE, pages } from '../content/pages.mjs';
 
-const root = resolve(new URL('..', import.meta.url).pathname);
+// Through fileURLToPath rather than .pathname. On Windows a file URL's
+// pathname is "/C:/Users/..." -- with a leading slash -- and resolve() reads
+// that as a path rooted at the current drive, so it hands back "C:\\C:\\Users".
+// fileURLToPath is the conversion that knows about drive letters.
+const root = fileURLToPath(new URL('..', import.meta.url));
 
 const esc = text => String(text)
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
