@@ -34,7 +34,7 @@
   object-src 'none';
   base-uri 'none';
   form-action 'none'">
-<title>Blinded – redact a PDF without uploading it</title>
+<title>Blinded: Zero-upload redaction for recurring images &amp; text</title>
 <meta name="description" content="The only redactor that finds every copy of a name, a logo or a face by sight and deletes it completely. Nothing is uploaded – it runs in your browser.">
 <link rel="icon" href="/favicon.ico" sizes="48x48">
 <link rel="icon" href="/icon.svg" type="image/svg+xml">
@@ -55,7 +55,7 @@
      the only place in the markup that names the host twice. -->
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Blinded">
-<meta property="og:title" content="Blinded – redaction that never uploads your document">
+<meta property="og:title" content="Blinded: Zero-upload redaction for recurring images &amp; text">
 <meta property="og:description" content="The only redactor that finds every copy of a name, a logo or a face by sight and deletes it completely. Nothing is uploaded.">
 <meta property="og:url" content="https://blinded.dev/">
 <meta property="og:image" content="https://blinded.dev/og.png">
@@ -86,7 +86,7 @@
   "isAccessibleForFree": false
 }
 </script>
-<link rel="stylesheet" href="app.css?v=dcc6ba80">
+<link rel="stylesheet" href="app.css?v=f4a42a61">
 </head>
 <body>
 
@@ -106,13 +106,13 @@
           <rect x="22.2" y="8.6" width="2" height="6.4" rx="1"/>
         </g>
       </svg> Blinded</button>
-    <p class="claim" id="claim">Efficient redaction for your most sensitive documents, all done locally.</p>
+    <p class="claim" id="claim">Zero-upload redaction for recurring images &amp; text</p>
     <div class="top-actions">
       <!-- Two shapes of header, and which one you get is whether a document
            is open.
 
            With none, these are the pages of a site and you move between them:
-           Premium, Q&A, and the mark at the top left to come back. There is
+           Blinded License, Q&A, and the mark at the top left to come back. There is
            nothing to go "back to the tool" to.
 
            With a document open, everything else is a detour, and the only
@@ -121,7 +121,7 @@
            that and a header with two ways home is a header explaining
            itself. -->
       <button type="button" class="top-link" id="reset-top" hidden>Reset</button>
-      <button type="button" class="top-link" id="prem-open">Premium</button>
+      <button type="button" class="top-link" id="prem-open">Blinded License</button>
       <button type="button" class="top-link" id="faq-open">Q&amp;A</button>
       <button type="button" class="top-link" id="back-top" hidden>Back to the tool</button>
     </div>
@@ -466,7 +466,7 @@
       <!-- A button, like the FAQ beside it, rather than a link. The pages
            this tool has are views of it: following a link to one closes the
            document to go and read about the thing you were doing. -->
-      <button type="button" class="footlink" id="foot-prem">Premium</button>
+      <button type="button" class="footlink" id="foot-prem">Blinded License</button>
       <span class="foot-dot" aria-hidden="true">·</span>
       <a class="footlink" href="https://github.com/jaredsia-svg/blinded" rel="noopener">Source code on GitHub</a>
       <span class="foot-dot" aria-hidden="true">·</span>
@@ -765,7 +765,7 @@
     </div>
   </section>
 
-<!-- What a pass costs, pulled in from /premium/ the same way the questions
+<!-- What a licence costs, pulled in from /premium/ the same way the questions
      are: one copy of the words, at an address that can be linked to and
      indexed, and opening it never navigates away from a document that exists
      nowhere but this tab. -->
@@ -856,7 +856,7 @@
         <path d="M6 6l12 12M18 6L6 18"/>
       </svg>
     </button>
-    <h2 class="namehead payhead" id="payhead">Blinded &ndash; Premium Pass</h2>
+    <h2 class="namehead payhead" id="payhead">Blinded license</h2>
     <p class="confirmbody" id="paybody"></p>
     <ul class="paylist" id="paylist"></ul>
     <!-- The three objections somebody has at this moment, answered before
@@ -871,17 +871,17 @@
          how every other dialog here closes. A Not now button was a third
          thing to read in a box whose whole job is two prices. -->
     <p class="payhave"><button type="button" id="paycode" class="footlink">I
-      already have a pass</button></p>
+      already have a license</button></p>
   </div>
 </div>
 
 <!-- A pass bought earlier, or on another machine. What was emailed is the
-     pass itself rather than a link to it, so it travels. -->
+     license itself rather than a link to it, so it travels. -->
 <div id="codebox" class="busy" hidden role="dialog" aria-modal="true"
   aria-labelledby="codehead">
   <div class="busy-inner nameinner confirminner">
-    <h2 class="namehead" id="codehead">Enter your pass</h2>
-    <label class="namelabel" for="codeinput">Pass</label>
+    <h2 class="namehead" id="codehead">Enter your license</h2>
+    <label class="namelabel" for="codeinput">License</label>
     <input id="codeinput" type="text" class="nameinput" spellcheck="false"
       autocomplete="off" placeholder="blinded1.…">
     <p class="hint">It is checked here, in this tab, against a key built into
@@ -1072,9 +1072,9 @@
 <script src="lib/pdfwrite.js?v=4b977425"></script>
 <script src="lib/pdfread.js?v=ca229552"></script>
 <script src="lib/pass.js?v=9a72ccda"></script>
-<script src="lib/pay.js?v=280e8f74"></script>
+<script src="lib/pay.js?v=c9e5b5df"></script>
 <script src="lib/render.js?v=65c3fe76"></script>
-<script src="app.js?v=863e6329"></script>
+<script src="app.js?v=907e206d"></script>
 <script type="module" src="lib/boot.mjs?v=8b98ed8f"></script>
 </body>
 </html>

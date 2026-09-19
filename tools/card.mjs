@@ -30,7 +30,9 @@ const html = `<!doctype html><meta charset="utf-8"><style>
   .head { padding: 40px 56px 26px; }
   .mark { display: flex; align-items: center; gap: 13px; font-size: 38px; font-weight: 700; }
   .mark svg { width: 52px; }
-  .claim { margin-top: 14px; font-size: 27px; color: #b9c2d0; }
+  /* One line, and there is room for it: at 27px it used half the card. The
+     line is the whole pitch, so it takes the space. */
+  .claim { margin-top: 14px; font-size: 32px; color: #b9c2d0; }
   .claim b { color: #fff; font-weight: 600; }
   .pair { flex: 1; display: flex; gap: 22px; padding: 0 56px 44px; min-height: 0; }
   .one { flex: 1; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
@@ -48,8 +50,8 @@ const html = `<!doctype html><meta charset="utf-8"><style>
     <rect x="16.6" y="8.6" width="3.6" height="6.4" rx="1.5"/>
     <rect x="22.2" y="8.6" width="2" height="6.4" rx="1"/>
   </g></svg> Blinded</div>
-  <p class="claim">${PITCH.card.replace(/ Never uploads\./,
-    ' <b>Never uploads.</b>')}</p>
+  <p class="claim">${PITCH.card.replace(/^(Zero-upload|Never uploads\.)/,
+    '<b>$1</b>')}</p>
 </div>
 <div class="pair">
   <div class="one"><div class="cap">Before</div>

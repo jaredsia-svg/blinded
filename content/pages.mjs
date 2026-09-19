@@ -27,7 +27,9 @@ export const SITE = 'https://blinded.dev';
 // the site explains.
 export const PITCH = {
   // For a share card, where there is room for one line.
-  card: 'Finds every copy by sight. Deletes it completely. Never uploads.',
+  // "Zero-upload ... Never uploads" said the same thing twice in a line
+  // with room for one thing. The claim is in the first word now.
+  card: 'Zero-upload redaction for recurring images \u0026 text.',
   // For a meta description, where there is room for two sentences and the
   // first fifteen words are what shows.
   // Under 160 characters, because that is where a search result stops and

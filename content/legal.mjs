@@ -51,28 +51,28 @@ export const pages = [
           + 'were, what was in them, or that you used the tool today.'] },
 
       { h: 'What is stored on your own machine',
-        p: ['One thing: if you buy a pass, the pass itself is kept in your '
+        p: ['One thing: if you buy a license, the license itself is kept in your '
           + 'browser’s local storage so you do not have to paste it again. '
-          + 'It is a short signed string saying that somebody bought a pass '
+          + 'It is a short signed string saying that somebody bought a license '
           + 'and when it expires. It carries nothing about who you are. You '
           + 'can clear it at any time by clearing this site’s data.',
           'A draft is a file you download. It holds your marks and the words '
           + 'you typed, never the document, and it goes to your own disk like '
           + 'any other download. We never see it.'] },
 
-      { h: 'If you buy a pass',
+      { h: 'If you buy a license',
         p: ['Payment is handled by Paddle, which is the merchant of record: '
           + 'they sell the licence, take the card details and handle the tax. '
           + 'We never see your card number. The name, email address and '
           + 'country you give at checkout are held by Paddle under their own '
           + 'privacy policy, and they are the ones who send your receipt.',
-          'Our own service that signs passes stores one row per purchase: the '
-          + 'transaction id, the signed pass, when it was made and when it '
+          'Our own service that signs licenses stores one row per purchase: the '
+          + 'transaction id, the signed license, when it was made and when it '
           + 'expires. Not your name, not your email address, not your country. '
-          + 'Rows are deleted once the pass they describe has expired. That '
+          + 'Rows are deleted once the license they describe has expired. That '
           + 'service has never been given a document and has no way to ask for '
           + 'one.',
-          'Checking a pass happens on your machine, against a public key that '
+          'Checking a license happens on your machine, against a public key that '
           + 'came with the page. Using one sends no request to us — so we do '
           + 'not learn that you exported a document, when, or what it was.'] },
 
@@ -128,15 +128,15 @@ export const pages = [
     slug: 'terms',
     title: 'Terms of service',
     h1: 'Terms of service',
-    description: 'The terms for using Blinded and for buying a pass: what a '
-      + 'pass is, what the tool does not promise, and who is responsible for '
+    description: 'The terms for using Blinded and for buying a license: what a '
+      + 'license is, what the tool does not promise, and who is responsible for '
       + 'checking a redaction.',
     sections: [
       { h: 'What this is',
         p: ['Blinded is a document redaction tool that runs entirely in your '
           + 'browser. Using it means accepting these terms. If you do not '
           + 'accept them, do not use it.',
-          'These terms cover the hosted tool at blinded.dev and any pass '
+          'These terms cover the hosted tool at blinded.dev and any license '
           + 'bought through it.'] },
 
       { h: 'The thing you must read',
@@ -167,19 +167,19 @@ export const pages = [
           + 'of the bargain: this costs a few dollars and cannot carry the '
           + 'risk of your release decision.'] },
 
-      { h: 'What a pass is',
+      { h: 'What a license is',
         p: ['Documents of twenty pages or fewer are free, at any length of '
           + 'use and forever. Above twenty pages, writing the finished file '
-          + 'needs a pass. Everything before that step — opening, reading, '
+          + 'needs a license. Everything before that step — opening, reading, '
           + 'searching, marking, reviewing, saving a draft — is free at any '
           + 'length.',
-          'A pass is a time-limited licence to use the export feature, not an '
+          'A license is a time-limited permission to use the export feature, not an '
           + 'account and not a subscription. There is nothing to cancel: it '
           + 'stops working when it expires. It is a string, it is checked on '
           + 'your own machine, and it will work on any machine you paste it '
           + 'into until it runs out. Keep it to yourself; sharing it is a '
           + 'breach of these terms even though nothing technical stops you.',
-          'A pass buys length. It does not buy a better redaction — the tool '
+          'A license buys length. It does not buy a better redaction — the tool '
           + 'does exactly the same thing either way.'] },
 
       { h: 'Payment',
@@ -187,13 +187,13 @@ export const pages = [
           + 'a transaction with Paddle, whose own terms apply to it alongside '
           + 'these, and Paddle handles the payment, the tax and the receipt.',
           'Prices are shown before you buy and may change; a change never '
-          + 'affects a pass you have already bought.'] },
+          + 'affects a license you have already bought.'] },
 
       { h: 'Using it properly',
         p: ['Do not use Blinded to break the law, to conceal something you are '
           + 'legally required to disclose, or to alter a document you are not '
           + 'entitled to alter. Do not attempt to interfere with the site or '
-          + 'with the service that signs passes, and do not forge a pass.',
+          + 'with the service that signs licenses, and do not forge a license.',
           'Since the tool runs on your machine and sends us nothing, we have '
           + 'no way to detect any of this and no interest in trying. This '
           + 'clause tells you where the line is; it is not a claim to be '
@@ -204,12 +204,12 @@ export const pages = [
           + '1.0.0. You may read it, run it yourself and change it for any '
           + 'noncommercial purpose. You may not sell it or use it '
           + 'commercially. The licence governs the source; these terms govern '
-          + 'the hosted tool and any pass bought here.'] },
+          + 'the hosted tool and any license bought here.'] },
 
       { h: 'Ending it',
         p: ['You can stop using the tool at any time; there is nothing to '
           + 'close and nothing of yours held anywhere. We may stop offering '
-          + 'the hosted tool, in which case any unexpired pass would be '
+          + 'the hosted tool, in which case any unexpired license would be '
           + 'refunded on request.',
           'Because the source is published, the tool itself cannot be taken '
           + 'away from you: a copy you have run yourself keeps working '
@@ -228,7 +228,7 @@ export const pages = [
     title: 'Refunds and cancellation',
     h1: 'Refunds and cancellation',
     description: 'A full refund within ' + REFUND_HOURS + ' hours of buying a '
-      + 'pass, for any reason. There is no subscription to cancel.',
+      + 'license, for any reason. There is no subscription to cancel.',
     sections: [
       { h: 'The rule',
         p: ['<strong>A full refund within ' + REFUND_HOURS + ' hours of '
@@ -237,7 +237,7 @@ export const pages = [
           + 'was not what you wanted, that is reason enough.',
           'Twenty pages are free precisely so that this decision can be made '
           + 'before any money changes hands: you can see exactly what the tool '
-          + 'finds in your own document before you pay a thing. A pass buys '
+          + 'finds in your own document before you pay a thing. A license buys '
           + 'length, and nothing else changes when you have one.'] },
 
       { h: 'How to ask',
@@ -250,25 +250,25 @@ export const pages = [
 
       { h: 'After the window',
         p: ['Past ' + REFUND_HOURS + ' hours we are not promising a refund, '
-          + 'but ask anyway if something went wrong. A pass that never worked, '
+          + 'but ask anyway if something went wrong. A license that never worked, '
           + 'or a payment that went through and produced nothing, is our '
           + 'problem to fix whenever you notice it.'] },
 
       { h: 'There is nothing to cancel',
-        p: ['A pass is not a subscription. It is bought once, it works until '
+        p: ['A license is not a subscription. It is bought once, it works until '
           + 'it expires, and then it stops. Nothing recurs, nothing renews, '
           + 'and there is no account to close — so there is no cancellation '
           + 'to remember and no dark pattern to find your way out of.',
-          'One honest consequence: a refunded pass keeps working until it '
-          + 'expires. Checking a pass happens on your machine and asks us '
+          'One honest consequence: a refunded license keeps working until it '
+          + 'expires. Checking a license happens on your machine and asks us '
           + 'nothing, which is what makes it private and also what makes it '
           + 'impossible for us to withdraw. We have chosen privacy over '
           + 'control here, deliberately, and at these prices it is not a close '
           + 'call.'] },
 
-      { h: 'If your pass never arrived',
+      { h: 'If your license never arrived',
         p: ['Write to ' + CONTACT + ' with your Paddle receipt and we will '
-          + 'send the pass by hand. A payment that went through and left you '
+          + 'send the license by hand. A payment that went through and left you '
           + 'with nothing is ours to fix, not yours, and it does not count '
           + 'against any window.'] },
     ],

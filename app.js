@@ -661,7 +661,7 @@
     // Two shapes of header, and which one you get is whether a document is
     // open.
     //
-    // With none, these are the pages of a site: Premium and Q&A move between
+    // With none, these are the pages of a site: the licence page and Q&A move between
     // them, the mark at the top left comes back, and there is nothing to go
     // "back to the tool" to -- offering it would be offering to return
     // somewhere nobody has been.
@@ -813,7 +813,7 @@
         if (Pay && !Pay.on) {
           if (note) {
             note.textContent = 'Right now every length is free, including '
-              + 'export. The prices below are what a pass will cost when that '
+              + 'export. The prices below are what a license will cost when that '
               + 'changes.';
             note.hidden = false;
           }
@@ -1006,11 +1006,15 @@
     // steps aside the same way just above.
     busy(false);
     await confirmAction({
-      title: 'Premium pass required',
-      body: 'Documents over ' + Pay.freePages + ' pages need a Premium Pass '
-        + 'to export the finished file: '
-        + Pay.prices.map(one => one.price + ' for ' + one.label).join(', ')
-        + '. Pay once the redaction is done, just before exporting.',
+      title: 'Blinded license required',
+      body: 'Documents over ' + Pay.freePages + ' pages need a license to '
+        + 'export the finished file. Pay once the redaction is done, just '
+        + 'before exporting. More details ',
+      // The last word is a link, so the body is built rather than set: a
+      // reviewer who wants the whole story should not have to go looking for
+      // the page that tells it.
+      bodyLink: { text: 'here', href: '/premium/' },
+      bodyTail: '.',
       confirmLabel: 'Understood',
       // Nothing is being lost here and there is one way on, so the button is
       // the ordinary blue rather than the red that means "this throws work
@@ -7213,7 +7217,21 @@
       const save = el('confirmsave');
       const reset = el('confirmreset');
       el('confirmhead').textContent = opts.title || 'Are you sure?';
-      el('confirmbody').textContent = opts.body || '';
+      // A link inside the sentence, where one is asked for. textContent for
+      // the rest of it: every other caller passes plain words, and building
+      // those as markup would be a way in for anything that ever ends up in
+      // a dialog body.
+      const said = el('confirmbody');
+      said.textContent = opts.body || '';
+      if (opts.bodyLink) {
+        const to = document.createElement('a');
+        to.href = opts.bodyLink.href;
+        to.textContent = opts.bodyLink.text;
+        // A tab of its own: the document is in this one and nowhere else.
+        to.target = '_blank';
+        to.rel = 'noopener';
+        said.append(to, document.createTextNode(opts.bodyTail || ''));
+      }
       yes.textContent = opts.confirmLabel || 'Discard';
       // Red is for the ones that lose something. A notice that borrows it
       // makes every red button on the site mean a little less.
@@ -7501,8 +7519,8 @@
           return;
         }
         payNote(answer.why === 'expired'
-          ? 'That pass has run out. Buying again gives you a new one.'
-          : 'That does not look like a pass from here. Check for a missing '
+          ? 'That license has run out. Buying again gives you a new one.'
+          : 'That does not look like a license from here. Check for a missing '
             + 'character at either end.');
       };
       window.addEventListener('focus', look);
@@ -7564,11 +7582,11 @@
     const body = el('paybody');
     if (body) {
       body.textContent = 'Documents over ' + Pay.freePages + ' pages need a '
-        + 'Premium Pass to export the finished file.';
+        + 'Blinded license to export the finished file.';
     }
     // Each price is the button that buys it.
     //
-    // It used to be a list of prices and then one Buy a pass button, which
+    // It used to be a list of prices and then one Buy a license button, which
     // opened a page that listed the same two prices and asked again. Three
     // presses and two readings of the same pair of numbers to spend three
     // dollars. Choosing the price is the decision; pressing it should be the

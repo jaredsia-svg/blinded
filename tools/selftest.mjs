@@ -2467,8 +2467,10 @@ check('no creation date is carried into the output', !meta.info.CreationDate);
     for (const part of ['by sight', 'completely', 'uploaded']) {
       check('the claim names "' + part + '"', PITCH.short.includes(part), PITCH.short);
     }
+    // However it is worded, the card has to make the claim the picture is
+    // evidence for. "Zero-upload" and "Never uploads" are both it.
     check('and the share card carries it too', PITCH.card.length > 20
-      && /Never uploads/.test(PITCH.card), PITCH.card);
+      && /Zero-upload|Never uploads/.test(PITCH.card), PITCH.card);
   }
 
   // What a search result actually has room for.
@@ -2887,8 +2889,8 @@ check('no creation date is carried into the output', !meta.info.CreationDate);
     // point: the day a paid version redacts better than the free one is the
     // day this is selling safety, and a change that does it has to delete
     // this line and argue with this test.
-    check('it says a pass buys length rather than a better redaction',
-      /pass buys length, not a better redaction/.test(said)
+    check('it says a license buys length rather than a better redaction',
+      /licen[cs]e buys length, not a better redaction/.test(said)
         && /remove exactly the same things/.test(said), 'premium/index.html');
 
     // Reachable from everywhere, or it is a page nobody finds when the

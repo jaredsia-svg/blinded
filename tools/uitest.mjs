@@ -8998,7 +8998,7 @@ try {
     // One sentence, not a paragraph. Somebody reading this has a finished
     // redaction on the other side of it and wants the price.
     check('and told what it is for and what it costs',
-      /over 20 pages/.test(asked.body) && /Premium Pass/.test(asked.body)
+      /over 20 pages/.test(asked.body) && /Blinded license/.test(asked.body)
         && asked.prices >= 2, JSON.stringify(asked));
 
     // Choosing the price is the decision, so pressing it is the whole of it.
@@ -9091,7 +9091,7 @@ try {
     check('a made-up pass is refused', wrong.stillAsking === true
       && wrong.naming === false, JSON.stringify(wrong));
     check('and said so in a sentence somebody can act on',
-      /does not look like a pass/.test(wrong.note), wrong.note);
+      /does not look like a license/.test(wrong.note), wrong.note);
 
     // One that expired is a different answer: buy another, not "that is not a
     // pass". Sending somebody to look for a renewal they do not need, or to
@@ -9162,6 +9162,11 @@ try {
       head: document.getElementById('confirmhead').textContent,
       body: document.getElementById('confirmbody').textContent,
       yes: document.getElementById('confirmyes').textContent,
+      link: (() => {
+        const a = document.querySelector('#confirmbody a');
+        return a ? { href: a.getAttribute('href'), blank: a.target,
+                     rel: a.rel, text: a.textContent } : null;
+      })(),
       red: document.getElementById('confirmyes').classList.contains('danger'),
       wide: Math.round(document.getElementById('confirmyes').getBoundingClientRect().width)
         >= Math.round(document.querySelector('#confirmbox .confirminner')
@@ -9170,12 +9175,17 @@ try {
       here: !document.getElementById('view-review').hidden,
     }));
     check('a long one is told the rule as the pages come up',
-      /pass/i.test(notice.head), JSON.stringify(notice));
+      /licen[cs]e/i.test(notice.head), JSON.stringify(notice));
     check('naming the length the line sits at',
       notice.body.includes('over 20 pages'), JSON.stringify(notice));
-    check('and both prices, so neither is a surprise later',
-      notice.body.includes('USD 2.99') && notice.body.includes('USD 6.99'),
-      JSON.stringify(notice));
+    check('and pointed at the page that carries the numbers',
+      /more details/i.test(notice.body), JSON.stringify(notice));
+    // And pointed there by a link, in a tab of its own: the document is in
+    // this one and nowhere else, so reading the price must not cost it.
+    check('with a link to it that opens a tab of its own',
+      notice.link && notice.link.href === '/premium/'
+        && notice.link.blank === '_blank' && /noopener/.test(notice.link.rel),
+      JSON.stringify(notice.link));
     check('and that the money comes after the work, not before it',
       /before exporting/i.test(notice.body), JSON.stringify(notice));
     // Over the document, not over the reading overlay.
@@ -10565,7 +10575,7 @@ try {
       };
     });
     check('the page ends with its name, the questions and the source',
-      foot && /Blinded · FAQ · Premium · Source code on GitHub/.test(foot.says),
+      foot && /Blinded · FAQ · Blinded License · Source code on GitHub/.test(foot.says),
       JSON.stringify(foot));
     check('and the source link points at the repository',
       foot && /github\.com\/.+\/blinded/.test(foot.source) && foot.safe === true,
@@ -10610,8 +10620,9 @@ try {
       // Nothing about the document went anywhere to get this.
       pages: window.Blinded.state.pages.length,
     }));
-    check('the header opens what a pass costs', price.says === 'Premium'
-      && /Premium/.test(price.heading || ''), JSON.stringify(price));
+    check('the header opens what a license costs',
+      price.says === 'Blinded License'
+        && /Blinded License/.test(price.heading || ''), JSON.stringify(price));
     check('and it does not bring a second top-level heading with it',
       price.ownH1 === 0 && price.pageH1s === 1, JSON.stringify(price));
 

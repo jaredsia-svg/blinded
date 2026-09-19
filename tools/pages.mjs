@@ -119,9 +119,9 @@ ${structured(page)}
   <div class="wrap top-inner">
     <a class="mark" href="/">
 ${mark()} Blinded</a>
-    <p class="claim">Efficient redaction for your most sensitive documents, all done locally.</p>
+    <p class="claim">Zero-upload redaction for recurring images &amp; text</p>
     <div class="top-actions">
-      <a class="top-link" href="/premium/">Premium</a>
+      <a class="top-link" href="/premium/">Blinded License</a>
       <a class="top-link" href="/faq.html">Q&amp;A</a>
     </div>
   </div>

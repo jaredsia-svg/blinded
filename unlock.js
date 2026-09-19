@@ -73,12 +73,12 @@
   }
 
   async function bought(transaction) {
-    say('Payment taken. Making your pass…');
+    say('Payment taken. Making your license…');
     const pass = await collect(transaction);
     if (!pass) {
-      say('Payment taken, and your pass was made — this page could not fetch '
-        + 'it in time. Write to support@blinded.dev with your Paddle receipt '
-        + 'and we will send it straight back.', true);
+      say('Payment taken, and your license was made — this page could not '
+        + 'fetch it in time. Write to support@blinded.dev with your Paddle '
+        + 'receipt and we will send it straight back.', true);
       return;
     }
     // Checked before it is shown. A pass that does not verify is a bug at our
@@ -87,7 +87,7 @@
     Pass.useKey(Pay.key);
     const answer = await Pass.check(pass);
     if (!answer.ok) {
-      say('Payment taken, but the pass we made does not check out (' + answer.why
+      say('Payment taken, but the license we made does not check out (' + answer.why
         + '). Keep this page open and get in touch — your payment is '
         + 'safe and this is ours to fix.', true);
       return;
@@ -229,7 +229,7 @@
       note.className = 'hint warnhint';
       note.id = 'buyrehearse';
       note.textContent = 'A rehearsal of the buying page. Blinded is free at '
-        + 'every length in this copy and nobody needs a pass — this is here '
+        + 'every length in this copy and nobody needs a license — this is here '
         + 'so that buying one can be tested before it is switched on.';
       el('buylist').before(note);
     }
@@ -245,7 +245,7 @@
     const script = document.createElement('script');
     script.src = 'https://cdn.paddle.com/paddle/v2/paddle.js';
     script.onerror = () => say('The payment window could not be loaded. If you '
-      + 'are on a network that blocks it, a pass bought anywhere else will '
+      + 'are on a network that blocks it, a license bought anywhere else will '
       + 'work here.', true);
     script.onload = () => {
       if (Pay.paddle.environment !== 'production') {

@@ -11,6 +11,12 @@
      ran together into one list. */
   --line-strong: #c8d2e2;
   --band: #eef3fb;
+  /* What a dialog is made of. It used to be #f4f6fa on a #f6f7f9 page, which
+     is a step of three values: the box read as a lighter patch of the same
+     surface rather than as a thing in front of it. A shade under the foot's
+     own band, so the two read as the same material and the dialog is plainly
+     the nearer of the two. */
+  --dialog: #e7eef9;
   --bg: #f6f7f9;
   --card: #ffffff;
   --accent: #1f6feb;
@@ -785,7 +791,8 @@ button { font: inherit; cursor: pointer; border-radius: 8px; }
 
 .busy { position: fixed; inset: 0; background: rgba(246,247,249,.86); display: grid; place-items: center; z-index: 20; }
 .busy-inner {
-  background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--dialog); border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
   padding: 16px 22px; font-weight: 500; min-width: 260px; max-width: 360px;
 }
 .spinner { width: 16px; height: 16px; border: 2px solid var(--line); border-top-color: var(--accent); border-radius: 50%; animation: spin .7s linear infinite; }
@@ -1620,7 +1627,7 @@ body.reviewing .exportbar { position: static; flex: none; margin: 14px 0 18px; }
    card on a white page reads as part of it. */
 .nameinner {
   max-width: 460px; text-align: left;
-  background: #f4f6fa; border: 1px solid #dfe4ec;
+  background: var(--dialog); border: 1px solid var(--line-strong);
 }
 /* One shape for all three: a box on the left, the name, and one quiet line
    under it. They were three paragraphs of different lengths, each wrapping
