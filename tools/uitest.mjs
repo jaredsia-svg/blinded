@@ -10620,8 +10620,10 @@ try {
       // Nothing about the document went anywhere to get this.
       pages: window.Blinded.state.pages.length,
     }));
+    // One word in the header, where the room is; the page it opens still
+    // introduces itself in full.
     check('the header opens what a license costs',
-      price.says === 'Blinded License'
+      price.says === 'License'
         && /Blinded License/.test(price.heading || ''), JSON.stringify(price));
     check('and it does not bring a second top-level heading with it',
       price.ownH1 === 0 && price.pageH1s === 1, JSON.stringify(price));
