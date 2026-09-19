@@ -2700,6 +2700,26 @@ check('no creation date is carried into the output', !meta.info.CreationDate);
     Pay.key && Pay.key.kty === 'EC' && Pay.key.d === undefined,
     JSON.stringify(Object.keys(Pay.key || {})));
 
+  // And that it is a key at all.
+  //
+  // A P-256 public key is two coordinates. Pasting one in and losing the
+  // second -- which a long line in a terminal makes easy -- leaves something
+  // that looks like a key, passes every check above, and throws inside
+  // importKey. lib/pass.js catches that throw and answers "forged", so the
+  // failure is: the customer pays, gets a real pass, and is told it is a
+  // forgery. Nothing short of importing it actually catches this.
+  {
+    let usable = false;
+    let why = '';
+    try {
+      await webcrypto.subtle.importKey('jwk', Pay.key,
+        { name: 'ECDSA', namedCurve: 'P-256' }, false, ['verify']);
+      usable = true;
+    } catch (error) { why = error.message; }
+    check('and it is a whole key, which is the only way to know it is one',
+      usable, 'lib/pay.js: the key does not import (' + why + ')');
+  }
+
   // The split that keeps the promise. The tool's page may not reach a payment
   // processor; the buying page may, and holds no document.
   const tool = readFileSync(join(root, 'index.html'), 'utf8');
