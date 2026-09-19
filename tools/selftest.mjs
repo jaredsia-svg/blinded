@@ -2908,9 +2908,19 @@ check('no creation date is carried into the output', !meta.info.CreationDate);
       // itself. A link would close the document to go and read about the
       // thing the reader was in the middle of doing.
       if (where === 'index.html') {
+        // The rule is that reading about the tool must never close the
+        // document, not that the word /premium/ may not appear: a link that
+        // opens a tab of its own leaves the document exactly where it was.
+        // So links are allowed here when, and only when, they do that.
+        const links = [...page.matchAll(/<a\b[^>]*href="\/premium\/"[^>]*>/g)]
+          .map(one => one[0]);
+        const closes = links.filter(one => !/target="_blank"/.test(one));
         check('and nothing in the tool navigates away to reach it',
-          !/href="\/premium\/"/.test(page) && /id="foot-prem"/.test(page),
-          'index.html has a link to /premium/');
+          closes.length === 0 && /id="foot-prem"/.test(page),
+          closes.join(' | ') || 'index.html');
+        check('and a tab it does open cannot reach back into this one',
+          links.every(one => !/target="_blank"/.test(one) || /rel="noopener"/.test(one)),
+          links.join(' | '));
       }
     }
 

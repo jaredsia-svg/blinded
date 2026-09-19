@@ -7460,12 +7460,13 @@
         box.hidden = true;
         window.removeEventListener('focus', look);
         el('paylist').removeEventListener('click', buy);
-        el('payskip').removeEventListener('click', no);
         el('payx').removeEventListener('click', no);
+        box.removeEventListener('pointerdown', away);
         el('paycode').removeEventListener('click', typed);
         resolve(answer);
       };
       const no = () => shut(false);
+      const away = event => { if (event.target === box) no(); };
       // Delegated, because describePay builds these buttons afresh every time
       // the dialog opens and a listener bound to the old ones would be bound
       // to nothing.
@@ -7506,8 +7507,12 @@
       };
       window.addEventListener('focus', look);
       el('paylist').addEventListener('click', buy);
-      el('payskip').addEventListener('click', no);
       el('payx').addEventListener('click', no);
+      // A press on the dimmed page behind the box is a way out, the same as
+      // the cross and the same as every other dialog here. Declining costs
+      // nothing -- the marks stay, the document stays, and Export can be
+      // pressed again -- so a stray tap can only cost somebody the dialog.
+      box.addEventListener('pointerdown', away);
       el('paycode').addEventListener('click', typed);
     });
   }

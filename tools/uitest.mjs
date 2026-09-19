@@ -9015,7 +9015,9 @@ try {
       if (go) go.click();
       await new Promise(r => setTimeout(r, 200));
       window.open = was;
-      return { asked, count, gone: !document.getElementById('paygo'),
+      return { asked, count,
+               gone: !document.getElementById('paygo')
+                 && !document.getElementById('payskip'),
                label: go ? go.textContent : null };
     });
     check('every price in the dialog is the button that buys it',
@@ -9029,10 +9031,39 @@ try {
       oneclick.asked && oneclick.asked.name === 'blinded-pay',
       JSON.stringify(oneclick));
 
+    // With Not now gone, the ways out are the cross and the page behind it.
+    // If neither worked the dialog would be a trap over somebody's document.
+    const outside = await paying.evaluate(async () => {
+      const box = document.getElementById('paybox');
+      const before = box.hidden;
+      box.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+      await new Promise(r => setTimeout(r, 250));
+      return { before, after: box.hidden };
+    });
+    check('a press on the page behind closes it',
+      outside.before === false && outside.after === true,
+      JSON.stringify(outside));
+
+    // And it must be the page behind, not anything inside: a press that
+    // lands on a price would otherwise shut the dialog on its way to buying.
+    await paying.evaluate(() => document.getElementById('export').click());
+    await paying.waitForTimeout(400);
+    const inside = await paying.evaluate(async () => {
+      const box = document.getElementById('paybox');
+      box.querySelector('.busy-inner')
+        .dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+      await new Promise(r => setTimeout(r, 250));
+      return { open: box.hidden === false };
+    });
+    check('but a press inside it does not', inside.open === true,
+      JSON.stringify(inside));
+
 
     // Saying no leaves everything where it was. Nothing is lost by declining.
     const declined = await paying.evaluate(async () => {
-      document.getElementById('payskip').click();
+      // The cross, since there is no Not now any more: declining is the
+      // dialog's way out, not a third thing on offer beside two prices.
+      document.getElementById('payx').click();
       await new Promise(r => setTimeout(r, 300));
       return { gone: document.getElementById('paybox').hidden,
                naming: !document.getElementById('namebox').hidden,

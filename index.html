@@ -86,7 +86,7 @@
   "isAccessibleForFree": false
 }
 </script>
-<link rel="stylesheet" href="app.css?v=509a5147">
+<link rel="stylesheet" href="app.css?v=dcc6ba80">
 </head>
 <body>
 
@@ -862,13 +862,14 @@
     <!-- The three objections somebody has at this moment, answered before
          they are raised. Short enough to be read at a glance, which is all
          the attention anybody gives a price. -->
-    <p class="paytrust">No account &middot; Nothing to cancel &middot; Works offline</p>
+    <p class="paytrust">No account &middot; Nothing to cancel &middot; Works
+      offline <a href="/premium/" id="paymore" target="_blank" rel="noopener">(more
+      details)</a></p>
     <p class="hint warnhint" id="paynote" hidden></p>
-    <!-- No Buy a pass button any more: the prices above are the buttons, and
-         a second one asking the same question was the extra press. -->
-    <div class="confirmgo sweepgo">
-      <button type="button" id="payskip" class="ghost confirm-action">Not now</button>
-    </div>
+    <!-- No buttons down here at all. The prices above are the way on, and
+         the way out is the cross, or a press on the page behind -- which is
+         how every other dialog here closes. A Not now button was a third
+         thing to read in a box whose whole job is two prices. -->
     <p class="payhave"><button type="button" id="paycode" class="footlink">I
       already have a pass</button></p>
   </div>
@@ -1073,7 +1074,7 @@
 <script src="lib/pass.js?v=9a72ccda"></script>
 <script src="lib/pay.js?v=280e8f74"></script>
 <script src="lib/render.js?v=65c3fe76"></script>
-<script src="app.js?v=c3c7a27b"></script>
+<script src="app.js?v=863e6329"></script>
 <script type="module" src="lib/boot.mjs?v=8b98ed8f"></script>
 </body>
 </html>
