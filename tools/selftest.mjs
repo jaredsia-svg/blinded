@@ -2756,6 +2756,11 @@ check('no creation date is carried into the output', !meta.info.CreationDate);
       id.startsWith('pro_')
         ? id + ' is a product id -- open it in Paddle and copy the pri_ under it'
         : id);
+    // Whole, too. Half a public key was pasted in once and every symptom of
+    // it pointed somewhere else; an id is the same shape of mistake and the
+    // same length every time, so it can simply be measured.
+    check('and it is a whole one', /^pri_[0-9a-z]{26}$/.test(id),
+      id + ' is ' + id.length + ' characters; a Paddle price id is 30');
   }
 
   // Sandbox is for trying it out; money cannot arrive there. Switching
