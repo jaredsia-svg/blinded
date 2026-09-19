@@ -2720,10 +2720,16 @@ check('no creation date is carried into the output', !meta.info.CreationDate);
     // matters is not worth missing over an indent.
     const said = prem.replace(/\s+/g, ' ');
     check('it says the line is length, not quality',
-      /drawn at length rather than at quality/.test(said)
-        && /remove exactly the same things/.test(said), 'premium/index.html');
+      /line is length, not quality/i.test(said)
+        && /remove exactly the same things, exactly as thoroughly/.test(said),
+      'premium/index.html');
+    // Named, because it is the expensive one and therefore the one a future
+    // version would be tempted to put behind the pass.
     check('and that the second check is on the free side of it',
-      /free, at any length[\s\S]*second check/.test(said), 'premium/index.html');
+      /the second check included/.test(said), 'premium/index.html');
+    check('and says why that line is where it is',
+      /selling safety/.test(said) && /must not be metered/.test(said),
+      'premium/index.html');
 
     // Reachable from everywhere, or it is a page nobody finds when the
     // question occurs to them.

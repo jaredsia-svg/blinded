@@ -2300,20 +2300,48 @@ body.choosing { -webkit-user-select: none; user-select: none; }
 }
 
 
-/* ---------- what it costs, and what stays free ---------- */
+/* ---------- what it costs ---------- */
+/*
+   Short on purpose. Anybody on this page has one question and it is a
+   number; everything else is there to be believed rather than read, so it is
+   three short columns and two paragraphs, not a features list.
+*/
 .premnow {
-  margin: 0 0 16px; padding: 10px 14px; border-radius: 8px;
+  margin: 0 0 18px; padding: 10px 14px; border-radius: 8px;
   background: var(--warn-bg); border: 1px solid #e6cd9a;
   color: #8a5a10; font-size: 13.5px; font-weight: 600;
 }
-.premprices { list-style: none; margin: 18px 0 0; padding: 0; }
-.premprices li {
-  display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;
-  padding: 10px 0; border-top: 1px solid var(--line);
+/* The two prices, side by side, because the only thing anybody is doing here
+   is comparing them. */
+.premcards {
+  display: grid; gap: 12px; margin: 20px 0 12px;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
 }
-.premprices b { font-size: 18px; }
-.premprices span { font-size: 14px; }
-.premprices i { color: var(--ink-soft); font-size: 13px; font-style: normal; margin-left: auto; }
-.premlist { margin: 0; padding-left: 18px; max-width: 62ch; }
-.premlist li { margin-bottom: 10px; color: var(--ink-soft); line-height: 1.6; }
-.premlist b { color: var(--ink); }
+.premcard {
+  background: #f4f6fa; border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 16px 18px;
+}
+.premcard b { display: block; font-size: 24px; letter-spacing: -0.02em; }
+.premcard span { display: block; margin-top: 2px; font-size: 13.5px; font-weight: 600; }
+.premcard i {
+  display: block; margin-top: 8px; font-style: normal;
+  font-size: 12.5px; color: var(--ink-soft);
+}
+.premfree { margin: 0 0 18px; font-size: 13px; color: var(--ink-soft); max-width: 60ch; }
+/* Three things worth knowing, read across rather than down a list. */
+.premfacts {
+  display: grid; gap: 18px; margin: 26px 0 4px;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  border-top: 1px solid var(--line); padding-top: 20px;
+}
+.premfacts h2 { margin: 0 0 5px; font-size: 13.5px; }
+.premfacts p { margin: 0; font-size: 12.5px; line-height: 1.55; color: var(--ink-soft); }
+.premline p { max-width: 62ch; }
+.premfoot {
+  margin: 22px 0 0; padding-top: 16px; border-top: 1px solid var(--line);
+  display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline;
+  font-size: 12.5px; color: var(--ink-soft);
+}
+.premfoot a { color: var(--ink-soft); }
+.premfoot a:hover { color: var(--accent); }
+.premrefund { color: var(--ink-soft); }

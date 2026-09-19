@@ -11,21 +11,23 @@
   const el = id => document.getElementById(id);
 
   function rows() {
-    const list = el('premprices');
-    list.textContent = '';
+    const host = el('premprices');
+    host.textContent = '';
     for (const price of Pay.prices) {
-      const row = document.createElement('li');
+      const card = document.createElement('div');
+      card.className = 'premcard';
       const what = document.createElement('b');
       what.textContent = price.price;
       const how = document.createElement('span');
-      how.textContent = ' for ' + price.label;
+      how.textContent = price.label;
       const why = document.createElement('i');
       why.textContent = price.note;
-      row.append(what, how, why);
-      list.append(row);
+      card.append(what, how, why);
+      host.append(card);
     }
     el('premfree').textContent = 'Free below ' + Pay.freePages
-      + ' pages, always.';
+      + ' pages. Always, and at any length: opening, searching, marking, '
+      + 'reviewing and saving a draft.';
   }
 
   async function held() {

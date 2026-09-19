@@ -56,104 +56,60 @@
 <article class="view faqmain lander">
 
   <h1 class="faqtitle">Premium</h1>
-  <p class="lede">Almost all of Blinded is free, and the part that is free is
-    the part that matters. What is paid for is length.</p>
+  <p class="lede">Almost all of Blinded is free. What is paid for is length.</p>
 
   <!-- Written from lib/pay.js at load, so the prices here and the prices at
        the checkout cannot drift apart. -->
   <p class="premnow" id="premnow" hidden></p>
-  <ul class="premprices" id="premprices"></ul>
-  <p class="landgo"><a class="landcta" href="/unlock.html" id="prembuy">Get a pass</a>
-    <span class="landfree" id="premfree"></span></p>
 
-  <section class="faq">
-    <h2>What is free, at any length, forever</h2>
-    <ul class="premlist">
-      <li><b>The redaction itself.</b> Every word, every logo, every detector,
-        the reading of scanned pages, the second check that looks for words
-        which exist only as pictures — all of it, on a document of any size.</li>
-      <li><b>Opening, searching, marking and reviewing.</b> You can do the
-        entire job on a five-hundred-page file and see everything it found
-        before any question of money comes up.</li>
-      <li><b>Saving a draft.</b> Your marks and the words you typed, as a file
-        on your own machine, to reopen and carry on later.</li>
-      <li><b>Exporting anything up to twenty pages.</b> A contract, a letter,
-        a scan of something that came in the post — the jobs somebody does
-        once and would not pay for.</li>
-    </ul>
+  <div class="premcards" id="premprices"></div>
+
+  <p class="premfree" id="premfree"></p>
+  <p class="landgo"><a class="landcta" href="/unlock.html" id="prembuy">Get a pass</a></p>
+
+  <div class="premfacts">
+    <div>
+      <h2>No account</h2>
+      <p>Nothing to sign up for, nothing to cancel. A pass is a string. When it
+        runs out it stops working, and that is the end of it.</p>
+    </div>
+    <div>
+      <h2>Works offline</h2>
+      <p>Verified on your own machine against a key that can check a pass and
+        cannot make one. Using it tells us nothing — not that you used it, not
+        when, not what you were redacting.</p>
+    </div>
+    <div>
+      <h2>Your file is not involved</h2>
+      <p>Buying happens on a separate page, in a separate window. The page
+        holding your document still cannot reach a payment processor, or
+        anything else.</p>
+    </div>
+  </div>
+
+  <section class="faq premline">
+    <h2>The line is length, not quality</h2>
+    <p>A pass buys one thing: writing the finished file for a document longer
+      than twenty pages. There is no feature behind it — no better matcher, no
+      faster search. The free version and the paid version remove exactly the
+      same things, exactly as thoroughly, the second check included.</p>
+    <p>That is deliberate. A redaction tool that redacts better if you pay is
+      selling safety, and safety is the one thing that must not be metered.</p>
   </section>
 
-  <section class="faq">
-    <h2>What a pass is for</h2>
-    <p>One thing: writing the finished file for a document longer than twenty
-      pages. That is the whole of it. There is no feature behind it, no better
-      matcher, no faster search.</p>
-    <p>It is deliberate that the line is drawn at length rather than at
-      quality. A redaction tool that redacts better if you pay is selling
-      safety, and safety is the one thing that must not be metered. The free
-      version and the paid version remove exactly the same things, exactly as
-      thoroughly.</p>
-  </section>
+  <p class="premfoot">
+    <a href="/faq.html">How it works</a>
+    <span aria-hidden="true">·</span>
+    <a href="https://github.com/jaredsia-svg/blinded" rel="noopener">Source</a>
+    <span aria-hidden="true">·</span>
+    <a href="mailto:support@blinded.dev">support@blinded.dev</a>
+    <span aria-hidden="true">·</span>
+    <span class="premrefund">Refunds within 14 days, any reason.</span>
+  </p>
 
-  <section class="faq">
-    <h2>How a pass works</h2>
-    <ul class="premlist">
-      <li><b>No account.</b> Nothing to sign up for, nothing to log into,
-        nothing to cancel. A pass is a string. When it runs out it stops
-        working, and that is the end of it.</li>
-      <li><b>No subscription.</b> Neither pass renews. You buy five days or a
-        month, and then you have bought nothing else.</li>
-      <li><b>It works offline.</b> Blinded holds a key that can check a pass
-        and cannot make one, so it is verified on your own machine. Nothing is
-        sent anywhere to confirm it — which means using it tells us nothing:
-        not that you used it, not when, and not what you were redacting.</li>
-      <li><b>It travels.</b> The same string works on any machine you paste it
-        into, as many times as you like, until it expires.</li>
-      <li><b>Your document is never involved.</b> Buying happens on a separate
-        page, in a separate window. The page holding your file is forbidden by
-        the browser from talking to a payment processor, and that has not
-        changed to make room for this.</li>
-    </ul>
-  </section>
-
-  <section class="faq">
-    <h2>Questions</h2>
-    <h3>What happens when my pass runs out?</h3>
-    <p>Long documents stop exporting. Everything else keeps working, and every
-      file you already exported is yours. Nothing is taken away and nothing is
-      held hostage — your draft, your marks and your documents are on your
-      machine, not ours.</p>
-    <h3>Can I try it first?</h3>
-    <p>You already can, on the document you actually care about. Open a
-      five-hundred-page file, redact all of it, and look at every mark. You are
-      only asked for money at the last step, and only if the file is long.</p>
-    <h3>I bought a pass and lost it.</h3>
-    <p>It is in the email from the purchase. If you cannot find it, write to
-      <a href="mailto:support@blinded.dev">support@blinded.dev</a> with the
-      email address you paid with.</p>
-    <h3>Can I get a refund?</h3>
-    <p>Yes, within fourteen days, for any reason. Paddle is the merchant of
-      record and handles it — or write to
-      <a href="mailto:support@blinded.dev">support@blinded.dev</a> and we
-      will.</p>
-    <h3>Do you need a licence for a team or a firm?</h3>
-    <p>Write to <a href="mailto:support@blinded.dev">support@blinded.dev</a>.
-      Blinded is source-available and runs on your own machines, so a firm that
-      wants to host it internally is a conversation rather than a product
-      page.</p>
-  </section>
-
-  <section class="faq">
-    <h2>Also</h2>
-    <ul class="landalso">
-      <li><a href="/faq.html">How it works, in full</a></li>
-      <li><a href="/">Open the tool</a></li>
-      <li><a href="https://github.com/jaredsia-svg/blinded" rel="noopener">Read the source on GitHub</a></li>
-      <li><a href="mailto:support@blinded.dev">support@blinded.dev</a></li>
-    </ul>
-  </section>
-
-  <p class="faqback"><a class="faqbackbtn" href="/">Open the tool</a></p>
+  <!-- No second "Open the tool" at the foot. The page is short enough that
+       the button near the prices is still on screen, and two of them a
+       screen apart is a page that does not know which one it meant. -->
 
 </article>
 </main>
