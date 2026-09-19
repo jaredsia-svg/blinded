@@ -37,6 +37,10 @@
     el('buypass').textContent = pass;
     el('buydone').hidden = false;
     el('buylist').hidden = true;
+    // Including the checkout, which has done its job and would otherwise sit
+    // under the pass inviting a second purchase.
+    const frame = el('buyframe');
+    if (frame) frame.hidden = true;
     say('');
     el('buydone').scrollIntoView({ block: 'nearest' });
   }
@@ -96,19 +100,21 @@
     list.textContent = '';
     for (const price of Pay.prices) {
       const row = document.createElement('li');
+      // The same shape as the dialog in the tool: the length in the blue,
+      // the price opposite it, the whole row the button. Two different
+      // drawings of one offer made it look like two offers.
       const go = document.createElement('button');
       go.type = 'button';
-      go.className = 'buygo';
-      const what = document.createElement('b');
-      what.textContent = price.price;
+      go.className = 'payprice';
       const how = document.createElement('span');
+      how.className = 'payfor';
       how.textContent = price.label;
-      go.append(what, how);
+      const what = document.createElement('b');
+      what.className = 'paycost';
+      what.textContent = price.price;
+      go.append(how, what);
       go.addEventListener('click', () => buy(price));
-      const note = document.createElement('span');
-      note.className = 'buyfine';
-      note.textContent = price.note;
-      row.append(go, note);
+      row.append(go);
       list.append(row);
     }
   }
@@ -134,16 +140,32 @@
     } catch { /* and a browser that will not even make the call */ }
   }
 
-  function buy(price) {
+  // `inline` draws the checkout into this page; `overlay` floats it over the
+  // page. Inline is right when the price was already chosen in the tool,
+  // because then this page is the checkout and nothing else -- an overlay
+  // over an otherwise empty page is a curtain in front of a curtain. Somebody
+  // who came here without choosing gets the prices and an overlay, since
+  // there is a page behind it worth keeping.
+  function buy(price, inline) {
     wake();
     const id = Pay.paddle.priceIds[price.id];
     if (!window.Paddle || !id) {
       say('Buying is not switched on for this copy of Blinded yet.', true);
       return;
     }
+    if (inline) {
+      el('buylist').hidden = true;
+      el('buyframe').hidden = false;
+    }
     window.Paddle.Checkout.open({
       items: [{ priceId: id, quantity: 1 }],
-      settings: {
+      settings: inline ? {
+        displayMode: 'inline',
+        frameTarget: 'checkout-container',
+        frameInitialHeight: 460,
+        frameStyle: 'width:100%; min-width:312px; background-color:transparent; border:none;',
+        showAddDiscounts: true,
+      } : {
         displayMode: 'overlay',
         // The discount field is on, which is the only way a code can be used:
         // Paddle draws it inside its own overlay or not at all.
@@ -261,7 +283,7 @@
         },
       });
 
-      if (wanted) buy(wanted);
+      if (wanted) buy(wanted, true);
     };
     document.head.append(script);
   }

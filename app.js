@@ -452,35 +452,6 @@
 
   // Said when the document opens, not when the file is asked for.
   //
-  // Everything here is free below a length, and above it the finished file is
-  // paid for. Which of those applies is known the moment the document is
-  // opened, so it is said then -- while the reviewer is deciding whether to
-  // do the work, rather than after they have done it. A price discovered at
-  // the end is a bait however small it is.
-  //
-  // It sits beside the report rather than in front of it, because it is not
-  // an interruption: nothing is blocked, and the answer is only needed at the
-  // very last step.
-  function sayThePrice() {
-    const said = el('paysays');
-    if (!said) return;
-    const Pay = window.BlindedPay;
-    const on = Pay && Pay.on && hasDocument()
-      && Pay.paidFor(state.kind === 'text' ? 1 : Math.max(1, state.pages.length))
-      && !passHeld;
-    said.hidden = !on;
-    if (!on) return;
-    // The rule rather than this document's arithmetic. "34 pages" told a
-    // reviewer what they already knew and left them working out what it
-    // implied; the useful sentence is where the line is, what it costs on
-    // either side of it, and -- the part that stops anybody feeling led on --
-    // that nothing is asked for until the work is done.
-    said.textContent = 'Documents over ' + Pay.freePages + ' pages need a '
-      + 'Premium Pass to write the finished file: '
-      + Pay.prices.map(one => one.price + ' for ' + one.label).join(', ')
-      + '. Pay once the redaction is done, just before exporting.';
-  }
-
   // A line under the bars, for when the wait itself raises the question.
   //
   // Watching a file being worked on for the first time is exactly when someone
@@ -953,6 +924,16 @@
         return;
       }
 
+      // Said once the document is on screen, and only once for it.
+      //
+      // It was a line in the foot, beside five other hints, under a document
+      // somebody had just opened and was looking at. Nobody read it. The rule
+      // is worth interrupting for exactly once -- now, before any work has
+      // been done, so that the price is never something discovered at the end
+      // with the work already finished. After this it is not mentioned again
+      // until the moment it is actually needed.
+      await tellThePrice();
+
       // A draft was chosen first and has been waiting for its document.
       if (pendingDraft) {
         const draft = pendingDraft;
@@ -1004,7 +985,39 @@
     });
   }
 
+  // A different document is a different answer, and it has not been given
+  // yet. Reset here rather than where a file is chosen, because every way in
+  // -- a file, an image, text, a draft's document -- arrives through this.
+  let priceTold = false;
+
+  async function tellThePrice() {
+    if (priceTold) return;
+    const Pay = window.BlindedPay;
+    if (!Pay || !Pay.on || !hasDocument()) return;
+    if (!Pay.paidFor(documentPages())) return;
+    // Somebody who already holds a pass is being told about a bill they have
+    // paid, which is the most irritating notice there is.
+    await refreshPass();
+    if (passHeld) return;
+    priceTold = true;
+    // The reading overlay is still up at this point -- busy(false) does not
+    // run until the open path's finally -- and a dialog stacked on top of
+    // "Reading the PDF" reads as two things happening at once. warnIfHuge
+    // steps aside the same way just above.
+    busy(false);
+    await confirmAction({
+      title: 'This one needs a pass to export',
+      body: 'Documents over ' + Pay.freePages + ' pages need a Premium Pass '
+        + 'to write the finished file: '
+        + Pay.prices.map(one => one.price + ' for ' + one.label).join(', ')
+        + '. Everything else is free, at any length. Pay once the redaction '
+        + 'is done, just before exporting.',
+      confirmLabel: 'Got it',
+    });
+  }
+
   function startReview(kind, name, pages) {
+    priceTold = false;
     state.kind = kind;
     state.name = name;
     // What was read belonged to the last document. Left standing, this one is
@@ -2392,7 +2405,6 @@
       // Said in the foot instead once a run has finished, as one sentence.
       note.textContent = state.footRan ? '' : 'Outlined  - press Redact to cover them.';
     }
-    sayThePrice();
     renderFoot();
   }
 
@@ -7467,7 +7479,6 @@
       const look = async () => {
         await refreshPass();
         if (!passHeld) return;
-        sayThePrice();
         shut(true);
       };
       const typed = async () => {
@@ -7478,8 +7489,6 @@
         if (answer.ok) {
           Pass.remember(said.trim());
           passHeld = answer.payload;
-          // The line in the foot says a pass is needed. It is not, now.
-          sayThePrice();
           shut(true);
           return;
         }
@@ -7537,11 +7546,13 @@
   // What the dialog says, for this document and this deployment's prices.
   function describePay() {
     const pages = documentPages();
+    // The rule, not this document's arithmetic, and not a paragraph. Somebody
+    // reading this has a finished redaction on the other side of it and wants
+    // to know the price, which is one sentence long.
     const body = el('paybody');
     if (body) {
-      body.textContent = 'This document is ' + pages + ' pages. Everything you '
-        + 'have done so far is free and stays free; writing the finished file '
-        + 'needs a pass.';
+      body.textContent = 'Documents over ' + Pay.freePages + ' pages need a '
+        + 'Premium Pass to export the finished file.';
     }
     // Each price is the button that buys it.
     //
@@ -7555,19 +7566,23 @@
       list.textContent = '';
       for (const price of Pay.prices) {
         const row = document.createElement('li');
+        // The whole row is the button, so the target is the width of the
+        // dialog rather than the width of two words. Inside it the length
+        // sits in the blue, where the eye lands first, and the price sits
+        // opposite it -- the two things being chosen between, one on each
+        // side, rather than run together in a sentence.
         const go = document.createElement('button');
         go.type = 'button';
-        go.className = 'primary payprice';
+        go.className = 'payprice';
         go.dataset.price = price.id;
-        const what = document.createElement('b');
-        what.textContent = price.price;
         const how = document.createElement('span');
+        how.className = 'payfor';
         how.textContent = price.label;
-        go.append(what, how);
-        const why = document.createElement('span');
-        why.className = 'payrowfine';
-        why.textContent = price.note;
-        row.append(go, why);
+        const what = document.createElement('b');
+        what.className = 'paycost';
+        what.textContent = price.price;
+        go.append(how, what);
+        row.append(go);
         list.append(row);
       }
     }

@@ -86,7 +86,7 @@
   "isAccessibleForFree": false
 }
 </script>
-<link rel="stylesheet" href="app.css?v=e07c9459">
+<link rel="stylesheet" href="app.css?v=54cc4788">
 </head>
 <body>
 
@@ -752,10 +752,6 @@
            search and the report after one are the same sentence in two
            moments, and one of them was over on the right by the buttons. -->
       <span id="exportnote" class="hint"></span>
-      <!-- What this costs, said when the document opens rather than when the
-           file is asked for. A price discovered after the work is done is a
-           bait however small it is. -->
-      <span id="paysays" class="hint paysays" hidden></span>
       <!-- Three buttons in the order the work happens, always all three, each
            greyed until it is its turn. One button that changed its own name
            from Search to Redact to Redacted moved the button beside it every
@@ -860,11 +856,13 @@
         <path d="M6 6l12 12M18 6L6 18"/>
       </svg>
     </button>
-    <h2 class="namehead" id="payhead">A pass for this one</h2>
+    <h2 class="namehead payhead" id="payhead">Blinded &ndash; Premium Pass</h2>
     <p class="confirmbody" id="paybody"></p>
     <ul class="paylist" id="paylist"></ul>
-    <p class="hint payfine">Buying opens a window on this site. The document
-      stays here, in this tab, and is not part of it.</p>
+    <!-- The three objections somebody has at this moment, answered before
+         they are raised. Short enough to be read at a glance, which is all
+         the attention anybody gives a price. -->
+    <p class="paytrust">No account &middot; Nothing to cancel &middot; Works offline</p>
     <p class="hint warnhint" id="paynote" hidden></p>
     <!-- No Buy a pass button any more: the prices above are the buttons, and
          a second one asking the same question was the extra press. -->
@@ -1073,9 +1071,9 @@
 <script src="lib/pdfwrite.js?v=4b977425"></script>
 <script src="lib/pdfread.js?v=ca229552"></script>
 <script src="lib/pass.js?v=9a72ccda"></script>
-<script src="lib/pay.js?v=79643af5"></script>
+<script src="lib/pay.js?v=280e8f74"></script>
 <script src="lib/render.js?v=65c3fe76"></script>
-<script src="app.js?v=3b4fd5c8"></script>
+<script src="app.js?v=3ad844bd"></script>
 <script type="module" src="lib/boot.mjs?v=8b98ed8f"></script>
 </body>
 </html>

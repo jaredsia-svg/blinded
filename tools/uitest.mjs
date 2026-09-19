@@ -8937,7 +8937,7 @@ try {
       await new Promise(r => setTimeout(r, 400));
       const out = { asked: !document.getElementById('paybox').hidden,
                     naming: !document.getElementById('namebox').hidden,
-                    says: !document.getElementById('paysays').hidden,
+                    notice: !document.getElementById('confirmbox').hidden,
                     pages: B.state.pages.length };
       document.getElementById('namecancel').click();
       return out;
@@ -8945,7 +8945,7 @@ try {
     check('a short document is never asked to pay',
       short.asked === false && short.naming === true, JSON.stringify(short));
     check('and is told nothing about money',
-      short.says === false, JSON.stringify(short));
+      short.notice === false, JSON.stringify(short));
 
     // A long one says so when it opens -- before the work, not after it.
     await paying.evaluate(() => window.Blinded.loadFile
@@ -8958,14 +8958,16 @@ try {
     await arm();
     await paying.evaluate(() => window.Blinded.rescan && null);
     await paying.waitForTimeout(400);
+    // It used to be a line in the foot, which is where hints go and where
+    // nobody looked: the reviewer had just opened a document and was looking
+    // at the document. It is a notice now, shown once as the pages come up.
     const told = await paying.evaluate(async () => {
       const B = window.Blinded;
       B.state.pages[0].manual.push({ id: 'x', x: 40, y: 40, w: 120, h: 30 });
       B.state.searched = true;
       B.coverMarks();
       await new Promise(r => setTimeout(r, 300));
-      const line = document.getElementById('paysays');
-      return { shown: !line.hidden, text: line.textContent,
+      return { gone: document.getElementById('paysays') === null,
                pages: B.state.pages.length };
     });
     // It used to open with this document's own page count -- "34 pages." --
@@ -8974,15 +8976,9 @@ try {
     // line is, both prices, and that nothing is asked for until the work is
     // finished. That last clause is the one that stops the whole thing
     // reading as a bait.
-    check('a long one says what it costs when it opens',
-      told.shown === true && /pass/i.test(told.text), JSON.stringify(told));
-    check('naming the length the line sits at',
-      told.text.includes('over 20 pages'), JSON.stringify(told));
-    check('and both prices, so neither is a surprise later',
-      told.text.includes('USD 2.99') && told.text.includes('USD 6.99'),
+    check('the price is no longer a hint in the foot', told.gone === true,
       JSON.stringify(told));
-    check('and says the money comes after the work, not before it',
-      /before exporting/i.test(told.text), JSON.stringify(told));
+
 
     // Asked before the Save as box, not after it. Being asked to name a file,
     // choose its options and press Save, and only then being told there is a
@@ -8999,9 +8995,11 @@ try {
     check('a long one is asked to pay', asked.asked === true, JSON.stringify(asked));
     check('before it is asked to name the file, not after',
       asked.naming === false, JSON.stringify(asked));
+    // One sentence, not a paragraph. Somebody reading this has a finished
+    // redaction on the other side of it and wants the price.
     check('and told what it is for and what it costs',
-      /free and stays free/.test(asked.body) && asked.prices >= 1,
-      JSON.stringify(asked));
+      /over 20 pages/.test(asked.body) && /Premium Pass/.test(asked.body)
+        && asked.prices >= 2, JSON.stringify(asked));
 
     // Choosing the price is the decision, so pressing it is the whole of it.
     // It used to be: press a price to read it, press Buy a pass, then read
@@ -9086,15 +9084,12 @@ try {
       await new Promise(r => setTimeout(r, 600));
       return { gone: document.getElementById('paybox').hidden,
                naming: !document.getElementById('namebox').hidden,
-               kept: Boolean(localStorage.getItem('blinded.pass')),
-               says: !document.getElementById('paysays').hidden };
+               kept: Boolean(localStorage.getItem('blinded.pass')) };
     }, made.good);
     check('a real pass lets the file be written',
       through.gone === true && through.naming === true, JSON.stringify(through));
     check('and is kept, so it is not asked for again',
       through.kept === true, JSON.stringify(through));
-    check('and the line saying a pass is needed goes away',
-      through.says === false, JSON.stringify(through));
 
     const again = await paying.evaluate(async () => {
       document.getElementById('namecancel').click();
@@ -9119,6 +9114,46 @@ try {
     check('the page holding the document still reaches nothing but itself',
       /connect-src 'self' blob:;/.test(reach.policy) && reach.paddle === false,
       JSON.stringify(reach).slice(0, 200));
+
+
+    // The notice itself. It needs payment to be on *before* the document is
+    // opened, which the arming above deliberately is not -- so it gets its
+    // own load.
+    await paying.goto(base);
+    await paying.evaluate(key => {
+      window.BlindedPay.on = true;
+      window.BlindedPay.key = key;
+      localStorage.removeItem('blinded.pass');
+    }, made.key);
+    await paying.setInputFiles('#file', longEnough);
+    await paying.waitForSelector('#confirmbox:not([hidden])', { timeout: 60000 });
+    const notice = await paying.evaluate(() => ({
+      head: document.getElementById('confirmhead').textContent,
+      body: document.getElementById('confirmbody').textContent,
+      yes: document.getElementById('confirmyes').textContent,
+      reading: !document.getElementById('busy').hidden,
+      here: !document.getElementById('view-review').hidden,
+    }));
+    check('a long one is told the rule as the pages come up',
+      /pass/i.test(notice.head), JSON.stringify(notice));
+    check('naming the length the line sits at',
+      notice.body.includes('over 20 pages'), JSON.stringify(notice));
+    check('and both prices, so neither is a surprise later',
+      notice.body.includes('USD 2.99') && notice.body.includes('USD 6.99'),
+      JSON.stringify(notice));
+    check('and that the money comes after the work, not before it',
+      /before exporting/i.test(notice.body), JSON.stringify(notice));
+    // Over the document, not over the reading overlay.
+    check('with the document already behind it',
+      notice.here === true && notice.reading === false, JSON.stringify(notice));
+    check('and one way out of it', /got it/i.test(notice.yes),
+      JSON.stringify(notice));
+
+    await paying.click('#confirmyes');
+    await paying.waitForTimeout(250);
+    check('which closes it',
+      await paying.evaluate(() =>
+        document.getElementById('confirmbox').hidden === true));
 
     await paying.close();
   });
@@ -10678,7 +10713,7 @@ try {
       on: window.BlindedPay.on === true,
       hidden: document.getElementById('buylist').hidden,
       note: document.getElementById('buynote').textContent,
-      buttons: [...document.querySelectorAll('#buylist .buygo')]
+      buttons: [...document.querySelectorAll('#buylist .payprice')]
         .map(one => one.textContent),
       prices: window.BlindedPay.prices.length,
       marked: document.body.dataset.rehearsing || '',
@@ -10709,7 +10744,7 @@ try {
       await buy.waitForTimeout(250);
       const rehearsal = await buy.evaluate(() => ({
         hidden: document.getElementById('buylist').hidden,
-        buttons: [...document.querySelectorAll('#buylist .buygo')]
+        buttons: [...document.querySelectorAll('#buylist .payprice')]
           .map(one => one.textContent),
         prices: window.BlindedPay.prices.length,
         marked: document.body.dataset.rehearsing || '',
@@ -10748,7 +10783,7 @@ try {
       knocks.length >= 1, JSON.stringify(knocks));
 
     const before = knocks.length;
-    await knocker.click('#buylist .buygo');
+    await knocker.click('#buylist .payprice');
     await knocker.waitForTimeout(400);
     check('and again when the checkout is opened',
       knocks.length > before, JSON.stringify(knocks));
