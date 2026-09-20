@@ -10619,7 +10619,7 @@ try {
       };
     });
     check('the page ends with its name, the questions and the source',
-      foot && /Blinded · FAQ · Blinded License · Source code on GitHub/.test(foot.says),
+      foot && /Blinded · FAQ · License · Source code on GitHub/.test(foot.says),
       JSON.stringify(foot));
     check('and the source link points at the repository',
       foot && /github\.com\/.+\/blinded/.test(foot.source) && foot.safe === true,

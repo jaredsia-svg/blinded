@@ -2889,9 +2889,19 @@ check('no creation date is carried into the output', !meta.info.CreationDate);
     // point: the day a paid version redacts better than the free one is the
     // day this is selling safety, and a change that does it has to delete
     // this line and argue with this test.
-    check('it says a license buys length rather than a better redaction',
-      /licen[cs]e buys length, not a better redaction/.test(said)
-        && /remove exactly the same things/.test(said), 'premium/index.html');
+    // The claim moved to the terms, where it is a promise rather than a
+    // selling line, and it is checked there instead of being dropped. The day
+    // a paid version redacts better than the free one is the day this is
+    // selling safety, and a change that does it still has to delete a
+    // sentence and argue with this test.
+    {
+      const terms = readFileSync(join(root, 'terms', 'index.html'), 'utf8')
+        .replace(/\s+/g, ' ');
+      check('somewhere still says a license buys length, not a better redaction',
+        /licen[cs]e buys length/i.test(terms)
+          && /does not buy a better redaction/i.test(terms)
+          && /exactly the same thing/i.test(terms), 'terms/index.html');
+    }
 
     // Reachable from everywhere, or it is a page nobody finds when the
     // question occurs to them.
@@ -3229,14 +3239,15 @@ check('no creation date is carried into the output', !meta.info.CreationDate);
   // whoever writes the sales page and whoever writes the policy -- and the
   // day they disagree is the day somebody is told two different things about
   // their own money.
-  const prem = readFileSync(join(root, 'premium', 'index.html'), 'utf8');
-  const said = /Refunds within (\d+) hours/.exec(prem);
-  check('the premium page quotes a refund window', Boolean(said), 'premium');
-  if (said) {
-    check('and the refund policy quotes the same one',
-      Number(said[1]) === REFUND_HOURS,
-      'premium says ' + said[1] + ', content/legal.mjs says ' + REFUND_HOURS);
-  }
+  // The refund window used to be quoted on the licence page as well, by hand,
+  // and this checked the two against each other. The licence page does not
+  // quote it any more, so there is no second copy to drift: the only place it
+  // is written is the refund policy, which is generated from REFUND_HOURS and
+  // cannot disagree with it. What is worth checking is that it is said at
+  // all, and that the page saying it is reachable -- both of which the legal
+  // pages section above already does.
+  check('the refund window is a number somebody chose',
+    Number.isFinite(REFUND_HOURS) && REFUND_HOURS > 0, String(REFUND_HOURS));
 
   // Not a failure -- nobody here can answer it -- but it must not be quietly
   // forgotten either, so it is said on every run until somebody decides.
