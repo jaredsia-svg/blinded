@@ -2309,6 +2309,48 @@
     return !state.searched || unsearched > 0 || unknownKinds() > 0;
   }
 
+  // Rows a run has taken charge of, and cannot be pulled out from under it.
+  //
+  // Not a flag on the run: a word typed while the search is halfway down the
+  // document is not part of that search, has no tally coming, and taking it
+  // back out costs nothing. Only the rows the run actually started with are
+  // held.
+  let runHolds = { terms: [], templates: [] };
+
+  function holdRun(terms, templates) {
+    runHolds = { terms: (terms || []).slice(),
+                 templates: (templates || []).map(one => one.id) };
+    // The rows were drawn before any of this was true, so they are still
+    // wearing live buttons. Taking the hold without redrawing them is a hold
+    // nobody can see.
+    redrawLists();
+  }
+
+  function freeRun() {
+    // Only once nothing is running. The second check can start while the
+    // first pass is still letting go, and a release from one must not open
+    // the rows the other is still reading.
+    if (state.redacting || state.sweepRunning) return;
+    runHolds = { terms: [], templates: [] };
+    redrawLists();
+  }
+
+  // Both lists, because a run holds words and pictures alike.
+  function redrawLists() {
+    if (typeof renderTermCounts === 'function') renderTermCounts();
+    if (typeof renderTemplates === 'function') renderTemplates();
+  }
+
+  function termIsHeld(term) {
+    return (state.redacting || state.sweepRunning)
+      && runHolds.terms.includes(term);
+  }
+
+  function templateIsHeld(id) {
+    return (state.redacting || state.sweepRunning)
+      && runHolds.templates.includes(id);
+  }
+
   function refreshApply() {
     const button = el('apply');
     const marks = plannedCount();
@@ -2371,7 +2413,17 @@
         'Searching  - the bar beside this says how far it has got';
     }
 
-    el('export').disabled = !state.applied || marks === 0;
+    // Export waits for a redaction while there is one to wait for.
+    //
+    // With nothing found, nothing left to search and nothing running, waiting
+    // is waiting for something that is not coming -- and the reviewer is left
+    // holding a document they cannot get out of the tool. There are reasons
+    // to want it anyway: pages organised or pulled out, a note typed, a box
+    // drawn by hand, or simply seeing what comes out before trusting it with
+    // anything that matters.
+    const nothingToCover = !searching && !state.applied && marks === 0
+      && !state.redacting && !state.sweepRunning;
+    el('export').disabled = (!state.applied || marks === 0) && !nothingToCover;
 
     // The thorough sweep is offered on the back of a finished redaction, so
     // whether it shows at all follows the same state this button reflects.
@@ -2429,7 +2481,11 @@
         ? '1 search still to run.'
         : unsearched + ' searches still to run.';
     } else if (marks === 0) {
-      note.textContent = 'Nothing marked yet.';
+      // Nothing. It used to say "Nothing marked yet", which reports a state
+      // the panel already shows and reads as a fault when it is not one:
+      // a document with nothing in it to cover is a finished answer, and
+      // Export is live beside this line saying so.
+      note.textContent = '';
     } else {
       // Said in the foot instead once a run has finished, as one sentence.
       note.textContent = state.footRan ? '' : 'Outlined  - press Redact to cover them.';
@@ -2465,6 +2521,15 @@
     state.sweepOfferShown = false;
     state.redacting = true;
     state.paused = false;
+    // What this run is looking for, snapshotted at the moment it starts.
+    //
+    // Deleting a word while the pass that is counting it is halfway down the
+    // document leaves the tally describing a word that is no longer in the
+    // list, and the marks it has already drawn with nothing to belong to. So
+    // the rows in here cannot be removed until the run lets go of them.
+    // Anything added afterwards is not part of this run and can be taken back
+    // out freely, which is why this is a snapshot and not a flag.
+    holdRun(state.terms, state.templates);
 
     // The bars go up here rather than inside the reading pass.
     //
@@ -2543,6 +2608,7 @@
     if (state.paused) {
       state.paused = false;
       state.redacting = false;
+      freeRun();
       busy(false);
       redrawAll();
       refreshApply();
@@ -2554,6 +2620,7 @@
       if (entries.length) await runSearches(entries, done => leg('search', done));
     } catch (error) {
       state.redacting = false;
+      freeRun();
       busy(false);
       alert('The image search could not finish: ' + (error && error.message ? error.message : error));
       return;
@@ -2569,6 +2636,7 @@
     // have an answer.
     state.countedKinds = acceptedKinds();
     state.redacting = false;
+    freeRun();
     // The word list shows a tally only once something has counted, so it has
     // to be redrawn when that becomes true. The detectors are the same now
     // that they read what OCR read: they wait on this search too, and without
@@ -6389,7 +6457,11 @@
       // row" stopped meaning anything.
       remove.className = 'templatedrop';
       remove.textContent = 'x';
-      remove.title = 'Stop matching this image';
+      const busyWith = templateIsHeld(template.id);
+      remove.disabled = busyWith;
+      remove.title = busyWith
+        ? 'Being searched for  - it can be removed when the run finishes'
+        : 'Stop matching this image';
       remove.addEventListener('click', () => removeTemplate(template.id));
 
       // The thumbnail is the way to a proper look at what was picked.
@@ -6618,7 +6690,14 @@
       drop.type = 'button';
       drop.className = 'termdrop';
       drop.textContent = 'x';
-      drop.title = 'Remove "' + term + '"';
+      // Not while the run that is counting it is still going. Removing it
+      // mid-pass leaves a tally describing a word that is no longer in the
+      // list and marks on the page belonging to nothing.
+      const heldNow = termIsHeld(term);
+      drop.disabled = heldNow;
+      drop.title = heldNow
+        ? 'Being searched for  - it can be removed when the run finishes'
+        : 'Remove "' + term + '"';
       drop.setAttribute('aria-label', 'Remove "' + term + '"');
       drop.addEventListener('click', () => dropTerm(term));
 
@@ -9070,6 +9149,9 @@
     state.sweepRunning = true;
     state.sweepStopped = false;
     state.sweepSkipped = false;
+    // The second check reads the same words and pictures, so it holds them
+    // for the same reason the first pass does.
+    holdRun(state.terms, state.templates);
     // A new run is a new answer: a word turned down last time is asked about
     // again, because what it found may not be what it found before.
     state.offersDismissed = new Set();
@@ -9101,6 +9183,7 @@
         done => sweepProgress(done, pages.length));
     } catch (error) {
       state.sweepRunning = false;
+      freeRun();
       renderSweep();
       alert('The thorough check could not finish: '
         + (error && error.message ? error.message : error));
@@ -9408,6 +9491,7 @@
     }
 
     state.sweepRunning = false;
+    freeRun();
     state.sweepBest = {};
     recordBest(entries, results);
     if (deepResults) recordBest(deepEntries, deepResults);

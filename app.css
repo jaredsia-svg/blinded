@@ -1254,7 +1254,7 @@ body.picking #imagesect { position: static; z-index: auto; background: none; }
   color: var(--ink-soft); cursor: pointer; border-radius: 6px; font-size: 16px;
   line-height: 1; display: flex; align-items: center; justify-content: center;
 }
-.termdrop:hover { background: #e3e8f0; color: var(--ink); }
+.termdrop:hover:not(:disabled) { background: #e3e8f0; color: var(--ink); }
 
 .termcounts, .templates { list-style: none; margin: 8px 0 0; padding: 0; }
 .termcounts li, .templates li {
@@ -1394,7 +1394,13 @@ body.picking #imagesect { position: static; z-index: auto; background: none; }
   border: 0; background: transparent; color: var(--ink-soft);
   font-size: 15px; line-height: 1; padding: 2px 5px; flex: none;
 }
-.templatedrop:hover { color: var(--danger); }
+.templatedrop:hover:not(:disabled) { color: var(--danger); }
+/* Greyed while the run that is reading them is still going. Not hidden: the
+   row has to keep its shape, and a control that vanishes and comes back is a
+   list that moves under the reviewer halfway through a search. */
+.termdrop:disabled, .templatedrop:disabled {
+  opacity: .32; cursor: default; background: none;
+}
 
 button.wide { width: 100%; padding: 8px; }
 button.wide.on { background: var(--accent); color: #fff; border-color: var(--accent); }

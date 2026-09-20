@@ -10904,6 +10904,117 @@ try {
     await buy.close();
   });
 
+  // ---------- what a run holds, and what it lets go of ----------
+  //
+  // Deleting a word while the pass counting it is halfway down the document
+  // leaves a tally describing a word that is no longer in the list and marks
+  // belonging to nothing. So the rows a run started with cannot be taken out
+  // from under it -- and anything typed after it began is not part of it, has
+  // no tally coming, and stays removable.
+  await part("a run holds what it is looking for", async () => {
+    const held = await context.newPage();
+    await held.goto(base);
+    await held.setInputFiles('#file', manyPath);
+    await held.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
+    await held.waitForTimeout(300);
+    await held.fill('#termbox', 'Page');
+    await held.press('#termbox', 'Enter');
+    await held.waitForTimeout(200);
+
+    const free = await held.evaluate(() =>
+      document.querySelector('.termdrop').disabled);
+    check('before a run the word can be taken back out', free === false,
+      String(free));
+
+    await held.click('#search');
+    // Sampled rather than waited for: a short run can be over before a fixed
+    // pause ends, and a test that misses the state it is about is a test that
+    // passes for the wrong reason.
+    let during = null;
+    for (let i = 0; i < 80; i++) {
+      const now = await held.evaluate(() => ({
+        running: window.Blinded.state.redacting,
+        drops: [...document.querySelectorAll('.termdrop')]
+          .map(b => ({ word: b.getAttribute('aria-label'), off: b.disabled })),
+      }));
+      if (now.running) { during = now; break; }
+      await held.waitForTimeout(20);
+    }
+    check('the run was caught while it was going', Boolean(during),
+      'never saw state.redacting true');
+    if (during) {
+      check('and the word it is looking for cannot be removed',
+        during.drops.length > 0 && during.drops.every(one => one.off === true),
+        JSON.stringify(during));
+    }
+
+    // Typed after it began, so no part of it.
+    await held.fill('#termbox', 'addedmidrun');
+    await held.press('#termbox', 'Enter');
+    await held.waitForTimeout(150);
+    const mid = await held.evaluate(() => ({
+      running: window.Blinded.state.redacting,
+      drops: [...document.querySelectorAll('.termdrop')]
+        .map(b => ({ word: b.getAttribute('aria-label'), off: b.disabled })),
+    }));
+    if (mid.running) {
+      const added = mid.drops.find(one => /addedmidrun/.test(one.word));
+      check('a word typed while it runs is not held by it',
+        added && added.off === false, JSON.stringify(mid));
+    }
+
+    await held.waitForFunction(() => !window.Blinded.state.redacting,
+      undefined, { timeout: 120000 });
+    await held.waitForTimeout(300);
+    const after = await held.evaluate(() =>
+      [...document.querySelectorAll('.termdrop')].map(b => b.disabled));
+    check('and the hold is let go of when the run finishes',
+      after.length > 0 && after.every(one => one === false),
+      JSON.stringify(after));
+    await held.close();
+  });
+
+  // ---------- a document with nothing in it to cover ----------
+  //
+  // Export used to wait for a redaction whether or not one was ever coming.
+  // With nothing found, nothing left to search and nothing running, that is
+  // waiting for something that will not happen -- and the reviewer is left
+  // holding a document they cannot get out of the tool.
+  await part("nothing to cover still lets the file out", async () => {
+    const bare = join(tmpdir(), 'blinded-nothing.txt');
+    writeFileSync(bare, 'Nothing in here worth covering at all.\n');
+    const quiet = await context.newPage();
+    await quiet.goto(base);
+    await quiet.setInputFiles('#file', bare);
+    await quiet.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
+    await quiet.waitForTimeout(300);
+    await quiet.fill('#termbox', 'zzzznotpresenthere');
+    await quiet.press('#termbox', 'Enter');
+    await quiet.waitForTimeout(200);
+    await quiet.click('#search');
+    await quiet.waitForFunction(() => !window.Blinded.state.redacting,
+      undefined, { timeout: 60000 });
+    await quiet.waitForTimeout(400);
+
+    const done = await quiet.evaluate(() => ({
+      searchShown: !document.getElementById('search').hidden,
+      applyDisabled: document.getElementById('apply').disabled,
+      exportDisabled: document.getElementById('export').disabled,
+      note: document.getElementById('exportnote').textContent,
+    }));
+    check('with nothing found, there is nothing left to search',
+      done.searchShown === false, JSON.stringify(done));
+    check('and nothing to redact', done.applyDisabled === true,
+      JSON.stringify(done));
+    check('but the file can still be exported',
+      done.exportDisabled === false, JSON.stringify(done));
+    // "Nothing marked yet" reported a state the panel already shows, and read
+    // as a fault when it is not one.
+    check('and the foot does not call it a fault',
+      !/nothing marked/i.test(done.note), JSON.stringify(done));
+    await quiet.close();
+  });
+
   await browser.close();
   server.close();
 }
