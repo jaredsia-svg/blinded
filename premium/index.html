@@ -67,6 +67,18 @@
 
   <div class="premcards" id="premprices"></div>
 
+  <!-- Shown instead of the prices to somebody who already holds a license.
+       The string itself is behind a press, because this page is as likely to
+       be open on a shared screen as anywhere else, and a license on screen is
+       a license anybody in the room can copy. -->
+  <section class="premheld" id="premheld" hidden>
+    <p class="premhint">Your license is kept in this browser. Take a copy of
+      it to use Blinded on another machine.</p>
+    <p><button type="button" class="ghost premreveal" id="premshow">Show my
+      license</button></p>
+    <p class="buypass" id="premkey" hidden></p>
+  </section>
+
 
   <div class="premfacts">
     <div>

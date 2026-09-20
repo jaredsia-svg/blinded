@@ -2445,6 +2445,14 @@ body.choosing { -webkit-user-select: none; user-select: none; }
    a button here, so it behaves like one: the tool intercepts it and opens a
    window, because there a document is open and must not be navigated from. */
 a.payprice { text-decoration: none; color: var(--ink); }
+/* What somebody who already holds a licence sees in place of the prices. */
+.premheld { margin: 20px 0 12px; }
+.premhint { margin: 0 0 12px; font-size: 13px; color: var(--ink-soft); max-width: 60ch; }
+.premreveal { padding: 8px 16px; font-size: 13.5px; border-radius: 10px; }
+/* By class, not by id. This element lives in premium/index.html and only
+   reaches the tool as imported markup, so an id selector here is a rule
+   pointing at something index.html has never heard of. */
+.premheld .buypass { margin-top: 12px; }
 .premfree { margin: 0 0 18px; font-size: 13px; color: var(--ink-soft); max-width: 60ch; }
 /* Three things worth knowing, read across rather than down a list. */
 .premfacts {

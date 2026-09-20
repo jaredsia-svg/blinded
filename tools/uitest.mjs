@@ -9135,6 +9135,50 @@ try {
     check('and the next export is not asked at all',
       again.asked === false && again.naming === true, JSON.stringify(again));
 
+    // The licence page, to somebody who has one. A page still offering to
+    // sell a second licence to a live one has not read its own state, and
+    // pressing a price there would send them to a checkout they have no
+    // reason to be at.
+    // A notice may be standing over the page from an earlier block; it is
+    // modal, so it swallows the press before the header ever sees it.
+    if (await paying.isVisible('#confirmbox:not([hidden]) #confirmyes')) {
+      await paying.click('#confirmyes');
+      await paying.waitForTimeout(250);
+    }
+    await paying.click('#prem-open');
+    await paying.waitForSelector('#view-premium:not([hidden])', { timeout: 15000 });
+    await paying.waitForFunction(
+      () => !document.querySelector('#prem-here #premheld').hidden,
+      undefined, { timeout: 15000 });
+    const mine = await paying.evaluate(() => ({
+      note: document.querySelector('#prem-here #premnow').textContent,
+      pricesHidden: document.querySelector('#prem-here #premprices').hidden,
+      buyable: document.querySelectorAll('#prem-here a[data-price]').length,
+      keyHidden: document.querySelector('#prem-here #premkey').hidden,
+    }));
+    check('it says how long is left rather than what it costs',
+      /more day/.test(mine.note), JSON.stringify(mine));
+    check('and offers no prices to press',
+      mine.pricesHidden === true && mine.buyable === 0, JSON.stringify(mine));
+    // On screen only when asked for. This page is as likely to be open on a
+    // shared screen as anywhere else, and a licence on screen is a licence
+    // anybody in the room can copy.
+    check('and keeps the licence itself behind a press',
+      mine.keyHidden === true, JSON.stringify(mine));
+
+    await paying.click('#prem-here #premshow');
+    await paying.waitForTimeout(250);
+    const shown = await paying.evaluate(() => ({
+      text: document.querySelector('#prem-here #premkey').textContent,
+      says: document.querySelector('#prem-here #premshow').textContent.trim(),
+    }));
+    check('which shows it', /^blinded1\./.test(shown.text), JSON.stringify(shown));
+    check('and says how to put it away again', /hide/i.test(shown.says),
+      JSON.stringify(shown));
+
+    await paying.click('#back-top');
+    await paying.waitForSelector('#view-review:not([hidden])', { timeout: 15000 });
+
     // The promise the whole split exists to keep: the page holding the
     // document reaches nothing, whatever is being sold.
     const reach = await paying.evaluate(() => ({

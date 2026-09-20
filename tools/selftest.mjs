@@ -2901,6 +2901,11 @@ check('no creation date is carried into the output', !meta.info.CreationDate);
       ...landers.map(one => [one.slug,
         readFileSync(join(root, one.slug, 'index.html'), 'utf8')])];
     for (const [where, page] of every) {
+      // Except the checkout, which deliberately has no way out but the mark.
+      // Somebody on it has decided and is a card away from finishing; a link
+      // to the page that explains what they are buying is a door out of a
+      // purchase, offered to the one person who does not need it.
+      if (where === 'unlock.html') continue;
       // index.html opens it as a view rather than navigating to it, so what it
       // carries is the button that does that; everything else links.
       check(where + ': offers the price page',
@@ -2933,8 +2938,11 @@ check('no creation date is carried into the output', !meta.info.CreationDate);
     for (const [where, page] of every) {
       if (where === 'index.html') continue;
       const nav = /<div class="top-actions">([\s\S]*?)<\/div>/.exec(page);
+      // The rule is that a header must not offer a way back into a tool the
+      // reader may not have open. A header with no links at all -- the
+      // checkout's -- keeps it by having nothing to offer.
       check(where + ': its header offers pages, not a way back',
-        nav && !/Open the tool|Back to the tool/.test(nav[1]), where);
+        !nav || !/Open the tool|Back to the tool/.test(nav[1]), where);
       check(where + ': and the mark is the way to the front page',
         /<a class="mark" href="\/?"/.test(page), where);
       // A link on these, a button in the tool, one rule for the type of it.

@@ -42,15 +42,8 @@
 
     const license = await held();
     if (!license) return;
-    const now = el('premnow');
-    const left = Pass.daysLeft(license);
-    now.textContent = 'You have a license' + (left
-      ? ', good for ' + left + (left === 1 ? ' more day.' : ' more days.')
-      : '.') + ' Nothing to do.';
-    now.hidden = false;
-    // Somebody who already holds one is not shown two buttons offering to
-    // sell them another.
-    rows(false);
+    Pay.showHeld(document, { left: Pass.daysLeft(license),
+                             license: Pass.recall() });
   }
 
   start();

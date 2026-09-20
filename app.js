@@ -769,9 +769,30 @@
   // would mean taking two empty boxes.
   let premLoaded = null;
 
+  // Whether a licence is held is asked every time this view is opened, not
+  // once when its markup arrived. Somebody can buy one in the window this
+  // view opened and come straight back here, and a cached "you have no
+  // licence" would then be selling them a second one.
+  async function dressPremium(host) {
+    const Pay = window.BlindedPay;
+    if (!Pay || !host.querySelector('#premprices')) return;
+    await refreshPass();
+    if (passHeld) {
+      Pay.showHeld(host, { left: Pass.daysLeft(passHeld),
+                           license: Pass.recall() });
+      return;
+    }
+    const prices = host.querySelector('#premprices');
+    const held = host.querySelector('#premheld');
+    if (prices) prices.hidden = false;
+    if (held) held.hidden = true;
+    Pay.renderPrices(prices, { buyable: Pay.on });
+  }
+
   function loadPremium() {
     const host = el('prem-here');
-    if (!host || premLoaded) return premLoaded;
+    if (!host) return null;
+    if (premLoaded) return premLoaded.then(() => dressPremium(host));
     premLoaded = fetch('premium/', { credentials: 'omit' })
       .then(answer => answer.ok ? answer.text()
         : Promise.reject(new Error('premium/: ' + answer.status)))
@@ -794,26 +815,10 @@
           heading.replaceWith(demoted);
         }
         const Pay = window.BlindedPay;
-        if (Pay) {
-          Pay.renderPrices(host.querySelector('#premprices'),
-            { buyable: Pay.on });
-        }
-        // The page's own note and button are decided by its script. Here the
-        // same two decisions are made from the same settings.
+        // The page's own note is decided by its script. Here the same
+        // decisions are made from the same settings.
         const note = host.querySelector('#premnow');
-        const go = host.querySelector('#prembuy');
-        // Buying opens a window; it does not navigate. Followed in this tab
-        // that link closes the document to go and pay for it, which is the
-        // exact thing this view exists to avoid -- and the reason the whole
-        // page is fetched in here rather than linked to.
-        if (go) {
-          go.addEventListener('click', event => {
-            event.preventDefault();
-            window.open(go.getAttribute('href') || Pay.where, 'blinded-pay',
-              'width=520,height=760,noopener=no');
-          });
-        }
-        // And the prices, which are links on the page this markup came from
+        // The prices, which are links on the page this markup came from
         // and must not behave like links in here. Delegated, because they are
         // rebuilt every time this view is opened. Without this a reviewer who
         // pressed a price would watch their document disappear on the way to
@@ -835,7 +840,6 @@
               + 'changes.';
             note.hidden = false;
           }
-          if (go && go.closest('.landgo')) go.closest('.landgo').hidden = true;
         }
       })
       .catch(() => {
@@ -850,7 +854,7 @@
         host.append(said);
         premLoaded = null;
       });
-    return premLoaded;
+    return premLoaded.then(() => dressPremium(host));
   }
 
   function fail(message) {
