@@ -3257,6 +3257,55 @@ check('no creation date is carried into the output', !meta.info.CreationDate);
   }
 }
 
+// ---------- what is asked to be indexed, and what is not ----------
+//
+// Two mistakes, opposite ways round, and a crawler reports both the same
+// unhelpful way.
+//
+// A page in the sitemap carrying noindex is the site contradicting itself:
+// come and read this, and do not record it. Google calls that "Excluded by
+// noindex tag" and drops the page, and nothing on the page says why.
+//
+// The other is the checkout losing its noindex and turning up in a search
+// result -- a payment page reached cold, out of context, by somebody who
+// never opened the tool. It is deliberately kept out, and deliberately kept
+// out of the sitemap too, so the two never disagree.
+{
+  const map = where => {
+    const path = where.replace('https://blinded.dev/', '');
+    if (!path) return 'index.html';
+    return path.endsWith('/') ? path + 'index.html' : path;
+  };
+  const listed = [...readFileSync(join(root, 'sitemap.xml'), 'utf8')
+    .matchAll(/<loc>([^<]+)<\/loc>/g)].map(one => one[1]);
+
+  check('the sitemap has something in it', listed.length > 0, String(listed.length));
+  for (const where of listed) {
+    const file = join(root, map(where));
+    check(map(where) + ': is offered for indexing and does not refuse it',
+      existsSync(file) && !/noindex/i.test(readFileSync(file, 'utf8')),
+      where);
+  }
+
+  // And the one page that does refuse is still refusing, and is still not
+  // being offered.
+  const buy = readFileSync(join(root, 'unlock.html'), 'utf8');
+  check('the checkout keeps itself out of search',
+    /<meta name="robots" content="[^"]*noindex/i.test(buy), 'unlock.html');
+  check('and is not in the sitemap asking to be let in',
+    !listed.some(one => /unlock/.test(one)), listed.join(' '));
+
+  // Nothing else may quietly pick one up. A noindex on a landing page is
+  // invisible until months of crawling have gone nowhere.
+  const pages = ['index.html', 'faq.html', 'premium/index.html',
+    ...landers.map(one => one.slug + '/index.html'),
+    'privacy/index.html', 'terms/index.html', 'refunds/index.html'];
+  for (const file of pages) {
+    check(file + ': carries no noindex',
+      !/noindex/i.test(readFileSync(join(root, file), 'utf8')), file);
+  }
+}
+
 // ---------- report ----------
 
 console.log('\nBlinded self-test');
