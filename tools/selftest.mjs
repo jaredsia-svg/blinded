@@ -3306,6 +3306,61 @@ check('no creation date is carried into the output', !meta.info.CreationDate);
   }
 }
 
+// ---------- the numbers, wherever a person reads them ----------
+//
+// Sixteen pages name the free length in prose and one quotes the prices, all
+// by hand, and none of them was held to lib/pay.js. Move freePages and
+// sixteen pages start lying about what costs money; change a price and the
+// questions page quotes the old one. Every other guard here exists to stop
+// exactly this, and the one place it was missing was the money.
+{
+  const WORDS = { 10: 'ten', 15: 'fifteen', 20: 'twenty', 25: 'twenty-five',
+    30: 'thirty', 40: 'forty', 50: 'fifty' };
+  const word = WORDS[Pay.freePages];
+  check('the free length is a number this can check in words',
+    Boolean(word), String(Pay.freePages) + ' has no spelling here');
+
+  const site = [['index.html', 'index.html'], ['faq.html', 'faq.html'],
+    ['unlock.html', 'unlock.html'], ['premium/index.html', 'premium/index.html'],
+    ['terms/index.html', 'terms/index.html'],
+    ...landers.map(one => [one.slug, one.slug + '/index.html'])];
+
+  // Only where the sentence is about what costs money. "34 pages" in a note
+  // about document length is not a claim about the price.
+  const NUMBER = /\b(\d+|ten|fifteen|twenty|twenty-five|thirty|forty|fifty)[\s-]pages?\b/gi;
+  const MONEY = /free|licen[cs]e|costs?|pay|paid|charge/i;
+  for (const [where, file] of site) {
+    const prose = readFileSync(join(root, file), 'utf8')
+      .replace(/<script[\s\S]*?<\/script>/g, ' ')
+      .replace(/<!--[\s\S]*?-->/g, ' ')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/\s+/g, ' ');
+    const wrong = [];
+    for (const said of prose.split(/(?<=[.?!])\s+/)) {
+      if (!MONEY.test(said)) continue;
+      for (const hit of said.matchAll(NUMBER)) {
+        const n = hit[1].toLowerCase();
+        if (n !== String(Pay.freePages) && n !== word) wrong.push(hit[0]);
+      }
+    }
+    check(where + ': names the free length lib/pay.js actually uses',
+      wrong.length === 0, wrong.join(', ') + ' (pay.js says ' + Pay.freePages + ')');
+  }
+
+  // And the prices, which are quoted in prose on the questions page.
+  const asked = readFileSync(join(root, 'faq.html'), 'utf8');
+  for (const price of Pay.prices) {
+    check('the questions page quotes ' + price.price + ' as it stands',
+      asked.includes(price.price), price.price);
+  }
+  // Nothing may quote a price that is not on sale any more.
+  const quoted = [...asked.matchAll(/USD \d+\.\d\d/g)].map(one => one[0]);
+  const real = Pay.prices.map(one => one.price);
+  check('and quotes no price that is not on sale',
+    quoted.every(one => real.includes(one)),
+    quoted.filter(one => !real.includes(one)).join(', '));
+}
+
 // ---------- report ----------
 
 console.log('\nBlinded self-test');
