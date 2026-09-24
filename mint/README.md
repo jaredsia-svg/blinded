@@ -48,7 +48,7 @@ Never commit either. `.pass-key.json` is in `.gitignore`.
 | `PADDLE_PRICE_MONTH` | the `pri_…` id of the month pass |
 | `ALLOW_ORIGIN` | `https://blinded.dev` — the only site allowed to read a pass back |
 | `PORT` | defaults to 8080 |
-| `STORE` | where the rows live, defaults to `./passes.json` |
+| `STORE` | where the rows live, defaults to `./passes.json` — see **Where the rows live** |
 
 ```sh
 BLINDED_PASS_KEY="$(jq -c .priv ../.pass-key.json)" \
@@ -57,6 +57,56 @@ PADDLE_PRICE_DAYS=pri_… PADDLE_PRICE_MONTH=pri_… \
 ALLOW_ORIGIN=https://blinded.dev \
 node server.mjs
 ```
+
+## Where the rows live
+
+`STORE` defaults to `./passes.json`, which is a file on the container's own
+filesystem. On Render that filesystem is ephemeral: it is wiped on every
+deploy, and on every cold start after a free instance has slept. The rows do
+not survive any of those, so a licence can only be fetched back during the
+same uptime window it was minted in — which is not a feature, it is a feature
+that looks like it works while you are testing it.
+
+A licence that cannot be fetched back is not lost money, but it is a support
+email, and the buying page offers the button either way. So the store wants a
+disk under it.
+
+Render will not attach a disk to a free instance, so this is two changes:
+
+1. **Settings → Instance Type → Starter** ($7/month). This is also what stops
+   the service sleeping, so the cold-start knock the buying page does on load
+   stops mattering at the same time.
+2. **Disks → Add Disk.** Any name; mount path `/var/data`; 1 GB is the
+   smallest and is far more than this needs (a row is a few hundred bytes).
+   Storage is $0.25/GB/month. The mount path can be most places but not `/`,
+   `/opt`, `/etc`, `/home` or the project directory itself.
+3. **Environment → `STORE=/var/data/passes.json`**, so the rows are written
+   under the mount rather than beside the code. Only what is under the mount
+   path survives; the rest of the filesystem stays ephemeral.
+
+Two things change once a disk is attached. Deploys are no longer
+zero-downtime — the old instance is stopped before the new one starts, which
+is a few seconds — and the service can no longer run more than one instance,
+because a disk is readable by exactly one. Neither matters here: Paddle
+retries a webhook it could not deliver, and the handler already refuses to
+mint twice for the same transaction, so a deploy landing mid-purchase costs
+nothing.
+
+Whatever is in `passes.json` today is already gone or about to be; there is
+nothing to migrate.
+
+### The other way
+
+The rows exist only because the mint has no way to ask whether a transaction
+was really paid for. It could: Paddle's API will answer that, and a pass is
+derived from the transaction id and the price, so the mint could re-mint on
+demand and keep no store at all. That removes the disk, the sleeping and the
+recovery window in one go, and makes a licence fetchable back forever rather
+than while a row survives.
+
+It costs a Paddle API key on the service (`pdl_…` — server-side only, never in
+`lib/pay.js`) and a dependency on Paddle being up at the moment somebody asks.
+Not done. Worth doing if the disk ever feels like the wrong $7.
 
 ## In Paddle
 
