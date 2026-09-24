@@ -109,16 +109,48 @@ export function daysFor(event, table) {
   return 0;
 }
 
-// A pass is handed back over the wire for ten minutes after it is made, and
-// not afterwards. The transaction id is the only thing standing between a
-// request and a pass, which is thin -- it is enough for the page that is
-// waiting right now, and worth nothing to somebody who finds the id in a
-// receipt next week. After that it is a note to support and a pass sent by
-// hand, which at this volume is the right amount of machinery.
-const READABLE_FOR = 10 * 60 * 1000;
-
+// A licence is handed back for as long as it is worth handing back.
+//
+// This used to be ten minutes: long enough for the page waiting on a purchase
+// just made, and worth nothing to anybody who found the id later. That was
+// the right trade while losing a licence meant writing to support, and the
+// wrong one the moment the question became "I cleared my browser" or "I am on
+// the other laptop" -- both of which are ordinary, and neither of which is
+// worth a person's afternoon over three dollars.
+//
+// So the window is the licence's own life. A row is dropped by keep() the
+// moment the licence in it expires, so nothing is kept that could still be
+// fetched, and nothing fetchable outlives what it unlocks.
+//
+// What that costs, stated plainly: the transaction id becomes a bearer token
+// for the licence, sitting in the buyer's email. It is a 26-character id
+// nobody can guess or enumerate, held by the buyer and by Paddle, and it
+// unlocks something that is already a string somebody could forward. The
+// exposure is real and it is small, and the rate limit below is there so the
+// endpoint cannot be used to look for one.
 export function readable(row, now) {
-  return (now === undefined ? Date.now() : now) - row.made < READABLE_FOR;
+  const at = (now === undefined ? Date.now() : now) / 1000;
+  return Boolean(row) && row.exp > at;
+}
+
+// Enough tries for somebody typing an id off a receipt, nowhere near enough
+// to go looking for one. Per address, and in memory: a restart forgives
+// everybody, which is the right way for this to fail.
+const TRIES = 12;
+const TRY_WINDOW = 10 * 60 * 1000;
+const tries = new Map();
+
+export function tooMany(who, now = Date.now(), log = tries) {
+  const seen = (log.get(who) || []).filter(at => now - at < TRY_WINDOW);
+  seen.push(now);
+  log.set(who, seen);
+  // The log is only useful for the window it covers.
+  if (log.size > 5000) {
+    for (const [key, at] of log) {
+      if (!at.length || now - at[at.length - 1] > TRY_WINDOW) log.delete(key);
+    }
+  }
+  return seen.length > TRIES;
 }
 
 function send(res, code, body, extra) {
@@ -175,11 +207,16 @@ const server = createServer((req, res) => {
   // afterwards. Long enough for the page that is waiting, short enough that a
   // transaction id found later is worth nothing.
   if (req.method === 'GET' && url.pathname === '/pass') {
-    const txn = url.searchParams.get('txn');
+    const who = String(req.headers['x-forwarded-for'] || '')
+      .split(',')[0].trim() || req.socket.remoteAddress || 'unknown';
+    if (tooMany(who)) {
+      return send(res, 429, { error: 'too many tries; wait a few minutes' });
+    }
+    const txn = String(url.searchParams.get('txn') || '').trim();
     const row = txn && passes.get(txn);
     if (!row) return send(res, 404, { error: 'not yet' });
     if (!readable(row)) {
-      return send(res, 410, { error: 'too late; write to support with your receipt' });
+      return send(res, 410, { error: 'that licence has expired' });
     }
     return send(res, 200, { pass: row.pass });
   }

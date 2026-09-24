@@ -95,10 +95,26 @@
     <p><a class="landcta" href="/" id="buyback">Back to the tool</a></p>
   </section>
 
-  <p class="hint buyaside">Trouble, or a payment that went through and left
-    you with no license? Write to
-    <a href="mailto:support@blinded.dev">support@blinded.dev</a> with your
-    Paddle receipt and we will send it by hand.</p>
+  <!-- Getting one back. Paddle emails every buyer a receipt with the
+       transaction id on it, and the licence was filed under exactly that id
+       when it was made -- so the thing somebody already has in their inbox is
+       the thing that fetches it. No account, and nothing here learns who they
+       are. -->
+  <section class="buyfind" id="buyfind">
+    <h2>Lost it, or on another device?</h2>
+    <p class="hint">Find the receipt Paddle emailed you and paste the
+      transaction ID from it. It starts with <code>txn_</code>.</p>
+    <p class="findrow">
+      <input id="findtxn" type="text" class="nameinput" spellcheck="false"
+        autocomplete="off" placeholder="txn_…" aria-label="Paddle transaction ID">
+      <button type="button" id="findgo" class="primary">Find my license</button>
+    </p>
+    <p class="hint" id="findnote" hidden></p>
+  </section>
+
+  <p class="hint buyaside">No receipt, or something else wrong? Write to
+    <a href="mailto:support@blinded.dev">support@blinded.dev</a> and we will
+    sort it out by hand.</p>
 
 </main>
 

@@ -41,6 +41,9 @@
     // under the pass inviting a second purchase.
     const frame = el('buyframe');
     if (frame) frame.hidden = true;
+    // And the way to look for one, now that one is on screen.
+    const finder = el('buyfind');
+    if (finder) finder.hidden = true;
     say('');
     el('buydone').scrollIntoView({ block: 'nearest' });
   }
@@ -203,7 +206,71 @@
     window.close();
   }
 
+  // Fetching a licence back from the id on a Paddle receipt.
+  //
+  // The mint filed it under that id when it made it, so nothing new has to be
+  // stored and nothing here has to know who is asking. It is checked before
+  // it is shown, the same as one that has just been bought: a string the page
+  // cannot verify is not a licence, whichever door it came through.
+  async function findLicence() {
+    const box = el('findtxn');
+    const note = el('findnote');
+    const say = (text, bad) => {
+      note.textContent = text;
+      note.hidden = !text;
+      note.classList.toggle('warnhint', Boolean(bad));
+    };
+    const txn = String(box.value || '').trim();
+    if (!txn) { say('Paste the transaction ID from your receipt.', true); return; }
+    if (!Pay.mint) { say('Not switched on for this copy of Blinded.', true); return; }
+    say('Looking\u2026', false);
+    let answer;
+    try {
+      answer = await fetch(Pay.mint + '/pass?txn=' + encodeURIComponent(txn),
+        { credentials: 'omit', cache: 'no-store' });
+    } catch {
+      say('Could not reach us. If you are on a network that blocks it, try '
+        + 'again from another one.', true);
+      return;
+    }
+    if (answer.status === 429) {
+      say('That is a lot of tries. Wait a few minutes and try again.', true);
+      return;
+    }
+    if (answer.status === 404) {
+      say('No licence under that ID. Check it against the receipt \u2014 it '
+        + 'starts with txn_ \u2014 or write to support@blinded.dev.', true);
+      return;
+    }
+    if (answer.status === 410) {
+      say('That licence has run out. Buying again gives you a new one.', true);
+      return;
+    }
+    if (!answer.ok) { say('Something went wrong. Try again in a moment.', true); return; }
+    const got = await answer.json().catch(() => null);
+    const licence = got && got.pass;
+    if (!licence) { say('Something went wrong. Try again in a moment.', true); return; }
+    Pass.useKey(Pay.key);
+    const checked = await Pass.check(licence);
+    if (!checked.ok) {
+      say('That licence does not check out here (' + checked.why + '). Write '
+        + 'to support@blinded.dev and we will look.', true);
+      return;
+    }
+    say('');
+    show(licence);
+  }
+
   function start() {
+    const find = el('findgo');
+    if (find) find.addEventListener('click', findLicence);
+    const txnBox = el('findtxn');
+    if (txnBox) {
+      txnBox.addEventListener('keydown', event => {
+        if (event.key === 'Enter') { event.preventDefault(); findLicence(); }
+      });
+    }
+
     const back = el('buyback');
     if (back) back.addEventListener('click', goBack);
 

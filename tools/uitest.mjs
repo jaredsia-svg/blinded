@@ -11122,6 +11122,88 @@ try {
     await tab.close();
   });
 
+  // ---------- getting a licence back ----------
+  //
+  // Somebody clears their browser, or picks up the other laptop. Paddle
+  // emailed them a receipt with the transaction id on it, and the licence was
+  // filed under exactly that id when it was made -- so the thing already in
+  // their inbox is the thing that fetches it. No account, and nothing here
+  // learns who they are.
+  await part("a licence can be fetched back from a receipt", async () => {
+    const lost = await context.newPage();
+    // The mint is not running in this suite, so its answers are stood in for.
+    // What is being tested is the page: which answer it gives to each, that
+    // it checks what comes back rather than trusting it, and that it never
+    // shows a string it could not verify.
+    await lost.route('**/pass?txn=*', route => {
+      const asked = new URL(route.request().url()).searchParams.get('txn');
+      if (asked === 'txn_rate') {
+        return route.fulfill({ status: 429, contentType: 'application/json',
+          body: JSON.stringify({ error: 'too many' }) });
+      }
+      if (asked === 'txn_old') {
+        return route.fulfill({ status: 410, contentType: 'application/json',
+          body: JSON.stringify({ error: 'expired' }) });
+      }
+      if (asked === 'txn_forged') {
+        return route.fulfill({ status: 200, contentType: 'application/json',
+          body: JSON.stringify({ pass: 'blinded1.notreal.notreal' }) });
+      }
+      return route.fulfill({ status: 404, contentType: 'application/json',
+        body: JSON.stringify({ error: 'not yet' }) });
+    });
+    await lost.goto(base + 'unlock.html');
+    await lost.waitForTimeout(400);
+    await lost.evaluate(() => {
+      window.BlindedPay.on = true;
+      window.BlindedPay.mint = location.origin;
+      // Earlier sections share this browser and leave a licence in storage
+      // for this origin. Without clearing it, "nothing was stored" reads
+      // somebody else's leftovers and passes for the wrong reason -- or, as
+      // here, fails for one.
+      localStorage.removeItem('blinded.pass');
+    });
+
+    const ask = async id => {
+      await lost.fill('#findtxn', id);
+      await lost.click('#findgo');
+      await lost.waitForTimeout(500);
+      return lost.evaluate(() => ({
+        note: document.getElementById('findnote').textContent,
+        shown: !document.getElementById('buydone').hidden,
+        stored: Boolean(localStorage.getItem('blinded.pass')),
+      }));
+    };
+
+    check('an empty box is asked for an id rather than searched for nothing',
+      /paste the transaction/i.test((await ask('')).note));
+
+    const missing = await ask('txn_nothere');
+    check('an id with nothing under it says so, and how to check it',
+      /no licence under that id/i.test(missing.note)
+        && /txn_/.test(missing.note), JSON.stringify(missing));
+    check('and shows nothing', missing.shown === false && missing.stored === false,
+      JSON.stringify(missing));
+
+    const old = await ask('txn_old');
+    check('a licence that has run out says buying again gives a new one',
+      /run out/i.test(old.note), JSON.stringify(old));
+
+    const rate = await ask('txn_rate');
+    check('and a flood of tries is turned away without a licence',
+      /wait a few minutes/i.test(rate.note) && rate.shown === false,
+      JSON.stringify(rate));
+
+    // The one that matters. A string the page cannot verify is not a licence,
+    // whichever door it arrived through -- the mint is not trusted here any
+    // more than a person pasting one in is.
+    const forged = await ask('txn_forged');
+    check('a licence that does not check out is refused, not shown',
+      forged.shown === false && forged.stored === false
+        && /does not check out/i.test(forged.note), JSON.stringify(forged));
+    await lost.close();
+  });
+
   // ---------- getting back to the document after paying ----------
   //
   // The buying page opens as a window over the tool, and the document stays

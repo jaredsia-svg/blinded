@@ -2986,7 +2986,7 @@ check('no creation date is carried into the output', !meta.info.CreationDate);
 // pass for anybody who posts some JSON at it", which is the same as giving
 // them away.
 {
-  const { signatureIsGood, daysFor, readable } = await import('../mint/server.mjs');
+  const { signatureIsGood, daysFor, readable, tooMany } = await import('../mint/server.mjs');
   const { createHmac } = await import('node:crypto');
   const body = JSON.stringify({ event_type: 'transaction.completed' });
   const sign = (ts, secret, text) => createHmac('sha256', secret)
@@ -3016,11 +3016,38 @@ check('no creation date is carried into the output', !meta.info.CreationDate);
   check('and so does an event with no items',
     daysFor({ data: {} }, { pri_a: 5 }) === 0 && daysFor({}, { pri_a: 5 }) === 0);
 
-  // The transaction id is thin as a credential, so it stops working.
-  check('a pass is collectable while the buyer is waiting for it',
-    readable({ made: now }, now) === true);
-  check('and not from a receipt found next week',
-    readable({ made: now - 86400000 }, now) === false);
+  // A licence can be fetched for as long as it is worth fetching, so that
+  // losing one is a paste rather than a support ticket -- and not a moment
+  // longer, because a row that outlives what it unlocks is a credential kept
+  // for nothing.
+  const soon = Math.floor(now / 1000) + 5 * 86400;
+  check('a licence is collectable while the buyer is waiting for it',
+    readable({ exp: soon, made: now }, now) === true);
+  check('and still collectable next week, from the receipt',
+    readable({ exp: soon, made: now - 86400000 }, now) === true);
+  check('but not once it has run out',
+    readable({ exp: Math.floor(now / 1000) - 60, made: now - 40 * 86400000 },
+      now) === false);
+  check('and not for a row that is not there at all',
+    readable(null, now) === false);
+
+  // Enough tries to type an id off a receipt; not enough to go looking for
+  // one. Without this, a window that lasts the licence's life is an oracle.
+  {
+    const log = new Map();
+    const at = now;
+    let refused = 0;
+    for (let i = 0; i < 20; i++) if (tooMany('1.2.3.4', at + i, log)) refused++;
+    check('a burst of tries from one place is cut off',
+      refused > 0, refused + ' of 20 refused');
+    check('but the first few get through', refused < 20,
+      refused + ' of 20 refused');
+    check('and somebody else is not punished for it',
+      tooMany('5.6.7.8', at, log) === false);
+    // The window moves: an hour later the same address starts again.
+    check('and a burst is forgiven once the window has passed',
+      tooMany('1.2.3.4', at + 3600000, log) === false);
+  }
 }
 
 // ---------- what the writing claims the detectors are ----------
@@ -3167,9 +3194,14 @@ check('no creation date is carried into the output', !meta.info.CreationDate);
   const canSend = sends.test(mint);
   if (!canSend) {
     const promises = /(?:by|via|in your|check your) e-?mail|e-?mailed\b/i;
+    // Except where the sender is Paddle, which really does email a receipt --
+    // and saying so is how somebody finds the transaction id that fetches
+    // their licence back. The rule is about promising an email *we* send.
+    const theirs = /paddle/i;
     for (const file of ['unlock.html', 'unlock.js', 'mint/server.mjs']) {
       const text = readFileSync(join(root, file), 'utf8');
-      const said = text.split(/(?<=[.?!])\s+/).filter(one => promises.test(one));
+      const said = text.split(/(?<=[.?!])\s+/)
+        .filter(one => promises.test(one) && !theirs.test(one));
       check(file + ': does not promise an email nothing sends',
         said.length === 0, said.join(' | ').slice(0, 200));
     }
