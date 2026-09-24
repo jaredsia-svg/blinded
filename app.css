@@ -172,10 +172,15 @@ a.mark { color: inherit; text-decoration: none; }
    somebody arriving should see what the tool does without scrolling — so the
    air around the hero is tighter than it was rather than the sentence being
    shorter than it should be. */
-.hero { max-width: 720px; margin: 4px auto 18px; text-align: center; }
+/* The title is a sentence now rather than three words, so it wraps where the
+   old one did not, and the fourteen pixels that cost pushed the last feature
+   card past the fold on a 1366x768 screen -- which is where the promise the
+   page is making stops being visible without scrolling. Taken back from the
+   title's own size and the gap under it, not from the cards. */
+.hero { max-width: 720px; margin: 4px auto 14px; text-align: center; }
 .hero h1 {
-  font-size: clamp(28px, 4.4vw, 40px); line-height: 1.12; letter-spacing: -0.022em;
-  margin: 0 0 12px; font-weight: 680;
+  font-size: clamp(26px, 3.9vw, 35px); line-height: 1.12; letter-spacing: -0.022em;
+  margin: 0 0 10px; font-weight: 680;
 }
 .lede { margin: 0; font-size: 15.5px; line-height: 1.5; color: var(--ink-soft); }
 .lede em { font-style: normal; color: var(--ink); font-weight: 600; }
@@ -256,11 +261,16 @@ a.mark { color: inherit; text-decoration: none; }
 .runlegs .leg-label > span:first-child { grid-area: 1 / 1; }
 .runlegs .leg .bar { grid-area: 1 / 2; min-width: 60px; }
 .runlegs .leg-count { grid-area: 1 / 3; margin-left: 0; }
+/* A colour per run, matching the marks each one leaves.
+   The first search draws green marks and the second check draws amber ones,
+   and the bar reporting each was the same blue -- so the two runs looked
+   alike while running and different the moment they finished. */
 .bar > i {
   display: block; height: 100%; width: 0;
-  background: var(--accent); border-radius: inherit;
+  background: #1a7f37; border-radius: inherit;
   transition: width 140ms linear;
 }
+#sweeprun .bar > i { background: #d98b1f; }
 .busy-note {
   margin: 12px 0 0; font-size: 12px; line-height: 1.45;
   color: var(--ink-soft); font-weight: 400;
@@ -322,6 +332,18 @@ a.mark { color: inherit; text-decoration: none; }
   cursor: pointer;
 }
 .tool:last-child { border-right-width: 1px; }
+/* The row that holds the close control spans the panel, so that control can
+   sit at the far end of it rather than against the tool beside it. The other
+   toolbars still shrink to their contents. */
+.toolsmain { width: 100%; }
+/* Away from the ones pressed by the dozen. It is the only control here that
+   can lose the document, so it does not want to be next to Undo -- and it
+   carries its own left edge, having nothing to share one with. */
+.toolclose {
+  margin-left: auto; border-left-width: 1px; border-right-width: 1px;
+  border-radius: 0 var(--radius) var(--radius) 0;
+}
+.toolclose:hover:not(:disabled) { background: #fdecea; color: var(--danger); }
 .tool:first-child { border-radius: var(--radius) 0 0 var(--radius); }
 .tool:last-child { border-radius: 0 var(--radius) var(--radius) 0; }
 .tool svg {
@@ -1126,12 +1148,16 @@ body.picking .tools {
 .barpip:hover { border-color: var(--ink-soft); }
 .barpip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 /* The one in use. The search puts the bar where the scores point, so this is
-   normally the recommendation as well — it is filled rather than outlined, and
-   there is nothing to press, so nothing that looks pressable. */
+   normally the recommendation as well, and it is filled rather than outlined.
+   It presses like the rest of them now -- it shows and hides where the
+   matches are -- so it carries the same pointer. */
 .barpip.now {
-  cursor: default;
   border-color: var(--accent); background: rgba(31, 111, 235, .1); color: var(--accent);
 }
+.barpip[aria-expanded="true"] {
+  background: var(--accent); border-color: var(--accent); color: #fff;
+}
+.barpip[aria-expanded="true"] b, .barpip[aria-expanded="true"] i { color: #fff; }
 .barpip.now b, .barpip.now i { color: var(--accent); }
 /* And what the scores point at when the bar is somewhere else, because the
    reviewer moved it: outlined, and one press away. */
@@ -1220,6 +1246,20 @@ body.picking .tools {
    competing with the page you are being asked to draw on. The way out here
    is the red cross above, which is why that exists. */
 body.picking #imagesect { position: static; z-index: auto; background: none; }
+
+/* Three circles, the thumbnail, the tally and the cross, all on the one row.
+   On a phone the wheel wrapped, so a picked image was two rows tall and the
+   number that belongs to it sat above the settings it belongs to. They are
+   small enough here for the three to fit beside everything else, and they do
+   not wrap: a row that is sometimes one line and sometimes two makes a list
+   of images jump every time a search finishes. */
+/* Measured at 390px, which is the narrow phone: three at 38 came to seven
+   pixels more than the row had. The overflow is a safety valve rather than a
+   plan -- a fourth setting, or a wider tally, scrolls instead of clipping. */
+.barwheel { flex-wrap: nowrap; gap: 3px; min-width: 0; overflow-x: auto; }
+.barpip { width: 34px; height: 34px; }
+.barpip b { font-size: 10px; }
+.barpip i { font-size: 6.5px; }
 }
 .pickstop {
   position: fixed; z-index: 45; top: calc(var(--top-h) + 12px); left: 14px;

@@ -86,7 +86,7 @@
   "isAccessibleForFree": false
 }
 </script>
-<link rel="stylesheet" href="app.css?v=28f81679">
+<link rel="stylesheet" href="app.css?v=17a68dd0">
 </head>
 <body>
 
@@ -120,7 +120,6 @@
            document is actually on screen; Home is gone, because the mark does
            that and a header with two ways home is a header explaining
            itself. -->
-      <button type="button" class="top-link" id="reset-top" hidden>Reset</button>
       <button type="button" class="top-link" id="prem-open">License</button>
       <button type="button" class="top-link" id="faq-open">Q&amp;A</button>
       <button type="button" class="top-link" id="back-top" hidden>Back to the tool</button>
@@ -134,7 +133,7 @@
   <section id="view-drop" class="view">
 
     <div class="hero">
-      <h1>Redaction for confidential documents.</h1>
+      <h1>Secure, zero-upload redaction for recurring images &amp; text</h1>
       <p class="lede">Select a name, a logo or an image <em>once</em> – every
         copy gets deleted, at any size or colour, even inside a scanned
         document in under a minute.</p>
@@ -148,8 +147,8 @@
           stroke-width="1.6" stroke-linecap="round"/>
       </svg>
       <p class="drop-lead">Drop a document here</p>
-      <p class="drop-sub">PDF, PNG, JPEG or plain text – or <span class="link">browse</span></p>
-      <p class="drop-faint">or a saved draft, to carry on where you left off</p>
+      <p class="drop-sub">PDF, PNG, JPEG, or a saved draft – or <span class="link">browse</span></p>
+      <p class="drop-faint">Nothing is uploaded.</p>
     </div>
     <!-- Outside the drop box: a file input nested inside a click-to-browse
          control often opens and immediately closes the picker (the same click
@@ -502,7 +501,7 @@
       <aside class="panel">
         <div class="panel-head">
           <h2 id="doc-name">document</h2>
-          <div class="tools" role="group" aria-label="Tools">
+          <div class="tools toolsmain" role="group" aria-label="Tools">
             <button type="button" id="tool-pan" class="tool" aria-pressed="true"
               title="Move the pages – drag to scroll. Nothing on a page changes.">
               <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
@@ -518,18 +517,6 @@
             <!-- Two buttons in one icon's worth of room: up on the top half,
                  down on the bottom. Paging is a different job from scrolling –
                  it lands on a page rather than somewhere in one. -->
-            <div class="tool toolstack" role="group" aria-label="Pages">
-              <button type="button" id="page-prev" class="half" title="Previous page">
-                <svg viewBox="0 0 24 14" aria-hidden="true" focusable="false">
-                  <path d="M5 10l7-6 7 6"/>
-                </svg><span class="sr-only">Previous page</span>
-              </button>
-              <button type="button" id="page-next" class="half" title="Next page">
-                <svg viewBox="0 0 24 14" aria-hidden="true" focusable="false">
-                  <path d="M5 4l7 6 7-6"/>
-                </svg><span class="sr-only">Next page</span>
-              </button>
-            </div>
             <button type="button" id="zoom-out" class="tool" title="Zoom out">
               <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
                 <circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5M8 11h6"/>
@@ -550,6 +537,14 @@
                 <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
                 <path d="M8 21v-7h8v7M8 3v5h6"/>
               </svg><span class="sr-only">Save a draft</span>
+            </button>
+            <!-- Last, and pushed to the far end: the only control here that
+                 can lose the document, kept away from the ones pressed by the
+                 dozen. It asks before it does anything. -->
+            <button type="button" id="tool-close" class="tool toolclose" title="Reset or close this file">
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="M6 6l12 12M18 6L6 18"/>
+              </svg><span class="sr-only">Reset or close this file</span>
             </button>
           </div>
           <p class="hint drafthint" id="draftnote" hidden></p>
@@ -1074,7 +1069,7 @@
 <script src="lib/pass.js?v=9a72ccda"></script>
 <script src="lib/pay.js?v=b5e2146e"></script>
 <script src="lib/render.js?v=65c3fe76"></script>
-<script src="app.js?v=8ce61fe2"></script>
+<script src="app.js?v=4969054e"></script>
 <script type="module" src="lib/boot.mjs?v=8b98ed8f"></script>
 </body>
 </html>

@@ -274,7 +274,7 @@ try {
     // The second-check offer is modal, and a reviewer answers it before doing
     // anything else. Every route out of a searched document goes through it.
     await dismissSweepOffer(page);
-    await page.click('#reset-top');
+    await page.click('#tool-close');
     if (await page.isVisible('#confirmbox')) await page.click('#confirmyes');
     await page.waitForSelector('#view-drop:not([hidden])', { timeout: 15000 });
   };
@@ -1355,7 +1355,7 @@ try {
     const opened = await pagesOpen();
     check('a document is open to be lost', opened > 0, String(opened));
 
-    await page.click('#reset-top');
+    await page.click('#tool-close');
     const asked = await page.isVisible('#confirmbox');
     check('opening another file asks first', asked === true);
     const wording = await page.textContent('#confirmbody');
@@ -1379,14 +1379,14 @@ try {
       (await page.isVisible('#view-review')) === true);
 
     // Escape is the same answer as Cancel.
-    await page.click('#reset-top');
+    await page.click('#tool-close');
     await page.waitForSelector('#confirmbox:not([hidden])', { timeout: 15000 });
     await page.keyboard.press('Escape');
     check('escape cancels too', (await pagesOpen()) === opened);
 
     // So is a press on the dimmed page behind the box. It has to cancel and
     // not confirm: a stray tap must never be the thing that loses a document.
-    await page.click('#reset-top');
+    await page.click('#tool-close');
     await page.waitForSelector('#confirmbox:not([hidden])', { timeout: 15000 });
     await page.evaluate(() => {
       const box = document.getElementById('confirmbox');
@@ -1398,7 +1398,7 @@ try {
       JSON.stringify({ opened, now: await pagesOpen() }));
 
     // But a press inside it is not outside it.
-    await page.click('#reset-top');
+    await page.click('#tool-close');
     await page.waitForSelector('#confirmbox:not([hidden])', { timeout: 15000 });
     await page.evaluate(() => {
       document.querySelector('#confirmbox .busy-inner')
@@ -1443,7 +1443,7 @@ try {
     await page.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
 
     // And confirming actually does it.
-    await page.click('#reset-top');
+    await page.click('#tool-close');
     await page.waitForSelector('#confirmbox:not([hidden])', { timeout: 15000 });
     await page.click('#confirmyes');
     await page.waitForSelector('#view-drop:not([hidden])', { timeout: 15000 });
@@ -1453,7 +1453,7 @@ try {
 
     // With nothing open there is nothing to ask about, and a prompt that
     // always fires is one people learn to click through.
-    await page.evaluate(() => document.getElementById('reset-top').click());
+    await page.evaluate(() => document.getElementById('tool-close').click());
     check('with no document open it does not ask',
       (await page.isVisible('#confirmbox')) === false);
 
@@ -1945,12 +1945,14 @@ try {
   check('each one reading as a bar and what it would find',
     wheel.every(pip => /^\d\.\d\d$/.test(pip.bar || '')
       && /^\d+ match(es)?$/.test(pip.count || '')), JSON.stringify(wheel));
-  // Where it stands now is a readout, not an offer: a control that does
-  // nothing is a control the reviewer stops trusting.
-  check('exactly one of them is the setting in use, and it cannot be pressed',
-    wheel.filter(pip => pip.now).length === 1
-    && wheel.every(pip => (pip.now ? pip.tag === 'SPAN' : pip.tag === 'BUTTON')),
-    JSON.stringify(wheel));
+  // One of them is where the bar stands, and all of them press. The one in
+  // use cannot move the bar -- there is nowhere to move it to -- so it does
+  // the other half instead and shows where the matches are, which also gives
+  // the row a way to shut a list one of its circles just opened.
+  check('exactly one of them is the setting in use',
+    wheel.filter(pip => pip.now).length === 1, JSON.stringify(wheel));
+  check('and every one of them can be pressed',
+    wheel.every(pip => pip.tag === 'BUTTON'), JSON.stringify(wheel));
   // Left to right by how strict they are, the way the slider runs. A row whose
   // order changed with the answer would be a row nobody could learn.
   check('and they run from the loosest setting to the strictest',
@@ -2803,8 +2805,14 @@ try {
       /choose that file/i.test(asks || '') && /\.pdf/.test(asks || ''), asks);
     check('and says what a draft does and does not hold',
       /not the document/i.test(await page.textContent('#drafthint')));
-    check('the front page mentions drafts, quietly',
-      /saved draft/i.test(await page.textContent('.drop-faint')),
+    // Drafts moved up a line, into the list of what can be dropped, and the
+    // faint line under it carries the promise instead -- which is the thing
+    // somebody standing over a confidential file wants to read there.
+    check('the front page says a saved draft can be dropped',
+      /saved draft/i.test(await page.textContent('.drop-sub')),
+      await page.textContent('.drop-sub'));
+    check('and promises nothing leaves, where the eye lands last',
+      /nothing is uploaded/i.test(await page.textContent('.drop-faint')),
       await page.textContent('.drop-faint'));
 
     await page.setInputFiles('#file', fixturePath);
@@ -3678,7 +3686,7 @@ try {
         return {
           zoomIn: of('zoom-in'), zoomOut: of('zoom-out'),
           pan: of('tool-pan'), mark: of('tool-mark'),
-          undo: of('undo'), reset: of('reset-top'), save: of('savedraft'),
+          undo: of('undo'), reset: of('tool-close'), save: of('savedraft'),
           // Shown, not merely un-hidden: on a wide screen the stylesheet keeps
           // it away, because the Cancel in the panel is right there.
           escape: getComputedStyle(document.getElementById('pickstop')).display !== 'none',
@@ -6995,6 +7003,13 @@ try {
   //
   // Scrolling lands somewhere in a page; these land on one, which is what is
   // wanted when the job is "check the next one".
+  // ---------- a page at a time, without two buttons for it ----------
+  //
+  // The toolbar carried a stacked pair of arrows that moved one page. They
+  // have gone: the scrubber is how a phone gets down a document and the
+  // keyboard is how everything else does, and a third way that moved a single
+  // page was a cell of toolbar nobody reached for. Paging itself is untouched,
+  // which is what this checks -- along with what took the room.
   await part("a page at a time", async () => {
     const paging = await page.evaluate(async () => {
       const B = window.Blinded;
@@ -7012,127 +7027,113 @@ try {
       B.goToPage(0);
       await settle();
       const start = topPage();
-      document.getElementById('page-next').click();
+      B.stepPage(1);
       await settle();
       const next = topPage();
-      document.getElementById('page-next').click();
+      B.stepPage(1);
       await settle();
       const twice = topPage();
-      document.getElementById('page-prev').click();
+      B.stepPage(-1);
       await settle();
       const back = topPage();
       // And it stops at the ends rather than running off them.
       B.goToPage(0);
       await settle();
-      document.getElementById('page-prev').click();
+      B.stepPage(-1);
       await settle();
       const atTheTop = topPage();
       return { start, next, twice, back, atTheTop };
     });
-    check('the down arrow goes to the next page',
+    check('stepping forward goes to the next page',
       paging.next === paging.start + 1, JSON.stringify(paging));
     check('and again', paging.twice === paging.start + 2, JSON.stringify(paging));
-    check('the up arrow comes back', paging.back === paging.twice - 1,
+    check('stepping back comes back', paging.back === paging.twice - 1,
       JSON.stringify(paging));
     check('and the first page is as far back as it goes',
       paging.atTheTop === 1, JSON.stringify(paging));
 
-    // Two buttons in one icon's worth of room, to the right of the crosshair.
-    const shape = await page.evaluate(() => {
-      const up = document.getElementById('page-prev').getBoundingClientRect();
-      const down = document.getElementById('page-next').getBoundingClientRect();
+    // What the toolbar carries now, and where.
+    const row = await page.evaluate(() => {
+      const main = document.querySelector('.toolsmain');
+      const close = document.getElementById('tool-close');
+      const last = main.lastElementChild;
       const mark = document.getElementById('tool-mark').getBoundingClientRect();
-      const zoom = document.getElementById('zoom-out').getBoundingClientRect();
-      const cell = document.querySelector('.toolstack').getBoundingClientRect();
+      const box = close.getBoundingClientRect();
+      const rowBox = main.getBoundingClientRect();
       return {
-        stacked: down.top >= up.bottom - 1,
-        sameWidth: Math.abs((up.width + down.width) / 2 - mark.width) < 3,
-        // The cell they share is one icon, the same as every other in the row.
-        together: Math.abs(cell.height - mark.height) < 1
-          && Math.abs(cell.width - mark.width) < 1,
-        afterTheCrosshair: up.left >= mark.right - 1 && up.left < zoom.left,
-        gone: document.getElementById('restart') === null,
+        arrowsGone: !document.getElementById('page-prev')
+          && !document.getElementById('page-next')
+          && document.querySelector('.toolstack') === null,
+        resetTopGone: document.getElementById('reset-top') === null,
+        closeIsLast: last === close,
+        atTheRightEdge: Math.round(rowBox.right - box.right) <= 1,
+        sameSizeAsTheRest: Math.abs(box.height - mark.height) < 1,
       };
     });
-    check('the arrows are stacked, up above down',
-      shape.stacked === true, JSON.stringify(shape));
-    check('in one icon\'s worth of room',
-      shape.sameWidth === true && shape.together === true, JSON.stringify(shape));
-    check('to the right of the crosshair',
-      shape.afterTheCrosshair === true, JSON.stringify(shape));
-    check('and the new-file icon has left the toolbar',
-      shape.gone === true, JSON.stringify(shape));
+    check('the paging arrows have left the toolbar',
+      row.arrowsGone === true, JSON.stringify(row));
+    check('and so has the Reset at the top right',
+      row.resetTopGone === true, JSON.stringify(row));
+    check('a way to close the file stands at the far end of the row',
+      row.closeIsLast === true && row.atTheRightEdge === true,
+      JSON.stringify(row));
+    check('the same size as every other icon beside it',
+      row.sameSizeAsTheRest === true, JSON.stringify(row));
 
-    // It is a div holding two buttons, so it misses the rounding every other
-    // icon gets from being a button — which left one square-cornered cell in a
-    // row of rounded ones.
-    const dressed = await page.evaluate(() => {
-      const cell = getComputedStyle(document.querySelector('.toolstack'));
-      const other = getComputedStyle(document.getElementById('zoom-out'));
-      return { radius: cell.borderTopLeftRadius, otherRadius: other.borderTopLeftRadius,
-               border: cell.borderTopColor, otherBorder: other.borderTopColor,
-               clipped: cell.overflow };
-    });
-    check('the cell is rounded and bordered like every other icon',
-      dressed.radius === dressed.otherRadius && dressed.border === dressed.otherBorder,
-      JSON.stringify(dressed));
-
-    // Hovering one arrow answers that arrow. The wrapper carries the .tool
-    // class for its border and size, and the whole-cell hover was firing on it
-    // — greying both halves for a pointer that was over one.
-    const hovered = await page.evaluate(async () => {
-      const read = () => {
-        const up = getComputedStyle(document.getElementById('page-prev')).backgroundColor;
-        const down = getComputedStyle(document.getElementById('page-next')).backgroundColor;
-        const cell = getComputedStyle(document.querySelector('.toolstack')).backgroundColor;
-        return { up, down, cell };
-      };
-      const rest = read();
-      document.getElementById('page-prev').classList.add('probe-hover');
-      return { rest };
-    });
-    await page.hover('#page-prev');
-    await page.waitForTimeout(120);
-    const onUp = await page.evaluate(() => ({
-      up: getComputedStyle(document.getElementById('page-prev')).backgroundColor,
-      down: getComputedStyle(document.getElementById('page-next')).backgroundColor,
+    // And it is the same three-way question the header used to ask, not a
+    // button that closes the document where it stands.
+    await page.click('#tool-close');
+    await page.waitForSelector('#confirmbox:not([hidden])', { timeout: 10000 });
+    const asks = await page.evaluate(() => ({
+      head: document.getElementById('confirmhead').textContent,
+      reset: document.getElementById('confirmreset').hidden,
+      save: document.getElementById('confirmsave').hidden,
+      yes: document.getElementById('confirmyes').textContent,
     }));
-    await page.hover('#page-next');
-    await page.waitForTimeout(120);
-    const onDown = await page.evaluate(() => ({
-      up: getComputedStyle(document.getElementById('page-prev')).backgroundColor,
-      down: getComputedStyle(document.getElementById('page-next')).backgroundColor,
-    }));
-    await page.mouse.move(5, 600);
-    check('hovering the up arrow greys the top half',
-      onUp.up !== hovered.rest.up, JSON.stringify({ rest: hovered.rest, onUp }));
-    check('and leaves the bottom half alone',
-      onUp.down === hovered.rest.down, JSON.stringify({ rest: hovered.rest, onUp }));
-    check('hovering the down arrow greys the bottom half',
-      onDown.down !== hovered.rest.down, JSON.stringify({ rest: hovered.rest, onDown }));
-    check('and leaves the top half alone',
-      onDown.up === hovered.rest.up, JSON.stringify({ rest: hovered.rest, onDown }));
+    check('it asks before anything is lost',
+      /reset or close/i.test(asks.head), JSON.stringify(asks));
+    check('offering all three ways out',
+      asks.reset === false && asks.save === false && /close file/i.test(asks.yes),
+      JSON.stringify(asks));
+    await page.click('#confirmx');
+    await page.waitForTimeout(250);
   });
 
-  // ---------- starting over, from the header ----------
-  await part("starting over, from the header", async () => {
+  // ---------- starting over, from the toolbar ----------
+  //
+  // It used to be a word in the header, beside the pages of the site. It is
+  // an icon at the far end of the toolbar now, among the things that act on
+  // the document rather than among the things that leave it -- and away from
+  // the tools pressed by the dozen, because it is the only one here that can
+  // lose the work.
+  await part("starting over, from the toolbar", async () => {
     const reset = await page.evaluate(() => {
-      const button = document.getElementById('reset-top');
-      const faq = document.getElementById('faq-open');
+      const button = document.getElementById('tool-close');
+      const row = document.querySelector('.toolsmain');
       const r = button.getBoundingClientRect();
-      const f = faq.getBoundingClientRect();
+      const undo = document.getElementById('undo').getBoundingClientRect();
       return {
         shown: !button.hidden,
-        leftOfTheQuestions: r.right <= f.left + 1,
         inTheHeader: button.closest('.top') !== null,
-        says: button.textContent.trim(),
+        inTheToolbar: button.closest('.toolsmain') !== null,
+        lastInTheRow: row.lastElementChild === button,
+        clearOfTheRest: Math.round(r.left - undo.right) > 8,
+        says: (button.getAttribute('title') || '').trim(),
+        gone: document.getElementById('reset-top') === null,
       };
     });
-    check('a loaded document gets a Reset in the header',
-      reset.shown === true && reset.inTheHeader === true, JSON.stringify(reset));
-    check('on the left of the questions', reset.leftOfTheQuestions === true,
+    check('a loaded document gets a way to close it', reset.shown === true,
       JSON.stringify(reset));
-    check('and it says Reset', reset.says === 'Reset', reset.says);
+    check('in the toolbar rather than the header',
+      reset.inTheToolbar === true && reset.inTheHeader === false,
+      JSON.stringify(reset));
+    check('at the far end of it, clear of the tools beside it',
+      reset.lastInTheRow === true && reset.clearOfTheRest === true,
+      JSON.stringify(reset));
+    check('and it says what it does', /reset or close/i.test(reset.says),
+      reset.says);
+    check('the word in the header has gone with it', reset.gone === true,
+      JSON.stringify(reset));
   });
 
   // ---------- a locked file ----------
@@ -8949,7 +8950,7 @@ try {
 
     // A long one says so when it opens -- before the work, not after it.
     await paying.evaluate(() => window.Blinded.loadFile
-      && document.getElementById('reset-top').click());
+      && document.getElementById('tool-close').click());
     await paying.waitForSelector('#view-drop:not([hidden])', { timeout: 15000 })
       .catch(() => {});
     await paying.goto(base);
@@ -9147,9 +9148,10 @@ try {
     }
     await paying.click('#prem-open');
     await paying.waitForSelector('#view-premium:not([hidden])', { timeout: 15000 });
-    await paying.waitForFunction(
-      () => !document.querySelector('#prem-here #premheld').hidden,
-      undefined, { timeout: 15000 });
+    await paying.waitForFunction(() => {
+      const held = document.querySelector('#prem-here #premheld');
+      return Boolean(held) && !held.hidden;
+    }, undefined, { timeout: 15000 });
     const mine = await paying.evaluate(() => ({
       note: document.querySelector('#prem-here #premnow').textContent,
       pricesHidden: document.querySelector('#prem-here #premprices').hidden,
@@ -10214,7 +10216,7 @@ try {
     }, sel);
 
     const reviewing = {
-      back: await link('#back-top'), reset: await link('#reset-top'),
+      back: await link('#back-top'), reset: await link('#tool-close'),
       faq: await link('#faq-open'), prem: await link('#prem-open'),
     };
     // Home is gone. The mark at the top left does that, and a header carrying
@@ -10231,8 +10233,12 @@ try {
     const home = {
       drop: await page.isVisible('#drop'),
       pages: await page.evaluate(() => window.Blinded.state.pages.length),
-      back: await link('#back-top'), reset: await link('#reset-top'),
+      back: await link('#back-top'),
       faq: await link('#faq-open'), prem: await link('#prem-open'),
+      // The way to close the file is in the toolbar now, which lives inside
+      // the document's own view -- so away from it the question is whether it
+      // can be seen at all, not whether an attribute is set.
+      closeSeen: await page.isVisible('#tool-close'),
       // The page itself is still there to read.
       versus: await page.isVisible('.versus'),
     };
@@ -10245,9 +10251,11 @@ try {
     check('the only thing offered there is the way back',
       home.back.says === 'Back to the tool' && home.back.hidden === false,
       JSON.stringify(home));
-    check('with the pages and Reset out of the way',
-      home.reset.hidden === true && home.faq.hidden === true
-        && home.prem.hidden === true, JSON.stringify(home));
+    check('with the pages out of the way',
+      home.faq.hidden === true && home.prem.hidden === true,
+      JSON.stringify(home));
+    check('and the way to close the file out of reach with them',
+      home.closeSeen === false, JSON.stringify(home));
 
     await page.click('#back-top');
     await page.waitForSelector('#view-review:not([hidden])', { timeout: 15000 });
@@ -10260,20 +10268,21 @@ try {
       await page.click(button);
       await page.waitForSelector(view + ':not([hidden])', { timeout: 15000 });
       const asking = {
-        back: await link('#back-top'), reset: await link('#reset-top'),
+        back: await link('#back-top'),
         faq: await link('#faq-open'), prem: await link('#prem-open'),
+        closeSeen: await page.isVisible('#tool-close'),
       };
       check(view + ' offers only the way back too',
         asking.back.says === 'Back to the tool' && asking.back.hidden === false
-          && asking.reset.hidden === true && asking.faq.hidden === true
-          && asking.prem.hidden === true, JSON.stringify(asking));
+          && asking.faq.hidden === true && asking.prem.hidden === true
+          && asking.closeSeen === false, JSON.stringify(asking));
       await page.click('#back-top');
       await page.waitForSelector('#view-review:not([hidden])', { timeout: 15000 });
     }
 
     // And with no document at all, there is nothing to go back to: the pages
     // are the pages of a site, and the mark is the way between them.
-    await page.click('#reset-top');
+    await page.click('#tool-close');
     await page.waitForSelector('#confirmbox:not([hidden])', { timeout: 15000 });
     await page.click('#confirmyes');
     await page.waitForSelector('#view-drop:not([hidden])', { timeout: 15000 });

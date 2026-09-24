@@ -614,7 +614,7 @@
     button.textContent = 'Pause';
     // And in the foot, where a search that reports itself down there had no
     // way to be stopped at all.
-    offerRunControl({ label: 'Pause search', onPress: requestPause });
+    offerRunControl({ label: 'Pause', onPress: requestPause });
   }
 
   function requestPause() {
@@ -696,7 +696,6 @@
     }
     el('prem-open').hidden = backOnly;
     el('faq-open').hidden = backOnly;
-    el('reset-top').hidden = name !== 'review';
     // Which page you are on, said on the button that opens it. Without this
     // the pair reads as two things to go to, one of which you already are.
     for (const [id, view] of [['prem-open', 'premium'], ['faq-open', 'faq']]) {
@@ -1038,6 +1037,10 @@
       bodyLink: { text: 'here', href: '/premium/' },
       bodyTail: '.',
       confirmLabel: 'Understood',
+      // Gone on its own after five seconds. It is telling the reviewer the
+      // rule, not asking them anything, and they have a document open behind
+      // it that they came here to work on.
+      dismissAfter: 5000,
       // Nothing is being lost here and there is one way on, so the button is
       // the ordinary blue rather than the red that means "this throws work
       // away", and it is sized to its word rather than to the dialog.
@@ -5837,13 +5840,12 @@
     refreshPaging();
   }
 
+  // The two arrows this used to grey out have gone from the toolbar: the
+  // scrubber and the keyboard are the ways down a document, and a pair of
+  // buttons that move one page at a time were a third that nobody reached
+  // for. Paging itself is untouched -- stepPage still answers the arrow keys.
   function refreshPaging() {
     refreshScrub();
-    const only = el('pages').children.length <= 1;
-    const prev = el('page-prev');
-    const next = el('page-next');
-    if (prev) prev.disabled = only;
-    if (next) next.disabled = only;
   }
 
   function stepZoom(by) {
@@ -5938,7 +5940,7 @@
     // quiet rather than becoming traps.
     // Paging stays live with zooming: both are ways of getting to the mark
     // being picked, and neither takes the reviewer anywhere else.
-    for (const id of ['tool-pan', 'tool-mark', 'undo', 'savedraft', 'reset-top']) {
+    for (const id of ['tool-pan', 'tool-mark', 'undo', 'savedraft', 'tool-close']) {
       const button = el(id);
       if (!button) continue;
       if (picking) { button.disabled = true; }
@@ -6366,17 +6368,36 @@
     const wheel = document.createElement('div');
     wheel.className = 'barwheel';
     for (const step of settings) {
-      // Where the bar stands is a readout, not an offer: pressing it would do
-      // nothing, and a control that does nothing is one the reviewer stops
-      // trusting.
-      const pip = document.createElement(step.now ? 'span' : 'button');
+      // Every one of them presses, including the one the bar is already at.
+      //
+      // That one used to be a readout, on the reasoning that pressing it
+      // could not move the bar anywhere -- true, but it left the reviewer
+      // with a row of circles where one behaved differently from the rest,
+      // and no way to shut the list a circle had just opened. So it does the
+      // other half instead: it shows and hides where the matches are, exactly
+      // as the tally beside it does.
+      const open = state.openTally === template.id;
+      const pip = document.createElement('button');
+      pip.type = 'button';
       pip.className = 'barpip' + (step.now ? ' now' : '') + (step.best ? ' best' : '');
-      if (!step.now) {
-        pip.type = 'button';
-        pip.title = 'Put the bar at ' + step.bar.toFixed(2) + ' and look again';
-        pip.addEventListener('click', () => moveBarTo(template, step.bar));
+      if (step.now) {
+        pip.title = open ? 'Hide where they are' : 'Where they are';
+        pip.setAttribute('aria-expanded', String(open));
+        pip.addEventListener('click', () => {
+          state.openTally = open ? null : template.id;
+          renderTemplates();
+        });
       } else {
-        pip.title = 'Where the bar is now';
+        pip.title = 'Put the bar at ' + step.bar.toFixed(2)
+          + ' and look again, and show where they are';
+        pip.addEventListener('click', () => {
+          // The places come up with the answer. Moving the bar changes which
+          // matches exist, and a count that changes without saying where
+          // asks the reviewer to take it on trust -- which is the one thing
+          // this panel is for not doing.
+          state.openTally = template.id;
+          moveBarTo(template, step.bar);
+        });
       }
       const reading = document.createElement('b');
       reading.textContent = step.bar.toFixed(2);
@@ -7351,7 +7372,16 @@
       // should not be the thing that loses the document.
       close.focus();
 
+      // A notice that goes on its own after a while.
+      //
+      // Only ever a notice: a dialog that asks a question and then answers it
+      // by itself is a dialog that decided for you. This one is telling the
+      // reviewer something and has one way on, so it can time out -- and the
+      // button stays, for anybody who reads faster than five seconds.
+      let leaves = null;
+
       const done = answer => {
+        if (leaves) { clearTimeout(leaves); leaves = null; }
         box.hidden = true;
         yes.removeEventListener('click', accept);
         close.removeEventListener('click', reject);
@@ -7387,6 +7417,11 @@
       reset.addEventListener('click', restore);
       box.addEventListener('pointerdown', away);
       document.addEventListener('keydown', key, true);
+      // Started here, where done already exists and beside the listeners it
+      // is cleared alongside.
+      if (opts.dismissAfter) {
+        leaves = setTimeout(() => done(true), opts.dismissAfter);
+      }
     });
   }
 
@@ -9165,7 +9200,7 @@
     if (said) said.textContent = '';
     const foot = el('runfoot');
     if (foot) foot.hidden = true;
-    offerRunControl({ id: 'sweepstop', label: 'Pause check',
+    offerRunControl({ id: 'sweepstop', label: 'Pause',
       onPress: stopTheCheck });
     sweepProgress(0, pages.length);
     renderSweep();
@@ -9991,8 +10026,21 @@
     // a row that already says what to press next, and what it actually is, is
     // a remark about what the search found.
     const work = swept ? null : sweepWorkload();
+    // And only where a word could be hiding as pixels in the first place.
+    //
+    // The check looks for words by shape, which is worth doing where a word
+    // might exist as a picture rather than as text: a scan, a screenshot, a
+    // logo. pdfread already worked out, page by page, whether there is
+    // anything on it that could hide one -- an image or a filled shape -- and
+    // a document made only of drawn text has nowhere for a missed word to be.
+    // Offering a slow second pass over one is offering work with nothing to
+    // find.
+    //
+    // Erring towards offering: a page that could not be inspected counts as
+    // one that could hide something, and one such page is enough.
+    const couldHide = state.pages.some(page => page.couldHideText !== false);
     const canRun = state.searched && !state.sweepRunning && !state.redacting
-      && !swept && state.terms.length > 0 && state.kind !== 'text'
+      && !swept && state.terms.length > 0 && state.kind !== 'text' && couldHide
       && Boolean(work && work.pages && work.terms);
     sweepOnOffer = canRun;
 
@@ -10592,8 +10640,6 @@
   el('foot-faq').addEventListener('click', () => goAway('faq'));
   el('foot-prem').addEventListener('click', () => goAway('premium'));
 
-  el('page-prev').addEventListener('click', () => stepPage(-1));
-  el('page-next').addEventListener('click', () => stepPage(1));
   // Clears every mark on the open document and redraws from the pristine
   // source canvases. The file stays open; OCR and the text layer stay.
   function resetToOriginal() {
@@ -10690,7 +10736,7 @@
     showTool('drop');
   }
 
-  el('reset-top').addEventListener('click', async () => {
+  el('tool-close').addEventListener('click', async () => {
     // Nothing open means nothing to lose, and a confirmation for that would be
     // the kind of prompt people learn to click through.
     if (!(state.pages.length || state.text)) {
