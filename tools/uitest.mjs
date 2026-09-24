@@ -296,9 +296,9 @@ try {
   // ---------- load ----------
   await page.goto(base);
   check('the drop view is the first thing shown', await page.isVisible('#view-drop'));
-  check('the header tagline is on screen',
-    (await page.textContent('#claim')).trim().length > 0,
-    await page.textContent('#claim'));
+  check('the header carries no tagline beside the name',
+    (await page.locator('.top .claim').count()) === 0,
+    'a tagline is back in the header');
   // The tagline no longer carries the privacy claim, so check it still exists
   // somewhere a new reader will meet it rather than letting it quietly vanish.
   check('the privacy claim survives on the front page',

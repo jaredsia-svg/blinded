@@ -122,7 +122,6 @@ ${structured(page)}
   <div class="wrap top-inner">
     <a class="mark" href="/">
 ${mark()} Blinded</a>
-    <p class="claim">Zero-upload redaction for recurring images &amp; text</p>
     <div class="top-actions">
       <a class="top-link" href="/premium/">License</a>
       <a class="top-link" href="/faq.html">Q&amp;A</a>
