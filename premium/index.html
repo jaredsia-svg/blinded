@@ -34,7 +34,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="A slide before and after redaction: names and logos gone from the second copy.">
 <meta name="twitter:card" content="summary_large_image">
-<link rel="stylesheet" href="/app.css?v=35b5efdc">
+<link rel="stylesheet" href="/app.css?v=5e1eabe2">
 </head>
 <body class="plainpage">
 
@@ -80,12 +80,6 @@
     <span class="foot-dot" aria-hidden="true">&middot;</span>
     <a class="footlink" href="/unlock.html?find">I lost my license</a>
   </p>
-  <p class="findrow" id="premcoderow" hidden>
-    <input id="premcodein" type="text" class="nameinput" spellcheck="false"
-      autocomplete="off" placeholder="blinded1.&hellip;" aria-label="Your license">
-    <button type="button" id="premcodego" class="primary">Use it</button>
-  </p>
-  <p class="hint" id="premcodenote" hidden></p>
 
   <!-- Shown instead of the prices to somebody who already holds a license.
        The string itself is behind a press, because this page is as likely to
@@ -161,8 +155,30 @@
 </article>
 </main>
 
+<!-- The same box the tool puts up for the same question, because it is the
+     same question and somebody may well meet both. An overlay rather than a
+     row that unfolds further down the page: a row can appear below the fold
+     and read as a button that did nothing. -->
+<div id="premcodebox" class="busy" hidden role="dialog" aria-modal="true"
+  aria-labelledby="premcodehead">
+  <div class="busy-inner nameinner confirminner">
+    <h2 class="namehead" id="premcodehead">Enter your license</h2>
+    <label class="namelabel" for="premcodein">License</label>
+    <input id="premcodein" type="text" class="nameinput" spellcheck="false"
+      autocomplete="off" placeholder="blinded1.&hellip;">
+    <p class="hint">It is checked here, in this tab, against a key built into
+      this page. Nothing is sent anywhere to verify it, and it keeps working
+      offline.</p>
+    <p class="hint" id="premcodenote" hidden></p>
+    <div class="namego">
+      <button type="button" id="premcodecancel" class="ghost">Cancel</button>
+      <button type="button" id="premcodego" class="primary">Use it</button>
+    </div>
+  </div>
+</div>
+
 <script src="/lib/pass.js?v=9a72ccda"></script>
 <script src="/lib/pay.js?v=e8535f6a"></script>
-<script src="/premium.js?v=c407febe"></script>
+<script src="/premium.js?v=abe8bdf9"></script>
 </body>
 </html>

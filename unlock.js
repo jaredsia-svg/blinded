@@ -262,21 +262,16 @@
   }
 
   function start() {
-    // Shown only to somebody who came looking for it.
+    // ?find is its own page, not the buying page with a box added.
     //
-    // It used to sit under the checkout for everybody, which is a way of
-    // getting a licence back offered to the one person who is in the middle
-    // of buying one. The tool's own dialog and the licence page both send
-    // people here with ?find on the address when that is what they want.
-    if (new URLSearchParams(location.search).has('find')) {
-      const box = el('buyfind');
-      if (box) {
-        box.hidden = false;
-        box.scrollIntoView({ block: 'center' });
-        const input = el('findtxn');
-        if (input) input.focus();
-      }
-    }
+    // It used to sit under the checkout for everybody, which offers a way of
+    // getting a licence back to the one person who is in the middle of buying
+    // one. Now the tool's dialog and the licence page both send people here
+    // with ?find when that is what they want -- and somebody who came to
+    // recover a licence they have already paid for should not be shown two
+    // prices while they do it. So the prices, the checkout frame and Paddle
+    // itself are all left out: nothing here is selling anything.
+    const finding = new URLSearchParams(location.search).has('find');
 
     const find = el('findgo');
     if (find) find.addEventListener('click', findLicence);
@@ -298,6 +293,30 @@
       Pass.check(held).then(answer => {
         if (answer.ok) show(held);
       });
+    }
+
+    // Nothing below this point is about buying, so in find mode none of it
+    // runs: no prices, no checkout, and no Paddle script fetched for a page
+    // that will not use it. The mint is still knocked on, because finding a
+    // licence is the one thing this page is here to do.
+    if (finding) {
+      const title = document.querySelector('.buytitle');
+      if (title) title.textContent = 'Find your license';
+      document.title = 'Find your license \u00b7 Blinded';
+      el('buylist').hidden = true;
+      el('buyframe').hidden = true;
+      const box = el('buyfind');
+      if (box) {
+        box.hidden = false;
+        // It is the only thing on the page now, so it does not need to
+        // announce itself with a rule above it as though something came
+        // before.
+        box.classList.add('buyfindonly');
+      }
+      const input = el('findtxn');
+      if (input) input.focus();
+      wake();
+      return;
     }
 
     // Which price, if the tool already asked -- decided before anything is

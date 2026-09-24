@@ -11257,22 +11257,57 @@ try {
   // So the doors go where somebody would look for them, and the fetch stays
   // where it is allowed to happen.
   await part("a lost licence can be found from the tool and from the licence page", async () => {
-    // Somebody buying is not somebody who lost one. The finder is folded away
-    // unless it was asked for by name.
+    // Somebody buying is not somebody who lost one, and the other way round.
+    // Visibility is read off the computed style rather than the attribute:
+    // the attribute is what the code sets, and asserting on it only proves
+    // the code did what the code did.
+    const seen = page => page.evaluate(() => {
+      const vis = id => {
+        const e = document.getElementById(id);
+        return e ? getComputedStyle(e).display !== 'none' : null;
+      };
+      return {
+        title: (document.querySelector('.buytitle') || {}).textContent,
+        prices: vis('buylist'),
+        priceRows: document.querySelectorAll('#buylist li').length,
+        frame: vis('buyframe'),
+        finder: vis('buyfind'),
+        focused: document.activeElement && document.activeElement.id,
+        paddle: Boolean(document.querySelector('script[src*="paddle.com"]')),
+      };
+    });
+
     const shop = await context.newPage();
     await shop.goto(base + 'unlock.html?price=days');
-    await shop.waitForTimeout(400);
+    await shop.waitForTimeout(500);
+    const buying = await seen(shop);
     check('buying a licence is not cluttered with finding an old one',
-      await shop.evaluate(() => document.getElementById('buyfind').hidden));
+      buying.finder === false, JSON.stringify(buying));
 
+    // ?find is the page, not the buying page with a box bolted under it.
+    // Being shown two prices while recovering something already paid for is
+    // the tool trying to sell to somebody who has already bought.
     await shop.goto(base + 'unlock.html?find');
-    await shop.waitForTimeout(400);
-    const asked = await shop.evaluate(() => ({
-      shown: !document.getElementById('buyfind').hidden,
-      focused: document.activeElement && document.activeElement.id,
-    }));
-    check('and asking for it puts the cursor in the box', asked.shown === true
-      && asked.focused === 'findtxn', JSON.stringify(asked));
+    await shop.waitForTimeout(700);
+    const asked = await seen(shop);
+    check('and asking for it puts the cursor in the box',
+      asked.finder === true && asked.focused === 'findtxn', JSON.stringify(asked));
+    check('with nothing on sale on it', asked.prices === false
+      && asked.priceRows === 0 && asked.frame === false, JSON.stringify(asked));
+    check('and it says what it is', /find your licen[cs]e/i.test(asked.title || ''),
+      JSON.stringify(asked));
+    // No checkout is going to open, so fetching Paddle would be a third-party
+    // script loaded onto a page that has no use for it.
+    check('and Paddle is never fetched for it', asked.paddle === false,
+      JSON.stringify(asked));
+
+    // And the selling page still sells.
+    await shop.goto(base + 'unlock.html');
+    await shop.waitForTimeout(700);
+    const still = await seen(shop);
+    check('while the buying page still offers both prices',
+      still.prices === true && still.priceRows === 2 && still.finder === false,
+      JSON.stringify(still));
     await shop.close();
 
     // Door one: the moment they are told there is something to pay for.
@@ -11331,29 +11366,41 @@ try {
     await lic.evaluate(() => localStorage.removeItem('blinded.pass'));
     await lic.reload();
     await lic.waitForTimeout(400);
-    const row = await lic.evaluate(() => {
+    // Again read off the computed style. An earlier version of this section
+    // asserted on the hidden attribute, which would have gone on passing if
+    // the box were revealed somewhere nobody could see it.
+    const shape = () => lic.evaluate(() => {
+      const box = document.getElementById('premcodebox');
+      const r = box && box.getBoundingClientRect();
       const have = document.getElementById('premhave');
       const link = have && have.querySelector('a');
       return {
-        shown: Boolean(have) && !have.hidden,
+        shown: Boolean(have) && getComputedStyle(have).display !== 'none',
         says: have ? have.textContent.replace(/\s+/g, ' ').trim() : null,
         href: link ? link.getAttribute('href') : null,
-        boxHidden: document.getElementById('premcoderow').hidden,
+        box: box ? getComputedStyle(box).display !== 'none' : null,
+        // A dialog that does not cover the page is a dialog somebody scrolls
+        // past, which is the failure this replaced.
+        over: r ? Math.round(r.width) >= window.innerWidth
+                  && Math.round(r.height) >= window.innerHeight : false,
+        focused: document.activeElement && document.activeElement.id,
       };
     });
+    const row = await shape();
     check('the licence page offers the same two', row.shown === true
       && /already have a license/i.test(row.says)
       && /lost my license/i.test(row.says), JSON.stringify(row));
     check('and its lost door is the same finder', row.href === '/unlock.html?find',
       JSON.stringify(row));
-    check('with the paste box folded away until it is wanted',
-      row.boxHidden === true, JSON.stringify(row));
+    check('with the paste box away until it is wanted', row.box === false,
+      JSON.stringify(row));
 
     await lic.click('#premcode');
-    await lic.waitForTimeout(300);
-    check('pressing it opens the box with the cursor in it',
-      await lic.evaluate(() => !document.getElementById('premcoderow').hidden
-        && document.activeElement.id === 'premcodein'));
+    await lic.waitForTimeout(400);
+    const opened = await shape();
+    check('pressing it puts a box over the page with the cursor in it',
+      opened.box === true && opened.over === true
+        && opened.focused === 'premcodein', JSON.stringify(opened));
 
     // The same rule as everywhere else: a string is not a licence until this
     // page has checked the signature itself.
@@ -11363,13 +11410,25 @@ try {
     const junk = await lic.evaluate(() => ({
       note: document.getElementById('premcodenote').textContent,
       stored: Boolean(localStorage.getItem('blinded.pass')),
-      held: !document.getElementById('premcoderow').hidden,
+      open: getComputedStyle(document.getElementById('premcodebox')).display !== 'none',
     }));
     check('a pasted string that does not check out is refused, not stored',
       junk.stored === false && /does not look like a licence/i.test(junk.note),
       JSON.stringify(junk));
-    check('and the box stays open to try again', junk.held === true,
+    check('and the box stays open to try again', junk.open === true,
       JSON.stringify(junk));
+
+    // A way out that is not the keyboard, and one that is.
+    await lic.press('#premcodein', 'Escape');
+    await lic.waitForTimeout(300);
+    check('escape closes it', (await shape()).box === false);
+    await lic.click('#premcode');
+    await lic.waitForTimeout(300);
+    await lic.click('#premcodecancel');
+    await lic.waitForTimeout(300);
+    check('and so does cancel', (await shape()).box === false);
+    await lic.click('#premcode');
+    await lic.waitForTimeout(300);
 
     // And the path that matters: a licence that does check out. Signed here
     // with a key made here, so no private key has to live in the repository.
@@ -11392,8 +11451,8 @@ try {
     await lic.waitForTimeout(500);
     const took = await lic.evaluate(() => ({
       stored: localStorage.getItem('blinded.pass'),
-      asking: !document.getElementById('premhave').hidden,
-      box: !document.getElementById('premcoderow').hidden,
+      asking: getComputedStyle(document.getElementById('premhave')).display !== 'none',
+      box: getComputedStyle(document.getElementById('premcodebox')).display !== 'none',
       note: (document.getElementById('premnow') || {}).textContent,
       held: !document.getElementById('premheld').hidden,
       prices: !document.getElementById('premprices').hidden,

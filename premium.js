@@ -49,30 +49,51 @@
     }
     Pass.remember(typed);
     say('');
-    el('premcoderow').hidden = true;
-    el('premhave') && (el('premhave').hidden = true);
+    shutCode();
+    if (el('premhave')) el('premhave').hidden = true;
     Pay.showLicensed(document.querySelector('.top-link.here'), true);
     Pay.showHeld(document, { left: Pass.daysLeft(answer.payload),
                              license: typed });
+  }
+
+  function shutCode() {
+    const box = el('premcodebox');
+    if (box) box.hidden = true;
+  }
+
+  function openCode() {
+    const box = el('premcodebox');
+    const input = el('premcodein');
+    if (!box || !input) return;
+    const note = el('premcodenote');
+    if (note) { note.textContent = ''; note.hidden = true; }
+    input.value = '';
+    box.hidden = false;
+    input.focus();
   }
 
   async function start() {
     rows(Pay.on);
 
     const open = el('premcode');
-    if (open) {
-      open.addEventListener('click', () => {
-        const row = el('premcoderow');
-        row.hidden = !row.hidden;
-        if (!row.hidden) el('premcodein').focus();
-      });
-    }
+    if (open) open.addEventListener('click', openCode);
     const go = el('premcodego');
     if (go) go.addEventListener('click', useTyped);
+    const cancel = el('premcodecancel');
+    if (cancel) cancel.addEventListener('click', shutCode);
+    // A press on the dimmed page behind it is a way out, the same as every
+    // other box here. Nothing is lost by closing it.
+    const box = el('premcodebox');
+    if (box) {
+      box.addEventListener('pointerdown', event => {
+        if (event.target === box) shutCode();
+      });
+    }
     const typed = el('premcodein');
     if (typed) {
       typed.addEventListener('keydown', event => {
         if (event.key === 'Enter') { event.preventDefault(); useTyped(); }
+        if (event.key === 'Escape') { event.preventDefault(); shutCode(); }
       });
     }
 

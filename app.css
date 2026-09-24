@@ -2474,6 +2474,12 @@ body.choosing { -webkit-user-select: none; user-select: none; }
 /* Getting a licence back. Below the checkout, because somebody buying one has
    no use for it and somebody who lost one is looking for it. */
 .buyfind { margin: 22px 0 0; padding-top: 16px; border-top: 1px solid var(--line); }
+/* On ?find it is the page rather than a footnote to it: nothing came before,
+   so there is no rule to draw under. */
+.buyfind.buyfindonly { margin-top: 4px; padding-top: 0; border-top: 0; }
+/* The page's own title already says this in the same words, and two headings
+   one above the other reads as a mistake. */
+.buyfind.buyfindonly h2 { display: none; }
 .buyfind h2 { font-size: 15px; margin: 0 0 8px; }
 .findrow { display: flex; gap: 8px; margin: 12px 0 0; align-items: stretch; }
 .findrow .nameinput { flex: 1; min-width: 0; margin: 0; }
