@@ -64,7 +64,16 @@
   function openCode() {
     const box = el('premcodebox');
     const input = el('premcodein');
-    if (!box || !input) return;
+    // Said out loud rather than returning quietly. If this page is ever
+    // served as held markup against a fresh script, the box is not here and
+    // the press does nothing -- and a silent return leaves nothing to find in
+    // the one place somebody would look.
+    if (!box || !input) {
+      console.error('Blinded: the license box is missing from this page. It '
+        + 'is probably an old copy held in the browser cache; a hard reload '
+        + '(Ctrl+Shift+R, or Cmd+Shift+R) should fix it.');
+      return;
+    }
     const note = el('premcodenote');
     if (note) { note.textContent = ''; note.hidden = true; }
     input.value = '';

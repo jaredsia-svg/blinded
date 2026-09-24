@@ -77,6 +77,22 @@ services:
       # the wire: the first plain request a typed address makes, before the
       # redirect. Render serves this over TLS on every hostname it answers on,
       # so there is nothing left that needs http.
+      # Revalidate before reusing anything.
+      #
+      # Without this the browser decides for itself how long to keep a page,
+      # and it keeps the HTML. The asset links inside carry ?v=<hash> so a
+      # changed script gets a new URL -- but that only helps once the markup
+      # holding those links has itself been fetched again. Held HTML against a
+      # fresh script is the worst of the two: the page draws a button whose
+      # handler looks for markup that release does not have, so it does
+      # nothing at all, silently, and a hard reload is the only cure.
+      #
+      # no-cache does not mean do not store: it means ask first. An unchanged
+      # file comes back 304 with no body, so this costs a round trip and not a
+      # download, and the versioned URLs make that answer cheap.
+      - path: /*
+        name: Cache-Control
+        value: no-cache
       - path: /*
         name: Strict-Transport-Security
         value: max-age=31536000; includeSubDomains

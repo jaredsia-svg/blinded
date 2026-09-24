@@ -3358,6 +3358,48 @@ check('no creation date is carried into the output', !meta.info.CreationDate);
   }
 }
 
+// ---------- a script and its page, agreeing about what is on it ----------
+//
+// A button that does nothing, and no way to tell from either file alone.
+//
+// The licence page asks for a pasted licence in a box. premium.js opens that
+// box by id; premium/index.html is where the box lives. Move the box, rename
+// it, or ship one file without the other, and the handler still runs, finds
+// nothing, and returns -- so the button draws, takes the press, and does
+// nothing at all. Nothing throws, so no error reaches the console, and both
+// files read as correct on their own.
+//
+// It happens in the wild even when the repository is consistent, because a
+// browser caches the two separately: held markup against a fresh script is
+// exactly this mismatch. That is what the Cache-Control rule in render.yaml
+// is for. This is the other half -- making sure the pair in the repository
+// could never disagree in the first place.
+{
+  const pages = [
+    ['premium.js', 'premium/index.html'],
+    ['unlock.js', 'unlock.html'],
+  ];
+  for (const [script, page] of pages) {
+    const code = readFileSync(join(root, script), 'utf8');
+    const html = readFileSync(join(root, page), 'utf8');
+    // Ids the script reaches for by name, however it spells the call.
+    const wanted = new Set();
+    for (const hit of code.matchAll(/getElementById\(\s*'([A-Za-z0-9_-]+)'/g)) {
+      wanted.add(hit[1]);
+    }
+    // el('x') is the same call wearing a shorter name.
+    for (const hit of code.matchAll(/\bel\(\s*'([A-Za-z0-9_-]+)'\s*\)/g)) {
+      wanted.add(hit[1]);
+    }
+    check(script + ' reaches for ids at all', wanted.size > 0, String(wanted.size));
+    const have = new Set();
+    for (const hit of html.matchAll(/\sid="([A-Za-z0-9_-]+)"/g)) have.add(hit[1]);
+    const missing = [...wanted].filter(id => !have.has(id));
+    check('every id ' + script + ' opens is on ' + page,
+      missing.length === 0, missing.join(', '));
+  }
+}
+
 // ---------- what is asked to be indexed, and what is not ----------
 //
 // Two mistakes, opposite ways round, and a crawler reports both the same
