@@ -2420,6 +2420,15 @@ body.choosing { -webkit-user-select: none; user-select: none; }
   min-height: 38px; padding: 8px 22px; font-size: 13.5px;
 }
 .payfine { margin: 12px 0 0; }
+/* The line above Save. Quiet, because it is a caution and not an alarm --
+   somebody exporting a document they have just reviewed does not need
+   shouting at -- but the last thing read before the button. */
+.namecheck {
+  margin: 14px 0 0; font-size: 12.5px; line-height: 1.5;
+  color: var(--ink-soft);
+}
+.namecheck a { color: inherit; }
+.namecheck a:hover { color: var(--accent); }
 .payhave { margin: 12px 0 0; text-align: center; }
 /* The same size as the line above it. It was set at the body size, which
    made the quiet way out louder than the three answers over it. */

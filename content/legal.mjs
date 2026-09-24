@@ -15,10 +15,8 @@ export const REFUND_HOURS = 72;
 
 export const CONTACT = 'support@blinded.dev';
 
-// Where the law question gets answered. Until somebody who knows says
-// otherwise this names no country, because naming the wrong one is worse
-// than naming none -- and the self-test will not let it be forgotten.
-export const JURISDICTION = null;
+// Where the law question gets answered.
+export const JURISDICTION = 'Singapore';
 
 export const pages = [
   {
@@ -153,6 +151,26 @@ export const pages = [
           + 'file before you send it. If a document matters enough to redact, '
           + 'it matters enough to read afterwards.'] },
 
+      { h: 'What this is not',
+        p: ['<strong>The output is not certified.</strong> Blinded produces a '
+          + 'redacted file; it does not certify that the file is safe to '
+          + 'release. That judgement is yours, and it is made by looking at '
+          + 'what came out.',
+          'Some courts and regulators require a particular redaction process, '
+          + 'or a certificate that one was followed. Blinded provides '
+          + 'neither, and nothing here is legal advice about whether a '
+          + 'document meets an obligation you are under.',
+          '<strong>Misses are possible.</strong> A word the reader misread, a '
+          + 'logo at a size or colour the matcher did not reach, a detector '
+          + 'left unticked \u2014 each is a way for something to survive that '
+          + 'you meant to cover. This is why every proposal is shown before '
+          + 'it is applied, and why the exported file is worth reading.',
+          'We are not a HIPAA business associate and do not sign business '
+          + 'associate agreements. Your document never reaches us, so no '
+          + 'protected health information is disclosed to us by using this \u2014 '
+          + 'but whether a file is properly de-identified is your '
+          + 'determination and not ours.'] },
+
       { h: 'No warranty',
         p: ['The tool is provided as it is, without warranty of any kind, '
           + 'express or implied, including any warranty of merchantability, '
@@ -214,6 +232,15 @@ export const pages = [
           'Because the source is published, the tool itself cannot be taken '
           + 'away from you: a copy you have run yourself keeps working '
           + 'whatever happens to this site.'] },
+
+      { h: 'Which law',
+        p: ['These terms are governed by the law of Singapore, and the courts '
+          + 'of Singapore have jurisdiction over any dispute arising out of '
+          + 'them.',
+          'Nothing in them takes away a right you have under the law where '
+          + 'you live that cannot be given up by agreement. Where a term here '
+          + 'goes further than that law allows, it applies as far as it is '
+          + 'allowed to and no further.'] },
 
       { h: 'Changes',
         p: ['If these terms change, the change is visible in the '

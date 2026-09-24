@@ -39,8 +39,10 @@ export function renderLegal(page) {
 
   // Said once, at the top, rather than in a clause nobody reaches. A page
   // that cannot say which country's law applies should say so out loud.
+  // Said at the top as well as in its own clause: somebody looking for it is
+  // usually looking for it first.
   const law = JURISDICTION
-    ? `  <p class="hint">These terms are governed by the law of ${JURISDICTION}.</p>\n`
+    ? `  <p class="hint">Governed by the law of ${JURISDICTION}.</p>\n`
     : '';
 
   return `<!doctype html>

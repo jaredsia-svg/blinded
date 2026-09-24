@@ -3303,11 +3303,58 @@ check('no creation date is carried into the output', !meta.info.CreationDate);
   check('the refund window is a number somebody chose',
     Number.isFinite(REFUND_HOURS) && REFUND_HOURS > 0, String(REFUND_HOURS));
 
-  // Not a failure -- nobody here can answer it -- but it must not be quietly
-  // forgotten either, so it is said on every run until somebody decides.
-  if (!JURISDICTION) {
-    console.log('  note: content/legal.mjs names no governing law. A lawyer '
-      + 'should choose one.');
+  // Nobody here can choose the law, but once somebody has, it must be said
+  // on the page and not only in the file that generates it.
+  check('a governing law has been chosen', Boolean(JURISDICTION),
+    'content/legal.mjs names none');
+  if (JURISDICTION) {
+    const terms = readFileSync(join(root, 'terms', 'index.html'), 'utf8')
+      .replace(/\s+/g, ' ');
+    check('and the terms say which it is',
+      terms.includes(JURISDICTION), JURISDICTION);
+    check('and which courts read them', /courts of/i.test(terms), 'terms');
+    // A disclaimer that claims more than the law allows is one a court reads
+    // down or throws out. Saying so is what keeps the rest of it standing.
+    check('without claiming to override rights that cannot be given up',
+      /cannot be given up by agreement/i.test(terms), 'terms');
+  }
+
+  // The four things the tool is not, said where somebody can find them.
+  {
+    const terms = readFileSync(join(root, 'terms', 'index.html'), 'utf8')
+      .replace(/\s+/g, ' ');
+    for (const [what, pattern] of [
+      ['the output is not certified', /output is not certified/i],
+      ['no process or certificate is provided', /particular redaction process/i],
+      ['misses are possible', /misses are possible/i],
+      ['no business associate agreement', /business associate/i],
+    ]) {
+      check('the terms say ' + what, pattern.test(terms), what);
+    }
+    // And it must not disown the thing it is sold for. The de-identify page
+    // exists to bring those readers in; telling them at the last moment not
+    // to use it would make one of the two a lie.
+    check('without telling medical readers not to use it at all',
+      !/do not use (this|it) (as your |for )?hipaa/i.test(terms), 'terms');
+  }
+
+  // The same caution where the decision is actually made.
+  {
+    const tool = readFileSync(join(root, 'index.html'), 'utf8')
+      .replace(/\s+/g, ' ');
+    const said = /<p class="namecheck">([\s\S]*?)<\/p>/.exec(tool);
+    check('the export box cautions before the file is written',
+      Boolean(said), 'index.html');
+    if (said) {
+      check('saying the output is not certified',
+        /not certified/i.test(said[1]), said[1]);
+      check('and that misses are possible',
+        /misses are possible/i.test(said[1]), said[1]);
+      check('and to read the file before sending it',
+        /read the exported file/i.test(said[1]), said[1]);
+      check('with the terms a press away',
+        /href="\/terms\/"/.test(said[1]), said[1]);
+    }
   }
 }
 
