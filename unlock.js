@@ -185,7 +185,28 @@
     });
   }
 
+  // Going back to the tool, which is a window behind this one.
+  //
+  // This page opens as a window over the tool; the document is still in the
+  // tab that opened it, exactly as it was left. Following a link to "/" from
+  // here loaded a second copy of the tool into a 520-pixel window while the
+  // real one sat behind it holding the reviewer's work -- and the licence
+  // they had just bought appeared to have done nothing.
+  //
+  // Closing hands the tab back instead, and the tool picks the licence up on
+  // the focus it gets when this window goes. The href stays as it is, for
+  // anybody who opened this page directly rather than from the tool: there is
+  // no window to close for them, so the link is the right answer.
+  function goBack(event) {
+    if (!window.opener || window.opener.closed) return;
+    event.preventDefault();
+    window.close();
+  }
+
   function start() {
+    const back = el('buyback');
+    if (back) back.addEventListener('click', goBack);
+
     // A pass already in hand, because they bought one and came back. Say so
     // rather than selling them another.
     const held = Pass.recall();

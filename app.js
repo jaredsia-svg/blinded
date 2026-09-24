@@ -7568,6 +7568,13 @@
   // reviewer comes back from buying one.
   let passHeld = null;
 
+  // The header's tick, kept level with what is actually held.
+  function markLicence() {
+    if (Pay && Pay.showLicensed) {
+      Pay.showLicensed(el('prem-open'), Boolean(passHeld));
+    }
+  }
+
   async function refreshPass() {
     if (!Pay || !Pass || !Pay.on) { passHeld = null; return null; }
     Pass.useKey(Pay.key);
@@ -7579,6 +7586,7 @@
     // one bought cannot be told from the last one that did not work.
     if (!answer.ok && answer.why !== 'nocrypto') Pass.forget();
     passHeld = answer.ok ? answer.payload : null;
+    markLicence();
     return passHeld;
   }
 
@@ -10735,6 +10743,19 @@
     refreshApply();
     showTool('drop');
   }
+
+  // A licence bought in the window this tab opened lands in this origin's
+  // storage, not in a message: the buying page is a separate document and
+  // cannot call in here. So the tab asks again whenever it is looked at,
+  // which is exactly the moment somebody comes back from buying one -- the
+  // window closes, the focus lands here, and the tick appears beside the word
+  // License. Nothing is fetched and nothing is reloaded, so a document open
+  // behind all of this stays open, with its marks where they were.
+  window.addEventListener('focus', () => {
+    refreshPass().then(() => refreshApply());
+  });
+  // And once at the start, for a licence bought in an earlier sitting.
+  refreshPass();
 
   el('tool-close').addEventListener('click', async () => {
     // Nothing open means nothing to lose, and a confirmation for that would be

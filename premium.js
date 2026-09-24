@@ -26,6 +26,12 @@
   async function start() {
     rows(Pay.on);
 
+    // Asked once, and the answer used twice: the tick in the header and, if
+    // payment is on, what this page says instead of prices.
+    const license = await held();
+    // The same tick the tool's header wears, on the same word.
+    Pay.showLicensed(document.querySelector('.top-link.here'), Boolean(license));
+
     // Nothing is being charged for yet. Saying so is not modesty: a price
     // list on a page for something that is currently free is a page that
     // lies, and this is the one subject where being caught doing that costs
@@ -40,7 +46,6 @@
       return;
     }
 
-    const license = await held();
     if (!license) return;
     Pay.showHeld(document, { left: Pass.daysLeft(license),
                              license: Pass.recall() });

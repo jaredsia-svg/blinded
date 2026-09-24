@@ -11051,6 +11051,123 @@ try {
     await quiet.close();
   });
 
+  // ---------- the tick, and what it must not cost ----------
+  //
+  // A licence bought in the window this tab opened lands in storage, not in a
+  // message. The tab asks again on focus, which is the moment that window
+  // closes -- and nothing is fetched or reloaded, because the document behind
+  // all of this exists nowhere but here.
+  await part("a licence shows in the header without reloading", async () => {
+    const tab = await context.newPage();
+    await tab.goto(base);
+    const made = await tab.evaluate(async () => {
+      const pair = await crypto.subtle.generateKey(
+        { name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign', 'verify']);
+      const pub = await crypto.subtle.exportKey('jwk', pair.publicKey);
+      const b64 = b => btoa(String.fromCharCode(...new Uint8Array(b)))
+        .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+      const payload = { v: 1, plan: 'month', id: 't',
+        exp: Math.floor(Date.now() / 1000) + 9 * 86400 };
+      const signed = b64(new TextEncoder().encode(JSON.stringify(payload)));
+      const sig = await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' },
+        pair.privateKey, new TextEncoder().encode(signed));
+      return { key: { kty: pub.kty, crv: pub.crv, x: pub.x, y: pub.y },
+               licence: 'blinded1.' + signed + '.' + b64(sig) };
+    });
+    await tab.evaluate(k => {
+      window.BlindedPay.on = true;
+      window.BlindedPay.key = k;
+      localStorage.removeItem('blinded.pass');
+    }, made.key);
+
+    await tab.setInputFiles('#file', manyPath);
+    await tab.waitForSelector('#view-review:not([hidden])', { timeout: 60000 });
+    await tab.evaluate(() => {
+      const B = window.Blinded;
+      B.state.pages[0].manual.push({ id: 'keepme', x: 30, y: 30, w: 100, h: 24 });
+      B.redrawAll();
+    });
+    await tab.waitForTimeout(300);
+    const before = await tab.evaluate(() => ({
+      tick: Boolean(document.querySelector('#prem-open .licensed')),
+      pages: window.Blinded.state.pages.length,
+      marks: window.Blinded.state.pages[0].manual.length,
+    }));
+    check('with no licence there is no tick', before.tick === false,
+      JSON.stringify(before));
+
+    // Exactly how one arrives: written to this origin by the other window,
+    // then this tab is looked at again.
+    await tab.evaluate(l => localStorage.setItem('blinded.pass', l), made.licence);
+    await tab.evaluate(() => window.dispatchEvent(new Event('focus')));
+    await tab.waitForTimeout(600);
+    const after = await tab.evaluate(() => ({
+      tick: Boolean(document.querySelector('#prem-open .licensed')),
+      said: (document.querySelector('#prem-open .sr-only') || {}).textContent || '',
+      pages: window.Blinded.state.pages.length,
+      marks: window.Blinded.state.pages[0].manual.length,
+      kept: window.Blinded.state.pages[0].manual.some(m => m.id === 'keepme'),
+      onTheDocument: !document.getElementById('view-review').hidden,
+    }));
+    check('one bought in the other window shows up here', after.tick === true,
+      JSON.stringify(after));
+    check('and is said as well as drawn', /you have one/i.test(after.said),
+      JSON.stringify(after));
+    // The whole point. A reload would have cost the reviewer their work.
+    check('without the document moving',
+      after.pages === before.pages && after.onTheDocument === true,
+      JSON.stringify(after));
+    check('or a single mark on it', after.marks === before.marks
+      && after.kept === true, JSON.stringify(after));
+    await tab.close();
+  });
+
+  // ---------- getting back to the document after paying ----------
+  //
+  // The buying page opens as a window over the tool, and the document stays
+  // in the tab that opened it. "Back to the tool" followed a link to "/",
+  // which loaded a second copy of the tool into a 520-pixel window while the
+  // real one sat behind it holding the reviewer's work -- so the licence they
+  // had just bought appeared to have done nothing at all. Closing hands the
+  // tab back exactly as it was left.
+  await part("back to the tool means back to the document", async () => {
+    const tool = await context.newPage();
+    await tool.goto(base);
+    const [bought] = await Promise.all([
+      tool.waitForEvent('popup'),
+      tool.evaluate(u => window.open(u, 'blinded-pay',
+        'width=520,height=760,noopener=no'), base + 'unlock.html'),
+    ]);
+    await bought.waitForLoadState('domcontentloaded');
+    await bought.waitForTimeout(400);
+    check('the buying page knows it was opened by the tool',
+      await bought.evaluate(() => Boolean(window.opener)));
+
+    await bought.evaluate(() => { document.getElementById('buydone').hidden = false; });
+    await Promise.all([
+      bought.waitForEvent('close'),
+      bought.click('#buyback'),
+    ]).catch(() => {});
+    await tool.waitForTimeout(300);
+    check('going back closes it rather than navigating it',
+      bought.isClosed() === true);
+    check('and the tab that opened it is still there',
+      tool.isClosed() === false && new URL(tool.url()).pathname === '/');
+
+    // Opened directly, there is no window to close, so the link is the answer.
+    const alone = await context.newPage();
+    await alone.goto(base + 'unlock.html');
+    await alone.waitForTimeout(300);
+    await alone.evaluate(() => { document.getElementById('buydone').hidden = false; });
+    await alone.click('#buyback');
+    await alone.waitForLoadState('domcontentloaded');
+    await alone.waitForTimeout(300);
+    check('and a page opened on its own follows the link instead',
+      new URL(alone.url()).pathname === '/');
+    await alone.close();
+    await tool.close();
+  });
+
   await browser.close();
   server.close();
 }
