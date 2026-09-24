@@ -196,7 +196,17 @@
       });
     }
 
-    priceRows();
+    // Which price, if the tool already asked -- decided before anything is
+    // drawn.
+    //
+    // The rows used to go up and come down again when Paddle finished
+    // loading, so somebody who had already chosen watched their own choice
+    // offered back to them and then snatched away. They are not drawn at all
+    // now when the choice is already made.
+    const asked = new URLSearchParams(location.search).get('price');
+    const wanted = Pay.prices.find(one => one.id === asked);
+
+    if (!wanted) priceRows();
 
     // Rehearsing a purchase before payment is switched on.
     //
@@ -242,6 +252,17 @@
     // lead time there is.
     wake();
 
+    // And something to look at meanwhile. Paddle's script, its frame and the
+    // form inside it are three round trips, which is a few seconds on a slow
+    // connection -- and an empty page for those seconds reads as a page that
+    // has failed. Said only where the checkout is about to open by itself;
+    // somebody choosing a price has the prices to look at.
+    if (wanted) {
+      el('buylist').hidden = true;
+      el('buyframe').hidden = false;
+      say('Opening the secure checkout\u2026');
+    }
+
     const script = document.createElement('script');
     script.src = 'https://cdn.paddle.com/paddle/v2/paddle.js';
     script.onerror = () => say('The payment window could not be loaded. If you '
@@ -257,14 +278,16 @@
       // prices again and asked to press one of them again is the tool
       // doubting a decision that was just made. The prices stay on the page
       // behind the overlay, so changing their mind costs nothing.
-      const asked = new URLSearchParams(location.search).get('price');
-      const wanted = Pay.prices.find(one => one.id === asked);
-
       window.Paddle.Initialize({
         token: Pay.paddle.token,
         eventCallback(event) {
           if (event.name === 'checkout.completed') {
             bought(event.data && event.data.transaction_id);
+            return;
+          }
+          // The form is up, so the line that was standing in for it goes.
+          if (event.name === 'checkout.loaded') {
+            say('');
             return;
           }
           // Paddle's overlay says "Something went wrong" and nothing else,

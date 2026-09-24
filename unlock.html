@@ -34,6 +34,13 @@
 <link rel="icon" href="/icon.svg" type="image/svg+xml">
 <link rel="icon" href="/icon-192.png" type="image/png" sizes="192x192">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<!-- The handshake with Paddle, started while this page is still parsing.
+     Its script, the frame it opens and the form inside are three round trips
+     before a buyer sees a field to type in, and the first of them need not
+     wait for the markup to finish. -->
+<link rel="preconnect" href="https://cdn.paddle.com" crossorigin>
+<link rel="preconnect" href="https://checkout-service.paddle.com" crossorigin>
+<link rel="dns-prefetch" href="https://cdn.paddle.com">
 <link rel="stylesheet" href="/app.css">
 </head>
 <body class="plainpage buypage">

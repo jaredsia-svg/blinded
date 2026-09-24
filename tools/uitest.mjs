@@ -10878,6 +10878,33 @@ try {
         JSON.stringify(rehearsal));
     }
 
+    // Arriving with the choice already made. The rows used to be drawn and
+    // then hidden again when Paddle's script finished loading, so somebody
+    // who had just pressed a price watched it offered back and taken away.
+    // Sampled from the first paint, because that is where the flash was.
+    const chosen = await browser.newPage();
+    await chosen.goto(base + 'unlock.html?price=days', { waitUntil: 'commit' });
+    let flashes = 0;
+    let samples = 0;
+    for (let i = 0; i < 25; i++) {
+      const now = await chosen.evaluate(() => {
+        const list = document.getElementById('buylist');
+        if (!list) return null;
+        return { shown: !list.hidden,
+                 rows: list.querySelectorAll('.payprice').length };
+      }).catch(() => null);
+      if (now) {
+        samples += 1;
+        if (now.shown && now.rows > 0) flashes += 1;
+      }
+      await chosen.waitForTimeout(40);
+    }
+    check('the page was watched from its first paint', samples > 10,
+      String(samples));
+    check('and a price already chosen is never offered again',
+      flashes === 0, flashes + ' of ' + samples + ' frames showed prices');
+    await chosen.close();
+
     // The knock, which both states owe. The mint sleeps on a small instance
     // and takes most of a minute to wake, which is longer than this page will
     // wait for a pass. The buyer's own typing is what covers it, so it has to
