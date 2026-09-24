@@ -86,7 +86,7 @@
   "isAccessibleForFree": false
 }
 </script>
-<link rel="stylesheet" href="app.css?v=929856c3">
+<link rel="stylesheet" href="app.css?v=35b5efdc">
 </head>
 <body>
 
@@ -866,6 +866,12 @@
          thing to read in a box whose whole job is two prices. -->
     <p class="payhave"><button type="button" id="paycode" class="footlink">I
       already have a license</button></p>
+    <!-- The other half of the same question. This page cannot fetch a licence
+         back -- its policy lets it reach nothing at all, which is the promise
+         the whole tool is built on -- so it opens the one page that can, in
+         the same window buying uses. -->
+    <p class="paylost"><button type="button" id="paylost" class="footlink">I
+      lost my license</button></p>
   </div>
 </div>
 
@@ -998,7 +1004,7 @@
 
 <div id="namebox" class="busy" hidden>
   <div class="busy-inner nameinner">
-    <h2 class="namehead">Save as</h2>
+    <h2 class="namehead">Save your file</h2>
     <label class="namelabel" for="savename">File name</label>
     <input id="savename" type="text" class="nameinput" spellcheck="false">
     <p class="hint" id="namenote" hidden></p>
@@ -1035,9 +1041,11 @@
     </div>
     <!-- The last screen before the file exists, which is the one moment this
          is worth saying: after Save it is a file somebody may send. Short
-         enough to be read rather than skipped, and it links the rest. -->
-    <p class="namecheck">The output is not certified, and misses are possible.
-      Read the exported file before you send it.
+         enough to be read rather than skipped, and it links the rest. The
+         review it asks for is of the document still on screen, which is the
+         only thing anybody can still do something about. -->
+    <p class="namecheck">The output is not certified and mistakes in redaction
+      detection may be made. Review the document in detail before saving.
       <a href="/terms/" target="_blank" rel="noopener">Terms</a></p>
     <div class="namego">
       <button type="button" id="namecancel" class="ghost">Cancel</button>
@@ -1074,7 +1082,7 @@
 <script src="lib/pass.js?v=9a72ccda"></script>
 <script src="lib/pay.js?v=e8535f6a"></script>
 <script src="lib/render.js?v=65c3fe76"></script>
-<script src="app.js?v=fdd42d50"></script>
+<script src="app.js?v=9d8afb99"></script>
 <script type="module" src="lib/boot.mjs?v=8b98ed8f"></script>
 </body>
 </html>

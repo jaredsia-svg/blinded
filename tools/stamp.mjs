@@ -16,10 +16,16 @@ import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = resolve(join(dirname(fileURLToPath(import.meta.url)), '..'));
-// Every page that links an asset. There is one: the answers became a view
-// inside it rather than a page of their own, so that reading them does not
-// unload the document.
-const PAGES = ['index.html'];
+// Every page that links an asset it carries behaviour in. The answers became
+// a view inside the tool rather than a page of their own, so that reading them
+// does not unload the document -- but two pages do stand on their own, and
+// both run scripts. A browser holding yesterday's copy of one of those scripts
+// against today's markup gets buttons that are drawn and do nothing: the
+// licence page grew a paste box wired up in premium.js, and the buying page
+// only reveals its finder because unlock.js was taught to look for ?find.
+// The marketing pages are left alone -- they link a stylesheet and no more,
+// and most of them are written by a generator that would fight over the line.
+const PAGES = ['index.html', 'unlock.html', 'premium/index.html'];
 
 // Only local assets: a versioned URL for a file we do not control is a lie.
 const LINK = /(\s(?:href|src)=")([A-Za-z0-9_./-]+\.(?:css|js|mjs))(?:\?v=[0-9a-f]+)?(")/g;

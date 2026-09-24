@@ -2424,12 +2424,19 @@ body.choosing { -webkit-user-select: none; user-select: none; }
    somebody exporting a document they have just reviewed does not need
    shouting at -- but the last thing read before the button. */
 .namecheck {
-  margin: 14px 0 0; font-size: 12.5px; line-height: 1.5;
+  margin: 14px 0 0; font-size: 11.5px; line-height: 1.55;
+  /* Said plainly. The weight is set rather than inherited because this sits
+     inside a dialog whose other lines are labels, and a caution that comes
+     out bold reads as an alarm. */
+  font-weight: 400;
   color: var(--ink-soft);
 }
 .namecheck a { color: inherit; }
 .namecheck a:hover { color: var(--accent); }
 .payhave { margin: 12px 0 0; text-align: center; }
+/* Under the one above it, and quieter: most people have not lost anything. */
+.paylost { margin: 6px 0 0; text-align: center; }
+.paylost .footlink { font-size: 12.5px; }
 /* The same size as the line above it. It was set at the body size, which
    made the quiet way out louder than the three answers over it. */
 .payhave .footlink { font-size: 12.5px; }
@@ -2517,6 +2524,12 @@ a.payprice { text-decoration: none; color: var(--ink); }
    reaches the tool as imported markup, so an id selector here is a rule
    pointing at something index.html has never heard of. */
 .premheld .buypass { margin-top: 12px; }
+/* The two ways in for somebody who is not buying, under the prices. */
+.premhave {
+  margin: 14px 0 0; text-align: center; font-size: 12.5px;
+  color: var(--ink-soft);
+}
+.premhave .footlink { font-size: 12.5px; }
 .premfree { margin: 0 0 18px; font-size: 13px; color: var(--ink-soft); max-width: 60ch; }
 /* Three things worth knowing, read across rather than down a list. */
 .premfacts {

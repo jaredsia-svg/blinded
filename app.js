@@ -7622,6 +7622,7 @@
         box.hidden = true;
         window.removeEventListener('focus', look);
         el('paylist').removeEventListener('click', buy);
+        el('paylost').removeEventListener('click', lost);
         el('payx').removeEventListener('click', no);
         box.removeEventListener('pointerdown', away);
         el('paycode').removeEventListener('click', typed);
@@ -7629,6 +7630,14 @@
       };
       const no = () => shut(false);
       const away = event => { if (event.target === box) no(); };
+      // Somewhere to type the transaction id, which is a page this one is not
+      // allowed to be: fetching a licence means reaching the mint, and the
+      // page holding a document may reach nothing. Same window as buying, so
+      // the document behind it is left where it is.
+      const lost = () => {
+        window.open(Pay.where + '?find', 'blinded-pay',
+          'width=520,height=760,noopener=no');
+      };
       // Delegated, because describePay builds these buttons afresh every time
       // the dialog opens and a listener bound to the old ones would be bound
       // to nothing.
@@ -7669,6 +7678,7 @@
       };
       window.addEventListener('focus', look);
       el('paylist').addEventListener('click', buy);
+      el('paylost').addEventListener('click', lost);
       el('payx').addEventListener('click', no);
       // A press on the dimmed page behind the box is a way out, the same as
       // the cross and the same as every other dialog here. Declining costs

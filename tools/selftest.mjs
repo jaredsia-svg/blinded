@@ -3348,10 +3348,10 @@ check('no creation date is carried into the output', !meta.info.CreationDate);
     if (said) {
       check('saying the output is not certified',
         /not certified/i.test(said[1]), said[1]);
-      check('and that misses are possible',
-        /misses are possible/i.test(said[1]), said[1]);
-      check('and to read the file before sending it',
-        /read the exported file/i.test(said[1]), said[1]);
+      check('and that the detection can get it wrong',
+        /mistakes in redaction detection/i.test(said[1]), said[1]);
+      check('and to review the document before it is written',
+        /review the document/i.test(said[1]), said[1]);
       check('with the terms a press away',
         /href="\/terms\/"/.test(said[1]), said[1]);
     }

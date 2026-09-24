@@ -1504,6 +1504,48 @@ try {
   const offeredName = await page.inputValue('#savename');
   check('the export asks what to call the file first',
     typeof offeredName === 'string' && offeredName.endsWith('.pdf'), offeredName);
+
+  // The last thing read before the file exists. It has to say the two things
+  // that limit what this tool claims -- the output is not certified, and the
+  // detection can miss -- and it has to ask for the review while the document
+  // is still on screen, which is the only moment anybody can act on it.
+  //
+  // How it is set is part of what it says. Bold, or as large as the labels
+  // above it, and a caution reads as an alarm on a screen somebody reaches
+  // every single time they export. Quieter than its surroundings is the
+  // intent, so it is measured against them rather than against a number.
+  const caution = await page.evaluate(() => {
+    const p = document.querySelector('#namebox .namecheck');
+    if (!p) return null;
+    const mine = getComputedStyle(p);
+    const label = getComputedStyle(document.querySelector('#namebox .namelabel'));
+    const box = document.querySelector('#namebox .nameinner').getBoundingClientRect();
+    const save = document.getElementById('namesave').getBoundingClientRect();
+    return {
+      head: (document.querySelector('#namebox .namehead') || {}).textContent,
+      text: p.textContent.replace(/\s+/g, ' ').trim(),
+      px: parseFloat(mine.fontSize), weight: Number(mine.fontWeight),
+      labelPx: parseFloat(label.fontSize),
+      terms: Boolean(p.querySelector('a[href="/terms/"]')),
+      fits: box.bottom <= window.innerHeight && save.bottom <= window.innerHeight,
+    };
+  });
+  check('the box says what it is for', caution
+    && /save your file/i.test(caution.head), JSON.stringify(caution));
+  check('it says the output is not certified',
+    caution && /not certified/i.test(caution.text), JSON.stringify(caution));
+  check('and that the detection can get it wrong',
+    caution && /mistakes in redaction detection/i.test(caution.text),
+    JSON.stringify(caution));
+  check('and asks for the review while the document is still there',
+    caution && /review the document/i.test(caution.text), JSON.stringify(caution));
+  check('with the terms a press away', caution && caution.terms === true,
+    JSON.stringify(caution));
+  check('set quieter than the labels above it, and not bold',
+    caution && caution.px < caution.labelPx && caution.weight < 500,
+    JSON.stringify(caution));
+  check('and the whole box, Save included, still fits the screen',
+    caution && caution.fits === true, JSON.stringify(caution));
   await page.click('#namecancel');
   const cancelled = await page.evaluate(() =>
     document.getElementById('namebox').hidden);
@@ -8981,7 +9023,7 @@ try {
       JSON.stringify(told));
 
 
-    // Asked before the Save as box, not after it. Being asked to name a file,
+    // Asked before the save box, not after it. Being asked to name a file,
     // choose its options and press Save, and only then being told there is a
     // price, is a bait: the work is done and the answer is "pay or throw it
     // away".
@@ -11152,7 +11194,10 @@ try {
       return route.fulfill({ status: 404, contentType: 'application/json',
         body: JSON.stringify({ error: 'not yet' }) });
     });
-    await lost.goto(base + 'unlock.html');
+    // ?find is what the two "I lost my license" doors open. Without it the
+    // finder stays folded away, so this is also the only address it can be
+    // driven from.
+    await lost.goto(base + 'unlock.html?find');
     await lost.waitForTimeout(400);
     await lost.evaluate(() => {
       window.BlindedPay.on = true;
@@ -11202,6 +11247,169 @@ try {
       forged.shown === false && forged.stored === false
         && /does not check out/i.test(forged.note), JSON.stringify(forged));
     await lost.close();
+  });
+
+  // ---------- the two doors into it ----------
+  //
+  // Recovery lives on the buying page, because that page is the only one
+  // whose policy lets it reach the mint at all -- the tool and the licence
+  // page are connect-src 'self' and could not fetch a licence if they tried.
+  // So the doors go where somebody would look for them, and the fetch stays
+  // where it is allowed to happen.
+  await part("a lost licence can be found from the tool and from the licence page", async () => {
+    // Somebody buying is not somebody who lost one. The finder is folded away
+    // unless it was asked for by name.
+    const shop = await context.newPage();
+    await shop.goto(base + 'unlock.html?price=days');
+    await shop.waitForTimeout(400);
+    check('buying a licence is not cluttered with finding an old one',
+      await shop.evaluate(() => document.getElementById('buyfind').hidden));
+
+    await shop.goto(base + 'unlock.html?find');
+    await shop.waitForTimeout(400);
+    const asked = await shop.evaluate(() => ({
+      shown: !document.getElementById('buyfind').hidden,
+      focused: document.activeElement && document.activeElement.id,
+    }));
+    check('and asking for it puts the cursor in the box', asked.shown === true
+      && asked.focused === 'findtxn', JSON.stringify(asked));
+    await shop.close();
+
+    // Door one: the moment they are told there is something to pay for.
+    const tool = await context.newPage();
+    await tool.goto(base);
+    const overFree = join(tmpdir(), 'blinded-lost.pdf');
+    writeFileSync(overFree, buildManyPdf(24));
+    await tool.evaluate(() => {
+      window.BlindedPay.on = true;
+      localStorage.removeItem('blinded.pass');
+    });
+    await tool.setInputFiles('#file', overFree);
+    await tool.waitForSelector('#view-review:not([hidden])', { timeout: 60000 });
+    await tool.waitForTimeout(400);
+    await tool.evaluate(async () => {
+      const B = window.Blinded;
+      B.state.pages[0].manual.push({ id: 'lost', x: 30, y: 30, w: 100, h: 24 });
+      B.state.searched = true;
+      B.coverMarks();
+      await new Promise(r => setTimeout(r, 300));
+      const notice = document.getElementById('confirmbox');
+      if (notice && !notice.hidden) document.getElementById('confirmyes').click();
+      await new Promise(r => setTimeout(r, 300));
+      document.getElementById('export').click();
+    });
+    await tool.waitForSelector('#paybox:not([hidden])', { timeout: 15000 });
+    const popout = await tool.evaluate(async () => {
+      const was = window.open;
+      let opened = null;
+      window.open = (url, name) => { opened = { url, name }; return null; };
+      document.getElementById('paylost').click();
+      await new Promise(r => setTimeout(r, 200));
+      window.open = was;
+      return {
+        have: document.getElementById('paycode').textContent.replace(/\s+/g, ' ').trim(),
+        lost: document.getElementById('paylost').textContent.replace(/\s+/g, ' ').trim(),
+        opened,
+        pages: window.Blinded.state.pages.length,
+      };
+    });
+    check('the licence box offers both having one and having lost one',
+      /already have a license/i.test(popout.have)
+        && /lost my license/i.test(popout.lost), JSON.stringify(popout));
+    check('and losing one opens the finder in the buying window',
+      popout.opened && popout.opened.url === '/unlock.html?find'
+        && popout.opened.name === 'blinded-pay', JSON.stringify(popout));
+    // The document is what they were working on. Asking about a licence must
+    // not cost them it.
+    check('without touching the document underneath', popout.pages > 0,
+      JSON.stringify(popout));
+    await tool.close();
+
+    // Door two: the licence page, for somebody who came looking later.
+    const lic = await context.newPage();
+    await lic.goto(base + 'premium/');
+    await lic.evaluate(() => localStorage.removeItem('blinded.pass'));
+    await lic.reload();
+    await lic.waitForTimeout(400);
+    const row = await lic.evaluate(() => {
+      const have = document.getElementById('premhave');
+      const link = have && have.querySelector('a');
+      return {
+        shown: Boolean(have) && !have.hidden,
+        says: have ? have.textContent.replace(/\s+/g, ' ').trim() : null,
+        href: link ? link.getAttribute('href') : null,
+        boxHidden: document.getElementById('premcoderow').hidden,
+      };
+    });
+    check('the licence page offers the same two', row.shown === true
+      && /already have a license/i.test(row.says)
+      && /lost my license/i.test(row.says), JSON.stringify(row));
+    check('and its lost door is the same finder', row.href === '/unlock.html?find',
+      JSON.stringify(row));
+    check('with the paste box folded away until it is wanted',
+      row.boxHidden === true, JSON.stringify(row));
+
+    await lic.click('#premcode');
+    await lic.waitForTimeout(300);
+    check('pressing it opens the box with the cursor in it',
+      await lic.evaluate(() => !document.getElementById('premcoderow').hidden
+        && document.activeElement.id === 'premcodein'));
+
+    // The same rule as everywhere else: a string is not a licence until this
+    // page has checked the signature itself.
+    await lic.fill('#premcodein', 'blinded1.notreal.notreal');
+    await lic.click('#premcodego');
+    await lic.waitForTimeout(500);
+    const junk = await lic.evaluate(() => ({
+      note: document.getElementById('premcodenote').textContent,
+      stored: Boolean(localStorage.getItem('blinded.pass')),
+      held: !document.getElementById('premcoderow').hidden,
+    }));
+    check('a pasted string that does not check out is refused, not stored',
+      junk.stored === false && /does not look like a licence/i.test(junk.note),
+      JSON.stringify(junk));
+    check('and the box stays open to try again', junk.held === true,
+      JSON.stringify(junk));
+
+    // And the path that matters: a licence that does check out. Signed here
+    // with a key made here, so no private key has to live in the repository.
+    const real = await lic.evaluate(async () => {
+      const pair = await crypto.subtle.generateKey(
+        { name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign', 'verify']);
+      const pub = await crypto.subtle.exportKey('jwk', pair.publicKey);
+      const b64 = bytes => btoa(String.fromCharCode(...new Uint8Array(bytes)))
+        .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+      const payload = { v: 1, plan: 'days', id: 'typed',
+        exp: Math.floor(Date.now() / 1000) + 5 * 86400 };
+      const signed = b64(new TextEncoder().encode(JSON.stringify(payload)));
+      const sig = await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' },
+        pair.privateKey, new TextEncoder().encode(signed));
+      window.BlindedPay.key = { kty: pub.kty, crv: pub.crv, x: pub.x, y: pub.y };
+      return 'blinded1.' + signed + '.' + b64(sig);
+    });
+    await lic.fill('#premcodein', real);
+    await lic.click('#premcodego');
+    await lic.waitForTimeout(500);
+    const took = await lic.evaluate(() => ({
+      stored: localStorage.getItem('blinded.pass'),
+      asking: !document.getElementById('premhave').hidden,
+      box: !document.getElementById('premcoderow').hidden,
+      note: (document.getElementById('premnow') || {}).textContent,
+      held: !document.getElementById('premheld').hidden,
+      prices: !document.getElementById('premprices').hidden,
+    }));
+    check('a licence that does check out is kept', took.stored === real,
+      JSON.stringify(took).slice(0, 300));
+    check('and the page turns into the held state, prices gone',
+      took.held === true && took.prices === false
+        && /5 more days/.test(took.note || ''), JSON.stringify(took).slice(0, 300));
+    // Nothing is asked of somebody who has just answered it.
+    check('and neither question is put again', took.asking === false
+      && took.box === false, JSON.stringify(took).slice(0, 300));
+    // Sections after this one share the browser, and a licence left behind
+    // here would answer their questions for them.
+    await lic.evaluate(() => localStorage.removeItem('blinded.pass'));
+    await lic.close();
   });
 
   // ---------- getting back to the document after paying ----------

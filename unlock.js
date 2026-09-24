@@ -262,6 +262,22 @@
   }
 
   function start() {
+    // Shown only to somebody who came looking for it.
+    //
+    // It used to sit under the checkout for everybody, which is a way of
+    // getting a licence back offered to the one person who is in the middle
+    // of buying one. The tool's own dialog and the licence page both send
+    // people here with ?find on the address when that is what they want.
+    if (new URLSearchParams(location.search).has('find')) {
+      const box = el('buyfind');
+      if (box) {
+        box.hidden = false;
+        box.scrollIntoView({ block: 'center' });
+        const input = el('findtxn');
+        if (input) input.focus();
+      }
+    }
+
     const find = el('findgo');
     if (find) find.addEventListener('click', findLicence);
     const txnBox = el('findtxn');

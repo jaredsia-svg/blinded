@@ -34,7 +34,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="A slide before and after redaction: names and logos gone from the second copy.">
 <meta name="twitter:card" content="summary_large_image">
-<link rel="stylesheet" href="/app.css">
+<link rel="stylesheet" href="/app.css?v=35b5efdc">
 </head>
 <body class="plainpage">
 
@@ -68,6 +68,24 @@
   <p class="premnow" id="premnow" hidden></p>
 
   <div class="premcards" id="premprices"></div>
+
+  <!-- The two questions somebody arrives with who is not buying. Pasting one
+       in works here because a licence is checked against a key in the page
+       and stored in this browser, which is the same browser the tool runs in.
+       Finding one does not: that means reaching the mint, and only the buying
+       page is allowed to. -->
+  <p class="premhave" id="premhave">
+    <button type="button" class="footlink" id="premcode">I already have a
+      license</button>
+    <span class="foot-dot" aria-hidden="true">&middot;</span>
+    <a class="footlink" href="/unlock.html?find">I lost my license</a>
+  </p>
+  <p class="findrow" id="premcoderow" hidden>
+    <input id="premcodein" type="text" class="nameinput" spellcheck="false"
+      autocomplete="off" placeholder="blinded1.&hellip;" aria-label="Your license">
+    <button type="button" id="premcodego" class="primary">Use it</button>
+  </p>
+  <p class="hint" id="premcodenote" hidden></p>
 
   <!-- Shown instead of the prices to somebody who already holds a license.
        The string itself is behind a press, because this page is as likely to
@@ -143,8 +161,8 @@
 </article>
 </main>
 
-<script src="/lib/pass.js"></script>
-<script src="/lib/pay.js"></script>
-<script src="/premium.js"></script>
+<script src="/lib/pass.js?v=9a72ccda"></script>
+<script src="/lib/pay.js?v=e8535f6a"></script>
+<script src="/premium.js?v=c407febe"></script>
 </body>
 </html>
