@@ -3361,6 +3361,36 @@ check('no creation date is carried into the output', !meta.info.CreationDate);
     quoted.filter(one => !real.includes(one)).join(', '));
 }
 
+// ---------- the card, on every page that can be shared ----------
+//
+// A link to any page here draws the same picture. Without the size on it a
+// reader has to fetch the image before it can lay the card out, so the card
+// arrives late or not at all; without the alt, somebody using a screen reader
+// is told there is an image and nothing else. The front page had all three
+// and nowhere else did.
+{
+  const shareable = [['index.html', 'index.html'], ['faq.html', 'faq.html'],
+    ['premium/index.html', 'premium/index.html'],
+    ...landers.map(one => [one.slug, one.slug + '/index.html']),
+    ['privacy/index.html', 'privacy/index.html'],
+    ['terms/index.html', 'terms/index.html'],
+    ['refunds/index.html', 'refunds/index.html']];
+  for (const [where, file] of shareable) {
+    const page = readFileSync(join(root, file), 'utf8');
+    check(where + ': its card says what the picture is',
+      /og:image:alt" content="[^"]{20,}"/.test(page), where);
+    check(where + ': and how big it is',
+      /og:image:width" content="1200"/.test(page)
+        && /og:image:height" content="630"/.test(page), where);
+  }
+  // Which has to be the size the picture actually is, or the space kept for
+  // it is the wrong shape and the card jumps when it lands.
+  const png = readFileSync(join(root, 'og.png'));
+  check('and that is the size og.png really is',
+    png.readUInt32BE(16) === 1200 && png.readUInt32BE(20) === 630,
+    png.readUInt32BE(16) + 'x' + png.readUInt32BE(20));
+}
+
 // ---------- report ----------
 
 console.log('\nBlinded self-test');

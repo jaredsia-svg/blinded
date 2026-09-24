@@ -107,6 +107,9 @@ ${policy()}
 <meta property="og:description" content="${esc(page.description)}">
 <meta property="og:url" content="${url}">
 <meta property="og:image" content="${SITE}/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="A slide before and after redaction: names and logos gone from the second copy.">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="stylesheet" href="/app.css">
 <script type="application/ld+json">
