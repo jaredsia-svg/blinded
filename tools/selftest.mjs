@@ -3036,17 +3036,39 @@ check('no creation date is carried into the output', !meta.info.CreationDate);
   {
     const log = new Map();
     const at = now;
-    let refused = 0;
-    for (let i = 0; i < 20; i++) if (tooMany('1.2.3.4', at + i, log)) refused++;
-    check('a burst of tries from one place is cut off',
-      refused > 0, refused + ' of 20 refused');
-    check('but the first few get through', refused < 20,
-      refused + ' of 20 refused');
+
+    // The one that matters, and the one that was wrong: the buying page polls
+    // a single id for forty seconds while it waits for the webhook. Counting
+    // requests made a buyer hit the limit on the transaction they had just
+    // paid for, and the licence never arrived by itself.
+    let refusedPolling = 0;
+    if (tooMany('1.2.3.4', 'wake', at, log)) refusedPolling++;
+    let gone = 0;
+    let wait = 800;
+    let asked = 0;
+    while (gone < 40000) {
+      asked++;
+      if (tooMany('1.2.3.4', 'txn_mine', at + gone, log)) refusedPolling++;
+      gone += wait;
+      wait = Math.min(4000, wait * 1.4);
+    }
+    check('a whole purchase can poll for its own licence without being cut off',
+      refusedPolling === 0, refusedPolling + ' of ' + (asked + 1) + ' refused');
+
+    // And somebody going through ids they do not own is stopped.
+    let refusedHunting = 0;
+    for (let i = 0; i < 20; i++) {
+      if (tooMany('4.3.2.1', 'txn_guess' + i, at, log)) refusedHunting++;
+    }
+    check('but going through ids one after another is', refusedHunting > 0,
+      refusedHunting + ' of 20 refused');
+    check('after a few have been allowed through', refusedHunting < 20,
+      refusedHunting + ' of 20 refused');
     check('and somebody else is not punished for it',
-      tooMany('5.6.7.8', at, log) === false);
+      tooMany('5.6.7.8', 'txn_theirs', at, log) === false);
     // The window moves: an hour later the same address starts again.
     check('and a burst is forgiven once the window has passed',
-      tooMany('1.2.3.4', at + 3600000, log) === false);
+      tooMany('4.3.2.1', 'txn_later', at + 3600000, log) === false);
   }
 }
 

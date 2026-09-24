@@ -133,24 +133,41 @@ export function readable(row, now) {
   return Boolean(row) && row.exp > at;
 }
 
-// Enough tries for somebody typing an id off a receipt, nowhere near enough
-// to go looking for one. Per address, and in memory: a restart forgives
-// everybody, which is the right way for this to fail.
-const TRIES = 12;
+// How many different licences an address goes looking for, not how many
+// times it asks about one.
+//
+// Counting requests was wrong, and wrong in the worst direction: the buying
+// page polls a single id for forty seconds while it waits for Paddle's
+// webhook to land -- fifteen requests for one purchase -- so a buyer hit the
+// limit on the one transaction they were entitled to, and the licence they
+// had just paid for never arrived by itself.
+//
+// Somebody hunting for a licence they do not own has to try different ids.
+// That is the thing worth counting, and it leaves polling alone: one id
+// asked about a hundred times is still one id.
+//
+// Per address, and in memory: a restart forgives everybody, which is the
+// right way for this to fail.
+const IDS = 8;
 const TRY_WINDOW = 10 * 60 * 1000;
 const tries = new Map();
 
-export function tooMany(who, now = Date.now(), log = tries) {
-  const seen = (log.get(who) || []).filter(at => now - at < TRY_WINDOW);
-  seen.push(now);
+export function tooMany(who, txn, now = Date.now(), log = tries) {
+  const seen = log.get(who) || new Map();
+  for (const [id, at] of seen) if (now - at > TRY_WINDOW) seen.delete(id);
+  // Asking again about the same id refreshes it rather than adding to it.
+  seen.set(txn, now);
   log.set(who, seen);
-  // The log is only useful for the window it covers.
+  if (seen.size === 0) log.delete(who);
+  // The log is only worth the window it covers.
   if (log.size > 5000) {
-    for (const [key, at] of log) {
-      if (!at.length || now - at[at.length - 1] > TRY_WINDOW) log.delete(key);
+    for (const [key, ids] of log) {
+      let newest = 0;
+      for (const at of ids.values()) if (at > newest) newest = at;
+      if (now - newest > TRY_WINDOW) log.delete(key);
     }
   }
-  return seen.length > TRIES;
+  return seen.size > IDS;
 }
 
 function send(res, code, body, extra) {
@@ -209,10 +226,10 @@ const server = createServer((req, res) => {
   if (req.method === 'GET' && url.pathname === '/pass') {
     const who = String(req.headers['x-forwarded-for'] || '')
       .split(',')[0].trim() || req.socket.remoteAddress || 'unknown';
-    if (tooMany(who)) {
+    const txn = String(url.searchParams.get('txn') || '').trim();
+    if (tooMany(who, txn)) {
       return send(res, 429, { error: 'too many tries; wait a few minutes' });
     }
-    const txn = String(url.searchParams.get('txn') || '').trim();
     const row = txn && passes.get(txn);
     if (!row) return send(res, 404, { error: 'not yet' });
     if (!readable(row)) {
