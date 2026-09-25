@@ -567,6 +567,131 @@ function markTemplate(size) {
           + (bw * bh) + ' positions');
     }
 
+    // The same planes from the WebAssembly kernel (lib/fft.c). It computes the
+    // transforms in single precision where the JavaScript rounds from double,
+    // so the planes agree to float precision rather than bit for bit -- held
+    // here to the same bar the transform is held to against the loop, on one
+    // tile, on a page of several, and on a template wide enough to need
+    // larger tiles than the usual 256.
+    {
+      const wasmBytes = readFileSync(join(root, 'lib', 'fft.wasm'));
+      const made = await WebAssembly.instantiate(wasmBytes);
+      const planeBoth = (g, w, h, t) => {
+        Match.useKernel(null);
+        const js = Match.numeratorPlane(g, w, h, t);
+        Match.useKernel(made.instance);
+        const wasm = Match.numeratorPlane(g, w, h, t);
+        Match.useKernel(null);
+        let off = 0, top = 0;
+        for (let i = 0; i < js.length; i++) {
+          top = Math.max(top, Math.abs(js[i]));
+          off = Math.max(off, Math.abs(js[i] - wasm[i]));
+        }
+        return { relative: off / (top || 1), n: js.length, same: js.length === wasm.length };
+      };
+      check('the WebAssembly kernel loads', Match.useKernel(made.instance) === true);
+      Match.useKernel(null);
+      const one = planeBoth(page, W, H, tpl);
+      check('and gives the JavaScript\'s plane on one tile', one.same && one.relative < 1e-5,
+        one.relative.toExponential(2) + ' relative over ' + one.n);
+      const BW = 700, BH = 500;
+      const big = blankPage(BW, BH);
+      for (let i = 0; i < 40; i++) {
+        stamp(big, BW, (i * 97) % (BW - S), (i * 61) % (BH - S), S, 0.4 + (i % 5) / 8);
+      }
+      const many = planeBoth(big, BW, BH, tpl);
+      check('and on a page cut into several tiles', many.same && many.relative < 1e-5,
+        many.relative.toExponential(2) + ' relative over ' + many.n);
+      // A wide template: 150 pixels asks for a 512-wide tile, which is where a
+      // bigger kernel buffer and a second twiddle table come in.
+      const WT = 150, HT = 12;
+      const wide = new Float32Array(WT * HT);
+      for (let i = 0; i < wide.length; i++) wide[i] = ((i * 37) % 11) / 10;
+      const wideTpl = Match.prepareTemplate(wide, WT, HT);
+      const broad = planeBoth(big, BW, BH, wideTpl);
+      check('and with a template wide enough to need bigger tiles',
+        broad.same && broad.relative < 1e-5, broad.relative.toExponential(2) + ' relative');
+      // And the answer the search acts on is the same either way.
+      Match.useKernel(made.instance);
+      const withKernel = Match.suppress(Match.correlate(page, W, H, tpl));
+      Match.useKernel(null);
+      // Same places, scores within float rounding. Not the same order: two
+      // perfect copies tie to six decimals, and the last digit is exactly what
+      // single precision rounds differently -- so which of two equal matches is
+      // listed first is the one thing allowed to change.
+      const where = list => list.map(h => h.x + ',' + h.y).sort().join(' ');
+      const scoreOf = list => new Map(list.map(h => [h.x + ',' + h.y, h.score]));
+      const a = scoreOf(withKernel), b = scoreOf(hits);
+      const drift = [...a.keys()].reduce((m, k) => Math.max(m, Math.abs(a.get(k) - (b.get(k) || 0))), 0);
+      check('and the matches it finds are the same places, scored the same',
+        where(withKernel) === where(hits) && drift < 1e-5,
+        where(withKernel) + ' vs ' + where(hits) + ', drift ' + drift.toExponential(1));
+      // The small windows refinement and verification score, summed directly
+      // in the kernel rather than the loop: every width a remainder can take
+      // (sixteen at a time, then four, then one), and a template as large as
+      // a verify one.
+      {
+        let worst = 0, all = true;
+        for (const [ww, wh, tw, th] of [[40, 30, 17, 9], [61, 44, 40, 20], [52, 23, 37, 13],
+          [30, 30, 30, 30], [185, 64, 160, 40], [23, 11, 20, 9]]) {
+          const win = new Float32Array(ww * wh);
+          for (let i = 0; i < win.length; i++) win[i] = (i * 131 % 251) + ((i * 7) % 13) / 3;
+          const tg = new Float32Array(tw * th);
+          for (let i = 0; i < tg.length; i++) tg[i] = (i * 53 % 97) + (i % 3);
+          const t = Match.prepareTemplate(tg, tw, th);
+          Match.useKernel(made.instance);
+          const k = Match.directPlane(win, ww, wh, t);
+          Match.useKernel(null);
+          const cols = ww - tw + 1, rows = wh - th + 1;
+          if (!k || k.length !== cols * rows) { all = false; continue; }
+          for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) {
+            let dot = 0;
+            for (let j = 0; j < th; j++) for (let i = 0; i < tw; i++) {
+              dot += win[(y + j) * ww + x + i] * t.zero[j * tw + i];
+            }
+            worst = Math.max(worst, Math.abs(dot - k[y * cols + x]) / (Math.abs(dot) + t.norm * 255));
+          }
+        }
+        check('the kernel sums small windows as the loop does', all && worst < 1e-5,
+          worst.toExponential(2) + ' relative');
+        // Blank paper is where single precision fails: the sum cancels to
+        // almost nothing and the score divides by almost no contrast. The
+        // first kernel passed the check above and put twelve false marks on
+        // the benchmark, all on empty paper. Held here on the scores
+        // themselves, which is what the search acts on.
+        {
+          const PW = 187, PH = 75, TW = 160, TH = 46;
+          const paper = new Float32Array(PW * PH);
+          for (let i = 0; i < paper.length; i++) paper[i] = 255 - (i % 37 === 0 ? 0.02 : 0);
+          const ink = new Float32Array(TW * TH);
+          for (let i = 0; i < ink.length; i++) ink[i] = ((i % TW) % 9 < 3 && ((i / TW) | 0) % 7 < 5) ? 30 : 245;
+          const word = Match.prepareTemplate(ink, TW, TH);
+          const at = on => {
+            Match.useKernel(on ? made.instance : null);
+            const got = Match.correlate(paper, PW, PH, word, { threshold: -2, anyPolarity: true });
+            Match.useKernel(null);
+            return new Map(got.map(h => [h.x + ',' + h.y, h.score]));
+          };
+          const js = at(false), wasm = at(true);
+          let drift = 0;
+          for (const [k, v] of js) drift = Math.max(drift, Math.abs(v - (wasm.get(k) ?? 9)));
+          check('and on blank paper it scores what the loop scores',
+            js.size === wasm.size && drift < 1e-4, drift.toExponential(2) + ' over ' + js.size);
+        }
+        check('and with no kernel there is no direct plane, so the loop runs',
+          Match.directPlane(new Float32Array(100), 10, 10, Match.prepareTemplate(
+            Float32Array.from({ length: 9 }, (_, i) => i), 3, 3)) === null);
+      }
+      // The binary is the one file here nobody can read, so where there is a
+      // compiler it is rebuilt and held to its source byte for byte.
+      const { build } = await import('./wasm.mjs');
+      const rebuilt = build();
+      if (rebuilt) {
+        check('and lib/fft.wasm is exactly what lib/fft.c builds to',
+          Buffer.compare(rebuilt, wasmBytes) === 0, 'run: node tools/wasm.mjs');
+      }
+    }
+
     // A small window is under the crossover and must still be answered by the
     // loop: the transform's setup costs more than it saves down there.
     check('and the small windows refinement uses stay on the loop',
@@ -912,6 +1037,39 @@ check('a degenerate size does not throw',
     flush.text === 'with KAG', JSON.stringify(flush.text));
 })();
 
+// The closer second read of small, unsure words: what it re-reads, and what
+// a new reading is allowed to replace.
+(() => {
+  const w = (str, conf, x, y, width, h) => ({ str, confidence: conf, x, y: y + h, w: width, h,
+    rect: { x, y, w: width, h } });
+  const page = [w('srw', 0, 100, 100, 55, 8), w('Rao', 20, 160, 100, 20, 8),
+    w('Director', 90, 300, 100, 50, 8), w('Headline', 10, 100, 300, 200, 60)];
+  const crops = Ocr.rereadCrops(page, 1, 2000, 2000);
+  check('unsure small words on one line are read again as one crop',
+    crops.length === 1 && crops[0].x < 100 && crops[0].x + crops[0].w > 180, JSON.stringify(crops));
+  check('large unsure words (artwork) are not read again',
+    !crops.some(c => c.y > 250));
+  check('a confident word is never re-read by itself',
+    Ocr.rereadCrops([w('Director', 90, 300, 100, 50, 8)], 1, 2000, 2000).length === 0);
+  check('a clearly surer reading replaces the words it lies over',
+    (Ocr.rereadReplaces(w('Srinivas', 70, 100, 100, 50, 8), page) || []).length === 1);
+  check('a reading that is not clearly surer keeps the original',
+    Ocr.rereadReplaces(w('Rax', 25, 160, 100, 20, 8), page) === null);
+  check('a confident word is not replaced by a re-read',
+    Ocr.rereadReplaces(w('Directer', 95, 300, 100, 50, 8), page) === null);
+  check('new ink needs the inverted-pass bar',
+    Ocr.rereadReplaces(w('Sanjeev', 49, 700, 700, 40, 8), page) === null
+    && (Ocr.rereadReplaces(w('Sanjeev', 60, 700, 700, 40, 8), page) || [1]).length === 0);
+  const back = Ocr.fromEnlarged([w('x', 90, 30, 60, 30, 15)], { x: 10, y: 20 }, 2);
+  check('re-read words land back in the page\'s own pixels',
+    back[0].rect.x === (10 + 30 / Ocr.REREAD_SCALE) * 2 && back[0].rect.h === 15 * 2 / Ocr.REREAD_SCALE,
+    JSON.stringify(back[0].rect));
+  check('one word of a phrase agrees with the phrase rather than vetoing it',
+    Detect.hostContradictsShapeTerm('Inderpreet', 'Inderpreet Wadhwa') === false
+    && Detect.hostContradictsShapeTerm('Sanjeev', 'Inderpreet Wadhwa') === true
+    && Detect.hostContradictsShapeTerm('and', 'Fraser and Neave') === false);
+})();
+
 // The SIMD probe has to fail only when SIMD is missing, never because it is
 // malformed. The first one was written from memory, did not validate anywhere,
 // and every browser quietly got the slower build: measured afterwards, the
@@ -948,6 +1106,23 @@ check('and it is served from this origin, never a CDN',
 // documents rather than reasoned about. Short words resemble a great deal of a
 // page; long ones resemble much less, but they also score lower, so the bar has
 // to come down with them or they are never found.
+// The faces the check draws words in are shipped with the site, so a word is
+// drawn the same on every machine rather than in whatever the system has.
+{
+  const dir = join(root, 'vendor', 'fonts');
+  const files = ['arimo', 'tinos'].flatMap(f => ['400', '700'].flatMap(w =>
+    ['normal', 'italic'].map(st => f + '-latin-' + w + '-' + st + '.woff2')));
+  check('the bundled faces are all there',
+    files.every(f => existsSync(join(dir, f)) && statSync(join(dir, f)).size > 8000),
+    files.filter(f => !existsSync(join(dir, f))).join(', '));
+  check('the bundled faces carry their licence (OFL)',
+    ['OFL-arimo.txt', 'OFL-tinos.txt'].every(f => existsSync(join(dir, f))
+      && /SIL OPEN FONT LICENSE/i.test(readFileSync(join(dir, f), 'utf8'))));
+  check('every face names the bundled family first',
+    TextImage.FACES.every(f => /^"Blinded (Arimo|Tinos)"/.test(f.family)));
+  check('the sweep faces are the bundled sans',
+    TextImage.SWEEP_FACES.length === 2 && TextImage.SWEEP_FACES.every(f => /Arimo/.test(f.family)));
+}
 check('a short word gets no relief at all', TextImage.shapeRelief('KAG') === 0);
 check('nor does a four-letter acronym', TextImage.shapeRelief('TDTC') === 0);
 check('a long word gets some', TextImage.shapeRelief('proprietary') > 0);
@@ -1026,6 +1201,21 @@ check('an empty term is harmless', TextImage.shapeRelief('') === 0
     && Detect.ocrFuzzyPartMatch('Midale', 'Middle') === true);
   check('South is too far from Middle',
     Detect.ocrFuzzyPartMatch('South', 'Middle') === false);
+  // Look-alikes, for seeding the shape check only: equal once folded.
+  check('a look-alike read seeds its word (FaN\'s for F&N, Ra0 for Rao)',
+    Detect.ocrConfusableMatch("FaN's", 'F&N') && Detect.ocrConfusableMatch('Ra0', 'Rao')
+    && Detect.ocrConfusableMatch('K1mberly', 'Kimberly'));
+  check('a look-alike has to be equal, not near (ran, can, TDC, Hocges)',
+    !Detect.ocrConfusableMatch('ran', 'F&N') && !Detect.ocrConfusableMatch('can', 'F&N')
+    && !Detect.ocrConfusableMatch('TDC', 'TDTC') && !Detect.ocrConfusableMatch('Hocges', 'Huggies'));
+  check('look-alikes need three marks (Il is not 11)',
+    !Detect.ocrConfusableMatch('Il', '11') && !Detect.ocrConfusableMatch('', ''));
+  check('a look-alike host agrees rather than contradicts',
+    Detect.hostContradictsShapeTerm("FaN's", 'F&N') === false);
+  check('the TEXAS veto on KAS still holds',
+    Detect.hostContradictsShapeTerm('TEXAS', 'KAS') === true);
+  check('a look-alike never becomes a text finding on its own',
+    Detect.findTerms("FaN's Financials", ['F&N'], { fromOcr: true }).length === 0);
   check('two fuzzy parts cannot invent Fraser and Neave',
     Detect.findTerms('Frasor Neavo limited', ['Fraser and Neave'], { fromOcr: true })
       .filter(h => h.term === 'Fraser and Neave').length === 0);

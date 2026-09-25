@@ -54,6 +54,10 @@
   const Render = window.BlindedRender;
   const Labels = window.BlindedLabels;
   const TextImage = window.BlindedTextImage;
+  // The faces the word pictures are drawn in (lib/textimage.js), fetched as
+  // the app opens so they are here long before anybody searches. The two
+  // runs that draw them wait on this; it resolves whether or not they came.
+  if (TextImage && TextImage.ready) TextImage.ready();
   const measure = window.BlindedMeasure.create();
   const Match = window.BlindedMatch;
   const ImageSearch = window.BlindedImageSearch;
@@ -2575,6 +2579,8 @@
   // Runs every search that has not run yet and proposes what it found. This is
   // the first of the three presses; it does not cover anything.
   async function runSearch() {
+    // Every word picture this run draws is drawn in the bundled faces.
+    if (TextImage && TextImage.ready) await TextImage.ready();
     // The second check and a search are two passes over the same pages,
     // and they cannot both own the document. Pressing Search used to put a
     // dialog in the way offering to stop the check — a question asked at the
@@ -8777,6 +8783,8 @@
   // size. `ocrFuzzyPartMatch` is the same near-miss rule the OCR phrase
   // matcher uses — one edit, on a word long enough for one edit to mean
   // something, so "Widdle" still reaches "Middle" and "South" does not.
+  // `ocrConfusableMatch` adds the look-alikes ("FaN's" for "F&N"), equal
+  // once folded rather than near, since short words get no edits at all.
   const SEEDS_PER_PART = 8;
 
   // What the reader's agreement is worth at a seeded place.
@@ -8797,17 +8805,28 @@
   function readerSeedsFor(part, pages) {
     const out = [];
     if (!part) return out;
-    for (const page of pages || []) {
-      for (const item of page.ocrPlaced || page.ocrItems || []) {
-        if (!item || !item.rect || !item.str) continue;
-        if (!Detect.ocrFuzzyPartMatch(item.str, part)) continue;
-        out.push({ pageIndex: page.index,
-          x: item.rect.x, y: item.rect.y, w: item.rect.w, h: item.rect.h });
-        if (out.length >= SEEDS_PER_PART) return out;
+    // Near misses first, look-alikes after, so that a common word which only
+    // folds to this one ("Fan" for "F&N") cannot use up the places before a
+    // real near miss is reached.
+    const rules = [
+      str => Detect.ocrFuzzyPartMatch(str, part),
+      str => Boolean(Detect.ocrConfusableMatch) && !Detect.ocrFuzzyPartMatch(str, part)
+        && Detect.ocrConfusableMatch(str, part),
+    ];
+    for (const rule of rules) {
+      for (const page of pages || []) {
+        for (const item of page.ocrPlaced || page.ocrItems || []) {
+          if (!item || !item.rect || !item.str) continue;
+          if (!rule(item.str)) continue;
+          out.push({ pageIndex: page.index,
+            x: item.rect.x, y: item.rect.y, w: item.rect.w, h: item.rect.h });
+          if (out.length >= SEEDS_PER_PART) return out;
+        }
       }
     }
     return out;
   }
+
 
   // The other half of a phrase, from the half that was just found.
   //
@@ -9090,6 +9109,10 @@
   const HOST_SLACK = 3;
 
   function hostSaysItHere(host, term, rect) {
+    // A single word the reader drew a box round, which is the term under its
+    // look-alikes ("FaN's" for "F&N"), says it here: the whole box is the word.
+    if (host.rect && Detect.ocrConfusableMatch
+      && Detect.ocrConfusableMatch(host.text, term)) return true;
     const spans = Detect.findTerms(host.text, [term]);
     if (!spans.length) return false;
     const box = host.rect;
@@ -9173,9 +9196,15 @@
   let sweepTask = null;
 
   async function runSweep() {
-    if (state.sweepRunning) return 0;
+    if (state.sweepRunning || sweepTask) return 0;
     if (state.redacting) return 0;
-    sweepTask = sweepNow();
+    // Any wait for the faces happens inside the task rather than before it,
+    // so a second press in that moment finds the task already there.
+    // Started in this same moment when the faces are already in, which after
+    // the page's own preload they nearly always are.
+    sweepTask = (!TextImage || !TextImage.ready || (TextImage.settled && TextImage.settled()))
+      ? sweepNow()
+      : (async () => { await TextImage.ready(); return sweepNow(); })();
     try { return await sweepTask; } finally { sweepTask = null; }
   }
 
@@ -9521,6 +9550,10 @@
       const over = pages.filter(page =>
         [...missing.values()].some(set => set.has(page.index)));
       try {
+        // Its bar goes up as it starts, not when its first page comes back:
+        // on a short pass that is the moment before it ends, and the bar was
+        // there for less time than anyone could see it.
+        sweepProgress(pages.length, pages.length, 0, over.length);
         const again = await ImageSearch.searchAllParallel(over, deeper, {
           stop: () => state.sweepStopped,
           // Low enough to nominate a word the page is fighting, deep enough
@@ -9582,6 +9615,7 @@
         const seedOpts = { stop: () => state.sweepStopped, seedsOnly: true };
         const over = indexes => pages.filter(page => indexes.has(page.index));
         try {
+          sweepProgress(pages.length, pages.length, null, null, 0, pages.length);
           const found = await ImageSearch.searchAllParallel(
             over(new Set(anchors.flatMap(e => [...e.pageIndexes]))), anchors,
             seedOpts,
