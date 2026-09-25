@@ -11630,6 +11630,20 @@ try {
     check('above the form it would otherwise be hidden inside', layout.above === true);
     check('and Paddle\'s own small link is switched off, so there is one place for it',
       first.settings && first.settings.showAddDiscounts === false, JSON.stringify(first.settings));
+    check('and so is its "Add tax number" link',
+      first.settings && first.settings.showAddTaxId === false, JSON.stringify(first.settings));
+    // One quiet line, at a phone's width too: label, box and button side by
+    // side, and not much taller than the text in them.
+    const line = await shop.evaluate(() => {
+      const row = document.querySelector('.buycoderow');
+      const parts = [...row.querySelectorAll('label, input, button')]
+        .map(el => el.getBoundingClientRect());
+      const tops = parts.map(r => Math.round(r.top + r.height / 2));
+      return { oneLine: Math.max(...tops) - Math.min(...tops) <= 2,
+               height: Math.round(row.getBoundingClientRect().height) };
+    });
+    check('the code box is one short line', line.oneLine && line.height <= 34,
+      JSON.stringify(line));
     check('with no code until one is typed', !('discountCode' in first));
 
     await shop.fill('#buycodein', 'FRIENDS100');
@@ -11659,6 +11673,23 @@ try {
       !('discountCode' in third), JSON.stringify(third));
     check('saying why', /could not be used/i.test(await note())
       && /not valid/.test(await note()), await note());
+
+    // Only on the details step. Paddle says when the details have been sent
+    // (a customer is created) and when somebody goes back to change them.
+    const codeShown = () => shop.evaluate(() =>
+      getComputedStyle(document.getElementById('buycode')).display !== 'none');
+    await shop.evaluate(() => window.__cb({ name: 'checkout.loaded' }));
+    check('the code is offered on the details step', await codeShown());
+    await shop.evaluate(() => window.__cb({ name: 'checkout.customer.created',
+      data: { customer: { email: 'x@example.com' } } }));
+    check('and is gone once the details are sent and payment is next',
+      (await codeShown()) === false);
+    await shop.evaluate(() => window.__cb({ name: 'checkout.customer.removed' }));
+    check('and back if they go back to change their details', await codeShown());
+    await shop.evaluate(() => window.__cb({ name: 'checkout.customer.updated' }));
+    check('and gone again when the changed details are sent',
+      (await codeShown()) === false);
+    await shop.evaluate(() => window.__cb({ name: 'checkout.customer.removed' }));
 
     // No length chosen yet: the code waits for one.
     await shop.goto(base + 'unlock.html');

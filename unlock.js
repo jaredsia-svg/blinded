@@ -155,6 +155,13 @@
   // What is open now, so a code applied afterwards can reopen the same thing.
   let current = null;
 
+  // Whether the checkout is on its details step, which is the only step the
+  // code line is shown on.
+  function codeStep(details) {
+    const box = el('buycode');
+    if (box && box.dataset.live) box.hidden = !details;
+  }
+
   function codeSay(text, bad) {
     const note = el('buycodenote');
     if (!note) return;
@@ -208,6 +215,11 @@
         frameInitialHeight: 460,
         frameStyle: 'width:100%; min-width:312px; background-color:transparent; border:none;',
         showAddDiscounts: false,
+        // No "Add tax number" link either. It is for a business claiming
+        // back GST or VAT on the purchase, which on a three-dollar licence
+        // nobody does, and an optional field above the button reads to
+        // everybody else as a step they might have missed.
+        showAddTaxId: false,
       } : {
         displayMode: 'overlay',
         // Paddle's own discount link is off. Codes are typed into the box at
@@ -227,6 +239,7 @@
         // password for free passes, and it travels. Put a usage limit and an
         // expiry on every one of them in Paddle.
         showAddDiscounts: false,
+        showAddTaxId: false,
       },
     });
   }
@@ -440,6 +453,9 @@
     // The code box, now that there is a checkout for it to go into.
     const codeBox = el('buycode');
     if (codeBox) {
+      // Marked as switched on, so the checkout's own steps can hide and show
+      // it -- and cannot show it on a page where buying is not on at all.
+      codeBox.dataset.live = 'yes';
       codeBox.hidden = false;
       const go = el('buycodego');
       if (go) go.addEventListener('click', applyCode);
@@ -488,8 +504,28 @@
             bought(event.data && event.data.transaction_id);
             return;
           }
+          // The code is for the details step only.
+          //
+          // Paddle's form is two steps -- details, then payment -- and it is
+          // drawn in a frame this page cannot see into. What it does say is
+          // when the details were sent (a customer is created, or updated if
+          // they were sent again) and when somebody goes back to change
+          // them (the customer is removed). By the payment step a code
+          // should already be in: applying one there reopens the checkout
+          // and sends them back to the start, and a box above the card form
+          // reads as one more thing to fill in before paying.
+          if (event.name === 'checkout.customer.created'
+              || event.name === 'checkout.customer.updated') {
+            codeStep(false);
+            return;
+          }
+          if (event.name === 'checkout.customer.removed') {
+            codeStep(true);
+            return;
+          }
           // The form is up, so the line that was standing in for it goes.
           if (event.name === 'checkout.loaded') {
+            codeStep(true);
             say('');
             if (discount && el('buycodenote')
                 && el('buycodenote').textContent === 'Applying\u2026') {
