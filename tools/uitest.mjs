@@ -4,7 +4,7 @@
 // that comes out the other side. It loads a PDF that genuinely contains text,
 // drives the review UI the way a person would, exports, and then re-opens the
 // export to confirm the text is gone and the pixels are black.
-import { createReadStream, statSync, writeFileSync, readFileSync } from 'node:fs';
+import { createReadStream, statSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { dirname, extname, join, normalize, resolve } from 'node:path';
@@ -197,7 +197,10 @@ writeFileSync(textPath, 'Jane Doe — jane.doe@example.com — (415) 555-0132\n'
   + 'Mailing address: 1600 Amphitheatre Parkway, 94043.\n'
   + 'nothing sensitive here\n');
 
-const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
+// The browser the cloud sandbox provides, where there is one; anywhere else,
+// the one Playwright installs (npx playwright install chromium).
+const browser = await chromium.launch(existsSync('/opt/pw-browsers/chromium')
+  ? { executablePath: '/opt/pw-browsers/chromium' } : {});
 const context = await browser.newContext({ acceptDownloads: true });
 const page = await context.newPage();
 

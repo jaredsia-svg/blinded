@@ -18,6 +18,15 @@
 // ignored by git, and this file reads whatever is put there. Point it
 // somewhere else with BENCH=/path/to/folder.
 //
+// On a machine of your own, once, from the project folder:
+//
+//   npm install                        pdf.js and Playwright, for the tools
+//   npx playwright install chromium    the browser the bench drives
+//
+// then unpack the bench folder into bench/ beside this project's files.
+// Timings are the machine's own: run once with SAVE=1 on a new machine so
+// later runs are compared with that machine, not with another one.
+//
 //   node tools/bench.mjs              every benchmark
 //   node tools/bench.mjs kimberly     the ones whose name matches
 //   REVIEW=1 node tools/bench.mjs     also draw every page with its marks
@@ -129,7 +138,10 @@ const server = createServer((req, res) => {
   createReadStream(path).pipe(res);
 });
 const port = await new Promise(done => server.listen(0, () => done(server.address().port)));
-const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
+// The browser the cloud sandbox provides, where there is one; anywhere else,
+// the one Playwright installs (npx playwright install chromium).
+const browser = await chromium.launch(existsSync('/opt/pw-browsers/chromium')
+  ? { executablePath: '/opt/pw-browsers/chromium' } : {});
 
 let ran = 0;
 for (const name of readdirSync(bench).sort()) {

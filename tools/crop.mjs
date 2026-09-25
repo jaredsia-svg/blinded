@@ -8,7 +8,7 @@
 //                                                    if the bar turned it away
 import { chromium } from 'playwright';
 import { createServer } from 'node:http';
-import { createReadStream, statSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { createReadStream, statSync, readdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { extname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -47,7 +47,10 @@ const server = createServer((req, res) => {
   createReadStream(path).pipe(res);
 });
 const port = await new Promise(done => server.listen(0, () => done(server.address().port)));
-const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
+// The browser the cloud sandbox provides, where there is one; anywhere else,
+// the one Playwright installs (npx playwright install chromium).
+const browser = await chromium.launch(existsSync('/opt/pw-browsers/chromium')
+  ? { executablePath: '/opt/pw-browsers/chromium' } : {});
 const page = await browser.newPage();
 await page.goto('http://localhost:' + port + '/index.html');
 await page.waitForSelector('#view-drop:not([hidden])', { timeout: 20000 });
