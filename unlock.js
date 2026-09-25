@@ -184,6 +184,49 @@
     reopen();
   }
 
+  // Back, on the payment step.
+  //
+  // Paddle's two steps are one page as far as the browser knows, so back on
+  // the payment step left the page altogether -- on a phone this window is
+  // a tab with nothing before it, back closed it, and the reviewer landed on
+  // the tool with its price dialog still open, having lost the checkout.
+  // So when the details are sent, the page takes one step of history of its
+  // own, and back returns the checkout to its details step instead: the same
+  // length, the same code, the form open again.
+  //
+  // Not prefilled with the email Paddle was just given. Paddle skips its
+  // details step when it already has them, which is the opposite of what
+  // pressing back asked for.
+  let paying = false;
+  // The next popstate is this page tidying its own entry away, not a press.
+  let quietPop = false;
+
+  function enterPayment() {
+    if (paying) return;
+    try {
+      history.pushState({ blinded: 'payment' }, '');
+      paying = true;
+    } catch { /* no history to take a step in: back does what it always did */ }
+  }
+
+  // Left the payment step some other way -- Paddle's own link back to the
+  // details, the overlay closed, or the purchase done. The entry comes back
+  // out, so back afterwards means what it meant before any of this.
+  function leavePayment() {
+    if (!paying) return;
+    paying = false;
+    quietPop = true;
+    history.back();
+  }
+
+  window.addEventListener('popstate', () => {
+    if (quietPop) { quietPop = false; return; }
+    if (!paying) return;
+    paying = false;
+    codeStep(true);
+    reopen();
+  });
+
   // Close and open again with the code, rather than editing the open one:
   // opening is the one call every version of Paddle.js takes a code in, and
   // an inline checkout redraws in the same place.
@@ -501,7 +544,12 @@
         token: Pay.paddle.token,
         eventCallback(event) {
           if (event.name === 'checkout.completed') {
+            leavePayment();
             bought(event.data && event.data.transaction_id);
+            return;
+          }
+          if (event.name === 'checkout.closed') {
+            leavePayment();
             return;
           }
           // The code is for the details step only.
@@ -517,10 +565,12 @@
           if (event.name === 'checkout.customer.created'
               || event.name === 'checkout.customer.updated') {
             codeStep(false);
+            enterPayment();
             return;
           }
           if (event.name === 'checkout.customer.removed') {
             codeStep(true);
+            leavePayment();
             return;
           }
           // The form is up, so the line that was standing in for it goes.

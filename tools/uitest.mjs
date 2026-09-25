@@ -11714,6 +11714,87 @@ try {
     await shop.close();
   });
 
+  // ---------- back, on the payment step ----------
+  //
+  // Paddle's two steps are one page to the browser, so back on the payment
+  // step left the page -- on a phone, closing the buying tab and dropping the
+  // reviewer on the tool with its price dialog still up. Back now returns the
+  // checkout to its details step. Paddle is stood in for, as above.
+  await part("back on the payment step returns to the details step", async () => {
+    const shop = await context.newPage();
+    await shop.route('https://cdn.paddle.com/paddle/v2/paddle.js', route => route.fulfill({
+      contentType: 'application/javascript',
+      body: `window.__opened = []; window.__closed = 0;
+        window.Paddle = {
+          Environment: { set() {} },
+          Initialize(o) { window.__cb = o.eventCallback; },
+          Checkout: {
+            open(o) {
+              window.__opened.push(JSON.parse(JSON.stringify(o)));
+              setTimeout(() => window.__cb && window.__cb({ name: 'checkout.loaded' }), 10);
+            },
+            close() { window.__closed++; },
+          },
+        };`,
+    }));
+    await shop.goto(base + 'unlock.html?price=month');
+    await shop.waitForFunction(() => (window.__opened || []).length === 1, undefined, { timeout: 10000 });
+    await shop.fill('#buycodein', 'PRESS');
+    await shop.click('#buycodego');
+    await shop.waitForFunction(() => window.__opened.length === 2, undefined, { timeout: 5000 });
+    const before = await shop.evaluate(() => history.length);
+
+    // Details sent: payment is on screen.
+    await shop.evaluate(() => window.__cb({ name: 'checkout.customer.created',
+      data: { customer: { email: 'buyer@example.com' } } }));
+    check('the payment step takes a step of history, so back has somewhere to go',
+      (await shop.evaluate(() => history.length)) === before + 1);
+
+    // Back, the way a phone's back gesture does it.
+    // Everything read defensively from here: if back leaves the page -- the
+    // bug -- there is no checkout to read, and a crash would take every later
+    // section down without naming this one.
+    await shop.evaluate(() => history.back()).catch(() => {});
+    await shop.waitForFunction(() => (window.__opened || []).length === 3,
+      undefined, { timeout: 5000 }).catch(() => {});
+    const again = await shop.evaluate(() => {
+      const box = document.getElementById('buycode');
+      return {
+        opened: window.__opened || [],
+        path: location.pathname + location.search,
+        code: Boolean(box) && getComputedStyle(box).display !== 'none',
+      };
+    }).catch(() => ({ opened: [], path: 'gone', code: false }));
+    const last = again.opened[again.opened.length - 1] || {};
+    check('back reopens the checkout at its details step instead of leaving the page',
+      again.opened.length === 3 && again.path === '/unlock.html?price=month',
+      JSON.stringify({ n: again.opened.length, path: again.path }));
+    check('for the same length, with the same code',
+      again.opened.length === 3
+        && JSON.stringify(last.items) === JSON.stringify(again.opened[1].items)
+        && last.discountCode === 'PRESS', JSON.stringify(last));
+    // Paddle skips its details step when it already has them, which is the
+    // opposite of what back asked for.
+    check('and without handing Paddle the details, which would skip past them',
+      !('customer' in last), JSON.stringify(last));
+    check('with the code line offered again', again.code === true);
+
+    // Leaving the payment step Paddle's own way takes the entry back out,
+    // without being mistaken for a press of back.
+    if (again.path !== '/unlock.html?price=month') {
+      check('so nothing after it could be tried', false, 'the page was left');
+      await shop.close();
+      return;
+    }
+    await shop.evaluate(() => window.__cb({ name: 'checkout.customer.created',
+      data: { customer: { email: 'buyer@example.com' } } }));
+    await shop.evaluate(() => window.__cb({ name: 'checkout.customer.removed' }));
+    await shop.waitForTimeout(400);
+    check('going back through Paddle\'s own link does not reopen anything',
+      (await shop.evaluate(() => window.__opened.length)) === 3);
+    await shop.close();
+  });
+
   // ---------- the licence view inside the tool ----------
   //
   // The header's License does not go to /premium/. It fetches that page and
