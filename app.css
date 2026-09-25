@@ -2511,6 +2511,14 @@ body.choosing { -webkit-user-select: none; user-select: none; }
   background: var(--warn-bg); border: 1px solid #e6cd9a;
   color: #8a5a10; font-size: 13.5px; font-weight: 600;
 }
+/* The same box once a licence is held: good news, so green, with the same
+   tick the header wears beside the word License. The amber above is for the
+   one thing this box otherwise says -- that nothing is being charged yet. */
+.premnow.premok {
+  display: flex; align-items: flex-start; gap: 10px;
+  background: #e8f5ec; border-color: #9fd3ae; color: #135c2a;
+}
+.premtick { width: 18px; height: 18px; flex: none; margin-top: 1px; }
 /* The two prices, side by side, because the only thing anybody is doing here
    is comparing them. */
 /* One under the other, the full width of the column, because each one is

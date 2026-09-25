@@ -53,6 +53,7 @@
     if (el('premhave')) el('premhave').hidden = true;
     Pay.showLicensed(document.querySelector('.top-link.here'), true);
     Pay.showHeld(document, { left: Pass.daysLeft(answer.payload),
+                             expires: answer.payload.exp,
                              license: typed });
   }
 
@@ -130,6 +131,7 @@
 
     if (!license) return;
     Pay.showHeld(document, { left: Pass.daysLeft(license),
+                             expires: license.exp,
                              license: Pass.recall() });
   }
 

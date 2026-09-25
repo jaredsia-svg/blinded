@@ -9307,8 +9307,8 @@ try {
       buyable: document.querySelectorAll('#prem-here a[data-price]').length,
       keyHidden: document.querySelector('#prem-here #premkey').hidden,
     }));
-    check('it says how long is left rather than what it costs',
-      /more day/.test(mine.note), JSON.stringify(mine));
+    check('it says when the licence ends rather than what it costs',
+      /active until/.test(mine.note), JSON.stringify(mine));
     check('and offers no prices to press',
       mine.pricesHidden === true && mine.buyable === 0, JSON.stringify(mine));
     // On screen only when asked for. This page is as likely to be open on a
@@ -11568,7 +11568,7 @@ try {
       JSON.stringify(took).slice(0, 300));
     check('and the page turns into the held state, prices gone',
       took.held === true && took.prices === false
-        && /5 more days/.test(took.note || ''), JSON.stringify(took).slice(0, 300));
+        && /active until/.test(took.note || ''), JSON.stringify(took).slice(0, 300));
     // Nothing is asked of somebody who has just answered it.
     check('and neither question is put again', took.asking === false
       && took.box === false, JSON.stringify(took).slice(0, 300));
@@ -11576,6 +11576,123 @@ try {
     // here would answer their questions for them.
     await lic.evaluate(() => localStorage.removeItem('blinded.pass'));
     await lic.close();
+  });
+
+  // ---------- the licence view inside the tool ----------
+  //
+  // The header's License does not go to /premium/. It fetches that page and
+  // copies its article into the tool, so the document stays open -- and only
+  // the markup comes across, never premium.js. So "I already have a license"
+  // was a button with nothing behind it, "I lost my license" a link that would
+  // have navigated the tool away from the document, and a reviewer holding a
+  // licence was still asked whether they had one. Reported three times. Every
+  // test of these opened /premium/ directly, where its own script wires them,
+  // and nobody arrives there that way from the tool. This opens it the way a
+  // reviewer does.
+  await part("the licence view inside the tool answers its own questions", async () => {
+    const view = await context.newPage();
+    await view.goto(base);
+    await view.waitForTimeout(400);
+    // A key of our own, and a five-day licence signed with it, so nothing in
+    // the repository has to hold a private key.
+    const made = await view.evaluate(async () => {
+      localStorage.removeItem('blinded.pass');
+      const pair = await crypto.subtle.generateKey(
+        { name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign', 'verify']);
+      const pub = await crypto.subtle.exportKey('jwk', pair.publicKey);
+      const b64 = bytes => btoa(String.fromCharCode(...new Uint8Array(bytes)))
+        .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+      const exp = Math.floor(Date.now() / 1000) + 5 * 86400;
+      const signed = b64(new TextEncoder().encode(JSON.stringify(
+        { v: 1, plan: 'days', id: 'view', exp })));
+      const sig = await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' },
+        pair.privateKey, new TextEncoder().encode(signed));
+      window.BlindedPay.on = true;
+      window.BlindedPay.key = { kty: pub.kty, crv: pub.crv, x: pub.x, y: pub.y };
+      return { licence: 'blinded1.' + signed + '.' + b64(sig), exp };
+    });
+    const seen = () => view.evaluate(() => {
+      const shown = id => {
+        const e = document.getElementById(id);
+        return e ? getComputedStyle(e).display !== 'none' : null;
+      };
+      const note = document.getElementById('premnow');
+      return {
+        view: shown('view-premium'), have: shown('premhave'), box: shown('codebox'),
+        why: (document.getElementById('codenote') || {}).textContent || '',
+        note: note ? note.textContent : '',
+        green: Boolean(note && note.classList.contains('premok')),
+        tick: Boolean(document.querySelector('#premnow svg.premtick')),
+        header: Boolean(document.querySelector('#prem-open .licensed')),
+        prices: shown('premprices'), stored: localStorage.getItem('blinded.pass'),
+        at: location.pathname,
+      };
+    });
+
+    await view.click('#prem-open');
+    await view.waitForSelector('#view-premium:not([hidden]) #premcode', { timeout: 15000 });
+    check('the view asks both questions', (await seen()).have === true);
+
+    await view.click('#premcode');
+    await view.waitForTimeout(300);
+    const asked = await seen();
+    check('and "I already have a license" opens a box to put it in',
+      asked.box === true, JSON.stringify(asked));
+
+    // Only if it opened. A box that never appears is the bug this section is
+    // here for, and typing into it would time out and take every section
+    // after this one down with it, without naming what failed.
+    if (asked.box) {
+      await view.fill('#codeinput', 'blinded1.junk.junk');
+      await view.click('#codego');
+      await view.waitForTimeout(400);
+      const junk = await seen();
+      check('a string that is not a licence is refused, with the reason, and asked again',
+        junk.box === true && /does not look like a license/i.test(junk.why)
+          && !junk.stored, JSON.stringify(junk));
+
+      await view.fill('#codeinput', made.licence);
+      await view.click('#codego');
+      await view.waitForTimeout(700);
+      const took = await seen();
+      check('a real one is kept', took.stored === made.licence);
+      check('and the view turns green, says when it ends, and drops the prices',
+        took.green && took.tick && /active until/.test(took.note)
+          && took.prices === false && took.box === false, JSON.stringify(took));
+      check('without asking whether they have one any more', took.have === false,
+        JSON.stringify(took));
+      check('and the header wears the tick too', took.header === true);
+      check('while the tool stays where it was', took.at === '/');
+      // The time it names is the licence's own, to the minute, not a
+      // rounded-off day.
+      const minute = await view.evaluate(exp => new Intl.DateTimeFormat(undefined,
+        { hour: '2-digit', minute: '2-digit' }).format(new Date(exp * 1000)), made.exp);
+      check('the time named is the moment the licence itself ends',
+        took.note.includes(minute), took.note + ' vs ' + minute);
+
+    } else {
+      check('so a licence could not be put in at all', false, 'the box never opened');
+    }
+
+    // The lost link finds it in the buying window, and takes nothing away.
+    await view.evaluate(() => localStorage.removeItem('blinded.pass'));
+    await view.reload();
+    await view.waitForTimeout(400);
+    await view.evaluate(() => { window.BlindedPay.on = true; });
+    await view.click('#prem-open');
+    await view.waitForSelector('#view-premium:not([hidden]) #premhave a', { timeout: 15000 });
+    const [pop] = await Promise.all([
+      view.waitForEvent('popup', { timeout: 5000 }).catch(() => null),
+      view.click('#premhave a'),
+    ]);
+    await view.waitForTimeout(300);
+    check('"I lost my license" opens the finder in its own window',
+      Boolean(pop) && /unlock\.html\?find$/.test(pop.url()), pop ? pop.url() : 'none');
+    check('and the tool is not navigated away from the document',
+      new URL(view.url()).pathname === '/', view.url());
+    if (pop) await pop.close();
+    await view.evaluate(() => localStorage.removeItem('blinded.pass'));
+    await view.close();
   });
 
   // ---------- a browser that will not run the reader ----------

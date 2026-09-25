@@ -776,8 +776,15 @@
     const Pay = window.BlindedPay;
     if (!Pay || !host.querySelector('#premprices')) return;
     await refreshPass();
+    // Neither question is put to somebody who already has one -- the same
+    // rule the page itself keeps. This view never kept it, so a reviewer
+    // holding a licence saw "I already have a license" under the box saying
+    // they had one.
+    const have = host.querySelector('#premhave');
+    if (have) have.hidden = Boolean(passHeld);
     if (passHeld) {
       Pay.showHeld(host, { left: Pass.daysLeft(passHeld),
+                           expires: passHeld.exp,
                            license: Pass.recall() });
       return;
     }
@@ -785,7 +792,35 @@
     const held = host.querySelector('#premheld');
     if (prices) prices.hidden = false;
     if (held) held.hidden = true;
+    // A licence that ran out while the tool was open must not leave its green
+    // box behind, still saying when it would end.
+    const note = host.querySelector('#premnow.premok');
+    if (note) { note.classList.remove('premok'); note.textContent = ''; note.hidden = true; }
     Pay.renderPrices(prices, { buyable: Pay.on });
+  }
+
+  // A licence typed into the licence view, in the tool's own box for it.
+  // Asked again, saying why, until it checks out or is cancelled.
+  async function typeLicenceHere(host) {
+    let why = '';
+    for (;;) {
+      const said = await askPassCode(why);
+      if (!said) return;
+      Pass.useKey(Pay.key);
+      const answer = await Pass.check(said.trim());
+      if (answer.ok) {
+        Pass.remember(said.trim());
+        await refreshPass();
+        markLicence();
+        await dressPremium(host);
+        refreshApply();
+        return;
+      }
+      why = answer.why === 'expired'
+        ? 'That license has run out. Buying again gives you a new one.'
+        : 'That does not look like a license from here. Check for a missing '
+          + 'character at either end.';
+    }
   }
 
   function loadPremium() {
@@ -830,6 +865,33 @@
             event.preventDefault();
             window.open(go.getAttribute('href'), 'blinded-pay',
               'width=520,height=760,noopener=no');
+          });
+        }
+        // The two questions under the prices, which the page answers with
+        // its own script -- and that script never runs here. Only the markup
+        // comes across, so here they were a button with nothing behind it
+        // and a link that would have navigated the tool away from the
+        // document. Measured: every test of these opened /premium/ directly,
+        // where they work, and nobody opens it that way from the tool.
+        //
+        // Delegated, and once: this view is rebuilt from the same host.
+        if (!host.dataset.asks) {
+          host.dataset.asks = 'yes';
+          host.addEventListener('click', event => {
+            if (event.target.closest('#premcode')) {
+              event.preventDefault();
+              typeLicenceHere(host);
+              return;
+            }
+            // Finding one means reaching the mint, which only the buying
+            // page may do -- so it opens there, in the window buying uses,
+            // and the document stays where it is.
+            const lost = event.target.closest('a[href*="unlock.html?find"]');
+            if (lost) {
+              event.preventDefault();
+              window.open(lost.getAttribute('href'), 'blinded-pay',
+                'width=520,height=760,noopener=no');
+            }
           });
         }
         if (Pay && !Pay.on) {
@@ -7692,11 +7754,14 @@
   // Typing in a pass bought earlier, or on another machine. The pass is the
   // thing that was emailed, so it travels; nothing here is tied to a browser
   // except where it is remembered.
-  function askPassCode() {
+  // `why` is what was wrong with the last one typed, when it is asked again.
+  function askPassCode(why) {
     return new Promise(resolve => {
       const box = el('codebox');
       const input = el('codeinput');
       if (!box || !input) { resolve(null); return; }
+      const note = el('codenote');
+      if (note) { note.textContent = why || ''; note.hidden = !why; }
       input.value = '';
       box.hidden = false;
       input.focus();
