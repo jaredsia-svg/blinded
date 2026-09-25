@@ -20,6 +20,23 @@
 //
 //   node tools/bench.mjs              every benchmark
 //   node tools/bench.mjs kimberly     the ones whose name matches
+//   REVIEW=1 node tools/bench.mjs     also draw every page with its marks
+//   SAVE=1 node tools/bench.mjs       keep this run as the baseline
+//
+// Whether it works *well* needs an answer key: truth.json beside the
+// document, listing every place something should be covered -- what it is,
+// which page, and where, in the page's own pixels. With one, a run says
+// what it found, what it missed and what it covered that it should not
+// have, and holds all three against the baseline: a place found before and
+// missed now, or a false alarm that was not there before, fails the run.
+//
+//   { "items": [ { "page": 0, "what": "Kimberly-Clark",
+//                  "rect": { "x": 120, "y": 80, "w": 300, "h": 40 } } ] }
+//
+// A place counts as covered when marks cover at least half of it, or its
+// centre -- the key is drawn by hand and need not be exact to the pixel. A
+// mark counts as a false alarm when nine-tenths of it lies outside every
+// place in the key.
 //
 // What it prints, per picked image: how many matches came back at the bar the
 // draft was saved with, the best score, and the whole verified distribution
@@ -29,7 +46,7 @@
 // it without searching the document again.
 import { chromium } from 'playwright';
 import { createServer } from 'node:http';
-import { createReadStream, statSync, readdirSync, writeFileSync, existsSync } from 'node:fs';
+import { createReadStream, statSync, readdirSync, writeFileSync, existsSync, readFileSync, mkdirSync } from 'node:fs';
 import { extname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -40,6 +57,56 @@ import { fileURLToPath } from 'node:url';
 const root = fileURLToPath(new URL('..', import.meta.url));
 const bench = process.env.BENCH || join(root, 'bench');
 const only = process.argv[2];
+const REVIEW = Boolean(process.env.REVIEW);
+const SAVE = Boolean(process.env.SAVE);
+const baselinePath = join(bench, 'baseline.json');
+const baseline = existsSync(baselinePath)
+  ? JSON.parse(readFileSync(baselinePath, 'utf8')) : null;
+const results = {};
+let regressions = 0;
+
+// ---------- scoring against the answer key ----------
+
+const area = r => Math.max(0, r.w) * Math.max(0, r.h);
+function overlap(a, b) {
+  const x = Math.max(0, Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x));
+  const y = Math.max(0, Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y));
+  return x * y;
+}
+// Half of a place under marks, or its centre under one, is covered. Overlaps
+// are summed across marks, which slightly overcounts where two marks overlap
+// each other -- harmless at a threshold of half.
+function covered(place, rects) {
+  const cx = place.x + place.w / 2;
+  const cy = place.y + place.h / 2;
+  if (rects.some(r => cx >= r.x && cx <= r.x + r.w && cy >= r.y && cy <= r.y + r.h)) return true;
+  const under = rects.reduce((sum, r) => sum + overlap(place, r), 0);
+  return under >= area(place) * 0.5;
+}
+function score(truth, marksByPage) {
+  const items = truth.items || [];
+  const found = [];
+  const missed = [];
+  items.forEach((item, i) => {
+    const page = marksByPage.find(p => p.page === item.page);
+    const rects = page ? page.marks.flatMap(m => m.rects) : [];
+    (covered(item.rect, rects) ? found : missed).push(i);
+  });
+  const alarms = [];
+  for (const page of marksByPage) {
+    const places = items.filter(item => item.page === page.page).map(item => item.rect);
+    for (const mark of page.marks) {
+      for (const r of mark.rects) {
+        const inside = places.reduce((sum, place) => sum + overlap(place, r), 0);
+        if (inside < area(r) * 0.1) {
+          alarms.push({ page: page.page, what: mark.what, how: mark.how,
+            rect: { x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.w), h: Math.round(r.h) } });
+        }
+      }
+    }
+  }
+  return { total: items.length, found, missed, alarms };
+}
 
 if (!existsSync(bench)) {
   console.log('No benchmarks at ' + bench + '.');
@@ -333,9 +400,165 @@ for (const name of readdirSync(bench).sort()) {
     console.log('      ' + JSON.stringify(logo.all.slice(0, 16)));
   }
   writeFileSync(join(folder, 'scores.json'), JSON.stringify(out, null, 1));
+
+  // Every mark the run left standing, said by what it is for, in the page's
+  // own pixels. This is what the answer key is held against.
+  const marks = await page.evaluate(() => {
+    const B = window.Blinded;
+    const number = id => B.state.templates.findIndex(t => t.id === id) + 1;
+    return B.state.pages.map(p => {
+      const list = [];
+      for (const hit of p.hits) {
+        if (p.dismissed.has(hit.finding.id)) continue;
+        list.push({ what: hit.finding.term || hit.finding.kind, how: 'text',
+          rects: hit.rects.map(r => ({ x: r.x, y: r.y, w: r.w, h: r.h })) });
+      }
+      for (const m of B.liveImageHits(p)) {
+        if (p.dismissed.has(m.id) || !m.rect) continue;
+        list.push({ what: m.term || ('image ' + number(m.templateId)),
+          how: m.bySweep ? 'check' : (m.term ? 'reader' : 'image'),
+          score: m.score ? +m.score.toFixed(3) : undefined,
+          rects: [{ x: m.rect.x, y: m.rect.y, w: m.rect.w, h: m.rect.h }] });
+      }
+      for (const r of p.manual || []) {
+        list.push({ what: 'drawn', how: 'manual', rects: [{ x: r.x, y: r.y, w: r.w, h: r.h }] });
+      }
+      return { page: p.index, w: p.source.width, h: p.source.height, marks: list };
+    });
+  });
+
+  // Pictures to read the key off: each page with every mark outlined and
+  // numbered, and a grid every hundred pixels so a place the run missed can
+  // be written down. Into the benchmark's own folder, which git ignores --
+  // these are pictures of confidential documents.
+  if (REVIEW) {
+    const dir = join(folder, 'review');
+    mkdirSync(dir, { recursive: true });
+    const shots = await page.evaluate(marks => {
+      const B = window.Blinded;
+      const colour = how => ({ text: '#1f6feb', reader: '#8250df', check: '#d4a72c',
+        image: '#1a7f37', manual: '#cf222e' })[how] || '#cf222e';
+      return B.state.pages.map(p => {
+        const src = p.source;
+        const c = document.createElement('canvas');
+        c.width = src.width; c.height = src.height;
+        const x = c.getContext('2d');
+        x.drawImage(src, 0, 0);
+        x.strokeStyle = 'rgba(0,0,0,0.12)'; x.lineWidth = 1;
+        x.fillStyle = 'rgba(0,0,0,0.45)'; x.font = '11px sans-serif';
+        for (let gx = 0; gx < c.width; gx += 100) {
+          x.beginPath(); x.moveTo(gx, 0); x.lineTo(gx, c.height); x.stroke();
+          x.fillText(String(gx), gx + 2, 11);
+        }
+        for (let gy = 0; gy < c.height; gy += 100) {
+          x.beginPath(); x.moveTo(0, gy); x.lineTo(c.width, gy); x.stroke();
+          x.fillText(String(gy), 2, gy + 11);
+        }
+        const mine = marks.find(m => m.page === p.index);
+        let n = 0;
+        for (const mark of mine.marks) {
+          n++;
+          for (const r of mark.rects) {
+            x.strokeStyle = colour(mark.how); x.lineWidth = 3;
+            x.strokeRect(r.x, r.y, r.w, r.h);
+          }
+          const r = mark.rects[0];
+          x.font = 'bold 16px sans-serif';
+          x.fillStyle = colour(mark.how);
+          x.fillText('#' + n, r.x, Math.max(14, r.y - 4));
+        }
+        return { page: p.index, url: c.toDataURL('image/png') };
+      });
+    }, marks);
+    for (const shot of shots) {
+      writeFileSync(join(dir, 'p' + (shot.page + 1) + '.png'),
+        Buffer.from(shot.url.split(',')[1], 'base64'));
+    }
+    writeFileSync(join(dir, 'marks.json'), JSON.stringify(marks.map(p => ({
+      page: p.page, size: p.w + 'x' + p.h,
+      marks: p.marks.map((m, i) => ({ n: i + 1, what: m.what, how: m.how, score: m.score,
+        rects: m.rects.map(r => [Math.round(r.x), Math.round(r.y), Math.round(r.w), Math.round(r.h)]) })),
+    })), null, 1));
+    console.log('   drew ' + shots.length + ' pages into ' + join(name, 'review'));
+  }
+
+  // Against the key, when there is one.
+  const truthPath = join(folder, 'truth.json');
+  const result = { search: +searchTook.toFixed(1), check: +sweepTook.toFixed(1) };
+  if (existsSync(truthPath)) {
+    const truth = JSON.parse(readFileSync(truthPath, 'utf8'));
+    const got = score(truth, marks);
+    Object.assign(result, { total: got.total, found: got.found, alarms: got.alarms.length });
+    console.log('   KEY: found ' + got.found.length + ' of ' + got.total
+      + ' · false alarms ' + got.alarms.length);
+    for (const i of got.missed) {
+      const item = truth.items[i];
+      console.log('      missed #' + (i + 1) + ' ' + JSON.stringify(item.what) + ' p' + (item.page + 1)
+        + (item.note ? ' (' + item.note + ')' : ''));
+    }
+    for (const a of got.alarms) {
+      console.log('      false alarm ' + JSON.stringify(a.what) + ' (' + a.how + ') p' + (a.page + 1)
+        + ' at ' + [a.rect.x, a.rect.y, a.rect.w, a.rect.h].join(','));
+    }
+    const before = baseline && baseline[name];
+    if (before && before.found) {
+      const lost = before.found.filter(i => !got.found.includes(i));
+      const gained = got.found.filter(i => !before.found.includes(i));
+      if (lost.length) {
+        regressions++;
+        console.log('   !! WORSE: no longer finds ' + lost.map(i => '#' + (i + 1)
+          + ' ' + JSON.stringify(truth.items[i].what)).join(', '));
+      }
+      if (got.alarms.length > before.alarms) {
+        regressions++;
+        console.log('   !! WORSE: false alarms ' + before.alarms + ' -> ' + got.alarms.length);
+      }
+      if (gained.length) {
+        console.log('   better: now finds ' + gained.map(i => '#' + (i + 1)).join(', '));
+      }
+      if (got.alarms.length < before.alarms) {
+        console.log('   better: false alarms ' + before.alarms + ' -> ' + got.alarms.length);
+      }
+    }
+  }
+  const before = baseline && baseline[name];
+  if (before) {
+    const pct = (now, was) => was ? Math.round((now / was - 1) * 100) : 0;
+    console.log('   time: search ' + result.search + 's (' + (pct(result.search, before.search) >= 0 ? '+' : '')
+      + pct(result.search, before.search) + '%) · check ' + result.check + 's ('
+      + (pct(result.check, before.check) >= 0 ? '+' : '') + pct(result.check, before.check) + '%)');
+  }
+  results[name] = result;
   await page.close();
+}
+
+// The whole bench in two lines, and the verdict.
+{
+  const all = Object.values(results).filter(r => r.total !== undefined);
+  if (all.length) {
+    const total = all.reduce((n, r) => n + r.total, 0);
+    const found = all.reduce((n, r) => n + r.found.length, 0);
+    const alarms = all.reduce((n, r) => n + r.alarms, 0);
+    console.log('\nALL: found ' + found + ' of ' + total + ' · false alarms ' + alarms);
+  }
+  const search = Object.values(results).reduce((n, r) => n + r.search, 0);
+  const check = Object.values(results).reduce((n, r) => n + r.check, 0);
+  console.log('TIME: search ' + search.toFixed(1) + 's · check ' + check.toFixed(1) + 's');
+  if (baseline && !only) {
+    const was = Object.values(baseline);
+    const s0 = was.reduce((n, r) => n + (r.search || 0), 0);
+    const c0 = was.reduce((n, r) => n + (r.check || 0), 0);
+    console.log('BASELINE: search ' + s0.toFixed(1) + 's · check ' + c0.toFixed(1) + 's');
+  }
+  if (regressions) console.log('\n!! ' + regressions + ' regression(s) against the baseline');
+  if (SAVE) {
+    const keep = Object.assign({}, baseline || {}, results);
+    writeFileSync(baselinePath, JSON.stringify(keep, null, 1));
+    console.log('saved as the baseline: ' + baselinePath);
+  }
 }
 
 if (!ran) console.log('Nothing matched' + (only ? ' ' + JSON.stringify(only) : '') + '.');
 await browser.close();
 server.close();
+process.exitCode = regressions ? 1 : 0;
