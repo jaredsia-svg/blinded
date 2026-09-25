@@ -143,6 +143,7 @@ a.mark { color: inherit; text-decoration: none; }
    outside theirs. One variable holds the width so they cannot drift apart
    again. */
 .drop {
+  display: block;
   max-width: var(--front-width); margin-left: auto; margin-right: auto;
   border: 2px dashed var(--line);
   background: var(--card);

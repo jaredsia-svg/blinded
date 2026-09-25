@@ -2022,7 +2022,11 @@ check('no creation date is carried into the output', !meta.info.CreationDate);
   // picker open-and-close on the first tap.
   {
     const dropOpen = html.indexOf('id="drop"');
-    const dropClose = html.indexOf('</div>', html.indexOf('drop-faint', dropOpen));
+    // Closed by whatever element it is. It was a div; it is a <label> for the
+    // input now, so the picker opens before the app has loaded -- with the
+    // input still outside it, which is the whole point of this check.
+    const dropTag = (/<(\w+)[^>]*id="drop"/.exec(html) || [])[1] || 'div';
+    const dropClose = html.indexOf('</' + dropTag + '>', html.indexOf('drop-faint', dropOpen));
     const dropInner = dropOpen >= 0 && dropClose >= 0
       ? html.slice(dropOpen, dropClose) : '';
     check('the drop box markup is present for nesting checks', dropInner.includes('drop-lead'));
@@ -2929,9 +2933,17 @@ check('no creation date is carried into the output', !meta.info.CreationDate);
         // document, not that the word /premium/ may not appear: a link that
         // opens a tab of its own leaves the document exactly where it was.
         // So links are allowed here when, and only when, they do that.
+        //
+        // And the links the app takes over. The header's License and the
+        // footer's are links in the markup so they work before the app has
+        // loaded -- when there is no document to lose -- and the app turns
+        // them into views the moment it is here. The UI suite holds them to
+        // that with a document open; this holds the list to those two.
+        const TAKEN_OVER = ['prem-open', 'foot-prem'];
         const links = [...page.matchAll(/<a\b[^>]*href="\/premium\/"[^>]*>/g)]
           .map(one => one[0]);
-        const closes = links.filter(one => !/target="_blank"/.test(one));
+        const closes = links.filter(one => !/target="_blank"/.test(one)
+          && !TAKEN_OVER.some(id => one.includes('id="' + id + '"')));
         check('and nothing in the tool navigates away to reach it',
           closes.length === 0 && /id="foot-prem"/.test(page),
           closes.join(' | ') || 'index.html');

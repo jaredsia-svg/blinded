@@ -9747,11 +9747,27 @@ try {
     headerLink && headerLink.text);
   check('and it is on the right of the strip, where it was asked for',
     headerLink && headerLink.visible && headerLink.onTheRight, JSON.stringify(headerLink));
-  // Not a link. Following one unloads the page, which throws away the open
-  // document and puts the browser's "leave site?" warning in front of a
-  // reviewer who only wanted to read what the tool does.
-  check('it is a button, not a link that would unload the document',
-    headerLink && headerLink.tag === 'BUTTON', JSON.stringify(headerLink));
+  // Never a way to unload the page. Following a link would throw away the
+  // open document and put the browser's "leave site?" warning in front of a
+  // reviewer who only wanted to read what the tool does. It is a link in the
+  // markup now -- so it works in the second or two before the app arrives,
+  // when there is no document -- and the app takes it over. What matters is
+  // what a press does, so that is what is checked: pressed, the page stays.
+  {
+    const before = page.url();
+    const pressed = await page.evaluate(() => {
+      const link = document.getElementById('faq-open');
+      const event = new MouseEvent('click', { bubbles: true, cancelable: true });
+      link.dispatchEvent(event);
+      return { taken: event.defaultPrevented, tag: link.tagName };
+    });
+    check('it never unloads the document: the app takes the press over',
+      headerLink && pressed.taken === true && page.url() === before,
+      JSON.stringify(pressed));
+    // Put it back as it was: the press opened (or closed) the answers.
+    await page.evaluate(() => document.getElementById('faq-open').click());
+    await page.waitForTimeout(300);
+  }
 
   await toggleFaq();
   await page.waitForSelector('#view-faq:not([hidden])', { timeout: 15000 });
@@ -11576,6 +11592,84 @@ try {
     // here would answer their questions for them.
     await lic.evaluate(() => localStorage.removeItem('blinded.pass'));
     await lic.close();
+  });
+
+  // ---------- the front page, before the app has loaded ----------
+  //
+  // The page is drawn before the app arrives -- it is the last thing on it,
+  // seventeen scripts and half a megabyte -- and every control on it used to
+  // be the app's to wire. Measured on a mid-range phone on 4G, the page was
+  // on screen for about 1.8 seconds before a tap on Browse or License did
+  // anything, and the tap was simply lost. The box is a label for the file
+  // input now and the header's pages are links, so each answers on its own.
+  //
+  // The app is held back here, so the gap is as long as this test needs
+  // rather than as long as this machine happens to take.
+  await part("the front page answers before the app has loaded", async () => {
+    const holdApp = async page => {
+      let release;
+      const held = new Promise(done => { release = done; });
+      await page.route(/\/app\.js(\?|$)/, async route => {
+        await held;
+        await route.continue().catch(() => {});
+      });
+      return release;
+    };
+
+    const early = await context.newPage();
+    const release = await holdApp(early);
+    await early.goto(base, { waitUntil: 'commit' });
+    await early.waitForSelector('#drop', { state: 'visible', timeout: 15000 });
+    check('the front page is on screen while the app is still on its way',
+      await early.evaluate(() => typeof window.Blinded === 'undefined'));
+
+    const [chooser] = await Promise.all([
+      early.waitForEvent('filechooser', { timeout: 5000 }).catch(() => null),
+      early.click('#drop'),
+    ]);
+    check('a tap on the box opens the file picker before the app has loaded',
+      Boolean(chooser));
+    if (chooser) await chooser.setFiles(fixturePath);
+    // The app arrives only now, after the file was chosen with nobody
+    // listening for it.
+    release();
+    await early.waitForSelector('#view-review:not([hidden])', { timeout: 60000 })
+      .catch(() => {});
+    const opened = await early.evaluate(() =>
+      Boolean(window.Blinded) && window.Blinded.state.pages.length > 0).catch(() => false);
+    check('and the file chosen then is opened once the app arrives', opened);
+
+    // With the app here and a document open, the same link is a view of the
+    // tool: following it would close the document.
+    if (opened) {
+      await early.click('#prem-open');
+      await early.waitForTimeout(500);
+      const stayed = await early.evaluate(() => ({
+        path: location.pathname,
+        view: !document.getElementById('view-premium').hidden,
+        pages: window.Blinded.state.pages.length,
+      }));
+      check('once the app is here, License opens as a view and the document stays open',
+        stayed.path === '/' && stayed.view && stayed.pages > 0, JSON.stringify(stayed));
+    }
+    await early.close();
+
+    // And the header's pages, tapped in the gap: there is no document to
+    // lose yet, so going to the page is the right answer.
+    for (const [id, where] of [['#prem-open', '/premium/'], ['#faq-open', '/faq.html']]) {
+      const gap = await context.newPage();
+      const let_go = await holdApp(gap);
+      await gap.goto(base, { waitUntil: 'commit' });
+      await gap.waitForSelector(id, { state: 'visible', timeout: 15000 });
+      await Promise.all([
+        gap.waitForURL('**' + where, { timeout: 10000 }).catch(() => {}),
+        gap.click(id),
+      ]);
+      check(id.slice(1) + ' tapped before the app has loaded goes to its page',
+        new URL(gap.url()).pathname === where, gap.url());
+      let_go();
+      await gap.close();
+    }
   });
 
   // ---------- a discount code, in plain sight ----------

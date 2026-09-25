@@ -91,7 +91,7 @@
   "isAccessibleForFree": false
 }
 </script>
-<link rel="stylesheet" href="app.css?v=91875557">
+<link rel="stylesheet" href="app.css?v=b0a60e97">
 </head>
 <body>
 
@@ -124,8 +124,12 @@
            document is actually on screen; Home is gone, because the mark does
            that and a header with two ways home is a header explaining
            itself. -->
-      <button type="button" class="top-link" id="prem-open">License</button>
-      <button type="button" class="top-link" id="faq-open">Q&amp;A</button>
+      <!-- Links, which the app takes over once it has loaded and opens as
+           views of itself, so a document that is open stays open. Before
+           then there is no document to lose, and a link that goes to the
+           page is better than a button that does nothing. -->
+      <a class="top-link" id="prem-open" href="/premium/">License</a>
+      <a class="top-link" id="faq-open" href="/faq.html">Q&amp;A</a>
       <button type="button" class="top-link" id="back-top" hidden>Back to the tool</button>
     </div>
   </div>
@@ -143,7 +147,14 @@
         document in under a minute.</p>
     </div>
 
-    <div id="drop" class="drop" tabindex="0" role="button" aria-label="Choose a document to redact">
+    <!-- A label for the file input, so the picker opens on the first tap
+         whether or not the app has loaded yet. It used to be a div that only
+         the app could make do anything, and the app is the last thing on
+         this page to arrive: measured on a mid-range phone on 4G, the page
+         was on screen for nearly two seconds before a tap on it did
+         anything at all. Once the app is here it takes the click over, for
+         the reasons in the note below the box. -->
+    <label for="file" id="drop" class="drop" tabindex="0" role="button" aria-label="Choose a document to redact">
       <svg class="drop-icon" viewBox="0 0 24 24" aria-hidden="true">
         <path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5" fill="none" stroke="currentColor"
           stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
@@ -153,7 +164,7 @@
       <p class="drop-lead">Drop a document here</p>
       <p class="drop-sub">PDF, PNG, JPEG, or a saved draft – or <span class="link">browse</span></p>
       <p class="drop-faint">Nothing is uploaded.</p>
-    </div>
+    </label>
     <!-- Outside the drop box: a file input nested inside a click-to-browse
          control often opens and immediately closes the picker (the same click
          "falls through"), which is why the front page sometimes needed two
@@ -464,12 +475,14 @@
     <p class="foot">
       <span class="foot-name">Blinded</span>
       <span class="foot-dot" aria-hidden="true">·</span>
-      <button type="button" class="footlink" id="foot-faq">FAQ</button>
+      <a class="footlink" id="foot-faq" href="/faq.html">FAQ</a>
       <span class="foot-dot" aria-hidden="true">·</span>
-      <!-- A button, like the FAQ beside it, rather than a link. The pages
-           this tool has are views of it: following a link to one closes the
-           document to go and read about the thing you were doing. -->
-      <button type="button" class="footlink" id="foot-prem">License</button>
+      <!-- Links the app takes over, like the two in the header. The pages
+           this tool has are views of it: following a link to one would close
+           the document to go and read about the thing you were doing, so
+           once the app is here they open as views instead. Before it is
+           here there is no document, and the link is the right answer. -->
+      <a class="footlink" id="foot-prem" href="/premium/">License</a>
       <span class="foot-dot" aria-hidden="true">·</span>
       <a class="footlink" href="https://github.com/jaredsia-svg/blinded" rel="noopener">Source code on GitHub</a>
       <span class="foot-dot" aria-hidden="true">·</span>
@@ -1088,7 +1101,7 @@
 <script src="lib/pass.js?v=fa8e95c9"></script>
 <script src="lib/pay.js?v=23919e06"></script>
 <script src="lib/render.js?v=65c3fe76"></script>
-<script src="app.js?v=4603ae72"></script>
+<script src="app.js?v=a4aa34bb"></script>
 <script type="module" src="lib/boot.mjs?v=8b98ed8f"></script>
 </body>
 </html>

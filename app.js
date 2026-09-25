@@ -8064,6 +8064,10 @@
     // Safety: if focus never fires, unlock after a beat.
     setTimeout(done, 1500);
   }
+  // The box is a <label> for the input, so a tap opens the picker before any
+  // of this has loaded. From here on the click is taken over: the label's
+  // own opening is cancelled, and the picker opened once, guarded against a
+  // second tap while it is up.
   drop.addEventListener('click', event => {
     event.preventDefault();
     browseForFile();
@@ -8071,7 +8075,28 @@
   drop.addEventListener('keydown', e => {
     if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); browseForFile(); }
   });
-  input.addEventListener('change', () => { loadFile(input.files[0]); input.value = ''; });
+  // A file can now be chosen before this script has run (the box is a
+  // label) and before pdf.js has -- it arrives last, as a module -- so a
+  // chosen file waits for the reader rather than being handed to one that
+  // is not there yet.
+  function afterReader(then) {
+    if (window.pdfjsLib) { then(); return; }
+    let done = false;
+    const go = () => { if (!done) { done = true; then(); } };
+    window.addEventListener('blinded:ready', go, { once: true });
+    // And if the reader never comes, the file is opened anyway, so the
+    // reason it could not be read is said rather than nothing happening.
+    setTimeout(go, 20000);
+  }
+  function takeChosen() {
+    const chosen = input.files && input.files[0];
+    input.value = '';
+    if (chosen) afterReader(() => loadFile(chosen));
+  }
+  input.addEventListener('change', takeChosen);
+  // Chosen while this script was still on its way: the change has already
+  // happened, with nobody listening, and the file is sitting in the input.
+  if (input.files && input.files.length) takeChosen();
 
   for (const type of ['dragenter', 'dragover']) {
     drop.addEventListener(type, e => { e.preventDefault(); drop.classList.add('over'); });
@@ -8079,7 +8104,10 @@
   for (const type of ['dragleave', 'drop']) {
     drop.addEventListener(type, e => { e.preventDefault(); drop.classList.remove('over'); });
   }
-  drop.addEventListener('drop', e => loadFile(e.dataTransfer.files[0]));
+  drop.addEventListener('drop', e => {
+    const dropped = e.dataTransfer.files[0];
+    afterReader(() => loadFile(dropped));
+  });
   // Without this the browser navigates away to the dropped file and the tab,
   // along with everything in it, is gone.
   // Pages come and go with the scroll, and change size with the window.
@@ -10715,7 +10743,10 @@
   // Each opens its page, or closes it again if you are already there. With a
   // document open these are not on screen at all -- "Back to the tool" is --
   // so the only job left here is the toggle.
-  const pageButton = (id, view) => el(id).addEventListener('click', () => {
+  // Links in the markup, so they work before this has loaded; views from
+  // here on, so an open document stays open.
+  const pageButton = (id, view) => el(id).addEventListener('click', event => {
+    event.preventDefault();
     if (!views[view].hidden) comeBack();
     else goAway(view);
   });
@@ -10728,8 +10759,14 @@
   el('home-mark').addEventListener('click', () => {
     if (views.drop.hidden) goAway('drop');
   });
-  el('foot-faq').addEventListener('click', () => goAway('faq'));
-  el('foot-prem').addEventListener('click', () => goAway('premium'));
+  el('foot-faq').addEventListener('click', event => {
+    event.preventDefault();
+    goAway('faq');
+  });
+  el('foot-prem').addEventListener('click', event => {
+    event.preventDefault();
+    goAway('premium');
+  });
 
   // Clears every mark on the open document and redraws from the pristine
   // source canvases. The file stays open; OCR and the text layer stay.
