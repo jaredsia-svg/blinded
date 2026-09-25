@@ -87,7 +87,7 @@ export function renderLegal(page) {
     <a class="mark" href="/">
       ${MARK} Blinded</a>
     <div class="top-actions">
-      <a class="top-link" href="/premium/">License</a>
+      <a class="top-link" href="/license/">License</a>
       <a class="top-link" href="/faq.html">Q&amp;A</a>
     </div>
   </div>

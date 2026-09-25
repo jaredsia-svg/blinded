@@ -3,182 +3,32 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<!-- The tool's own policy. This page sells nothing directly -- it explains,
-     and hands over to /unlock.html, which is the only page on this site
-     allowed to reach a payment processor. -->
+<!-- The licence page moved to /license/. This is left at the old address so
+     a bookmark, a link somebody shared, and the search results that still
+     list it all arrive there.
+
+     A page rather than a redirect rule in render.yaml, for a reason worth
+     knowing before deleting it: Render skips a redirect rule whenever a file
+     exists at the path, and applies render.yaml at all only if the service
+     is managed as a Blueprint -- which is not certain for this one. An
+     instant refresh works either way, and Google reads one as a permanent
+     move, the same as a 301. Not in the sitemap, and not to be indexed: the
+     canonical says where the page lives now. -->
 <meta http-equiv="Content-Security-Policy" content="
-  default-src 'self';
-  script-src 'self' 'wasm-unsafe-eval';
-  style-src 'self' 'unsafe-inline';
-  img-src 'self' data: blob:;
-  connect-src 'self' blob:;
-  worker-src 'self' blob:;
-  frame-src 'none';
-  object-src 'none';
+  default-src 'none';
+  style-src 'self';
+  img-src 'self';
   base-uri 'none';
   form-action 'none'">
-<title>Blinded License – what it costs, and what stays free</title>
-<meta name="description" content="What Blinded charges for, what it never will, and why. No account, no subscription to cancel, and the redaction itself is the same either way.">
-<link rel="icon" href="/favicon.ico" sizes="48x48">
-<link rel="icon" href="/icon.svg" type="image/svg+xml">
-<link rel="icon" href="/icon-192.png" type="image/png" sizes="192x192">
-<link rel="apple-touch-icon" href="/apple-touch-icon.png">
-<link rel="canonical" href="https://blinded.dev/premium/">
-<meta property="og:type" content="website">
-<meta property="og:site_name" content="Blinded">
-<meta property="og:title" content="Blinded License">
-<meta property="og:description" content="What Blinded charges for, what it never will, and why.">
-<meta property="og:url" content="https://blinded.dev/premium/">
-<meta property="og:image" content="https://blinded.dev/og.png">
-<meta property="og:image:width" content="1200">
-<meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="A slide before and after redaction: names and logos gone from the second copy.">
-<meta name="twitter:card" content="summary_large_image">
-<link rel="stylesheet" href="/app.css?v=b0a60e97">
+<meta http-equiv="refresh" content="0; url=/license/">
+<link rel="canonical" href="https://blinded.dev/license/">
+<meta name="robots" content="noindex">
+<title>Blinded License – moved</title>
+<link rel="stylesheet" href="/app.css">
 </head>
 <body class="plainpage">
-
-<header class="top">
-  <div class="wrap top-inner">
-    <a class="mark" href="/">
-      <svg class="markmark" viewBox="0 0 26 15" aria-hidden="true" focusable="false">
-        <g fill="currentColor">
-          <rect width="26" height="6.4" rx="2"/>
-          <rect y="8.6" width="14" height="6.4" rx="2"/>
-          <rect x="16.6" y="8.6" width="3.6" height="6.4" rx="1.5"/>
-          <rect x="22.2" y="8.6" width="2" height="6.4" rx="1"/>
-        </g>
-      </svg> Blinded</a>
-    <div class="top-actions">
-      <a class="top-link here" href="/premium/" aria-current="page">License</a>
-      <a class="top-link" href="/faq.html">Q&amp;A</a>
-    </div>
-  </div>
-</header>
-
 <main class="wrap">
-<article class="view faqmain lander">
-
-  <h1 class="faqtitle">Blinded License</h1>
-  <p class="lede">The Blinded license allows you to redact documents that are
-    more than 20 pages.</p>
-
-  <!-- Written from lib/pay.js at load, so the prices here and the prices at
-       the checkout cannot drift apart. -->
-  <p class="premnow" id="premnow" hidden></p>
-
-  <div class="premcards" id="premprices"></div>
-
-  <!-- The two questions somebody arrives with who is not buying. Pasting one
-       in works here because a licence is checked against a key in the page
-       and stored in this browser, which is the same browser the tool runs in.
-       Finding one does not: that means reaching the mint, and only the buying
-       page is allowed to. -->
-  <p class="premhave" id="premhave">
-    <button type="button" class="footlink" id="premcode">I already have a
-      license</button>
-    <span class="foot-dot" aria-hidden="true">&middot;</span>
-    <a class="footlink" href="/unlock.html?find">I lost my license</a>
-  </p>
-
-  <!-- Shown instead of the prices to somebody who already holds a license.
-       The string itself is behind a press, because this page is as likely to
-       be open on a shared screen as anywhere else, and a license on screen is
-       a license anybody in the room can copy. -->
-  <section class="premheld" id="premheld" hidden>
-    <p class="premhint">Your license is kept in this browser. Take a copy of
-      it to use Blinded on another machine.</p>
-    <p><button type="button" class="ghost premreveal" id="premshow">Show my
-      license</button></p>
-    <p class="buypass" id="premkey" hidden></p>
-  </section>
-
-
-  <div class="premfacts">
-    <div>
-      <h2><svg class="premico" viewBox="0 0 24 24" aria-hidden="true">
-        <circle cx="12" cy="8" r="3.4"/>
-        <path d="M5 20c0-3.9 3.1-7 7-7s7 3.1 7 7"/>
-        <path d="M3.5 3.5l17 17" class="premslash"/>
-      </svg>No account</h2>
-      <p>Nothing to sign up for, nothing to cancel. A license is a string. When it
-        runs out it stops working, and that is the end of it.</p>
-    </div>
-    <div>
-      <h2><svg class="premico" viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M2.5 9.5a13 13 0 0 1 19 0"/>
-        <path d="M6 13.5a8 8 0 0 1 12 0"/>
-        <path d="M9.5 17.5a3.5 3.5 0 0 1 5 0"/>
-        <path d="M3.5 3.5l17 17" class="premslash"/>
-      </svg>Works offline</h2>
-      <p>Verified on your own machine against a key that can check a license and
-        cannot make one. Using it tells us nothing — not that you used it, not
-        when, not what you were redacting.</p>
-    </div>
-    <div>
-      <h2><svg class="premico" viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/>
-        <path d="M14 3v5h5"/>
-        <path d="M9.5 14.5l5 0"/>
-      </svg>Your file is not involved</h2>
-      <p>Buying happens on a separate page, in a separate window. The page
-        holding your document still cannot reach a payment processor, or
-        anything else.</p>
-    </div>
-  </div>
-
-  <!-- The same seven the front page carries. What was here -- how it works,
-       the source, the address, the refund window and the line about length --
-       was a different set on every page; the seven are one set, everywhere. -->
-  <p class="foot">
-    <span class="foot-name">Blinded</span>
-    <span class="foot-dot" aria-hidden="true">&middot;</span>
-    <a class="footlink" href="/faq.html">FAQ</a>
-    <span class="foot-dot" aria-hidden="true">&middot;</span>
-    <a class="footlink" href="/premium/" aria-current="page">License</a>
-    <span class="foot-dot" aria-hidden="true">&middot;</span>
-    <a class="footlink" href="https://github.com/jaredsia-svg/blinded" rel="noopener">Source code on GitHub</a>
-    <span class="foot-dot" aria-hidden="true">&middot;</span>
-    <a class="footlink" href="mailto:support@blinded.dev">support@blinded.dev</a>
-    <span class="foot-dot" aria-hidden="true">&middot;</span>
-    <a class="footlink" href="/privacy/">Privacy</a>
-    <span class="foot-dot" aria-hidden="true">&middot;</span>
-    <a class="footlink" href="/terms/">Terms</a>
-    <span class="foot-dot" aria-hidden="true">&middot;</span>
-    <a class="footlink" href="/refunds/">Refunds</a>
-  </p>
-
-  <!-- No second "Open the tool" at the foot. The page is short enough that
-       the button near the prices is still on screen, and two of them a
-       screen apart is a page that does not know which one it meant. -->
-
-</article>
+  <p>This page is now at <a href="/license/">blinded.dev/license</a>.</p>
 </main>
-
-<!-- The same box the tool puts up for the same question, because it is the
-     same question and somebody may well meet both. An overlay rather than a
-     row that unfolds further down the page: a row can appear below the fold
-     and read as a button that did nothing. -->
-<div id="premcodebox" class="busy" hidden role="dialog" aria-modal="true"
-  aria-labelledby="premcodehead">
-  <div class="busy-inner nameinner confirminner">
-    <h2 class="namehead" id="premcodehead">Enter your license</h2>
-    <label class="namelabel" for="premcodein">License</label>
-    <input id="premcodein" type="text" class="nameinput" spellcheck="false"
-      autocomplete="off" placeholder="blinded1.&hellip;">
-    <p class="hint">It is checked here, in this tab, against a key built into
-      this page. Nothing is sent anywhere to verify it, and it keeps working
-      offline.</p>
-    <p class="hint" id="premcodenote" hidden></p>
-    <div class="namego">
-      <button type="button" id="premcodecancel" class="ghost">Cancel</button>
-      <button type="button" id="premcodego" class="primary">Use it</button>
-    </div>
-  </div>
-</div>
-
-<script src="/lib/pass.js?v=fa8e95c9"></script>
-<script src="/lib/pay.js?v=23919e06"></script>
-<script src="/premium.js?v=32dc574e"></script>
 </body>
 </html>

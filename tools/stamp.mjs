@@ -25,7 +25,7 @@ const root = resolve(join(dirname(fileURLToPath(import.meta.url)), '..'));
 // only reveals its finder because unlock.js was taught to look for ?find.
 // The marketing pages are left alone -- they link a stylesheet and no more,
 // and most of them are written by a generator that would fight over the line.
-const PAGES = ['index.html', 'unlock.html', 'premium/index.html'];
+const PAGES = ['index.html', 'unlock.html', 'license/index.html'];
 
 // Only local assets: a versioned URL for a file we do not control is a lie.
 const LINK = /(\s(?:href|src)=")([A-Za-z0-9_./-]+\.(?:css|js|mjs))(?:\?v=[0-9a-f]+)?(")/g;

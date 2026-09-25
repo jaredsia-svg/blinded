@@ -763,7 +763,7 @@
   // What a pass costs, fetched the same way and for the same reason.
   //
   // The prices are drawn here rather than copied out of the fetched markup,
-  // because /premium/ writes its own from lib/pay.js when its script runs --
+  // because /license/ writes its own from lib/pay.js when its script runs --
   // and a script in parsed markup never runs. Taking the cards as they came
   // would mean taking two empty boxes.
   let premLoaded = null;
@@ -827,13 +827,13 @@
     const host = el('prem-here');
     if (!host) return null;
     if (premLoaded) return premLoaded.then(() => dressPremium(host));
-    premLoaded = fetch('premium/', { credentials: 'omit' })
+    premLoaded = fetch('license/', { credentials: 'omit' })
       .then(answer => answer.ok ? answer.text()
-        : Promise.reject(new Error('premium/: ' + answer.status)))
+        : Promise.reject(new Error('license/: ' + answer.status)))
       .then(text => {
         const page = new DOMParser().parseFromString(text, 'text/html');
         const article = page.querySelector('article');
-        if (!article) throw new Error('premium/: nothing in it');
+        if (!article) throw new Error('license/: nothing in it');
         host.textContent = '';
         for (const one of [...article.children]) {
           host.append(document.importNode(one, true));
@@ -871,7 +871,7 @@
         // its own script -- and that script never runs here. Only the markup
         // comes across, so here they were a button with nothing behind it
         // and a link that would have navigated the tool away from the
-        // document. Measured: every test of these opened /premium/ directly,
+        // document. Measured: every test of these opened /license/ directly,
         // where they work, and nobody opens it that way from the tool.
         //
         // Delegated, and once: this view is rebuilt from the same host.
@@ -908,7 +908,7 @@
         const said = document.createElement('p');
         said.className = 'hint';
         const link = document.createElement('a');
-        link.href = 'premium/';
+        link.href = 'license/';
         link.textContent = 'Open the page';
         said.append(document.createTextNode('What it costs could not be '
           + 'loaded into this view. '), link, document.createTextNode('.'));
@@ -1096,7 +1096,7 @@
       // The last word is a link, so the body is built rather than set: a
       // reviewer who wants the whole story should not have to go looking for
       // the page that tells it.
-      bodyLink: { text: 'here', href: '/premium/' },
+      bodyLink: { text: 'here', href: '/license/' },
       bodyTail: '.',
       confirmLabel: 'Understood',
       // Gone on its own after five seconds. It is telling the reviewer the

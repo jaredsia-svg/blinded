@@ -2862,15 +2862,34 @@ check('no creation date is carried into the output', !meta.info.CreationDate);
 
   // ---------- the page that says what it costs ----------
   {
-    const prem = existsSync(join(root, 'premium', 'index.html'))
-      ? readFileSync(join(root, 'premium', 'index.html'), 'utf8') : '';
+    const prem = existsSync(join(root, 'license', 'index.html'))
+      ? readFileSync(join(root, 'license', 'index.html'), 'utf8') : '';
+
+    // The page lived at /premium/ until it was renamed, and that address is
+    // in bookmarks, in links people shared and in search results. What is
+    // left there sends all of them on: at once, with the new address as the
+    // canonical, out of the sitemap and out of the index.
+    {
+      const old = existsSync(join(root, 'premium', 'index.html'))
+        ? readFileSync(join(root, 'premium', 'index.html'), 'utf8') : '';
+      check('the old /premium/ address is still answered', old.length > 0);
+      check('by sending the reader straight on to /license/',
+        /<meta http-equiv="refresh" content="0; url=\/license\/">/.test(old), 'premium/index.html');
+      check('with /license/ as where the page lives now',
+        old.includes('<link rel="canonical" href="https://blinded.dev/license/">'));
+      check('and asking not to be indexed itself',
+        /<meta name="robots" content="noindex">/.test(old));
+      check('and not in the sitemap',
+        !readFileSync(join(root, 'sitemap.xml'), 'utf8').includes('/premium/'));
+      check('and running nothing', !/<script/i.test(old));
+    }
     check('there is a page saying what it costs', prem.length > 0,
-      'premium/index.html');
+      'license/index.html');
     check('canonical to its own address',
-      prem.includes('<link rel="canonical" href="https://blinded.dev/premium/">'));
+      prem.includes('<link rel="canonical" href="https://blinded.dev/license/">'));
     check('and in the sitemap',
       readFileSync(join(root, 'sitemap.xml'), 'utf8')
-        .includes('https://blinded.dev/premium/'));
+        .includes('https://blinded.dev/license/'));
 
     // The prices are written from lib/pay.js at load. A price list typed into
     // the markup as well is a page that quotes one number and charges
@@ -2878,9 +2897,9 @@ check('no creation date is carried into the output', !meta.info.CreationDate);
     const figures = Pay.prices.map(one => one.price.replace(/[^0-9.]/g, ''));
     check('the prices are not typed into the page',
       figures.every(figure => !prem.includes(figure)),
-      'premium/index.html has a price in it: ' + figures.join());
+      'license/index.html has a price in it: ' + figures.join());
     check('they are read from the one file that sets them',
-      /premium\.js/.test(prem) && /lib\/pay\.js/.test(prem), 'premium/index.html');
+      /premium\.js/.test(prem) && /lib\/pay\.js/.test(prem), 'license/index.html');
 
     // The claim this page exists to make. If the paid version ever redacts
     // better than the free one, this sentence becomes the lie that sinks the
@@ -2924,13 +2943,13 @@ check('no creation date is carried into the output', !meta.info.CreationDate);
       // carries is the button that does that; everything else links.
       check(where + ': offers the price page',
         where === 'index.html' ? /id="prem-open"/.test(page)
-          : /href="\/premium\/"/.test(page), where);
+          : /href="\/license\/"/.test(page), where);
       // And the tool offers it the way it offers the questions: as a view of
       // itself. A link would close the document to go and read about the
       // thing the reader was in the middle of doing.
       if (where === 'index.html') {
         // The rule is that reading about the tool must never close the
-        // document, not that the word /premium/ may not appear: a link that
+        // document, not that the word /license/ may not appear: a link that
         // opens a tab of its own leaves the document exactly where it was.
         // So links are allowed here when, and only when, they do that.
         //
@@ -2940,7 +2959,7 @@ check('no creation date is carried into the output', !meta.info.CreationDate);
         // them into views the moment it is here. The UI suite holds them to
         // that with a document open; this holds the list to those two.
         const TAKEN_OVER = ['prem-open', 'foot-prem'];
-        const links = [...page.matchAll(/<a\b[^>]*href="\/premium\/"[^>]*>/g)]
+        const links = [...page.matchAll(/<a\b[^>]*href="\/license\/"[^>]*>/g)]
           .map(one => one[0]);
         const closes = links.filter(one => !/target="_blank"/.test(one)
           && !TAKEN_OVER.some(id => one.includes('id="' + id + '"')));
@@ -2980,10 +2999,10 @@ check('no creation date is carried into the output', !meta.info.CreationDate);
         check(where + ': says how to reach somebody', page.includes(CONTACT), where);
       }
     }
-    check('and the price page does too', prem.includes(CONTACT), 'premium/index.html');
+    check('and the price page does too', prem.includes(CONTACT), 'license/index.html');
     // A support address that is a picture of an address helps nobody.
     check('as an address that can be written to',
-      new RegExp('href="mailto:' + CONTACT + '"').test(prem), 'premium/index.html');
+      new RegExp('href="mailto:' + CONTACT + '"').test(prem), 'license/index.html');
   }
 
   // The signing key is the business, and a copy of it lets anybody mint.
@@ -3145,7 +3164,7 @@ check('no creation date is carried into the output', !meta.info.CreationDate);
     'bank account', 'bank accounts', 'IP address', 'IP addresses',
     'national insurance', 'passport number', 'passport numbers'];
   const site = [['index.html', 'index.html'], ['faq.html', 'faq.html'],
-    ['premium/index.html', 'premium/index.html'],
+    ['license/index.html', 'license/index.html'],
     ...landers.map(one => [one.slug, one.slug + '/index.html'])];
   for (const [where, file] of site) {
     const path = join(root, file);
@@ -3238,7 +3257,7 @@ check('no creation date is carried into the output', !meta.info.CreationDate);
     check('and the file is there', existsSync(join(root, href.slice(1))), href);
   }
   const wearing = [['index.html', 'index.html'], ['faq.html', 'faq.html'],
-    ['unlock.html', 'unlock.html'], ['premium/index.html', 'premium/index.html'],
+    ['unlock.html', 'unlock.html'], ['license/index.html', 'license/index.html'],
     ...landers.map(one => [one.slug, one.slug + '/index.html'])];
   for (const [where, file] of wearing) {
     const head = readFileSync(join(root, file), 'utf8').split('</head>')[0];
@@ -3480,7 +3499,7 @@ check('no creation date is carried into the output', !meta.info.CreationDate);
 // A button that does nothing, and no way to tell from either file alone.
 //
 // The licence page asks for a pasted licence in a box. premium.js opens that
-// box by id; premium/index.html is where the box lives. Move the box, rename
+// box by id; license/index.html is where the box lives. Move the box, rename
 // it, or ship one file without the other, and the handler still runs, finds
 // nothing, and returns -- so the button draws, takes the press, and does
 // nothing at all. Nothing throws, so no error reaches the console, and both
@@ -3493,7 +3512,7 @@ check('no creation date is carried into the output', !meta.info.CreationDate);
 // could never disagree in the first place.
 {
   const pages = [
-    ['premium.js', 'premium/index.html'],
+    ['premium.js', 'license/index.html'],
     ['unlock.js', 'unlock.html'],
   ];
   for (const [script, page] of pages) {
@@ -3557,7 +3576,7 @@ check('no creation date is carried into the output', !meta.info.CreationDate);
 
   // Nothing else may quietly pick one up. A noindex on a landing page is
   // invisible until months of crawling have gone nowhere.
-  const pages = ['index.html', 'faq.html', 'premium/index.html',
+  const pages = ['index.html', 'faq.html', 'license/index.html',
     ...landers.map(one => one.slug + '/index.html'),
     'privacy/index.html', 'terms/index.html', 'refunds/index.html'];
   for (const file of pages) {
@@ -3581,7 +3600,7 @@ check('no creation date is carried into the output', !meta.info.CreationDate);
     Boolean(word), String(Pay.freePages) + ' has no spelling here');
 
   const site = [['index.html', 'index.html'], ['faq.html', 'faq.html'],
-    ['unlock.html', 'unlock.html'], ['premium/index.html', 'premium/index.html'],
+    ['unlock.html', 'unlock.html'], ['license/index.html', 'license/index.html'],
     ['terms/index.html', 'terms/index.html'],
     ...landers.map(one => [one.slug, one.slug + '/index.html'])];
 
@@ -3630,7 +3649,7 @@ check('no creation date is carried into the output', !meta.info.CreationDate);
 // and nowhere else did.
 {
   const shareable = [['index.html', 'index.html'], ['faq.html', 'faq.html'],
-    ['premium/index.html', 'premium/index.html'],
+    ['license/index.html', 'license/index.html'],
     ...landers.map(one => [one.slug, one.slug + '/index.html']),
     ['privacy/index.html', 'privacy/index.html'],
     ['terms/index.html', 'terms/index.html'],

@@ -2448,7 +2448,7 @@ body.choosing { -webkit-user-select: none; user-select: none; }
 
 /* ---------- the buying page ---------- */
 /* One job: take the payment. Narrow, centred, and with nothing on it that is
-   not that job -- the explaining moved to /premium/, where somebody who has
+   not that job -- the explaining moved to /license/, where somebody who has
    not decided yet can find it. */
 .buywrap { max-width: 480px; padding: 34px 20px 60px; }
 .buytitle {
@@ -2470,7 +2470,7 @@ body.choosing { -webkit-user-select: none; user-select: none; }
 .buygo span { font-weight: 500; opacity: .85; font-size: 13px; }
 .buyfine { color: var(--ink-soft); font-size: 13px; }
 /* The two lines this page has left, now that the explaining lives on
-   /premium/ where somebody who has not decided yet can find it. */
+   /license/ where somebody who has not decided yet can find it. */
 .buyaside { margin: 18px 0 0; padding-top: 14px; border-top: 1px solid var(--line); }
 /* Getting a licence back. Below the checkout, because somebody buying one has
    no use for it and somebody who lost one is looking for it. */
@@ -2558,7 +2558,7 @@ a.payprice { text-decoration: none; color: var(--ink); }
 .premheld { margin: 20px 0 12px; }
 .premhint { margin: 0 0 12px; font-size: 13px; color: var(--ink-soft); max-width: 60ch; }
 .premreveal { padding: 8px 16px; font-size: 13.5px; border-radius: 10px; }
-/* By class, not by id. This element lives in premium/index.html and only
+/* By class, not by id. This element lives in license/index.html and only
    reaches the tool as imported markup, so an id selector here is a rule
    pointing at something index.html has never heard of. */
 .premheld .buypass { margin-top: 12px; }

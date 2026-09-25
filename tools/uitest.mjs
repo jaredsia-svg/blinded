@@ -9378,7 +9378,7 @@ try {
     // And pointed there by a link, in a tab of its own: the document is in
     // this one and nowhere else, so reading the price must not cost it.
     check('with a link to it that opens a tab of its own',
-      notice.link && notice.link.href === '/premium/'
+      notice.link && notice.link.href === '/license/'
         && notice.link.blank === '_blank' && /noopener/.test(notice.link.rel),
       JSON.stringify(notice.link));
     check('and that the money comes after the work, not before it',
@@ -10808,7 +10808,7 @@ try {
     // an address. And it opens in its own tab -- the document lives in this
     // one and nowhere else, and navigating away to read about pricing would
     // throw it out.
-    // What a pass costs opens as a view, fetched from /premium/ -- the same
+    // What a pass costs opens as a view, fetched from /license/ -- the same
     // arrangement as the questions, and for the same reason: the words live
     // once, at an address a crawler can index and somebody can send, and
     // opening them never navigates away from a document that exists nowhere
@@ -10892,7 +10892,7 @@ try {
     await page.waitForSelector('#view-review:not([hidden])', { timeout: 15000 });
     await page.click('#prem-open');
     await page.waitForSelector('#view-premium:not([hidden])', { timeout: 15000 });
-    // Drawn here rather than taken from the fetched markup: /premium/ writes
+    // Drawn here rather than taken from the fetched markup: /license/ writes
     // its own prices when its script runs, and a script in parsed markup
     // never runs, so the cards would have arrived empty.
     check('with the prices actually in it',
@@ -11485,7 +11485,7 @@ try {
 
     // Door two: the licence page, for somebody who came looking later.
     const lic = await context.newPage();
-    await lic.goto(base + 'premium/');
+    await lic.goto(base + 'license/');
     await lic.evaluate(() => localStorage.removeItem('blinded.pass'));
     await lic.reload();
     await lic.waitForTimeout(400);
@@ -11656,7 +11656,7 @@ try {
 
     // And the header's pages, tapped in the gap: there is no document to
     // lose yet, so going to the page is the right answer.
-    for (const [id, where] of [['#prem-open', '/premium/'], ['#faq-open', '/faq.html']]) {
+    for (const [id, where] of [['#prem-open', '/license/'], ['#faq-open', '/faq.html']]) {
       const gap = await context.newPage();
       const let_go = await holdApp(gap);
       await gap.goto(base, { waitUntil: 'commit' });
@@ -11670,6 +11670,21 @@ try {
       let_go();
       await gap.close();
     }
+  });
+
+  // ---------- the licence page's old address ----------
+  //
+  // It was /premium/ until it was renamed /license/. Bookmarks, shared links
+  // and search results still say the old one, so it has to arrive.
+  await part("the old /premium/ address arrives at /license/", async () => {
+    const moved = await context.newPage();
+    await moved.goto(base + 'premium/');
+    await moved.waitForURL('**/license/', { timeout: 10000 }).catch(() => {});
+    check('opening /premium/ lands on /license/',
+      new URL(moved.url()).pathname === '/license/', moved.url());
+    check('and the licence page is really there, not a copy of the notice',
+      await moved.evaluate(() => Boolean(document.getElementById('premprices'))));
+    await moved.close();
   });
 
   // ---------- a discount code, in plain sight ----------
@@ -11891,13 +11906,13 @@ try {
 
   // ---------- the licence view inside the tool ----------
   //
-  // The header's License does not go to /premium/. It fetches that page and
+  // The header's License does not go to /license/. It fetches that page and
   // copies its article into the tool, so the document stays open -- and only
   // the markup comes across, never premium.js. So "I already have a license"
   // was a button with nothing behind it, "I lost my license" a link that would
   // have navigated the tool away from the document, and a reviewer holding a
   // licence was still asked whether they had one. Reported three times. Every
-  // test of these opened /premium/ directly, where its own script wires them,
+  // test of these opened /license/ directly, where its own script wires them,
   // and nobody arrives there that way from the tool. This opens it the way a
   // reviewer does.
   await part("the licence view inside the tool answers its own questions", async () => {
