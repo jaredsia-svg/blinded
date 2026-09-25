@@ -41,7 +41,7 @@
 <link rel="preconnect" href="https://cdn.paddle.com" crossorigin>
 <link rel="preconnect" href="https://checkout-service.paddle.com" crossorigin>
 <link rel="dns-prefetch" href="https://cdn.paddle.com">
-<link rel="stylesheet" href="/app.css?v=c8292621">
+<link rel="stylesheet" href="/app.css?v=9480dde4">
 </head>
 <body class="plainpage buypage">
 
@@ -68,6 +68,23 @@
 <main class="wrap buywrap">
 
   <h1 class="buytitle">Blinded license</h1>
+
+  <!-- The discount code, on this page and in plain sight. Paddle offers one
+       too, as a small link inside its own frame, where nobody holding a code
+       found it; that link is switched off so there is one place for a code,
+       not two. What is typed here is handed to Paddle when the checkout
+       opens, and Paddle alone decides whether it is good -- nothing on this
+       site can make a licence cheaper. Not a <form>: the policy forbids
+       submitting one anywhere, which is the right rule for this page. -->
+  <div class="buycode" id="buycode" hidden>
+    <label class="namelabel" for="buycodein">Discount code</label>
+    <p class="findrow">
+      <input id="buycodein" type="text" class="nameinput" spellcheck="false"
+        autocomplete="off" autocapitalize="characters" placeholder="Have a code? Enter it here">
+      <button type="button" id="buycodego" class="ghost">Apply</button>
+    </p>
+    <p class="hint" id="buycodenote" hidden></p>
+  </div>
 
   <!-- Where Paddle draws the checkout, when a price was chosen in the tool.
        Inline rather than an overlay: this page exists only to take the
@@ -120,6 +137,6 @@
 
 <script src="/lib/pass.js?v=fa8e95c9"></script>
 <script src="/lib/pay.js?v=23919e06"></script>
-<script src="/unlock.js?v=faeaf22e"></script>
+<script src="/unlock.js?v=4474986c"></script>
 </body>
 </html>

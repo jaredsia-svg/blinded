@@ -11578,6 +11578,111 @@ try {
     await lic.close();
   });
 
+  // ---------- a discount code, in plain sight ----------
+  //
+  // Paddle's own code field is a small link inside its frame, and somebody
+  // holding a code did not find it. So the box is on this page, above the
+  // checkout, and what is typed into it is handed to Paddle as the checkout
+  // opens -- Paddle alone decides whether the code is good, and a free
+  // licence still goes through Paddle and the mint, the one route licences
+  // are made by.
+  //
+  // Paddle cannot be reached from here, so a stand-in is served at its real
+  // address. It records exactly what this page hands Paddle and plays back
+  // the events Paddle sends, which is the whole of what this page controls.
+  await part("a discount code is typed on the page and handed to Paddle", async () => {
+    const shop = await context.newPage();
+    await shop.route('https://cdn.paddle.com/paddle/v2/paddle.js', route => route.fulfill({
+      contentType: 'application/javascript',
+      body: `window.__opened = []; window.__closed = 0;
+        window.Paddle = {
+          Environment: { set() {} },
+          Initialize(o) { window.__cb = o.eventCallback; },
+          Checkout: {
+            open(o) {
+              window.__opened.push(JSON.parse(JSON.stringify(o)));
+              setTimeout(() => window.__cb && window.__cb({ name: 'checkout.loaded' }), 10);
+            },
+            close() { window.__closed++; },
+          },
+        };`,
+    }));
+    const opened = () => shop.evaluate(() => window.__opened || []);
+    const note = () => shop.evaluate(() => {
+      const n = document.getElementById('buycodenote');
+      return n && !n.hidden ? n.textContent : '';
+    });
+
+    // A length already chosen in the tool: the checkout opens by itself.
+    await shop.goto(base + 'unlock.html?price=days');
+    await shop.waitForFunction(() => (window.__opened || []).length === 1, undefined, { timeout: 10000 });
+    const first = (await opened())[0];
+    const layout = await shop.evaluate(() => {
+      const box = document.getElementById('buycode');
+      const frame = document.getElementById('buyframe');
+      return {
+        shown: Boolean(box) && getComputedStyle(box).display !== 'none',
+        above: Boolean(box && frame)
+          && box.getBoundingClientRect().top < frame.getBoundingClientRect().top,
+      };
+    });
+    check('the code box is on the page, in plain sight', layout.shown === true);
+    check('above the form it would otherwise be hidden inside', layout.above === true);
+    check('and Paddle\'s own small link is switched off, so there is one place for it',
+      first.settings && first.settings.showAddDiscounts === false, JSON.stringify(first.settings));
+    check('with no code until one is typed', !('discountCode' in first));
+
+    await shop.fill('#buycodein', 'FRIENDS100');
+    await shop.click('#buycodego');
+    await shop.waitForFunction(() => window.__opened.length === 2, undefined, { timeout: 5000 });
+    const second = (await opened())[1];
+    check('applying it reopens the checkout with the code handed to Paddle',
+      second.discountCode === 'FRIENDS100'
+        && (await shop.evaluate(() => window.__closed)) === 1, JSON.stringify(second));
+    check('for the same length, in the same place',
+      JSON.stringify(second.items) === JSON.stringify(first.items)
+        && second.settings.displayMode === 'inline', JSON.stringify(second));
+
+    // Paddle says the code took the price to nothing.
+    await shop.evaluate(() => window.__cb({ name: 'checkout.discount.applied',
+      data: { totals: { total: '0' } } }));
+    check('a code that makes it free says so, and what to do next',
+      /free/i.test(await note()) && /details/i.test(await note()), await note());
+
+    // And a code Paddle will not take must not leave a checkout that will not
+    // open: it is dropped, said, and the checkout opens without it.
+    await shop.evaluate(() => window.__cb({ name: 'checkout.error',
+      error: { detail: 'discount code is not valid' } }));
+    await shop.waitForFunction(() => window.__opened.length === 3, undefined, { timeout: 5000 });
+    const third = (await opened())[2];
+    check('a refused code is dropped and the checkout opens without it',
+      !('discountCode' in third), JSON.stringify(third));
+    check('saying why', /could not be used/i.test(await note())
+      && /not valid/.test(await note()), await note());
+
+    // No length chosen yet: the code waits for one.
+    await shop.goto(base + 'unlock.html');
+    await shop.waitForSelector('#buylist .payprice', { timeout: 10000 });
+    await shop.fill('#buycodein', 'PRESS');
+    await shop.click('#buycodego');
+    check('typed before a length is chosen, it waits for one',
+      /when you choose/i.test(await note()), await note());
+    await shop.click('#buylist .payprice');
+    await shop.waitForFunction(() => window.__opened.length === 1, undefined, { timeout: 5000 });
+    check('and goes with whichever is chosen',
+      (await opened())[0].discountCode === 'PRESS', JSON.stringify(await opened()));
+
+    // Somebody finding a licence they have is not buying anything.
+    await shop.goto(base + 'unlock.html?find');
+    await shop.waitForTimeout(400);
+    check('and there is no code box on the page for finding a licence',
+      await shop.evaluate(() => {
+        const box = document.getElementById('buycode');
+        return !box || getComputedStyle(box).display === 'none';
+      }));
+    await shop.close();
+  });
+
   // ---------- the licence view inside the tool ----------
   //
   // The header's License does not go to /premium/. It fetches that page and

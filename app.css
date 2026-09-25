@@ -2473,6 +2473,11 @@ body.choosing { -webkit-user-select: none; user-select: none; }
 .buyaside { margin: 18px 0 0; padding-top: 14px; border-top: 1px solid var(--line); }
 /* Getting a licence back. Below the checkout, because somebody buying one has
    no use for it and somebody who lost one is looking for it. */
+/* The discount code: above the checkout, where it is seen before anything
+   is typed into the form below it. */
+.buycode { margin: 0 0 16px; }
+.buycode .findrow { margin-top: 6px; }
+.buycode .hint { margin: 6px 0 0; }
 .buyfind { margin: 22px 0 0; padding-top: 16px; border-top: 1px solid var(--line); }
 /* On ?find it is the page rather than a footnote to it: nothing came before,
    so there is no rule to draw under. */

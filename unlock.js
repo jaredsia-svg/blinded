@@ -149,6 +149,43 @@
   // over an otherwise empty page is a curtain in front of a curtain. Somebody
   // who came here without choosing gets the prices and an overlay, since
   // there is a page behind it worth keeping.
+  // The discount code typed on this page, handed to Paddle every time the
+  // checkout opens. Paddle validates it; this page only carries it.
+  let discount = '';
+  // What is open now, so a code applied afterwards can reopen the same thing.
+  let current = null;
+
+  function codeSay(text, bad) {
+    const note = el('buycodenote');
+    if (!note) return;
+    note.textContent = text || '';
+    note.hidden = !text;
+    note.classList.toggle('warnhint', Boolean(bad));
+  }
+
+  function applyCode() {
+    const box = el('buycodein');
+    const typed = String((box && box.value) || '').trim();
+    discount = typed;
+    if (!current) {
+      // Nothing open yet: the code rides along with whichever length is
+      // chosen next.
+      codeSay(typed ? 'It will be applied when you choose a length.' : '');
+      return;
+    }
+    codeSay(typed ? 'Applying\u2026' : '');
+    reopen();
+  }
+
+  // Close and open again with the code, rather than editing the open one:
+  // opening is the one call every version of Paddle.js takes a code in, and
+  // an inline checkout redraws in the same place.
+  function reopen() {
+    if (!current || !window.Paddle) return;
+    try { window.Paddle.Checkout.close(); } catch { /* already closed */ }
+    buy(current.price, current.inline);
+  }
+
   function buy(price, inline) {
     wake();
     const id = Pay.paddle.priceIds[price.id];
@@ -156,34 +193,40 @@
       say('Buying is not switched on for this copy of Blinded yet.', true);
       return;
     }
+    current = { price, inline };
     if (inline) {
       el('buylist').hidden = true;
       el('buyframe').hidden = false;
     }
+    const extra = discount ? { discountCode: discount } : {};
     window.Paddle.Checkout.open({
+      ...extra,
       items: [{ priceId: id, quantity: 1 }],
       settings: inline ? {
         displayMode: 'inline',
         frameTarget: 'checkout-container',
         frameInitialHeight: 460,
         frameStyle: 'width:100%; min-width:312px; background-color:transparent; border:none;',
-        showAddDiscounts: true,
+        showAddDiscounts: false,
       } : {
         displayMode: 'overlay',
-        // The discount field is on, which is the only way a code can be used:
-        // Paddle draws it inside its own overlay or not at all.
+        // Paddle's own discount link is off. Codes are typed into the box at
+        // the top of this page, in plain sight, and passed in above as
+        // discountCode -- a small link inside the frame was where nobody with
+        // a code found it, and two places for one code is one too many.
         //
-        // It is also how somebody is given a pass without paying -- a
+        // It is still how somebody is given a pass without paying -- a
         // reviewer, a journalist, a customer owed one. A hundred percent off
         // still makes a transaction, Paddle still says it completed, and the
         // mint still signs a pass against it, so the free route and the paid
         // route are the same route and there is no second code path minting
-        // passes for nothing.
+        // passes for nothing. That is also why a code cannot skip Paddle and
+        // hand over a licence here: that would be exactly that second path.
         //
         // Which is also the warning: a code that takes the price to zero is a
         // password for free passes, and it travels. Put a usage limit and an
         // expiry on every one of them in Paddle.
-        showAddDiscounts: true,
+        showAddDiscounts: false,
       },
     });
   }
@@ -394,6 +437,20 @@
       return;
     }
 
+    // The code box, now that there is a checkout for it to go into.
+    const codeBox = el('buycode');
+    if (codeBox) {
+      codeBox.hidden = false;
+      const go = el('buycodego');
+      if (go) go.addEventListener('click', applyCode);
+      const typed = el('buycodein');
+      if (typed) {
+        typed.addEventListener('keydown', event => {
+          if (event.key === 'Enter') { event.preventDefault(); applyCode(); }
+        });
+      }
+    }
+
     // The first knock: the buyer is reading prices, which is the cheapest
     // lead time there is.
     wake();
@@ -434,6 +491,25 @@
           // The form is up, so the line that was standing in for it goes.
           if (event.name === 'checkout.loaded') {
             say('');
+            if (discount && el('buycodenote')
+                && el('buycodenote').textContent === 'Applying\u2026') {
+              codeSay('');
+            }
+            return;
+          }
+          // Paddle took the code. Said in terms of what it did to the price,
+          // because that is the only thing anybody typing one wants to know.
+          if (event.name === 'checkout.discount.applied') {
+            const totals = event.data && event.data.totals;
+            const free = totals && Number(totals.total) === 0;
+            codeSay(free
+              ? 'Code applied \u2013 your license is free. Enter your details '
+                + 'below to get it.'
+              : 'Code applied. The new price is shown below.');
+            return;
+          }
+          if (event.name === 'checkout.discount.removed') {
+            codeSay('');
             return;
           }
           // Paddle's overlay says "Something went wrong" and nothing else,
@@ -445,6 +521,16 @@
             console.error('Paddle refused the checkout:', event);
             const why = event.error
               && (event.error.detail || event.error.message || event.error.code);
+            // With a code in play, the code is the likeliest reason, and a
+            // refused code must not leave somebody facing a checkout that
+            // will not open at all. Drop it, say so, and open without it.
+            if (discount) {
+              discount = '';
+              codeSay('That code could not be used' + (why ? ' (' + why + ')' : '')
+                + '. Check it, or carry on without it.', true);
+              reopen();
+              return;
+            }
             say('The payment window would not open'
               + (why ? ': ' + why : '. Its reason is in the browser console.'),
               true);
