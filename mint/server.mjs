@@ -148,7 +148,9 @@ export function readable(row, now) {
 //
 // Per address, and in memory: a restart forgives everybody, which is the
 // right way for this to fail.
+let saidWhoCounts = false;
 const IDS = 8;
+const LOG_CAP = 20000;
 const TRY_WINDOW = 10 * 60 * 1000;
 const tries = new Map();
 
@@ -166,8 +168,55 @@ export function tooMany(who, txn, now = Date.now(), log = tries) {
       for (const at of ids.values()) if (at > newest) newest = at;
       if (now - newest > TRY_WINDOW) log.delete(key);
     }
+    // And a flood of real addresses inside one window is not allowed to grow
+    // it without end either. Forgetting everybody is the same failure a
+    // restart already is, and the right one: it can only let somebody try
+    // again, never lock somebody out.
+    if (log.size > LOG_CAP) log.clear();
   }
   return seen.size > IDS;
+}
+
+// Who is asking, for counting purposes -- from the one header nobody can write.
+//
+// This used to read the leftmost X-Forwarded-For entry. Render appends to that
+// header rather than resetting it, so the leftmost entry is whatever the
+// client put there: sending a different one with every guess made each guess
+// a new address, and the limit below counted nothing at all. Measured against
+// this file, twenty guesses were twelve refused sent plainly and none refused
+// with the header rotated.
+//
+// "Take the rightmost entry instead" is the usual fix and it is wrong here:
+// there is more than one proxy in front of this service, so the rightmost
+// entry is a proxy's own address, every buyer would share one bucket, and
+// nine people buying inside ten minutes would lock the ninth out of the
+// licence they had just paid for. Cloudflare sits in front of Render and
+// overwrites CF-Connecting-IP with the address that actually connected to
+// it, which a client cannot forge through it.
+//
+// With no such header -- run anywhere but behind Cloudflare -- there is no
+// address worth trusting, and the answer is null: the limit is skipped rather
+// than applied to the socket, because on a proxied host the socket is the
+// proxy and counting it would punish everybody at once. That is the safe way
+// round for this endpoint. What actually stops somebody hunting for licences
+// is that a transaction id has 80 random bits in it; the limit is manners on
+// top.
+export function clientOf(headers) {
+  // Only this one. True-Client-IP looks like the same thing, but Cloudflare
+  // writes it only on some plans and otherwise lets a client's own through --
+  // which would be the leftmost X-Forwarded-For again, under a new name.
+  const raw = String((headers && headers['cf-connecting-ip']) || '').trim();
+  // An address, not a paragraph: IPv4 or IPv6 characters, and short.
+  return /^[0-9A-Fa-f:.]{3,45}$/.test(raw) ? raw : null;
+}
+
+// What a Paddle transaction id looks like, near enough to refuse everything
+// that is not one before it costs anything. Paddle's are txn_ and twenty-six
+// characters; the range is wider so a change of length on their side is not
+// an outage on this one. The point is the bound: an unchecked id was an
+// unbounded string kept in memory for ten minutes per address.
+export function wellFormed(txn) {
+  return /^txn_[A-Za-z0-9]{20,40}$/.test(String(txn || ''));
 }
 
 function send(res, code, body, extra) {
@@ -224,10 +273,22 @@ const server = createServer((req, res) => {
   // afterwards. Long enough for the page that is waiting, short enough that a
   // transaction id found later is worth nothing.
   if (req.method === 'GET' && url.pathname === '/pass') {
-    const who = String(req.headers['x-forwarded-for'] || '')
-      .split(',')[0].trim() || req.socket.remoteAddress || 'unknown';
+    // Said once, in the service log, so whether the limit is actually on can
+    // be read off the dashboard rather than assumed. The mode, never the
+    // address: the log is not somewhere a visitor's address needs to be.
+    if (!saidWhoCounts) {
+      saidWhoCounts = true;
+      console.log(clientOf(req.headers)
+        ? 'rate limit on: counting by CF-Connecting-IP'
+        : 'rate limit off: no CF-Connecting-IP on requests, so nobody is counted');
+    }
     const txn = String(url.searchParams.get('txn') || '').trim();
-    if (tooMany(who, txn)) {
+    // Refused before it is counted or kept. This is also what answers the
+    // buying page's wake-up knock, which asks for "wake" on purpose: any
+    // reply wakes a sleeping service as well as a real one.
+    if (!wellFormed(txn)) return send(res, 400, { error: 'not a transaction id' });
+    const who = clientOf(req.headers);
+    if (who && tooMany(who, txn)) {
       return send(res, 429, { error: 'too many tries; wait a few minutes' });
     }
     const row = txn && passes.get(txn);

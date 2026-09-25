@@ -19,13 +19,18 @@
   nothing may be posted anywhere, no form may submit, no plugin may load, and
   no <base> may redirect a relative URL somewhere else.
 
-  'unsafe-eval' is required by the WebAssembly the reader runs; 'wasm-unsafe-eval'
-  alone is not honoured by every browser that matters yet. It permits code
-  execution, not exfiltration – connect-src is what holds the promise.
+  'wasm-unsafe-eval' is required by the WebAssembly the reader runs, and it
+  is all it needs. This was 'unsafe-eval' -- which lets any string be run as
+  script -- because the narrow keyword was not yet honoured everywhere. It is
+  now: Chrome and Edge 97, Firefox 102, Safari and iOS 16, all from 2022. A
+  browser older than that refuses the reader, and the search then falls back
+  to hunting for each word's shape and says so, rather than hanging. Either
+  way it permits code execution, not exfiltration – connect-src is what holds
+  the promise.
 -->
 <meta http-equiv="Content-Security-Policy" content="
   default-src 'self';
-  script-src 'self' 'unsafe-eval';
+  script-src 'self' 'wasm-unsafe-eval';
   style-src 'self' 'unsafe-inline';
   img-src 'self' data: blob:;
   connect-src 'self' blob:;
@@ -1075,14 +1080,14 @@
 <script src="lib/pageprep.js?v=cef0ebf0"></script>
 <script src="lib/pagerole.js?v=c30f4694"></script>
 <script src="lib/imagesearch.js?v=1711f558"></script>
-<script src="lib/ocr.js?v=6de687ad"></script>
+<script src="lib/ocr.js?v=6012ce09"></script>
 <script src="lib/textimage.js?v=27484914"></script>
 <script src="lib/pdfwrite.js?v=4b977425"></script>
 <script src="lib/pdfread.js?v=ca229552"></script>
 <script src="lib/pass.js?v=9a72ccda"></script>
 <script src="lib/pay.js?v=e8535f6a"></script>
 <script src="lib/render.js?v=65c3fe76"></script>
-<script src="app.js?v=9d8afb99"></script>
+<script src="app.js?v=12c41f7b"></script>
 <script type="module" src="lib/boot.mjs?v=8b98ed8f"></script>
 </body>
 </html>

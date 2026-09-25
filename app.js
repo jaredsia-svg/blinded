@@ -7846,7 +7846,15 @@
           legs([{ key: 'ocr', label: 'Reading the redacted pages',
                   total: canvases.length }]);
           await nextPaint();
-          readBack = await Ocr.readPages(canvases, done => leg('ocr', done));
+          try {
+            readBack = await Ocr.readPages(canvases, done => leg('ocr', done));
+          } catch (error) {
+            // Said as what to do, not only what went wrong: the file itself
+            // is fine, and the one option that needs the reader is the one
+            // standing in the way of it.
+            throw new Error('this browser will not run the reader that makes '
+              + 'the text searchable. Untick "Searchable text" and save again.');
+          }
           legs([]);
         }
 

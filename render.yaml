@@ -34,7 +34,7 @@ services:
         name: Content-Security-Policy
         value: >-
           default-src 'self';
-          script-src 'self' 'unsafe-eval';
+          script-src 'self' 'wasm-unsafe-eval';
           style-src 'self' 'unsafe-inline';
           img-src 'self' data: blob:;
           connect-src 'self' blob:;
@@ -67,11 +67,6 @@ services:
           object-src 'none';
           base-uri 'none';
           form-action 'none'
-      # Paddle's overlay opens windows and reads back from them, which a
-      # same-origin opener policy forbids.
-      - path: /unlock.html
-        name: Cross-Origin-Opener-Policy
-        value: same-origin-allow-popups
       # Once a browser has seen this it will not be talked into http for a
       # year, which closes the one window where a document could be read off
       # the wire: the first plain request a typed address makes, before the
@@ -113,9 +108,23 @@ services:
       - path: /*
         name: Permissions-Policy
         value: accelerometer=(), camera=(), geolocation=(), gyroscope=(), microphone=(), payment=(), usb=(), interest-cohort=()
+      # One value for every page, and that value has to allow popups.
+      #
+      # The buying page needs it: Paddle opens windows for PayPal and for card
+      # checks and reads back from them, which same-origin forbids. The tool
+      # then needs the same value, because two same-origin pages with
+      # different opener policies are put in separate browsing context groups
+      # -- the buying window it opened could no longer see it, and "Back to
+      # the tool" loaded a second copy of the tool instead of closing. That
+      # shipped, and was only found by serving these headers to a browser.
+      #
+      # It costs the tool nothing it uses. Against a page elsewhere opening
+      # this one and keeping a handle on it, the two values are identical;
+      # they differ only for cross-origin popups this site opens itself, and
+      # every link out is rel=noopener.
       - path: /*
         name: Cross-Origin-Opener-Policy
-        value: same-origin
+        value: same-origin-allow-popups
       - path: /*
         name: Cross-Origin-Resource-Policy
         value: same-origin

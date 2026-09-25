@@ -67,6 +67,61 @@ const TYPES = {
   '.svg': 'image/svg+xml', '.xml': 'application/xml',
 };
 
+// The response headers render.yaml tells Render to send, sent here too.
+//
+// The suite used to serve every file with a content type and nothing else, so
+// nothing it ran had ever been under the policies the real site is under. Two
+// bugs lived in that gap. The opener policies on the tool and the buying page
+// disagreed, which cut the buying window off from the tool, so "Back to the
+// tool" loaded a second copy of the tool -- and the test for exactly that
+// passed, because here there was no policy to disagree. And the page reader's
+// worker, which takes its policy from its own response rather than from the
+// page's meta tag, had never been run under one at all.
+//
+// Read from the file rather than copied into this one, so the suite cannot
+// test a policy the site no longer sends.
+function productionHeaders() {
+  const text = readFileSync(join(root, 'render.yaml'), 'utf8');
+  const rules = [];
+  const lines = text.split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    const path = /^\s*- path:\s*(\S+)\s*$/.exec(lines[i]);
+    if (!path) continue;
+    const name = /^\s*name:\s*(.+?)\s*$/.exec(lines[i + 1] || '');
+    const value = /^\s*value:\s*(.*?)\s*$/.exec(lines[i + 2] || '');
+    if (!name || !value) continue;
+    let text = value[1];
+    if (text === '>-' || text === '>') {
+      // A folded block: every more-indented line after it, joined by spaces.
+      const indent = /^(\s*)/.exec(lines[i + 2])[1].length;
+      const parts = [];
+      for (let j = i + 3; j < lines.length; j++) {
+        const line = lines[j];
+        if (!line.trim()) break;
+        if (/^(\s*)/.exec(line)[1].length <= indent) break;
+        parts.push(line.trim());
+      }
+      text = parts.join(' ');
+    }
+    rules.push({ path: path[1], name: name[1], value: text });
+  }
+  return rules;
+}
+const HEADER_RULES = productionHeaders();
+
+// Which of them a request gets. For each header a rule naming the path wins
+// over the /* one, the way Render applies them and the way render.yaml says.
+function headersFor(requested) {
+  const out = {};
+  for (const exact of [false, true]) {
+    for (const rule of HEADER_RULES) {
+      const matches = rule.path === '/*' ? !exact : exact && rule.path === requested;
+      if (matches) out[rule.name] = rule.value;
+    }
+  }
+  return out;
+}
+
 function serve() {
   const server = createServer((req, res) => {
     const requested = decodeURIComponent(new URL(req.url, 'http://x').pathname);
@@ -79,7 +134,8 @@ function serve() {
       if (statSync(path).isDirectory()) path = join(path, 'index.html');
       statSync(path);
     } catch { return res.writeHead(404).end(); }
-    res.writeHead(200, { 'Content-Type': TYPES[extname(path)] || 'application/octet-stream' });
+    res.writeHead(200, Object.assign(headersFor(requested),
+      { 'Content-Type': TYPES[extname(path)] || 'application/octet-stream' }));
     createReadStream(path).pipe(res);
   });
   return new Promise(done => server.listen(0, () => done({ server, port: server.address().port })));
@@ -87,6 +143,26 @@ function serve() {
 
 const { server, port } = await serve();
 const base = 'http://127.0.0.1:' + port + '/';
+
+// And it really is sending them. If render.yaml is ever rearranged so the
+// reader above finds nothing, every section below would quietly go back to
+// running with no policies at all -- the gap both of those bugs lived in.
+{
+  const tool = headersFor('/');
+  const shop = headersFor('/unlock.html');
+  check('the suite serves the headers render.yaml sends',
+    HEADER_RULES.length >= 8, String(HEADER_RULES.length));
+  check('including the tool\'s content security policy',
+    /connect-src 'self' blob:/.test(tool['Content-Security-Policy'] || ''),
+    tool['Content-Security-Policy']);
+  check('and the buying page\'s own, which is the one allowed to reach Paddle',
+    /cdn\.paddle\.com/.test(shop['Content-Security-Policy'] || '')
+      && !/cdn\.paddle\.com/.test(tool['Content-Security-Policy'] || ''),
+    shop['Content-Security-Policy']);
+  check('and an opener policy on both',
+    Boolean(tool['Cross-Origin-Opener-Policy'] && shop['Cross-Origin-Opener-Policy']),
+    JSON.stringify([tool['Cross-Origin-Opener-Policy'], shop['Cross-Origin-Opener-Policy']]));
+}
 
 const fixturePath = join(tmpdir(), 'blinded-fixture.pdf');
 writeFileSync(fixturePath, buildTextPdf());
@@ -6000,7 +6076,38 @@ try {
     // frame handle rather than by reaching into contentWindow: the refusal is
     // about a frame owned by somebody else, and a test that could only look
     // inside a same-origin one would not be testing the case that matters.
+    //
+    // Two refusals, and both are tested. With the headers this site sends, the
+    // browser will not load the page into the frame at all. Without them --
+    // the copy "served from anywhere that forgets the header" -- the app has
+    // to refuse by itself. This suite sent no headers for years, so only the
+    // second was ever seen; now it sends them, and the first is the one that
+    // happens unless they are taken away on purpose.
+    const refusedFirst = await context.newPage();
+    await refusedFirst.setContent('<iframe id="frametest" style="width:600px;height:400px" src="'
+      + base + 'index.html"></iframe>');
+    await refusedFirst.waitForTimeout(1500);
+    const loaded = await Promise.all(refusedFirst.frames()
+      .filter(f => f !== refusedFirst.mainFrame())
+      .map(f => f.evaluate(() => Boolean(document.querySelector('#view-drop, .framed')))
+        .catch(() => false)));
+    await refusedFirst.close();
+    check('with the headers it is sent, the browser will not frame the tool at all',
+      loaded.length > 0 && loaded.every(one => one === false), JSON.stringify(loaded));
+
     const outer = await context.newPage();
+    // The same page with its frame headers taken off, which is the copy the
+    // app's own refusal is for.
+    await outer.route(base + 'index.html', async route => {
+      const answer = await route.fetch();
+      const headers = Object.assign({}, answer.headers());
+      delete headers['x-frame-options'];
+      if (headers['content-security-policy']) {
+        headers['content-security-policy'] = headers['content-security-policy']
+          .replace(/frame-ancestors[^;]*;?/, '');
+      }
+      await route.fulfill({ response: answer, headers });
+    });
     await outer.setContent('<iframe id="frametest" style="width:600px;height:400px" src="'
       + base + 'index.html"></iframe>');
     const inside = outer.frameLocator('#frametest');
@@ -11471,6 +11578,75 @@ try {
     await lic.close();
   });
 
+  // ---------- a browser that will not run the reader ----------
+  //
+  // The reader is WebAssembly, and the policy grants 'wasm-unsafe-eval' for
+  // it. A browser older than that keyword (iOS 15 and before) refuses to
+  // compile it -- and the engine does not fail when refused: its core aborts
+  // inside the worker and the promise building it never settles. The search
+  // sat on "Searching text" for ever, with Search and Export greyed out and
+  // nothing saying why. Found by serving the site with WebAssembly refused,
+  // which is what this does.
+  //
+  // What should happen is what the search was built to do when the reader is
+  // not there: look for each word's shape instead, and say so.
+  await part("a browser that will not run the reader still searches, and says so", async () => {
+    const old = await context.newPage();
+    const refuse = async route => {
+      const answer = await route.fetch();
+      const headers = Object.assign({}, answer.headers());
+      headers['content-security-policy'] = (headers['content-security-policy'] || '')
+        .replace(/'wasm-unsafe-eval'/g, '');
+      await route.fulfill({ response: answer, headers });
+    };
+    await old.route(base, refuse);
+    await old.route(base + 'index.html', refuse);
+    await old.goto(base);
+    await old.waitForTimeout(400);
+    check('the tool really is served without WebAssembly here',
+      await old.evaluate(() => {
+        try { new WebAssembly.Module(new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0])); return false; }
+        catch { return true; }
+      }));
+    const bytes = await old.evaluate(async () => {
+      const c = document.createElement('canvas');
+      c.width = 1224; c.height = 1584;
+      const x = c.getContext('2d', { alpha: false });
+      x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height);
+      x.fillStyle = '#111';
+      x.font = '700 64px Helvetica, Arial, sans-serif';
+      x.fillText('KAG', 90, 400);
+      const img = await window.BlindedRender.encodeForPdf(c, false);
+      return Array.from(window.BlindedPdfWrite.build([{ widthPt: 612, heightPt: 792, image: img }]));
+    });
+    const refused = join(tmpdir(), 'blinded-noreader.pdf');
+    writeFileSync(refused, Buffer.from(bytes));
+    await old.setInputFiles('#file', refused);
+    await old.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
+    await setTerms(old, ['KAG']);
+    await old.click('#search');
+    let finished = true;
+    await old.waitForFunction(() => window.Blinded.state.searched === true,
+      undefined, { timeout: 120000 }).catch(() => { finished = false; });
+    const after = await old.evaluate(() => ({
+      failed: window.Blinded.state.ocrFailed === true,
+      counts: document.getElementById('termcounts').textContent.replace(/\s+/g, ' ').trim(),
+      said: document.body.textContent.replace(/\s+/g, ' '),
+      stuck: !document.getElementById('busy').hidden,
+    }));
+    check('the search finishes instead of hanging', finished === true,
+      JSON.stringify(after).slice(0, 200));
+    check('knowing the reader was not available', after.failed === true);
+    check('and says so, rather than leaving the reviewer to wonder',
+      /page reader could not be loaded/i.test(after.said));
+    // The whole point of the fallback: the word is in the picture and only
+    // its shape can find it.
+    check('and still finds the word in the picture by its shape',
+      /KAG\s*[1-9]/.test(after.counts), after.counts);
+    await dismissSweepOffer(old);
+    await old.close();
+  });
+
   // ---------- getting back to the document after paying ----------
   //
   // The buying page opens as a window over the tool, and the document stays
@@ -11489,6 +11665,10 @@ try {
     ]);
     await bought.waitForLoadState('domcontentloaded');
     await bought.waitForTimeout(400);
+    // Under the headers the site actually sends. With two different opener
+    // policies on the two pages this read false -- the windows were put in
+    // separate groups -- and the press below loaded a second tool instead of
+    // closing. It passed for as long as this suite sent no headers at all.
     check('the buying page knows it was opened by the tool',
       await bought.evaluate(() => Boolean(window.opener)));
 

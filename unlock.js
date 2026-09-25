@@ -200,10 +200,27 @@
   // the focus it gets when this window goes. The href stays as it is, for
   // anybody who opened this page directly rather than from the tool: there is
   // no window to close for them, so the link is the right answer.
+  //
+  // Only when the tool opened this window, which window.opener answers --
+  // provided the two pages are served the same opener policy. They were not:
+  // the tool had same-origin and this page same-origin-allow-popups, and two
+  // different values put the windows in separate groups, so the opener read
+  // null here and every buyer was sent down the link into a second copy of
+  // the tool. It passed every test because the test server sent no headers.
+  // render.yaml now gives every page the same value, and the self-test holds
+  // them to it.
+  //
+  // Not "close and see what happens". A tab with one entry in its history is
+  // closable by script whoever opened it, so somebody who arrived from a link
+  // in their email would press this and watch their tab disappear.
+  //
+  // And if closing is refused anyway, the link still gets them there.
   function goBack(event) {
     if (!window.opener || window.opener.closed) return;
     event.preventDefault();
+    const where = event.currentTarget.getAttribute('href') || '/';
     window.close();
+    setTimeout(() => { if (!window.closed) location.href = where; }, 250);
   }
 
   // Fetching a licence back from the id on a Paddle receipt.
@@ -235,6 +252,12 @@
     }
     if (answer.status === 429) {
       say('That is a lot of tries. Wait a few minutes and try again.', true);
+      return;
+    }
+    // The mint refuses anything not shaped like a Paddle id before looking.
+    if (answer.status === 400) {
+      say('That does not look like a transaction ID. It starts with txn_ and '
+        + 'is on the receipt Paddle emailed you.', true);
       return;
     }
     if (answer.status === 404) {

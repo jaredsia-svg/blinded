@@ -2986,7 +2986,7 @@ check('no creation date is carried into the output', !meta.info.CreationDate);
 // pass for anybody who posts some JSON at it", which is the same as giving
 // them away.
 {
-  const { signatureIsGood, daysFor, readable, tooMany } = await import('../mint/server.mjs');
+  const { signatureIsGood, daysFor, readable, tooMany, clientOf, wellFormed } = await import('../mint/server.mjs');
   const { createHmac } = await import('node:crypto');
   const body = JSON.stringify({ event_type: 'transaction.completed' });
   const sign = (ts, secret, text) => createHmac('sha256', secret)
@@ -3041,8 +3041,9 @@ check('no creation date is carried into the output', !meta.info.CreationDate);
     // a single id for forty seconds while it waits for the webhook. Counting
     // requests made a buyer hit the limit on the transaction they had just
     // paid for, and the licence never arrived by itself.
+    // (The page's wake-up knock asks for "wake", which is refused as not an
+    // id before anything is counted, so it is not part of this.)
     let refusedPolling = 0;
-    if (tooMany('1.2.3.4', 'wake', at, log)) refusedPolling++;
     let gone = 0;
     let wait = 800;
     let asked = 0;
@@ -3069,6 +3070,47 @@ check('no creation date is carried into the output', !meta.info.CreationDate);
     // The window moves: an hour later the same address starts again.
     check('and a burst is forgiven once the window has passed',
       tooMany('4.3.2.1', 'txn_later', at + 3600000, log) === false);
+  }
+
+  // Who is counted. Leftmost X-Forwarded-For was whatever the client wrote,
+  // so rotating it made every guess a fresh address; the rightmost entry is a
+  // proxy's own and would put every buyer in one bucket. Neither is read.
+  {
+    check('the address counted is the one Cloudflare wrote',
+      clientOf({ 'cf-connecting-ip': '203.0.113.9' }) === '203.0.113.9');
+    check('and a forwarded-for header, which a client writes, is ignored',
+      clientOf({ 'x-forwarded-for': '10.0.0.1, 203.0.113.9' }) === null);
+    check('whichever end of it one reads',
+      clientOf({ 'x-forwarded-for': '203.0.113.9' }) === null);
+    check('and it wins over a forwarded-for sent alongside it',
+      clientOf({ 'cf-connecting-ip': '203.0.113.9', 'x-forwarded-for': '1.1.1.1' })
+        === '203.0.113.9');
+    check('nor is True-Client-IP, which Cloudflare passes through from a client on most plans',
+      clientOf({ 'true-client-ip': '203.0.113.9' }) === null);
+    check('an IPv6 address is an address',
+      clientOf({ 'cf-connecting-ip': '2001:db8::1' }) === '2001:db8::1');
+    // With nothing trustworthy the limit is skipped, not applied to the
+    // socket -- on a proxied host that is the proxy, and counting it would
+    // lock every buyer out together.
+    check('and with no header worth trusting there is no address at all',
+      clientOf({}) === null);
+    check('rather than whatever junk was put in its place',
+      clientOf({ 'cf-connecting-ip': '<script>' }) === null
+        && clientOf({ 'cf-connecting-ip': 'x'.repeat(5000) }) === null);
+  }
+
+  // What is let near the counter at all. An unchecked id was an unbounded
+  // string held for ten minutes per address.
+  {
+    check('a Paddle transaction id is well formed',
+      wellFormed('txn_01h04vsc0qhwtsbsxh3422wjs4') === true);
+    check('the wake-up knock is not an id', wellFormed('wake') === false);
+    check('nor is an empty one', wellFormed('') === false && wellFormed(null) === false);
+    check('nor a very long one', wellFormed('txn_' + 'a'.repeat(4000)) === false);
+    check('nor one carrying anything but letters and digits',
+      wellFormed('txn_01h04vsc0qhwtsbsxh3422w/s4') === false
+        && wellFormed('txn_01h04vsc0qhwtsbsxh3422wjs4\n') === false);
+    check('nor somebody else\'s kind of id', wellFormed('pri_01h04vsc0qhwtsbsxh3422wjs4') === false);
   }
 }
 
@@ -3356,6 +3398,69 @@ check('no creation date is carried into the output', !meta.info.CreationDate);
         /href="\/terms\/"/.test(said[1]), said[1]);
     }
   }
+}
+
+// ---------- no page may run a string as script ----------
+//
+// 'unsafe-eval' lets any string become code, which is the one permission that
+// turns a stray bit of injected text into a running program. The page reader
+// needs WebAssembly and nothing else, and 'wasm-unsafe-eval' grants exactly
+// that. It was 'unsafe-eval' for years after the narrow keyword was honoured
+// everywhere, because nothing asked. This asks, of every policy the site
+// states -- the meta tags in every page and the headers render.yaml sends.
+{
+  const files = [];
+  const walk = dir => {
+    for (const name of readdirSync(join(root, dir))) {
+      if (['node_modules', 'vendor', 'bench', '.git'].includes(name)) continue;
+      const rel = dir ? dir + '/' + name : name;
+      const full = join(root, rel);
+      if (statSync(full).isDirectory()) walk(rel);
+      else if (rel.endsWith('.html') || rel === 'render.yaml') files.push(rel);
+    }
+  };
+  walk('');
+  const policies = files.filter(f =>
+    /Content-Security-Policy/.test(readFileSync(join(root, f), 'utf8')));
+  check('the site states its policy in more than a handful of places',
+    policies.length >= 10, String(policies.length));
+  const loose = policies.filter(f =>
+    /'unsafe-eval'/.test(readFileSync(join(root, f), 'utf8')
+      .replace(/<!--[\s\S]*?-->/g, '').replace(/^\s*#.*$/gm, '')));
+  check('and none of them lets a string run as script', loose.length === 0,
+    loose.join(', '));
+  // The tool still has to be able to read a scan.
+  const tool = readFileSync(join(root, 'index.html'), 'utf8');
+  check('while the tool can still compile its reader',
+    /script-src 'self' 'wasm-unsafe-eval'/.test(tool));
+  const yaml = readFileSync(join(root, 'render.yaml'), 'utf8');
+  check('and so can the header every page is sent',
+    /- path: \/\*\s+name: Content-Security-Policy[\s\S]*?script-src 'self' 'wasm-unsafe-eval'/.test(yaml));
+}
+
+// ---------- one opener policy, on every page ----------
+//
+// The tool opens the buying page as a window and needs to see it close again.
+// Two same-origin pages served different Cross-Origin-Opener-Policy values are
+// put in separate browsing context groups, so the window the tool opened
+// cannot see the tool: window.opener is null, "Back to the tool" follows its
+// link, and a second copy of the tool loads in a 520-pixel window over the
+// real one. That shipped, with every test green, because nothing served these
+// headers to a browser.
+//
+// The value has to allow popups because the buying page needs it to (Paddle
+// opens windows for PayPal and card checks). So: every rule the same, and that.
+{
+  const yaml = readFileSync(join(root, 'render.yaml'), 'utf8');
+  const rules = [...yaml.matchAll(
+    /- path: (\S+)\s+name: Cross-Origin-Opener-Policy\s+value: (\S+)/g)]
+    .map(m => ({ path: m[1], value: m[2] }));
+  check('render.yaml states an opener policy', rules.length > 0, String(rules.length));
+  const values = [...new Set(rules.map(r => r.value))];
+  check('and states exactly one, for every page it covers', values.length === 1,
+    JSON.stringify(rules));
+  check('and that one lets the buying page open Paddle\'s windows',
+    values.length === 1 && values[0] === 'same-origin-allow-popups', values.join());
 }
 
 // ---------- a script and its page, agreeing about what is on it ----------
