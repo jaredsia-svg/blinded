@@ -2814,6 +2814,19 @@ check('no creation date is carried into the output', !meta.info.CreationDate);
       /Disallow: \/content\//.test(readFileSync(join(root, 'robots.txt'), 'utf8')));
   }
 
+  // What the front page loads as it starts, a crawler has to be allowed to
+  // load too, or it renders a page nobody else sees.
+  {
+    const rules = readFileSync(join(root, 'robots.txt'), 'utf8').split('\n')
+      .filter(line => /^\s*Disallow:/i.test(line))
+      .map(line => line.split(':')[1].trim()).filter(path => path && path !== '/');
+    const home = readFileSync(join(root, 'index.html'), 'utf8');
+    const loads = [...home.matchAll(/<script[^>]*\ssrc="([^"?]+)/g)].map(m => '/' + m[1].replace(/^\//, ''))
+      .concat([...home.matchAll(/<link[^>]*rel="stylesheet"[^>]*href="([^"?]+)/g)].map(m => '/' + m[1].replace(/^\//, '')));
+    const refused = loads.filter(src => rules.some(rule => src.startsWith(rule)));
+    check('robots.txt lets a crawler load everything the front page starts with',
+      loads.length > 5 && refused.length === 0, refused.join(', ') || loads.length + ' files');
+  }
   check('and robots.txt says where the sitemap is',
     /Sitemap: https:\/\/\S+\/sitemap\.xml/.test(readFileSync(join(root, 'robots.txt'), 'utf8')));
 }

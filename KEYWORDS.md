@@ -128,6 +128,48 @@ pages, this list and the sitemap together.
 - proof of income redaction
 - redact statement for landlord
 
+## [Remove a logo from every page of a PDF](https://blinded.dev/remove-logo-from-every-page-pdf/)
+
+`/remove-logo-from-every-page-pdf/` · 693 words · 4 questions
+
+- remove logo from every page of a PDF
+- redact logo PDF all pages
+- find all instances of an image in a PDF
+- delete the same image on every page
+- redact image throughout PDF
+- remove company logo from PDF
+
+## [Make a no-name teaser from a deck](https://blinded.dev/no-name-teaser/)
+
+`/no-name-teaser/` · 646 words · 3 questions
+
+- no-name teaser
+- blind teaser
+- anonymous teaser M&A
+- anonymise a company presentation
+- sanitise a deck for buyers
+- redact company name from a pitch deck
+
+## [Adobe Acrobat redaction vs Blinded](https://blinded.dev/adobe-acrobat-redaction-vs-blinded/)
+
+`/adobe-acrobat-redaction-vs-blinded/` · 707 words · 3 questions
+
+- Adobe Acrobat redaction alternative
+- Acrobat redact image all pages
+- Acrobat cannot find logo to redact
+- Acrobat redact vs
+- free alternative to Acrobat redaction
+
+## [Remove a letterhead or stamp from every page](https://blinded.dev/remove-letterhead-stamp-signature/)
+
+`/remove-letterhead-stamp-signature/` · 614 words · 3 questions
+
+- remove letterhead from PDF
+- redact company stamp in PDF
+- remove signature from every page
+- redact chop stamp scanned document
+- remove letterhead from scanned document
+
 ## Still to write
 
 Kept here rather than in a head, so the next round starts from a list instead

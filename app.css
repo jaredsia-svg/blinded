@@ -2315,12 +2315,15 @@ body.choosing { -webkit-user-select: none; user-select: none; }
    column it was two thumbnails. It breaks out of the text column -- as wide
    as the page allows, capped so it does not become a billboard -- while the
    prose stays at a width that can be read. */
+/* Wider than the text, but from the text's own left edge. It was centred on
+   the column with a transform, and the column is not centred in the window:
+   from about 1040 to 1200 pixels wide the comparison ran off the left of the
+   screen, cutting the "before" picture in half on an ordinary laptop. */
 .landshot {
-  margin: 22px 0 26px; width: min(1000px, calc(100vw - 40px));
-  max-width: 1000px; margin-left: 50%; transform: translateX(-50%);
+  margin: 22px 0 26px; width: min(1000px, calc(100vw - 80px)); max-width: none;
 }
 @media (max-width: 1040px) {
-  .landshot { width: auto; margin-left: 0; transform: none; }
+  .landshot { width: auto; }
 }
 /* Side by side on a screen with the room, stacked on one without: the point
    is the comparison, and a comparison you have to scroll between is not one. */

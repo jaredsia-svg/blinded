@@ -8658,24 +8658,22 @@
 
   // How long the check takes, per page, per word, per megapixel.
   //
-  // Measured on ten benchmark documents, after the numerator moved into a
-  // transform. Seconds a page a word, divided by the page's megapixels:
+  // Measured again once the transforms and the small windows moved into the
+  // SIMD kernel, which made the check about twice as fast: the old figure of
+  // three had the offer quoting two to five times the real wait. The bench
+  // now prints the offer's estimate beside the time actually taken, over
+  // nine documents. Seconds a page a word, divided by the page's megapixels:
   //
-  //   scanned deck      3.5      photographed slide   1.8
-  //   pre-IPO deck      3.7      teaser               1.9
-  //   drinks group      1.4      investor deck        2.0
-  //   watch catalogue   1.35
+  //   photographed slides  0.6, 0.8     investor decks   0.76, 0.86
+  //   watch catalogue      0.59         CIM page         0.70
+  //   headshot captions    1.47         pre-IPO deck     1.5
+  //   synthetic test       1.4
   //
-  // Which is a far tighter spread than it used to be -- 1.35 to 3.7, where
-  // before the transform the same ratio ran 3.5 to 11.5. The cost now follows
-  // the page's area rather than the shape of the word, which is exactly what
-  // a transform does: it stopped caring how big the template is.
-  //
-  // Three is about the middle of that. It is used both to tell the reviewer
-  // how long the wait will be and to decide whether to ask them at all, and
-  // the middle is right for the first; for the second the two thresholds are
-  // far enough apart that a fifth either way does not move the answer.
-  const SWEEP_SECONDS_PER_MP = 3;
+  // One is a little above the middle, on purpose: a wait that ends early is
+  // a better surprise than one that runs over. Measured on the machine the
+  // bench runs on; a slow laptop or a phone takes longer, which is another
+  // reason not to shave it to the median.
+  const SWEEP_SECONDS_PER_MP = 1;
 
   // Page area stops mattering past about four megapixels: the matcher caps
   // its own working resolution, so a twelve-megapixel photograph costs what a

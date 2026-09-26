@@ -1023,4 +1023,344 @@ export const pages = [
           + 'removed with a click.' },
     ],
   },
+
+  {
+    slug: 'remove-logo-from-every-page-pdf',
+    title: 'Remove a logo from every page of a PDF',
+    h1: 'Remove a logo from every page of a PDF',
+    description: 'Pick a logo once and every copy in the PDF is found by '
+      + 'sight, at any size, and removed for good. Nothing is uploaded.',
+    keywords: ['remove logo from every page of a PDF', 'redact logo PDF all pages',
+      'find all instances of an image in a PDF', 'delete the same image on every page',
+      'redact image throughout PDF', 'remove company logo from PDF'],
+    shot: { slide: 6, alt: 'A slide before and after: the two company logos in '
+      + 'the header and the two in the footer are each replaced with a labelled '
+      + 'black bar.' },
+    lede: 'A company logo sits in the header of the cover, in the footer of '
+      + 'every slide, and in a table halfway through at a third of the size. '
+      + 'You need it gone from all of them before the file goes out, and your '
+      + 'PDF editor has a search box that only finds words.',
+    sections: [
+      { h: 'Why search and redact misses it',
+        p: ['A logo in a PDF is a picture, not text. Search-and-redact tools '
+          + 'look through the text layer, and a picture has nothing in the text '
+          + 'layer to find. The usual workarounds each cover part of the job: '
+          + 'a mark repeated at the same position on every page catches the '
+          + 'footer but not the cover, and deleting the image object works only '
+          + 'where the logo was placed as one image, not where it was drawn as '
+          + 'shapes, flattened into a slide, or scanned.',
+          'People asking how to find every copy of the same image in a PDF '
+          + 'are usually told the same thing: there is no option for it, go '
+          + 'page by page. On a sixty-page deck that is an afternoon, and the '
+          + 'copy that gets missed is the small one.'] },
+      { h: 'Find it by what it looks like',
+        p: ['Draw a box round the logo once. The whole document is then '
+          + 'searched for that shape: at any size, anywhere on the page, '
+          + 'whether it is in colour, grey, or knocked out in white on a dark '
+          + 'banner. Measured on a real 28-page investor deck, picking the large '
+          + 'wordmark on the cover found all 26 copies, including 23 footer '
+          + 'copies at under half the size, and nothing that was not the mark.',
+          'You see every proposed match before anything is covered. Each '
+          + 'picked image carries its own sensitivity, offered as the two or '
+          + 'three settings your document’s scores actually point at, with '
+          + 'how many matches each would give, so you choose between real '
+          + 'answers rather than guess a number.'] },
+      { h: 'Removed, not covered',
+        p: ['A black rectangle drawn over a logo in a PDF editor often leaves '
+          + 'the image underneath, still in the file for anybody who moves the '
+          + 'rectangle or extracts the images. Here every page is rebuilt from '
+          + 'pixels when you export, so what was under a bar is not in the file '
+          + 'at all.',
+          'Names are handled the same way. Type the company name and it is '
+          + 'found in the text, in the lettering of pictures and scans, and '
+          + 'inside logos by shape, so the logo and the name go together.'] },
+      { h: 'Your file stays on your machine',
+        p: ['There is no server. The PDF is opened, searched and rebuilt in '
+          + 'your browser tab, and the page is forbidden by its own security '
+          + 'policy from sending anything anywhere. Watch the network panel, or '
+          + 'disconnect from the internet after the page loads: it keeps '
+          + 'working.'] },
+    ],
+    steps: [
+      'Open the PDF. It is read in the tab; nothing is sent anywhere.',
+      'Press the pick button and draw a box round one copy of the logo.',
+      'Check the proposed matches. Every copy is listed by page, at whatever '
+        + 'size it was found, and any one can be turned down.',
+      'Press Redact and export. The pages are rebuilt, so the logo is gone '
+        + 'rather than hidden.',
+    ],
+    who: 'Anyone sending a deck, report or data pack that must not show whose '
+      + 'it is: bankers preparing a teaser, consultants reusing client work, '
+      + 'and teams sharing a document with a supplier or an AI tool.',
+    faq: [
+      { q: 'Will it find the logo if it is a different size on some pages?',
+        a: 'Yes. Every copy is searched for across a range of sizes, from '
+          + 'about a tenth of the picked size to four times it, and matched on '
+          + 'shape rather than exact pixels.' },
+      { q: 'What if the logo is white on a dark background somewhere?',
+        a: 'It is found. The match is on the shape, so a mark recast in white '
+          + 'on a coloured banner is treated as the same mark.' },
+      { q: 'Is the file uploaded?',
+        a: 'No. Everything runs in your browser, and the page is not permitted '
+          + 'to send data anywhere. You can check in the network panel.' },
+      { q: 'Is it free?',
+        a: 'Documents up to 20 pages are free. Longer documents need a '
+          + 'license to export the finished file; everything else works without one.' },
+    ],
+  },
+
+  {
+    slug: 'no-name-teaser',
+    title: 'Make a no-name teaser from a deck',
+    h1: 'Make a no-name teaser from a deck',
+    description: 'Turn a company presentation into a blind teaser: every '
+      + 'mention of the name and every copy of the logo removed, in your '
+      + 'browser. Nothing is uploaded.',
+    keywords: ['no-name teaser', 'blind teaser', 'anonymous teaser M&A',
+      'anonymise a company presentation', 'sanitise a deck for buyers',
+      'redact company name from a pitch deck'],
+    shot: { slide: 4, alt: 'A deal slide before and after: both company names '
+      + 'in the headline, in the body and in the logos are replaced with '
+      + 'labelled bars, [L1] and [L2].' },
+    lede: 'The first thing a buyer sees has to say what the business is '
+      + 'without saying who it is. The source is usually the company’s own '
+      + 'deck, and the company’s own deck has its name and logo on every '
+      + 'page: in the headline, the footer, the product photographs and the '
+      + 'org chart.',
+    sections: [
+      { h: 'Where the name hides',
+        p: ['Deleting the typed name is the easy part. The name is also inside '
+          + 'the logo, set in the master slide, printed on packaging in a '
+          + 'product photograph, embedded in a chart exported as a picture, and '
+          + 'in the file name and the document properties. A teaser that '
+          + 'misses one of those identifies the company as surely as the '
+          + 'cover would have.',
+          'That is why blind teasers are usually rebuilt by hand, and why '
+          + 'they take a day to make and still go out with the logo in the '
+          + 'footer of page 11.'] },
+      { h: 'Type it once, pick it once',
+        p: ['Type the company name, the brand names and the people. Each is '
+          + 'found in the text, read out of pictures and scans, and matched by '
+          + 'shape where an unusual typeface defeats the reading. Then draw a '
+          + 'box round the logo once: every other copy is found by sight, in '
+          + 'any size or colour.',
+          'Turn on labels and each name becomes a consistent placeholder, '
+          + '[L1] for the company and [L2] for the counterparty, so the teaser '
+          + 'still reads as a story: "[L1] has grown revenue at 14% a year".'] },
+      { h: 'Nothing left underneath',
+        p: ['Each page of the export is rebuilt from pixels. The removed name '
+          + 'is not hidden under a box; it is not in the file. There is '
+          + 'nothing to select, copy or recover, and the exported file carries '
+          + 'no author, title or history from the original. You can also give '
+          + 'the export a new file name as you save it, and the old name is '
+          + 'removed from it too.'] },
+      { h: 'Checking it before it goes',
+        p: ['Every mark is listed by page before anything is covered, so the '
+          + 'check is a walk down a list rather than a hunt through the deck. '
+          + 'A search box shows how many times each name was found, which is '
+          + 'the quickest way to notice that the brand name appears forty times '
+          + 'and only thirty-eight were caught. Anything the search did not '
+          + 'find can be covered with a box of your own, and a second check '
+          + 'looks again, by shape, for names that exist only as lettering in '
+          + 'pictures. When the teaser is exported, open it and try to select '
+          + 'or search for the name: there is nothing there to find.'] },
+      { h: 'Without sending the deck anywhere',
+        p: ['A sell-side mandate usually comes with a confidentiality '
+          + 'agreement that does not allow the deck to be uploaded to a web '
+          + 'service. Nothing here is uploaded: the deck is opened and '
+          + 'rebuilt inside your browser, and the page is not permitted to '
+          + 'send anything anywhere.'] },
+    ],
+    steps: [
+      'Open the company’s deck. It stays in your browser.',
+      'Type the company and brand names, and draw a box round each logo once.',
+      'Review what was found, page by page, and add anything it missed with '
+        + 'a box of your own.',
+      'Redact and export the teaser under a new file name.',
+    ],
+    who: 'Sell-side bankers and M&A advisers, business brokers, and anyone '
+      + 'writing to buyers about a company that cannot yet be named.',
+    faq: [
+      { q: 'Does it catch the name inside product photographs?',
+        a: 'Often. Words in pictures are read by text recognition and, where '
+          + 'that fails, matched by shape. Lettering that is curved, tiny or '
+          + 'partly hidden can still be missed, so the result is listed page '
+          + 'by page for you to check.' },
+      { q: 'Can I keep the teaser readable?',
+        a: 'Yes. With labels on, each name is replaced by a consistent '
+          + 'placeholder such as [L1], so sentences still make sense.' },
+      { q: 'Is the deck uploaded anywhere?',
+        a: 'No. It is processed entirely in your browser, which is enforced by '
+          + 'the page’s security policy, not just promised.' },
+    ],
+  },
+
+  {
+    slug: 'adobe-acrobat-redaction-vs-blinded',
+    title: 'Adobe Acrobat redaction vs Blinded',
+    h1: 'Adobe Acrobat redaction vs Blinded',
+    description: 'Acrobat finds text to redact. Blinded also finds every copy '
+      + 'of a logo or picture by sight, in your browser, with nothing uploaded.',
+    keywords: ['Adobe Acrobat redaction alternative', 'Acrobat redact image all pages',
+      'Acrobat cannot find logo to redact', 'Acrobat redact vs', 'free alternative to Acrobat redaction'],
+    shot: { slide: 5, alt: 'A customer logo wall before and after: two of the '
+      + 'ten brand marks are replaced with labelled black bars.' },
+    lede: 'Adobe Acrobat Pro is the tool most people reach for, and for typed '
+      + 'text it is a good one. The difference shows up when what needs to go '
+      + 'is a picture: a logo, a letterhead, a stamp, a name printed inside an '
+      + 'image. Here is what each does, fairly.',
+    sections: [
+      { h: 'What Acrobat does well',
+        p: ['Acrobat Pro can search the text layer for a word, a phrase or a '
+          + 'pattern such as phone numbers, and mark every hit for redaction. '
+          + 'It removes the marked content properly when you apply the '
+          + 'redactions, it can sanitise hidden information such as metadata, '
+          + 'and the desktop version runs on your own machine. If everything '
+          + 'you need to remove is typed text, it does the job.',
+          'It can also repeat a mark you draw across a range of pages, which '
+          + 'catches a logo that sits in exactly the same place on every page. '
+          + 'And where a PDF reuses one embedded image on every page, redacting '
+          + 'it once can remove it from all of them, because they are the same '
+          + 'object; that is also why Acrobat users sometimes find a redaction '
+          + 'spreading to pages they did not mean.'] },
+      { h: 'Where the difference is',
+        p: ['Acrobat’s search only reads text. A logo is an image, so it '
+          + 'is never found by searching; neither is a name printed inside a '
+          + 'picture, a chart pasted as a screenshot, or anything on a scanned '
+          + 'page without recognised text. A copy embedded separately, drawn as '
+          + 'shapes, or flattened into a slide or a scan is not the same object, '
+          + 'so it is left behind. A repeated mark covers a logo only '
+          + 'where it is the same size in the same place, and misses the copy on '
+          + 'the cover, the smaller one in a table, and the white one on a dark '
+          + 'slide.',
+          'Blinded searches by sight. Pick a logo once and every copy is '
+          + 'found at any size, position or colour. Type a name and it is '
+          + 'found in the text, read out of pictures and scans, and matched by '
+          + 'shape where the reading fails. On a real 28-page deck, one pick '
+          + 'found all 26 copies of a company’s wordmark.'] },
+      { h: 'Side by side',
+        p: ['Finding typed words and patterns: both. Finding every copy of a '
+          + 'logo or picture: Blinded, by sight; Acrobat, only where the copy is '
+          + 'in the same place on each page. Words inside pictures and scans: '
+          + 'Blinded reads them; Acrobat needs a separate recognition pass '
+          + 'first. Where the file is processed: Acrobat desktop, on your '
+          + 'machine; Blinded, in your browser tab, with no install and no '
+          + 'upload. Price: Acrobat Pro is a subscription; Blinded is free up to '
+          + '20 pages, with a one-off license for longer documents.',
+          'They also work well together. If you already use Acrobat for text, '
+          + 'Blinded is the step for the pictures.'] },
+      { h: 'What Blinded does not do',
+        p: ['It is a redactor, not a PDF editor: it does not edit text, fill '
+          + 'forms or sign. And its export rebuilds each page as an image, which '
+          + 'is what makes the redaction permanent, but it means the exported '
+          + 'text is no longer selectable. For a document that goes to someone '
+          + 'outside, that is usually the point.'] },
+    ],
+    steps: [
+      'Open the PDF in Blinded. Nothing is uploaded or installed.',
+      'Type the words you would have searched for in Acrobat.',
+      'Draw a box round each logo or picture to remove. Every copy is found.',
+      'Review, redact and export. The pages are rebuilt, so nothing is left '
+        + 'underneath.',
+    ],
+    who: 'Anyone who already redacts in Acrobat and keeps finding logos, '
+      + 'letterheads and names in pictures left behind, or who does not have '
+      + 'an Acrobat Pro subscription.',
+    faq: [
+      { q: 'Can Acrobat find all copies of an image?',
+        a: 'Acrobat’s search reads text, so it does not find images by '
+          + 'what they look like. It can repeat a mark across pages at the same '
+          + 'position, and removes a reused embedded image wherever it is '
+          + 'reused, but not copies that are separate images, shapes or scans.' },
+      { q: 'Is Blinded as permanent as Acrobat’s redaction?',
+        a: 'Yes. Each page is rebuilt from pixels on export, so the removed '
+          + 'content is not in the file, and the file carries no metadata from '
+          + 'the original.' },
+      { q: 'Do I need to install anything?',
+        a: 'No. It runs in a browser tab, and keeps working offline once the '
+          + 'page has loaded.' },
+    ],
+  },
+
+  {
+    slug: 'remove-letterhead-stamp-signature',
+    title: 'Remove a letterhead or stamp from every page',
+    h1: 'Remove a letterhead or stamp from every page',
+    description: 'A letterhead, company stamp or signature repeated through '
+      + 'a PDF or scan, found by sight on every page and removed for good. '
+      + 'Nothing is uploaded.',
+    keywords: ['remove letterhead from PDF', 'redact company stamp in PDF',
+      'remove signature from every page', 'redact chop stamp scanned document',
+      'remove letterhead from scanned document'],
+    shot: { slide: 1, alt: 'A scanned page before and after: names, a date '
+      + 'and an identifying mark are replaced with black bars.' },
+    lede: 'Contracts, invoices and letters carry the same identifying marks '
+      + 'on every page: the letterhead at the top, the company stamp or chop '
+      + 'in the corner, initials or a signature at the foot. On a scan none of '
+      + 'it is text, and on a fifty-page bundle all of it has to go.',
+    sections: [
+      { h: 'Why these are hard to remove',
+        p: ['A letterhead in a born-digital PDF is an image. A stamp on a scan '
+          + 'is part of the page picture, slightly rotated, a different '
+          + 'strength of ink on every sheet, sometimes overlapping the text. A '
+          + 'signature is never quite the same twice. None of them can be '
+          + 'searched for, and a box drawn at the same position on every page '
+          + 'misses the ones that moved when the paper was fed.'] },
+      { h: 'Pick one; the rest are found',
+        p: ['Draw a box round one letterhead, one stamp or one signature. '
+          + 'Every page is searched for that shape, allowing for a different '
+          + 'size, position, colour or ink strength, and each match is proposed '
+          + 'with its page and a confidence you can accept or turn down.',
+          'Stamps and signatures vary more than printed logos, so their '
+          + 'matches score lower. Each picked image has its own sensitivity, '
+          + 'offered as the few settings the scores on your document point at, '
+          + 'with how many matches each would give. You can see immediately '
+          + 'whether a looser setting picks up the faint copies or starts '
+          + 'catching things that are not the stamp.'] },
+      { h: 'The text on the page as well',
+        p: ['Type the company name, the signatory and the reference numbers. '
+          + 'On a scan they are read by text recognition inside your browser, '
+          + 'and a second check looks again at anything written in lettering '
+          + 'too small or unusual to read. Names, stamps and letterheads are '
+          + 'all removed in one pass.'] },
+      { h: 'Signatures, fairly',
+        p: ['A printed logo is the same picture every time, and it is matched '
+          + 'very reliably. A handwritten signature is not: each one is drawn '
+          + 'afresh, and two signatures by the same person differ more than two '
+          + 'prints of a logo ever do. Picking one signature finds the others '
+          + 'when they are close in shape, and the list will show you which '
+          + 'pages were matched. For a signature that varies a lot, pick two or '
+          + 'three of them, or cover the signature blocks with a box of your '
+          + 'own; the rebuilt export removes them just as completely.'] },
+      { h: 'Removed for good, and never uploaded',
+        p: ['The export rebuilds every page from pixels, so a covered stamp '
+          + 'is not underneath a box; it is gone. And the documents never leave '
+          + 'your machine: the whole process runs in the browser tab, which is '
+          + 'not permitted to send anything anywhere. That matters for signed '
+          + 'contracts and personal records that should not pass through a '
+          + 'third-party server.'] },
+    ],
+    steps: [
+      'Open the PDF or scan. It is processed only in your browser.',
+      'Draw a box round one letterhead, stamp or signature.',
+      'Check the proposed copies on every page, and adjust the sensitivity if '
+        + 'faint ones were missed.',
+      'Type any names or numbers, then redact and export.',
+    ],
+    who: 'Legal and compliance teams sharing contracts, finance teams sending '
+      + 'invoices to auditors or suppliers, and anyone publishing scanned '
+      + 'correspondence.',
+    faq: [
+      { q: 'Will it find a stamp that is rotated or faint on some pages?',
+        a: 'Usually, within limits. Matching allows for size, colour and ink '
+          + 'strength; a stamp rotated well off square, or mostly hidden under '
+          + 'text, may score too low and should be checked by eye.' },
+      { q: 'Does it work on scanned documents?',
+        a: 'Yes. Scans are matched by shape, and their text is read by '
+          + 'recognition that runs inside your browser.' },
+      { q: 'Are my documents uploaded?',
+        a: 'No. Nothing leaves your machine, and the page is prevented from '
+          + 'sending data anywhere by its own security policy.' },
+    ],
+  },
 ]

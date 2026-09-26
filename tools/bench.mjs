@@ -265,6 +265,12 @@ for (const name of readdirSync(bench).sort()) {
     return out;
   });
 
+  // What the offer would have told the reviewer the wait would be, asked
+  // before the check starts, so the estimate can be held to the real time.
+  const estimate = await page.evaluate(() => {
+    const B = window.Blinded;
+    return B.sweepEstimate ? B.sweepEstimate() : null;
+  });
   const swept = Date.now();
   const sweepAdded = await page.evaluate(() => window.Blinded.runSweep());
   await page.waitForFunction(() => document.getElementById('busy').hidden,
@@ -362,6 +368,10 @@ for (const name of readdirSync(bench).sort()) {
 
   console.log('==', name, '·', out.pages, 'pages · ' + out.size.join('/') + ' · ' + out.dpi.join('/') + ' dpi · search ' + searchTook.toFixed(1)
     + 's · check ' + sweepTook.toFixed(1) + 's (+' + sweepAdded + ')');
+  if (estimate && estimate.seconds > 0) {
+    console.log('   check estimate ' + estimate.seconds.toFixed(1) + 's for ' + estimate.pages
+      + ' pages x ' + estimate.terms + ' words, took ' + sweepTook.toFixed(1) + 's');
+  }
   // Per page, per leg, so the numbers can be carried to another document.
   {
     const mp = out.size.map(one => {

@@ -7,14 +7,17 @@ Allow: /
 
 # Except the parts that are not pages. A crawler spending its budget on a
 # 1.4MB PDF worker or eleven megabytes of recognition data is a crawler not
-# reading the pages that say what this is.
+# reading the pages that say what this is. None of vendor/ is loaded until a
+# document is opened, so a crawler rendering the front page never needs it.
+#
+# lib/ is not on this list. The front page loads its scripts as it starts,
+# and a crawler that is refused them renders a different page from the one a
+# visitor sees -- which is the one thing Google asks sites not to do.
 #
 # content/ and the generator are the source the pages are written from, not
 # pages themselves.
 Disallow: /vendor/
-Disallow: /lib/
 Disallow: /tools/
-Disallow: /bench/
 Disallow: /content/
 
 Sitemap: https://blinded.dev/sitemap.xml
