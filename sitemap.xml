@@ -94,6 +94,21 @@
     <priority>0.7</priority>
   </url>
   <url>
+    <loc>https://blinded.dev/redact-images-pdf-powerpoint/</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://blinded.dev/redact-scanned-documents-automatically/</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://blinded.dev/redact-pdf-quickly/</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
     <loc>https://blinded.dev/privacy/</loc>
     <changefreq>yearly</changefreq>
     <priority>0.3</priority>

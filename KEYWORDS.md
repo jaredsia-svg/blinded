@@ -46,7 +46,6 @@ pages, this list and the sitemap together.
 
 - de-identify scanned records
 - de-identify medical records
-- redact scanned documents
 - PHI redaction without upload
 - anonymise scanned files
 - redact a scan
@@ -169,6 +168,38 @@ pages, this list and the sitemap together.
 - remove signature from every page
 - redact chop stamp scanned document
 - remove letterhead from scanned document
+
+## [Redact images in a PDF or PowerPoint deck](https://blinded.dev/redact-images-pdf-powerpoint/)
+
+`/redact-images-pdf-powerpoint/` · 627 words · 4 questions
+
+- redact images in PDF
+- redact image in PowerPoint
+- redact picture in slide deck
+- black out image in PDF
+- remove image from PDF permanently
+- redact photo in PDF
+
+## [Redact scanned documents automatically](https://blinded.dev/redact-scanned-documents-automatically/)
+
+`/redact-scanned-documents-automatically/` · 625 words · 3 questions
+
+- redact scanned documents
+- redact scanned PDF automatically
+- automatic redaction of scanned documents
+- OCR redaction
+- redact a scanned PDF without Acrobat
+- find personal data in a scan
+
+## [Redact a PDF quickly: the trick most people miss](https://blinded.dev/redact-pdf-quickly/)
+
+`/redact-pdf-quickly/` · 662 words · 3 questions
+
+- redact PDF quickly
+- fastest way to redact a PDF
+- redact PDF fast
+- quick PDF redaction trick
+- redact the same name on every page
 
 ## Still to write
 

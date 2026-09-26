@@ -14,18 +14,18 @@
   object-src 'none';
   base-uri 'none';
   form-action 'none'">
-<title>Remove a letterhead or stamp from every page – Blinded</title>
-<meta name="description" content="A letterhead, company stamp or signature repeated through a PDF or scan, found by sight on every page and removed for good. Nothing is uploaded.">
+<title>Redact a PDF quickly: the trick most people miss – Blinded</title>
+<meta name="description" content="The slow way is a box per mention. The fast way is to name each thing once and let every copy be found, even in pictures.">
 <link rel="icon" href="/favicon.ico" sizes="48x48">
 <link rel="icon" href="/icon.svg" type="image/svg+xml">
 <link rel="icon" href="/icon-192.png" type="image/png" sizes="192x192">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
-<link rel="canonical" href="https://blinded.dev/remove-letterhead-stamp-signature/">
+<link rel="canonical" href="https://blinded.dev/redact-pdf-quickly/">
 <meta property="og:type" content="article">
 <meta property="og:site_name" content="Blinded">
-<meta property="og:title" content="Remove a letterhead or stamp from every page">
-<meta property="og:description" content="A letterhead, company stamp or signature repeated through a PDF or scan, found by sight on every page and removed for good. Nothing is uploaded.">
-<meta property="og:url" content="https://blinded.dev/remove-letterhead-stamp-signature/">
+<meta property="og:title" content="Redact a PDF quickly: the trick most people miss">
+<meta property="og:description" content="The slow way is a box per mention. The fast way is to name each thing once and let every copy be found, even in pictures.">
+<meta property="og:url" content="https://blinded.dev/redact-pdf-quickly/">
 <meta property="og:image" content="https://blinded.dev/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
@@ -37,9 +37,9 @@
   {
     "@context": "https://schema.org",
     "@type": "Article",
-    "headline": "Remove a letterhead or stamp from every page",
-    "description": "A letterhead, company stamp or signature repeated through a PDF or scan, found by sight on every page and removed for good. Nothing is uploaded.",
-    "mainEntityOfPage": "https://blinded.dev/remove-letterhead-stamp-signature/",
+    "headline": "Redact a PDF quickly: the trick most people miss",
+    "description": "The slow way is a box per mention. The fast way is to name each thing once and let every copy be found, even in pictures.",
+    "mainEntityOfPage": "https://blinded.dev/redact-pdf-quickly/",
     "image": "https://blinded.dev/og.png",
     "about": {
       "@type": "SoftwareApplication",
@@ -53,26 +53,26 @@
     "mainEntity": [
       {
         "@type": "Question",
-        "name": "Will it find a stamp that is rotated or faint on some pages?",
+        "name": "How long does it take?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "Usually, within limits. Matching allows for size, colour and ink strength; a stamp rotated well off square, or mostly hidden under text, may score too low and should be checked by eye."
+          "text": "Usually a few seconds a page, so a few minutes for a long deck, with progress shown as it goes; scanned pages take longer because they are read first. Most of the time left is your own check."
         }
       },
       {
         "@type": "Question",
-        "name": "Does it work on scanned documents?",
+        "name": "Is it free?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "Yes. Scans are matched by shape, and their text is read by recognition that runs inside your browser."
+          "text": "Documents up to 20 pages are free. Longer ones need a license to export the finished file."
         }
       },
       {
         "@type": "Question",
-        "name": "Are my documents uploaded?",
+        "name": "Will it find a name inside an image?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "No. Nothing leaves your machine, and the page is prevented from sending data anywhere by its own security policy."
+          "text": "Usually. Words in pictures are read by text recognition and, where that fails, matched by their shape. Every result is listed for you to check."
         }
       }
     ]
@@ -90,8 +90,8 @@
       {
         "@type": "ListItem",
         "position": 2,
-        "name": "Remove a letterhead or stamp from every page",
-        "item": "https://blinded.dev/remove-letterhead-stamp-signature/"
+        "name": "Redact a PDF quickly: the trick most people miss",
+        "item": "https://blinded.dev/redact-pdf-quickly/"
       }
     ]
   }
@@ -121,8 +121,8 @@
 <main class="wrap">
 <article class="view faqmain lander">
 
-  <h1 class="faqtitle">Remove a letterhead or stamp from every page</h1>
-  <p class="lede">Contracts, invoices and letters carry the same identifying marks on every page: the letterhead at the top, the company stamp or chop in the corner, initials or a signature at the foot. On a scan none of it is text, and on a fifty-page bundle all of it has to go.</p>
+  <h1 class="faqtitle">Redact a PDF quickly: the trick most people miss</h1>
+  <p class="lede">Redaction is slow because people do it one mention at a time: find the name, draw a box, scroll, find it again. A forty-page document with one client name in it can take an hour, and the mention that gets missed is the one in a picture.</p>
 
   <p class="landgo"><a class="landcta" href="/">Open the tool</a>
     <span class="landfree">Free below twenty pages, in your browser. Nothing is uploaded.</span></p>
@@ -132,61 +132,64 @@
       <span><b>Before</b><img src="/gallery/slide-1-original.jpg"
         alt="Before redaction." loading="lazy" width="1280" height="720"></span>
       <span><b>After</b><img src="/gallery/slide-1-redacted.jpg"
-        alt="A scanned page before and after: names, a date and an identifying mark are replaced with black bars." loading="lazy" width="1280" height="720"></span>
+        alt="A product line-up before and after: brand names printed on the packaging photographs are covered, as are the names beneath them." loading="lazy" width="1280" height="720"></span>
     </div>
-    <figcaption>A scanned page before and after: names, a date and an identifying mark are replaced with black bars.</figcaption>
+    <figcaption>A product line-up before and after: brand names printed on the packaging photographs are covered, as are the names beneath them.</figcaption>
   </figure>
 
   <section class="faq">
-    <h2>Why these are hard to remove</h2>
-    <p>A letterhead in a born-digital PDF is an image. A stamp on a scan is part of the page picture, slightly rotated, a different strength of ink on every sheet, sometimes overlapping the text. A signature is never quite the same twice. None of them can be searched for, and a box drawn at the same position on every page misses the ones that moved when the paper was fed.</p>
+    <h2>The trick: say what, not where</h2>
+    <p>Stop marking places and start naming things. Type the client name once and every mention is found on every page: in the text, in the lettering of screenshots and photographs, and inside logos. Draw a box round a logo once and every other copy is found by sight, at any size. A document with a hundred mentions takes the same three entries as one with three.</p>
+    <p>Each word shows how many times it was found before you commit to it, which is also the fastest check there is: if a name should be on every page and the count says twelve of forty, you know where to look.</p>
   </section>
 
   <section class="faq">
-    <h2>Pick one; the rest are found</h2>
-    <p>Draw a box round one letterhead, one stamp or one signature. Every page is searched for that shape, allowing for a different size, position, colour or ink strength, and each match is proposed with its page and a confidence you can accept or turn down.</p>
-    <p>Stamps and signatures vary more than printed logos, so their matches score lower. Each picked image has its own sensitivity, offered as the few settings the scores on your document point at, with how many matches each would give. You can see immediately whether a looser setting picks up the faint copies or starts catching things that are not the stamp.</p>
+    <h2>Four more that save time</h2>
+    <p>Turn on the detectors, and email addresses, phone numbers, web addresses, street addresses and names are proposed without being typed at all.</p>
+    <p>Turn on labels, and each name becomes a consistent placeholder such as [P1], so the redacted document still reads and nobody has to rewrite the sentences around the bars.</p>
+    <p>Skip the separate clean-up. The export is rebuilt from pixels, so there is no hidden text, metadata or original image to sanitise afterwards, and you can rename the file as you save it.</p>
+    <p>Save a draft. If you are interrupted, the draft brings back every word, pick and mark on the same document, so nothing is redone.</p>
   </section>
 
   <section class="faq">
-    <h2>The text on the page as well</h2>
-    <p>Type the company name, the signatory and the reference numbers. On a scan they are read by text recognition inside your browser, and a second check looks again at anything written in lettering too small or unusual to read. Names, stamps and letterheads are all removed in one pass.</p>
+    <h2>What it looks like in practice</h2>
+    <p>A thirty-page supplier deck has to go to a competitor-facing partner with the client removed. The slow way is a search for the client name, forty boxes, a scroll through every slide looking for the logo, and a second pass for the product photographs with the name on the packaging. The fast way is the client name typed once, the logo picked once, labels on, and a look down the list of what was found. Same document, same result, a fraction of the time.</p>
   </section>
 
   <section class="faq">
-    <h2>Signatures, fairly</h2>
-    <p>A printed logo is the same picture every time, and it is matched very reliably. A handwritten signature is not: each one is drawn afresh, and two signatures by the same person differ more than two prints of a logo ever do. Picking one signature finds the others when they are close in shape, and the list will show you which pages were matched. For a signature that varies a lot, pick two or three of them, or cover the signature blocks with a box of your own; the rebuilt export removes them just as completely.</p>
+    <h2>Where the time still goes</h2>
+    <p>The time that is left is checking, and it should not be skipped. Every proposed mark is listed by page, so checking is walking a list rather than rereading the document, and anything missed can be covered with a box of your own. On scanned or photographed pages an optional second check looks again for words that exist only as pictures, and says how long it will take before it starts.</p>
   </section>
 
   <section class="faq">
-    <h2>Removed for good, and never uploaded</h2>
-    <p>The export rebuilds every page from pixels, so a covered stamp is not underneath a box; it is gone. And the documents never leave your machine: the whole process runs in the browser tab, which is not permitted to send anything anywhere. That matters for signed contracts and personal records that should not pass through a third-party server.</p>
+    <h2>No upload, so no waiting on one</h2>
+    <p>Everything runs in the browser tab: nothing is uploaded, and the page is not permitted to send anything anywhere. That is faster as well as safer, with no file to transfer and no queue on a server, and it keeps working if you lose the connection after the page has loaded.</p>
   </section>
 
   <section class="faq">
     <h2>How to do it, in four steps</h2>
     <ol class="landsteps">
-      <li>Open the PDF or scan. It is processed only in your browser.</li>
-      <li>Draw a box round one letterhead, stamp or signature.</li>
-      <li>Check the proposed copies on every page, and adjust the sensitivity if faint ones were missed.</li>
-      <li>Type any names or numbers, then redact and export.</li>
+      <li>Open the PDF. It stays on your machine.</li>
+      <li>Type each name once and pick each logo once, instead of marking every mention.</li>
+      <li>Switch on the detectors and labels, and check the counts.</li>
+      <li>Walk the list of marks, then redact and export under a new name.</li>
     </ol>
   </section>
 
   <section class="faq">
     <h2>Who it is for</h2>
-    <p>Legal and compliance teams sharing contracts, finance teams sending invoices to auditors or suppliers, and anyone publishing scanned correspondence.</p>
+    <p>Anyone who redacts more than occasionally and is tired of doing it one box at a time: analysts, paralegals, HR teams and researchers.</p>
     <p class="landgo"><a class="landcta" href="/">Open the tool</a></p>
   </section>
 
   <section class="faq">
     <h2>Questions</h2>
-    <h3>Will it find a stamp that is rotated or faint on some pages?</h3>
-    <p>Usually, within limits. Matching allows for size, colour and ink strength; a stamp rotated well off square, or mostly hidden under text, may score too low and should be checked by eye.</p>
-    <h3>Does it work on scanned documents?</h3>
-    <p>Yes. Scans are matched by shape, and their text is read by recognition that runs inside your browser.</p>
-    <h3>Are my documents uploaded?</h3>
-    <p>No. Nothing leaves your machine, and the page is prevented from sending data anywhere by its own security policy.</p>
+    <h3>How long does it take?</h3>
+    <p>Usually a few seconds a page, so a few minutes for a long deck, with progress shown as it goes; scanned pages take longer because they are read first. Most of the time left is your own check.</p>
+    <h3>Is it free?</h3>
+    <p>Documents up to 20 pages are free. Longer ones need a license to export the finished file.</p>
+    <h3>Will it find a name inside an image?</h3>
+    <p>Usually. Words in pictures are read by text recognition and, where that fails, matched by their shape. Every result is listed for you to check.</p>
   </section>
 
   <section class="faq">
@@ -206,9 +209,9 @@
         <li><a href="/remove-logo-from-every-page-pdf/">Remove a logo from every page of a PDF</a></li>
         <li><a href="/no-name-teaser/">Make a no-name teaser from a deck</a></li>
         <li><a href="/adobe-acrobat-redaction-vs-blinded/">Adobe Acrobat redaction vs Blinded</a></li>
+        <li><a href="/remove-letterhead-stamp-signature/">Remove a letterhead or stamp from every page</a></li>
         <li><a href="/redact-images-pdf-powerpoint/">Redact images in a PDF or PowerPoint deck</a></li>
         <li><a href="/redact-scanned-documents-automatically/">Redact scanned documents automatically</a></li>
-        <li><a href="/redact-pdf-quickly/">Redact a PDF quickly: the trick most people miss</a></li>
         <li><a href="/faq.html">How it works, in full</a></li>
         <li><a href="/license/">What it costs, and what stays free</a></li>
         <li><a href="https://github.com/jaredsia-svg/blinded" rel="noopener">Read the source on GitHub</a></li>

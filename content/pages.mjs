@@ -323,7 +323,7 @@ export const pages = [
       + 'scanned medical or personnel records, in the browser, with nothing '
       + 'sent to a server.',
     keywords: ['de-identify scanned records', 'de-identify medical records',
-      'redact scanned documents', 'PHI redaction without upload',
+      'PHI redaction without upload',
       'anonymise scanned files', 'redact a scan'],
     shot: { slide: 1, alt: 'A scanned page before and after: names, a date '
       + 'and a signature block are gone.' },
@@ -1361,6 +1361,261 @@ export const pages = [
       { q: 'Are my documents uploaded?',
         a: 'No. Nothing leaves your machine, and the page is prevented from '
           + 'sending data anywhere by its own security policy.' },
+    ],
+  },
+
+  {
+    slug: 'redact-images-pdf-powerpoint',
+    title: 'Redact images in a PDF or PowerPoint deck',
+    h1: 'Redact images in a PDF or PowerPoint deck',
+    description: 'Black out photographs, screenshots, charts and logos in a PDF '
+      + 'or slide deck, and every repeat of them, removed for good. Nothing '
+      + 'is uploaded.',
+    keywords: ['redact images in PDF', 'redact image in PowerPoint',
+      'redact picture in slide deck', 'black out image in PDF',
+      'remove image from PDF permanently', 'redact photo in PDF'],
+    shot: { slide: 2, alt: 'A presenters slide before and after: one '
+      + 'headshot is replaced with a labelled black box and every name beneath '
+      + 'the photographs is covered.' },
+    lede: 'Most redaction tools are built for words. A slide deck is mostly '
+      + 'pictures: headshots, product photographs, screenshots of a dashboard, '
+      + 'a chart exported as an image, a logo in the corner of every slide. '
+      + 'Those need to go too, and they need to actually leave the file.',
+    sections: [
+      { h: 'Covering a picture is not removing it',
+        p: ['Drawing a black shape over a photograph in PowerPoint, or a '
+          + 'rectangle over it in a PDF viewer, leaves the photograph where it '
+          + 'was, underneath. Anyone who opens the file in an editor, moves the '
+          + 'shape, or extracts the images gets the original back. The same is '
+          + 'true of a picture that has only been cropped: the cropped-off part '
+          + 'is usually still stored in the file.',
+          'Here every page of the export is rebuilt from pixels. Whatever sits '
+          + 'under a bar is replaced by the bar in the new page, and the old '
+          + 'picture is not carried across. There is nothing underneath to '
+          + 'find.'] },
+      { h: 'One box for one picture, one pick for every copy',
+        p: ['To remove a single photograph, draw a box over it. To remove a '
+          + 'picture that repeats, such as a logo in every footer, a watermark '
+          + 'graphic or the same headshot on the cover and the team page, pick it '
+          + 'once instead: every other copy is found by what it looks like, at '
+          + 'any size, and proposed for you to accept.',
+          'Words inside pictures are handled too. A name on a product box, the '
+          + 'axis labels of a chart pasted as a screenshot, or a caption set in '
+          + 'the image itself are read by text recognition in your browser, so '
+          + 'typing the name once finds it in the pictures as well as in the '
+          + 'text.'] },
+      { h: 'PowerPoint, Keynote and Google Slides',
+        p: ['Blinded opens PDF files and PNG or JPEG images, not .pptx files '
+          + 'directly. Export the deck to PDF first; it takes one click and '
+          + 'keeps every slide exactly as it looks. In PowerPoint, File, Export, '
+          + 'Create PDF. In Keynote, File, Export To, PDF. In Google Slides, '
+          + 'File, Download, PDF Document.',
+          'The redacted result is a PDF, which is also what you want to send: '
+          + 'a redacted .pptx still holds the original pictures in its package, '
+          + 'and anybody can open it and pull them out.'] },
+      { h: 'What it does not do',
+        p: ['It does not recognise a person. The same headshot used twice is '
+          + 'found, because it is the same picture; a different photograph of '
+          + 'the same person is a different picture and needs its own box. And '
+          + 'it proposes rather than decides: every match is listed by page '
+          + 'before anything is covered.'] },
+    ],
+    steps: [
+      'Export the deck to PDF if it is a PowerPoint, Keynote or Google Slides '
+        + 'file, then open it here. Nothing is uploaded.',
+      'Draw a box over each picture to remove, or pick a repeated one once to '
+        + 'find every copy.',
+      'Type any names or words that also appear in the pictures.',
+      'Redact and export. The pages are rebuilt, so the pictures are gone.',
+    ],
+    who: 'Anyone sharing a deck outside the company: consultants reusing '
+      + 'client work, founders sending a deck to investors, and teams '
+      + 'publishing a presentation with people or customers in it.',
+    faq: [
+      { q: 'Can I redact a PowerPoint file directly?',
+        a: 'Not a .pptx file; export it to PDF first, which takes one click in '
+          + 'PowerPoint, Keynote or Google Slides. The output is a redacted PDF.' },
+      { q: 'Will the original image still be in the file?',
+        a: 'No. Every page is rebuilt from pixels on export, so the covered '
+          + 'picture is not carried into the new file.' },
+      { q: 'Does it find faces automatically?',
+        a: 'It finds repeats of a picture you pick, including the same '
+          + 'headshot used again. It does not recognise a person across '
+          + 'different photographs.' },
+      { q: 'Is the file uploaded?',
+        a: 'No. Everything runs in your browser, and the page is not '
+          + 'permitted to send anything anywhere.' },
+    ],
+  },
+
+  {
+    slug: 'redact-scanned-documents-automatically',
+    title: 'Redact scanned documents automatically',
+    h1: 'Redact scanned documents automatically',
+    description: 'Names, emails, phone numbers and addresses found on scanned '
+      + 'pages without typing them, and removed for good. Runs in your '
+      + 'browser; nothing is uploaded.',
+    keywords: ['redact scanned documents', 'redact scanned PDF automatically',
+      'automatic redaction of scanned documents', 'OCR redaction',
+      'redact a scanned PDF without Acrobat', 'find personal data in a scan'],
+    shot: { slide: 3, alt: 'A page before and after: the repeated names and '
+      + 'details on it are replaced with labelled black bars.' },
+    lede: 'A scanned document is a photograph of paper. It looks like text, '
+      + 'but to a computer there is none: search finds nothing, and a '
+      + 'redaction tool that works by searching cannot see a single name on it. '
+      + 'Doing it by hand means reading every page and drawing every box.',
+    sections: [
+      { h: 'Reading the page first',
+        p: ['Open the scan and each page is read by text recognition, in your '
+          + 'browser rather than on a server. Small or faint type that reads '
+          + 'badly the first time is read again at a larger size, and white '
+          + 'text on dark bands is read inverted, so a header or a table '
+          + 'heading is not skipped.',
+          'Once the page has been read, everything a text document offers '
+          + 'works on the scan: searching for a name, counting how often it '
+          + 'appears, and finding it on every page.'] },
+      { h: 'Found without being typed',
+        p: ['Some things can be found without you naming them. Switch on the '
+          + 'detectors and every email address, phone number, web address, '
+          + 'street address and personal name the reading finds is proposed '
+          + 'for redaction automatically, on every page, before you have typed '
+          + 'a word. Then add the specific names and references that only you '
+          + 'know to look for.',
+          'A word the reading got wrong is not lost. Where recognition '
+          + 'misreads a name, a second check looks for it by its shape on the '
+          + 'page, and a common misreading, such as an ampersand read as an a, '
+          + 'is used to point that check at the right place.'] },
+      { h: 'A worked example',
+        p: ['Take a forty-page bundle of scanned correspondence to be released '
+          + 'with personal details removed. Opened here, the pages are read in '
+          + 'a few minutes, a few seconds a page. The detectors propose every email address, phone '
+          + 'number and street address they find. You type the three names '
+          + 'that matter and pick the letterhead once. What is left is a list '
+          + 'of marks by page to walk through, not forty pages to reread, and '
+          + 'an export in which none of it survives.'] },
+      { h: 'Stamps, logos and signatures',
+        p: ['A scan usually carries marks that are not text at all: a company '
+          + 'stamp, a letterhead, a logo. Draw a box round one and every other '
+          + 'copy is found by what it looks like, allowing for the small '
+          + 'differences in position and ink between scanned pages.'] },
+      { h: 'What automatic means here',
+        p: ['It finds and proposes; you confirm. Every mark is listed by page '
+          + 'before anything is covered, because a detector that is right '
+          + 'ninety-nine times in a hundred is still wrong on a document you '
+          + 'cannot take back. It works on one document at a time rather than '
+          + 'a folder of them, and handwriting is read far less reliably than '
+          + 'print, so handwritten names should be checked by eye.',
+          'The export rebuilds every page from pixels, so the redaction is '
+          + 'permanent, and the scan never leaves your machine: the browser '
+          + 'tab is not permitted to send it anywhere.'] },
+    ],
+    steps: [
+      'Open the scanned PDF or image. It is read in your browser.',
+      'Switch on the detectors for emails, phone numbers, addresses and names.',
+      'Type any other names or references, and pick any stamp or logo once.',
+      'Check the proposed marks, then redact and export.',
+    ],
+    who: 'Anyone handling scanned paperwork: HR and legal teams, records '
+      + 'officers answering a request, accountants sharing statements, and '
+      + 'researchers working with archive material.',
+    faq: [
+      { q: 'Does it read handwriting?',
+        a: 'Printed text is read well; handwriting much less reliably. '
+          + 'Handwritten names should be checked by eye and covered with a box '
+          + 'where they were missed.' },
+      { q: 'Can it process a folder of scans at once?',
+        a: 'No, one document at a time. Each is read, checked and exported in '
+          + 'the browser tab.' },
+      { q: 'Is the scan uploaded for OCR?',
+        a: 'No. Text recognition runs inside your browser, and the page is not '
+          + 'permitted to send anything anywhere.' },
+    ],
+  },
+
+  {
+    slug: 'redact-pdf-quickly',
+    title: 'Redact a PDF quickly: the trick most people miss',
+    h1: 'Redact a PDF quickly: the trick most people miss',
+    description: 'The slow way is a box per mention. The fast way is to name '
+      + 'each thing once and let every copy be found, even in pictures.',
+    keywords: ['redact PDF quickly', 'fastest way to redact a PDF',
+      'redact PDF fast', 'quick PDF redaction trick',
+      'redact the same name on every page'],
+    shot: { slide: 1, alt: 'A product line-up before and after: brand names '
+      + 'printed on the packaging photographs are covered, as are the names '
+      + 'beneath them.' },
+    lede: 'Redaction is slow because people do it one mention at a time: find '
+      + 'the name, draw a box, scroll, find it again. A forty-page document '
+      + 'with one client name in it can take an hour, and the mention that '
+      + 'gets missed is the one in a picture.',
+    sections: [
+      { h: 'The trick: say what, not where',
+        p: ['Stop marking places and start naming things. Type the client '
+          + 'name once and every mention is found on every page: in the text, '
+          + 'in the lettering of screenshots and photographs, and inside logos. '
+          + 'Draw a box round a logo once and every other copy is found by '
+          + 'sight, at any size. A document with a hundred mentions takes the '
+          + 'same three entries as one with three.',
+          'Each word shows how many times it was found before you commit to '
+          + 'it, which is also the fastest check there is: if a name should be '
+          + 'on every page and the count says twelve of forty, you know where '
+          + 'to look.'] },
+      { h: 'Four more that save time',
+        p: ['Turn on the detectors, and email addresses, phone numbers, web '
+          + 'addresses, street addresses and names are proposed without being '
+          + 'typed at all.',
+          'Turn on labels, and each name becomes a consistent placeholder such '
+          + 'as [P1], so the redacted document still reads and nobody has to '
+          + 'rewrite the sentences around the bars.',
+          'Skip the separate clean-up. The export is rebuilt from pixels, so '
+          + 'there is no hidden text, metadata or original image to sanitise '
+          + 'afterwards, and you can rename the file as you save it.',
+          'Save a draft. If you are interrupted, the draft brings back every '
+          + 'word, pick and mark on the same document, so nothing is redone.'] },
+      { h: 'What it looks like in practice',
+        p: ['A thirty-page supplier deck has to go to a competitor-facing '
+          + 'partner with the client removed. The slow way is a search for the '
+          + 'client name, forty boxes, a scroll through every slide looking '
+          + 'for the logo, and a second pass for the product photographs with '
+          + 'the name on the packaging. The fast way is the client name typed '
+          + 'once, the logo picked once, labels on, and a look down the list '
+          + 'of what was found. Same document, same result, a fraction of the '
+          + 'time.'] },
+      { h: 'Where the time still goes',
+        p: ['The time that is left is checking, and it should not be skipped. '
+          + 'Every proposed mark is listed by page, so checking is walking a '
+          + 'list rather than rereading the document, and anything missed can '
+          + 'be covered with a box of your own. On scanned or photographed '
+          + 'pages an optional second check looks again for words that exist '
+          + 'only as pictures, and says how long it will take before it starts.'] },
+      { h: 'No upload, so no waiting on one',
+        p: ['Everything runs in the browser tab: nothing is uploaded, and the '
+          + 'page is not permitted to send anything anywhere. That is faster '
+          + 'as well as safer, with no file to transfer and no queue on a '
+          + 'server, and it keeps working if you lose the connection after the '
+          + 'page has loaded.'] },
+    ],
+    steps: [
+      'Open the PDF. It stays on your machine.',
+      'Type each name once and pick each logo once, instead of marking every '
+        + 'mention.',
+      'Switch on the detectors and labels, and check the counts.',
+      'Walk the list of marks, then redact and export under a new name.',
+    ],
+    who: 'Anyone who redacts more than occasionally and is tired of doing it '
+      + 'one box at a time: analysts, paralegals, HR teams and researchers.',
+    faq: [
+      { q: 'How long does it take?',
+        a: 'Usually a few seconds a page, so a few minutes for a long deck, '
+          + 'with progress shown as it goes; scanned pages take longer because '
+          + 'they are read first. Most of the time left is your own check.' },
+      { q: 'Is it free?',
+        a: 'Documents up to 20 pages are free. Longer ones need a license to '
+          + 'export the finished file.' },
+      { q: 'Will it find a name inside an image?',
+        a: 'Usually. Words in pictures are read by text recognition and, where '
+          + 'that fails, matched by their shape. Every result is listed for '
+          + 'you to check.' },
     ],
   },
 ]
