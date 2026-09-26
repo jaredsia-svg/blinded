@@ -31,6 +31,7 @@
 //   node tools/bench.mjs kimberly     the ones whose name matches
 //   REVIEW=1 node tools/bench.mjs     also draw every page with its marks
 //   SAVE=1 node tools/bench.mjs       keep this run as the baseline
+//   OFFLINE=1 node tools/bench.mjs    open every document with the network cut
 //
 // Whether it works *well* needs an answer key: truth.json beside the
 // document, listing every place something should be covered -- what it is,
@@ -68,6 +69,7 @@ const bench = process.env.BENCH || join(root, 'bench');
 const only = process.argv[2];
 const REVIEW = Boolean(process.env.REVIEW);
 const SAVE = Boolean(process.env.SAVE);
+const OFFLINE = Boolean(process.env.OFFLINE);
 const baselinePath = join(bench, 'baseline.json');
 const baseline = existsSync(baselinePath)
   ? JSON.parse(readFileSync(baselinePath, 'utf8')) : null;
@@ -160,6 +162,14 @@ for (const name of readdirSync(bench).sort()) {
   page.on('pageerror', e => console.log('   !!', String(e).slice(0, 160)));
   await page.goto('http://localhost:' + port + '/index.html');
   await page.waitForSelector('#view-drop:not([hidden])', { timeout: 20000 });
+  // OFFLINE=1: the page is loaded, everything is kept for working offline,
+  // and then the network is cut before the document is opened -- the claim
+  // the site makes, held to the same answer key as the run with it.
+  if (OFFLINE) {
+    const kept = await page.evaluate(() => window.Blinded.offlineReady);
+    if (!kept) console.log('   !! not everything was kept for offline use');
+    await page.context().setOffline(true);
+  }
   if (draft) {
     await page.setInputFiles('#file', join(folder, draft));
     await page.waitForTimeout(400);

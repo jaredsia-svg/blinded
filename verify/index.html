@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- Written by tools/legal.mjs from content/legal.mjs. Do not edit here. -->
+<meta http-equiv="Content-Security-Policy" content="
+  default-src 'self';
+  script-src 'self';
+  style-src 'self' 'unsafe-inline';
+  img-src 'self' data:;
+  connect-src 'self';
+  frame-src 'none';
+  object-src 'none';
+  base-uri 'none';
+  form-action 'none'">
+<title>Verify it yourself – Blinded</title>
+<meta name="description" content="Four checks anyone can run in a few minutes to confirm that Blinded never sends your document anywhere: go offline, watch the network, read the policy, read the code.">
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="icon" href="/icon-192.png" type="image/png" sizes="192x192">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="canonical" href="https://blinded.dev/verify/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Blinded">
+<meta property="og:title" content="Verify it yourself – Blinded">
+<meta property="og:description" content="Four checks anyone can run in a few minutes to confirm that Blinded never sends your document anywhere: go offline, watch the network, read the policy, read the code.">
+<meta property="og:url" content="https://blinded.dev/verify/">
+<meta property="og:image" content="https://blinded.dev/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="A slide before and after redaction: names and logos gone from the second copy.">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="stylesheet" href="/app.css">
+</head>
+<body class="plainpage">
+
+<header class="top">
+  <div class="wrap top-inner">
+    <a class="mark" href="/">
+      <svg class="markmark" viewBox="0 0 26 15" aria-hidden="true" focusable="false">
+        <g fill="currentColor">
+          <rect width="26" height="6.4" rx="2"/>
+          <rect y="8.6" width="14" height="6.4" rx="2"/>
+          <rect x="16.6" y="8.6" width="3.6" height="6.4" rx="1.5"/>
+          <rect x="22.2" y="8.6" width="2" height="6.4" rx="1"/>
+        </g>
+      </svg> Blinded</a>
+    <div class="top-actions">
+      <a class="top-link" href="/license/">License</a>
+      <a class="top-link" href="/faq.html">Q&amp;A</a>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+<article class="view faqmain lander">
+
+  <h1 class="faqtitle">Verify it yourself: nothing is uploaded</h1>
+
+  <h2>Do not take our word for it</h2>
+  <p>Every redaction tool says it keeps your files safe. Blinded says something stronger: your document never leaves your computer at all. It is opened, read, searched and rebuilt inside your browser tab, and the finished file is written by your browser onto your own disk.</p>
+  <p>That is a claim you can check, and you should. Each of the tests below takes a few minutes and needs nothing but the browser you already have. The first needs no technical knowledge at all.</p>
+
+  <h2>Test 1: turn the internet off</h2>
+  <p>1. Open <a href="/">blinded.dev</a> and wait a few seconds after the page has loaded. On a first visit, the tool keeps a copy of itself on your computer for exactly this test.</p>
+  <p>2. Turn off Wi-Fi, unplug the network cable, or switch on airplane mode.</p>
+  <p>3. Open a document, search it, redact it and save the result.</p>
+  <p>Everything works: the reading, the search, the logo matching, the text recognition on scans and the export. A tool that sent your document to a server could not do any of that with no connection to send it over.</p>
+
+  <h2>Test 2: watch the network</h2>
+  <p>Your browser records every request a page makes, and shows them to you. In Chrome or Edge press F12 (on a Mac, Cmd+Option+I); in Safari, turn on the Develop menu in Settings, Advanced, then choose Develop, Show Web Inspector. Open the Network tab and tick <em>Preserve log</em>.</p>
+  <p>Now open a document, redact it and export it, and read the list. What you will see is the tool fetching its own files from blinded.dev: scripts, fonts, the PDF reader and the text recognition data, each one a download (a GET request). What you will not see is any upload: no POST or PUT request, nothing sent to another website, and no request anywhere near the size of your document. In Chrome, type <code>method:POST</code> into the filter box to be sure: the list is empty.</p>
+
+  <h2>Test 3: read the rule your browser enforces</h2>
+  <p>The tool page is sent with a content security policy: a set of rules the browser enforces on the page, whatever its code tries to do. To see it, click the first request in the Network tab (the page itself), then Headers, and find <code>content-security-policy</code> under the response headers. An independent scanner shows the same headers: <a href="https://securityheaders.com/?q=blinded.dev&amp;followRedirects=on" rel="noopener">securityheaders.com</a>.</p>
+  <p>Two lines matter. <code>connect-src 'self' blob:</code> means the page may not contact any website but blinded.dev itself, so it cannot send anything to a third party, an analytics service or another server of ours. <code>form-action 'none'</code> means it cannot submit a form anywhere at all.</p>
+  <p>The policy does let the page talk to blinded.dev, because that is where its own files come from. So the fair question is whether blinded.dev collects anything. It is a static site with no server code to receive a file, which Test 2 shows directly: every request to it is a download of the site’s own files.</p>
+
+  <h2>Test 4: read the code</h2>
+  <p>Everything the site runs is published on <a href="https://github.com/jaredsia-svg/blinded" rel="noopener">GitHub</a>, and the site is deployed from it: the files there are the files your browser runs. The one compiled file, the matching engine <code>lib/fft.wasm</code>, is built from <code>lib/fft.c</code> beside it, and rebuilding it gives the same bytes, which the project’s own tests check. Search it for <code>fetch(</code>: every request the tool makes is for one of its own files, the questions page, the license page, the matching engine and the reader’s data. There is no upload code to find.</p>
+
+  <h2>What does go over the network</h2>
+  <p>Loading the site downloads its files, like any website. The only other traffic is buying a license, and that happens on a separate page with a policy of its own that talks to the payment processor. The page that holds your document cannot reach it. A license, once bought, is checked inside your browser, with no call home. See the <a href="/privacy/">privacy page</a> for the full list of what our hosting and our payment processor can see.</p>
+  <p>If any of these tests shows you something different, write to <a href="mailto:support@blinded.dev">support@blinded.dev</a>. We would want to know first.</p>
+
+  <p class="faqback"><a class="faqbackbtn" href="/">Open the tool</a></p>
+
+  <p class="hint"><a href="/privacy/">Privacy and security</a> · <a href="/terms/">Terms of service</a> · <a href="/refunds/">Refunds and cancellation</a></p>
+
+</article>
+</main>
+
+</body>
+</html>

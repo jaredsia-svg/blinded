@@ -8647,6 +8647,39 @@
 
   el('busy-pause').addEventListener('click', requestPause);
   bindSweepOffer();
+
+  // Working with the network gone (see sw.js). The worker keeps the app, the
+  // PDF reader and the fonts as it installs; once the page has settled, it is
+  // asked to keep the page reader too -- about seven megabytes, so not before
+  // the page has what it needs, and only the build this browser will run.
+  // Resolves to true when everything is kept, false where it cannot be: no
+  // service worker, a plain http page, or a store that refused.
+  const offlineReady = (async () => {
+    try {
+      const sw = navigator.serviceWorker;
+      if (!sw || !window.isSecureContext) return false;
+      await sw.register('/sw.js');
+      const registration = await sw.ready;
+      await new Promise(done => {
+        if (document.readyState === 'complete') done();
+        else window.addEventListener('load', () => done(), { once: true });
+      });
+      await new Promise(done => setTimeout(done, 1500));
+      const base = new URL(Ocr.BASE, location.href);
+      const urls = ['tesseract.min.js', 'worker.min.js', 'eng.traineddata.gz']
+        .map(name => new URL(name, base).href)
+        .concat(new URL(Ocr.corePath(), location.href).href);
+      const answer = await new Promise(done => {
+        const channel = new MessageChannel();
+        channel.port1.onmessage = event => done(event.data || {});
+        registration.active.postMessage({ type: 'keep', urls }, [channel.port2]);
+        setTimeout(() => done({}), 120000);
+      });
+      return answer.kept === urls.length;
+    } catch {
+      return false;
+    }
+  })();
   function stopTheCheck() {
     state.sweepStopped = true;
     // The sentence beside the bars is gone, so the button says it instead.
@@ -10945,7 +10978,7 @@
     // Close file already returned to the front page in onConfirm.
   });
 
-  window.Blinded = { state, rescan, loadFile, exportFile, setMode, addTemplate,
+  window.Blinded = { state, rescan, loadFile, exportFile, setMode, addTemplate, offlineReady,
     undoLast, undoStack, applyLabels, labelItems, downloadKey,
     sensFor, barFromScores, settleBar, barSteps, moveBarTo, answeredAlready,
     liveImageHits,

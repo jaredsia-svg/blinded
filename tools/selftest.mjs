@@ -2830,6 +2830,35 @@ check('no creation date is carried into the output', !meta.info.CreationDate);
     check('robots.txt lets a crawler load everything the front page starts with',
       loads.length > 5 && refused.length === 0, refused.join(', ') || loads.length + ' files');
   }
+  // Offline (sw.js). The list of files kept for it has to cover what the tool
+  // loads, or the claim that it keeps working with the cable out is true only
+  // until the next file is added: every script and stylesheet the page loads,
+  // everything the image search's workers import, the PDF reader and its
+  // worker, and the fonts. And every file in the list has to exist, or the
+  // install fails for the lot.
+  {
+    const sw = readFileSync(join(root, 'sw.js'), 'utf8');
+    const core = [...(/const CORE = \[([\s\S]*?)\];/.exec(sw) || [, ''])[1].matchAll(/'([^']+)'/g)].map(m => m[1]);
+    const home = readFileSync(join(root, 'index.html'), 'utf8');
+    const loads = [...home.matchAll(/<script[^>]*\ssrc="([^"?]+)/g), ...home.matchAll(/<link[^>]*rel="stylesheet"[^>]*href="([^"?]+)/g)]
+      .map(m => '/' + m[1].replace(/^\//, ''));
+    const worker = readFileSync(join(root, 'lib', 'searchworker.js'), 'utf8');
+    const imported = [...(/importScripts\(([^)]*)\)/.exec(worker) || [, ''])[1].matchAll(/'([^']+)'/g)]
+      .map(m => '/lib/' + m[1]);
+    const fonts = readdirSync(join(root, 'vendor', 'fonts')).filter(f => f.endsWith('.woff2')).map(f => '/vendor/fonts/' + f);
+    const needed = [...loads, ...imported, ...fonts, '/lib/searchworker.js', '/lib/fft.wasm',
+      '/vendor/pdf.min.mjs', '/vendor/pdf.worker.min.mjs'];
+    const missing = needed.filter(one => !core.includes(one));
+    check('offline: everything the tool loads is kept for it', core.length > 20 && missing.length === 0,
+      missing.join(', ') || core.length + ' files');
+    const absent = core.filter(one => !existsSync(join(root, one === '/' ? 'index.html' : one.slice(1))));
+    check('and everything kept for it exists', absent.length === 0, absent.join(', '));
+    check('and the payment page is never answered from the store',
+      /const NEVER = \[[^\]]*'\/unlock\.html'/.test(sw));
+    check('and only this site is ever handled',
+      /url\.origin !== self\.location\.origin\) return;/.test(sw)
+        && /request\.method !== 'GET'\) return;/.test(sw));
+  }
   check('and robots.txt says where the sitemap is',
     /Sitemap: https:\/\/\S+\/sitemap\.xml/.test(readFileSync(join(root, 'robots.txt'), 'utf8')));
 }
@@ -3582,8 +3611,10 @@ check('no creation date is carried into the output', !meta.info.CreationDate);
     await import('../content/legal.mjs');
   const { renderLegal } = await import('./legal.mjs');
 
-  check('there are three of them',
-    legal.length === 3 && ['privacy', 'terms', 'refunds']
+  // The three the law and the payment processor expect, and the page that
+  // shows how to check the privacy claim for yourself.
+  check('there are the four of them',
+    legal.length === 4 && ['privacy', 'terms', 'refunds', 'verify']
       .every(slug => legal.some(one => one.slug === slug)),
     legal.map(one => one.slug).join(', '));
 

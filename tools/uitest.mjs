@@ -201,7 +201,12 @@ writeFileSync(textPath, 'Jane Doe — jane.doe@example.com — (415) 555-0132\n'
 // the one Playwright installs (npx playwright install chromium).
 const browser = await chromium.launch(existsSync('/opt/pw-browsers/chromium')
   ? { executablePath: '/opt/pw-browsers/chromium' } : {});
-const context = await browser.newContext({ acceptDownloads: true });
+// Service workers off everywhere but the offline test, which has a context of
+// its own. Many sections answer requests themselves -- a license service that
+// says "expired", a page served without WebAssembly -- and Playwright cannot
+// answer a request the page's service worker made instead (sw.js makes them
+// all, fetching fresh copies to keep for offline).
+const context = await browser.newContext({ acceptDownloads: true, serviceWorkers: 'block' });
 const page = await context.newPage();
 
 // Marking up and redacting are two steps now, so every test that wants to see
@@ -12101,6 +12106,39 @@ try {
   // real one sat behind it holding the reviewer's work -- so the licence they
   // had just bought appeared to have done nothing at all. Closing hands the
   // tab back exactly as it was left.
+  // The claim on the site: open the page, pull the cable out, and it carries
+  // on. It did not -- the PDF reader's worker and the page reader were only
+  // fetched when the first document was opened, and with the network gone
+  // that failed ("Setting up fake worker failed"). sw.js keeps them. This is
+  // the reviewer's own test: load the page, go offline, open a document, and
+  // search it -- the text layer and the page reader both.
+  await part("it keeps working with the network gone", async () => {
+    const offline = await browser.newContext();
+    try {
+      const tab = await offline.newPage();
+      const errors = [];
+      tab.on('pageerror', error => errors.push(String(error).slice(0, 160)));
+      await tab.goto(base);
+      const kept = await tab.evaluate(() => window.Blinded.offlineReady);
+      check('everything the tool needs is kept for working offline', kept === true, String(kept));
+      await offline.setOffline(true);
+      await tab.setInputFiles('#file', readablePath);
+      const opened = await tab.waitForSelector('#view-review:not([hidden])', { timeout: 60000 })
+        .then(() => true, () => false);
+      check('a document opens with the network gone', opened,
+        await tab.evaluate(() => document.body.innerText.slice(0, 200)));
+      if (opened) {
+        await tab.evaluate(() => { window.Blinded.addTerm('the'); return window.Blinded.runSearch(); });
+        await tab.waitForFunction(() => document.getElementById('busy').hidden, undefined, { timeout: 300000 });
+        const read = await tab.evaluate(() => window.Blinded.state.pages.reduce((n, p) => n + (p.ocrItems || []).length, 0));
+        check('and the page reader reads it offline too', read > 0, read + ' words read');
+      }
+      check('with nothing going wrong on the way', errors.length === 0, errors.join(' ; '));
+    } finally {
+      await offline.close();
+    }
+  });
+
   await part("back to the tool means back to the document", async () => {
     const tool = await context.newPage();
     await tool.goto(base);

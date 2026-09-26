@@ -300,4 +300,91 @@ export const pages = [
           + 'against any window.'] },
     ],
   },
+
+  {
+    slug: 'verify',
+    title: 'Verify it yourself',
+    h1: 'Verify it yourself: nothing is uploaded',
+    description: 'Four checks anyone can run in a few minutes to confirm that '
+      + 'Blinded never sends your document anywhere: go offline, watch the '
+      + 'network, read the policy, read the code.',
+    sections: [
+      { h: 'Do not take our word for it',
+        p: ['Every redaction tool says it keeps your files safe. Blinded says '
+          + 'something stronger: your document never leaves your computer at '
+          + 'all. It is opened, read, searched and rebuilt inside your browser '
+          + 'tab, and the finished file is written by your browser onto your own '
+          + 'disk.',
+          'That is a claim you can check, and you should. Each of the tests '
+          + 'below takes a few minutes and needs nothing but the browser you '
+          + 'already have. The first needs no technical knowledge at all.'] },
+      { h: 'Test 1: turn the internet off',
+        p: ['1. Open <a href="/">blinded.dev</a> and wait a few seconds after '
+          + 'the page has loaded. On a first visit, the tool keeps a copy of '
+          + 'itself on your computer for exactly this test.',
+          '2. Turn off Wi-Fi, unplug the network cable, or switch on airplane '
+          + 'mode.',
+          '3. Open a document, search it, redact it and save the result.',
+          'Everything works: the reading, the search, the logo matching, the '
+          + 'text recognition on scans and the export. A tool that sent your '
+          + 'document to a server could not do any of that with no connection '
+          + 'to send it over.'] },
+      { h: 'Test 2: watch the network',
+        p: ['Your browser records every request a page makes, and shows them to '
+          + 'you. In Chrome or Edge press F12 (on a Mac, Cmd+Option+I); in '
+          + 'Safari, turn on the Develop menu in Settings, Advanced, then choose '
+          + 'Develop, Show Web Inspector. Open the Network tab and tick '
+          + '<em>Preserve log</em>.',
+          'Now open a document, redact it and export it, and read the list. '
+          + 'What you will see is the tool fetching its own files from '
+          + 'blinded.dev: scripts, fonts, the PDF reader and the text '
+          + 'recognition data, each one a download (a GET request). What you '
+          + 'will not see is any upload: no POST or PUT request, nothing sent to '
+          + 'another website, and no request anywhere near the size of your '
+          + 'document. In Chrome, type <code>method:POST</code> into the filter '
+          + 'box to be sure: the list is empty.'] },
+      { h: 'Test 3: read the rule your browser enforces',
+        p: ['The tool page is sent with a content security policy: a set of '
+          + 'rules the browser enforces on the page, whatever its code tries to '
+          + 'do. To see it, click the first request in the Network tab (the '
+          + 'page itself), then Headers, and find '
+          + '<code>content-security-policy</code> under the response headers. '
+          + 'An independent scanner shows the same headers: '
+          + '<a href="https://securityheaders.com/?q=blinded.dev&amp;followRedirects=on" '
+          + 'rel="noopener">securityheaders.com</a>.',
+          'Two lines matter. <code>connect-src \'self\' blob:</code> means the '
+          + 'page may not contact any website but blinded.dev itself, so it '
+          + 'cannot send anything to a third party, an analytics service or '
+          + 'another server of ours. <code>form-action \'none\'</code> means it '
+          + 'cannot submit a form anywhere at all.',
+          'The policy does let the page talk to blinded.dev, because that is '
+          + 'where its own files come from. So the fair question is whether '
+          + 'blinded.dev collects anything. It is a static site with no server '
+          + 'code to receive a file, which Test 2 shows directly: every request '
+          + 'to it is a download of the site’s own files.'] },
+      { h: 'Test 4: read the code',
+        p: ['Everything the site runs is published on '
+          + '<a href="https://github.com/jaredsia-svg/blinded" rel="noopener">GitHub</a>, '
+          + 'and the site is deployed from it: the files there are the files '
+          + 'your browser runs. The one compiled file, the matching engine '
+          + '<code>lib/fft.wasm</code>, is built from <code>lib/fft.c</code> '
+          + 'beside it, and rebuilding it gives the same bytes, which the '
+          + 'project\u2019s own tests check. '
+          + 'Search it for <code>fetch(</code>: every request the tool makes is '
+          + 'for one of its own files, the questions page, the license page, '
+          + 'the matching engine and the reader’s data. There is no upload '
+          + 'code to find.'] },
+      { h: 'What does go over the network',
+        p: ['Loading the site downloads its files, like any website. The only '
+          + 'other traffic is buying a license, and that happens on a separate '
+          + 'page with a policy of its own that talks to the payment processor. '
+          + 'The page that holds your document cannot reach it. A license, once '
+          + 'bought, is checked inside your browser, with no call home. See the '
+          + '<a href="/privacy/">privacy page</a> for the full list of what '
+          + 'our hosting and our payment processor can see.',
+          'If any of these tests shows you something different, write to '
+          + '<a href="mailto:support@blinded.dev">support@blinded.dev</a>. We '
+          + 'would want to know first.'] },
+    ],
+  },
 ];
