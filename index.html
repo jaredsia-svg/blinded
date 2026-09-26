@@ -75,7 +75,7 @@
 <script type="application/ld+json">
 {
   "@context": "https://schema.org",
-  "@type": "SoftwareApplication",
+  "@type": "WebApplication",
   "name": "Blinded",
   "url": "https://blinded.dev/",
   "applicationCategory": "SecurityApplication",
@@ -88,7 +88,15 @@
     "Detectors for email addresses, phone numbers, addresses and names",
     "Exports a rebuilt page, so what is covered is gone rather than hidden"
   ],
-  "isAccessibleForFree": false
+  "isAccessibleForFree": false,
+  "offers": [
+    { "@type": "Offer", "name": "Free", "price": "0", "priceCurrency": "USD",
+      "description": "Documents up to 20 pages" },
+    { "@type": "Offer", "name": "5-day license", "price": "2.99", "priceCurrency": "USD",
+      "description": "Export documents of any length for 5 days" },
+    { "@type": "Offer", "name": "1-month license", "price": "6.99", "priceCurrency": "USD",
+      "description": "Export documents of any length for 1 month" }
+  ]
 }
 </script>
 <link rel="stylesheet" href="app.css?v=f1a19517">
@@ -312,9 +320,9 @@
         <li class="galslide">
           <button type="button" class="galshot" data-slide="1"
             aria-label="See “Building a global health and wellness leader” larger">
-            <img class="galimg galorig" src="gallery/slide-1-original.jpg"
+            <img class="galimg galorig" src="gallery/redact-brand-names-product-photos-before.webp"
               alt="The title slide: a row of consumer product packs under the words BUILDING A GLOBAL HEALTH &amp; WELLNESS LEADER, with both company logos beneath them." width="1280" height="720" draggable="false" loading="lazy">
-            <img class="galimg galred" src="gallery/slide-1-redacted.jpg"
+            <img class="galimg galred" src="gallery/redact-brand-names-product-photos-after.webp"
               alt="The same slide after redaction: both company logos are covered by black bars labelled [L1] and [L2], and the packs that carry their brands by bars labelled [R1], [L2], [L4] and [L5], while the packs of other brands and the headline are left alone." width="1280" height="720" draggable="false">
             <span class="sample-zoom">Click to enlarge</span>
           </button>
@@ -322,9 +330,9 @@
         <li class="galslide">
           <button type="button" class="galshot" data-slide="2"
             aria-label="See “Today’s presenters” larger">
-            <img class="galimg galorig" src="gallery/slide-2-original.jpg"
+            <img class="galimg galorig" src="gallery/redact-names-headshots-presenters-before.webp"
               alt="Four headshots arranged in a block, each one with a name under it, then the company that person works for and the job title they hold." width="1280" height="720" draggable="false" loading="lazy">
-            <img class="galimg galred" src="gallery/slide-2-redacted.jpg"
+            <img class="galimg galred" src="gallery/redact-names-headshots-presenters-after.webp"
               alt="The same slide after redaction: every name is covered by a labelled bar and one headshot by a bar labelled [L7], while the job titles (Chairman &amp; Chief Executive Officer, Lead Independent Director) are left readable." width="1280" height="720" draggable="false" loading="lazy">
             <span class="sample-zoom">Click to enlarge</span>
           </button>
@@ -332,9 +340,9 @@
         <li class="galslide">
           <button type="button" class="galshot" data-slide="3"
             aria-label="See “Scale against the rest of the sector” larger">
-            <img class="galimg galorig" src="gallery/slide-3-original.jpg"
+            <img class="galimg galorig" src="gallery/redact-logos-sales-chart-before.webp"
               alt="A bar chart of sales by company, each bar labelled with a competitor’s logo, beside a wheel of brand wordmarks." width="1280" height="720" draggable="false" loading="lazy">
-            <img class="galimg galred" src="gallery/slide-3-redacted.jpg"
+            <img class="galimg galred" src="gallery/redact-logos-sales-chart-after.webp"
               alt="The same slide after redaction: the two logos of the companies in the deal are covered wherever they appear, including inside the wheel of wordmarks, while the rival logos, every figure and the axis are left readable." width="1280" height="720" draggable="false" loading="lazy">
             <span class="sample-zoom">Click to enlarge</span>
           </button>
@@ -342,9 +350,9 @@
         <li class="galslide">
           <button type="button" class="galshot" data-slide="4"
             aria-label="See “Why the two companies fit together” larger">
-            <img class="galimg galorig" src="gallery/slide-4-original.jpg"
+            <img class="galimg galorig" src="gallery/redact-company-names-logos-deal-slide-before.webp"
               alt="A headline naming both companies, four supporting points, and the two logos side by side with a plus sign between them." width="1280" height="720" draggable="false" loading="lazy">
-            <img class="galimg galred" src="gallery/slide-4-redacted.jpg"
+            <img class="galimg galred" src="gallery/redact-company-names-logos-deal-slide-after.webp"
               alt="The same slide after redaction: the company names in the headline, the two logos, and the name inside the third supporting point are covered by labelled bars, while the four points themselves read as written." width="1280" height="720" draggable="false" loading="lazy">
             <span class="sample-zoom">Click to enlarge</span>
           </button>
@@ -352,9 +360,9 @@
         <li class="galslide">
           <button type="button" class="galshot" data-slide="5"
             aria-label="See “What the combination offers consumers” larger">
-            <img class="galimg galorig" src="gallery/slide-5-original.jpg"
+            <img class="galimg galorig" src="gallery/redact-brand-wordmarks-logo-row-before.webp"
               alt="Six claims about the combined business, a row of ten brand wordmarks, and a panel of revenue and EBITDA figures." width="1280" height="720" draggable="false" loading="lazy">
-            <img class="galimg galred" src="gallery/slide-5-redacted.jpg"
+            <img class="galimg galred" src="gallery/redact-brand-wordmarks-logo-row-after.webp"
               alt="The same slide after redaction: three of the ten wordmarks are covered by labelled bars and the rest left alone, with the figures, the claims and the footnote untouched." width="1280" height="720" draggable="false" loading="lazy">
             <span class="sample-zoom">Click to enlarge</span>
           </button>
@@ -362,9 +370,9 @@
         <li class="galslide">
           <button type="button" class="galshot" data-slide="6"
             aria-label="See “A complementary market portfolio” larger">
-            <img class="galimg galorig" src="gallery/slide-6-original.jpg"
+            <img class="galimg galorig" src="gallery/redact-logos-header-footer-before.webp"
               alt="A Venn diagram of the two companies’ markets, with a flag and a sales figure for each country." width="1280" height="720" draggable="false" loading="lazy">
-            <img class="galimg galred" src="gallery/slide-6-redacted.jpg"
+            <img class="galimg galred" src="gallery/redact-logos-header-footer-after.webp"
               alt="The same slide after redaction: only the two logos at the top are covered, leaving every flag, every country figure and the diagram itself readable." width="1280" height="720" draggable="false" loading="lazy">
             <span class="sample-zoom">Click to enlarge</span>
           </button>
@@ -986,7 +994,7 @@
           <path d="M15 5l-7 7 7 7"/>
         </svg>
       </button>
-      <div class="samplestage"><img id="samplebig" src="gallery/slide-1-redacted.jpg" draggable="false"
+      <div class="samplestage"><img id="samplebig" src="gallery/redact-brand-names-product-photos-after.webp" draggable="false"
         alt="A slide after redaction: the names and logos on it are gone."></div>
       <button type="button" class="bigedge right" id="big-on" aria-label="The next slide">
         <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">

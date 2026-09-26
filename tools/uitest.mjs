@@ -63,7 +63,7 @@ const TYPES = {
   // nothing: a landing page's before-and-after came out as two empty boxes
   // and the page still passed, because nothing was asking whether the
   // pictures had pixels in them.
-  '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png',
+  '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp',
   '.svg': 'image/svg+xml', '.xml': 'application/xml',
 };
 
@@ -4883,10 +4883,10 @@ try {
       return { opened, said, stepped, thenSaid, flipped, stillOpen };
     });
     check('the enlarged slide can be stepped without closing it',
-      /slide-1-redacted/.test(inside.opened) && /slide-2-redacted/.test(inside.stepped)
+      /product-photos-after/.test(inside.opened) && /headshots-presenters-after/.test(inside.stepped)
       && inside.said === '1 of 6' && inside.thenSaid === '2 of 6', JSON.stringify(inside));
     check('and swapped for its other half in place',
-      /slide-2-original/.test(inside.flipped), JSON.stringify(inside));
+      /headshots-presenters-before/.test(inside.flipped), JSON.stringify(inside));
     check('and pressing those controls does not close it',
       inside.stillOpen === true, JSON.stringify(inside));
 
@@ -4906,7 +4906,7 @@ try {
       return { wasOriginal, wasRedacted };
     });
     check('enlarging shows the half that is on screen',
-      /original/.test(enlarged.wasOriginal) && /redacted/.test(enlarged.wasRedacted),
+      /-before\.webp/.test(enlarged.wasOriginal) && /-after\.webp/.test(enlarged.wasRedacted),
       JSON.stringify(enlarged));
 
     // On a phone the picture is the screen: no card, no mat, no page-width

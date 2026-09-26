@@ -4,7 +4,7 @@
 // so that they can be loaded here without a bundler, the same way the page
 // loads them. tools/uitest.mjs covers the parts that need a real canvas.
 import { faqData, faqIsCurrent } from './faq.mjs';
-import { pages as landers, PITCH } from '../content/pages.mjs';
+import { pages as landers, PITCH, GALLERY } from '../content/pages.mjs';
 import { renderPage, renderSitemap, renderKeywords } from './pages.mjs';
 
 // The same two answers tools/pages.mjs gives, asked here so a stale page
@@ -2218,9 +2218,9 @@ check('no creation date is carried into the output', !meta.info.CreationDate);
   check('and every one of them is in the repository', missing.length === 0,
     missing.join(', '));
   for (let n = 1; n <= 6; n++) {
-    check('slide ' + n + ' has both halves',
-      wanted.includes('gallery/slide-' + n + '-original.jpg')
-      && wanted.includes('gallery/slide-' + n + '-redacted.jpg'));
+    check('slide ' + n + ' has both halves, named for what they show',
+      wanted.includes('gallery/' + GALLERY[n].file + '-before.webp')
+      && wanted.includes('gallery/' + GALLERY[n].file + '-after.webp'));
   }
 
   // A front page that costs a megabyte before anyone has done anything is a
@@ -2770,12 +2770,15 @@ check('no creation date is carried into the output', !meta.info.CreationDate);
         page.includes('<link rel="canonical" href="https://blinded.dev/'
           + one.slug + '/">'), one.slug);
       check(say + 'it has a picture of the thing it describes',
-        new RegExp('gallery/slide-' + one.shot.slide + '-original')
-          .test(page)
-          && new RegExp('gallery/slide-' + one.shot.slide + '-redacted')
-            .test(page)
-          && existsSync(join(root, 'gallery',
-            'slide-' + one.shot.slide + '-redacted.jpg')), one.slug);
+        page.includes('/gallery/' + GALLERY[one.shot.slide].file + '-before.webp')
+          && page.includes('/gallery/' + GALLERY[one.shot.slide].file + '-after.webp')
+          && existsSync(join(root, 'gallery', GALLERY[one.shot.slide].file + '-after.webp')),
+        one.slug);
+      // Both halves described: "Before redaction." told an image search
+      // nothing about the picture it was attached to.
+      check(say + 'and both halves say what is in them',
+        !page.includes('alt="Before redaction."')
+          && page.includes('alt="' + GALLERY[one.shot.slide].before.replace(/&/g, '&amp;')), one.slug);
       check(say + 'four steps, because that is what it promises',
         (page.match(/<li>/g) || []).length >= 4 && one.steps.length === 4,
         one.steps.length + ' steps');
@@ -3093,6 +3096,27 @@ check('no creation date is carried into the output', !meta.info.CreationDate);
     check('and the front page says so too',
       /needs a pass|free below|twenty pages/i.test(
         readFileSync(join(root, 'index.html'), 'utf8')), 'index.html');
+    // The prices in the structured data are the prices the payment page
+    // charges, and a free tier at the page limit it actually has: a search
+    // result quoting one price and a checkout charging another is the kind of
+    // thing that gets a listing's details withdrawn.
+    {
+      const home = readFileSync(join(root, 'index.html'), 'utf8');
+      const block = /<script type="application\/ld\+json">([\s\S]*?)<\/script>/.exec(home);
+      let app = null;
+      try { app = JSON.parse(block[1]); } catch { /* reported below */ }
+      const offers = (app && app.offers) || [];
+      const paid = offers.filter(one => Number(one.price) > 0).map(one => 'USD ' + one.price).sort();
+      check('the front page describes itself as a web application in security',
+        app && app['@type'] === 'WebApplication' && app.applicationCategory === 'SecurityApplication',
+        app && app['@type']);
+      check('and its structured prices are the ones the payment page charges',
+        JSON.stringify(paid) === JSON.stringify(Pay.prices.map(one => one.price).sort()),
+        JSON.stringify(paid) + ' vs ' + JSON.stringify(Pay.prices.map(one => one.price)));
+      check('and its free offer names the real page limit',
+        offers.some(one => Number(one.price) === 0
+          && new RegExp('up to ' + Pay.freePages + ' pages').test(one.description)));
+    }
     check('structured data does not claim it is free to everybody',
       !/"isAccessibleForFree": true/.test(
         readFileSync(join(root, 'index.html'), 'utf8')), 'index.html');

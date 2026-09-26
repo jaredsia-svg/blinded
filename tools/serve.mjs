@@ -21,7 +21,7 @@ const TYPES = {
   '.json': 'application/json',
   '.pdf': 'application/pdf',
   '.png': 'image/png',
-  '.jpg': 'image/jpeg',
+  '.jpg': 'image/jpeg', '.webp': 'image/webp',
   '.jpeg': 'image/jpeg',
   '.xml': 'application/xml',
   '.md': 'text/markdown; charset=utf-8',

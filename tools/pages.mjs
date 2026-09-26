@@ -11,7 +11,7 @@
 import { mkdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { SITE, pages } from '../content/pages.mjs';
+import { SITE, pages, GALLERY } from '../content/pages.mjs';
 import { pages as legal } from '../content/legal.mjs';
 
 // Through fileURLToPath rather than .pathname. On Windows a file URL's
@@ -55,8 +55,11 @@ function structured(page) {
       headline: page.h1,
       description: page.description,
       mainEntityOfPage: url,
-      image: SITE + '/og.png',
-      about: { '@type': 'SoftwareApplication', name: 'Blinded', url: SITE + '/' },
+      image: [SITE + '/gallery/' + GALLERY[page.shot.slide].file + '-after.webp',
+        SITE + '/gallery/' + GALLERY[page.shot.slide].file + '-before.webp',
+        SITE + '/og.png'],
+      about: { '@type': 'WebApplication', name: 'Blinded', url: SITE + '/',
+        applicationCategory: 'SecurityApplication', operatingSystem: 'Any browser' },
     },
     {
       '@context': 'https://schema.org',
@@ -140,9 +143,9 @@ ${mark()} Blinded</a>
 
   <figure class="landshot">
     <div class="landpair">
-      <span><b>Before</b><img src="/gallery/slide-${shot.slide}-original.jpg"
-        alt="Before redaction." loading="lazy" width="1280" height="720"></span>
-      <span><b>After</b><img src="/gallery/slide-${shot.slide}-redacted.jpg"
+      <span><b>Before</b><img src="/gallery/${GALLERY[shot.slide].file}-before.webp"
+        alt="${esc(GALLERY[shot.slide].before)}" loading="lazy" width="1280" height="720"></span>
+      <span><b>After</b><img src="/gallery/${GALLERY[shot.slide].file}-after.webp"
         alt="${esc(shot.alt)}" loading="lazy" width="1280" height="720"></span>
     </div>
     <figcaption>${esc(shot.alt)}</figcaption>

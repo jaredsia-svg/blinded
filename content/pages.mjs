@@ -43,6 +43,33 @@ export const PITCH = {
     + 'by sight and deletes it completely. Nothing is uploaded.',
 };
 
+// The six before-and-after pairs, named for what they show. A file called
+// slide-4-original.jpg tells an image search nothing; one called
+// redact-company-names-logos-deal-slide-before.webp says what it is before
+// anybody has read the page. `before` is what the original slide shows, for
+// the picture's alt text; the redacted half's alt text is each page's own.
+export const GALLERY = {
+  1: { file: 'redact-brand-names-product-photos',
+    before: 'A title slide: a row of consumer product packs under the words '
+      + 'BUILDING A GLOBAL HEALTH & WELLNESS LEADER, with both company logos '
+      + 'beneath them.' },
+  2: { file: 'redact-names-headshots-presenters',
+    before: 'Four headshots arranged in a block, each with a name under it, '
+      + 'then the company that person works for and their job title.' },
+  3: { file: 'redact-logos-sales-chart',
+    before: 'A bar chart of sales by company, each bar labelled with a '
+      + 'competitor\u2019s logo, beside a wheel of brand wordmarks.' },
+  4: { file: 'redact-company-names-logos-deal-slide',
+    before: 'A deal slide: a headline naming both companies, four supporting '
+      + 'points, and the two logos side by side with a plus sign between them.' },
+  5: { file: 'redact-brand-wordmarks-logo-row',
+    before: 'Six claims about the combined business, a row of ten brand '
+      + 'wordmarks, and a panel of revenue and EBITDA figures.' },
+  6: { file: 'redact-logos-header-footer',
+    before: 'A market slide with both company logos in the header and again '
+      + 'in the footer, over a Venn diagram of countries and sales figures.' },
+};
+
 export const pages = [
   {
     slug: 'redact-cim',

@@ -18,7 +18,8 @@ import { PITCH } from '../content/pages.mjs';
 // fileURLToPath is the conversion that knows about drive letters.
 const root = fileURLToPath(new URL('..', import.meta.url));
 const as64 = name =>
-  'data:image/jpeg;base64,' + readFileSync(resolve(root, name)).toString('base64');
+  'data:image/' + (name.endsWith('.webp') ? 'webp' : 'jpeg') + ';base64,'
+  + readFileSync(resolve(root, name)).toString('base64');
 
 const html = `<!doctype html><meta charset="utf-8"><style>
   * { margin: 0; box-sizing: border-box; }
@@ -55,9 +56,9 @@ const html = `<!doctype html><meta charset="utf-8"><style>
 </div>
 <div class="pair">
   <div class="one"><div class="cap">Before</div>
-    <div class="shot"><img src="${as64('gallery/slide-4-original.jpg')}"></div></div>
+    <div class="shot"><img src="${as64('gallery/redact-company-names-logos-deal-slide-before.webp')}"></div></div>
   <div class="one"><div class="cap after">After</div>
-    <div class="shot"><img src="${as64('gallery/slide-4-redacted.jpg')}"></div></div>
+    <div class="shot"><img src="${as64('gallery/redact-company-names-logos-deal-slide-after.webp')}"></div></div>
 </div>`;
 
 const browser = await chromium.launch();
