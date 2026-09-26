@@ -1649,6 +1649,41 @@ check('an empty term is harmless', TextImage.shapeRelief('') === 0
     loose.matches.length + ' vs ' + strict.matches.length);
 })();
 
+// A mark picked large, and its copies printed small. Measured on an investor
+// deck: the cover wordmark, picked, scored 0.68 against the same wordmark in
+// every slide's footer at 0.44 the size, because the pick was sampled down
+// four pixels at a time while the footer was drawn small; and the footer
+// copies split 0.91 / 0.70 on half a pixel of size. Here the copy is made the
+// way a renderer makes one -- every pixel the average of what it covers --
+// and the pick has to find it, well clear of the bar.
+(() => {
+  const TW = 300, TH = 40;
+  const mark = new Float32Array(TW * TH).fill(250);
+  for (let y = 6; y < 34; y++) {
+    for (let x = 8; x < 292; x++) {
+      const stroke = (x % 23 < 3) || ((x + y) % 29 < 2) || (y > 16 && y < 19 && x % 47 < 30);
+      if (stroke) mark[y * TW + x] = 20;
+    }
+  }
+  const k = 0.44, CW = Math.round(TW * k), CH = Math.round(TH * k);
+  const copy = Match.shrink(mark, TW, TH, CW, CH);
+  // What the final check compares: the pick brought down to working size,
+  // against the page's copy brought to that same size.
+  const NW = 160, NH = Math.round(TH * NW / TW);
+  const pageCopy = Match.resize(copy, CW, CH, NW, NH);
+  const score = small => {
+    const t = Match.prepareTemplate(small, NW, NH);
+    return Match.correlate(pageCopy, NW, NH, t, { threshold: -1 })[0].score;
+  };
+  const averaged = score(Match.shrink(mark, TW, TH, NW, NH));
+  const sampled = score(Match.resize(mark, TW, TH, NW, NH));
+  check('a pick shrunk by averaging looks like its copy printed small',
+    averaged >= 0.9 && averaged > sampled + 0.03,
+    'averaged ' + averaged.toFixed(3) + ', sampled ' + sampled.toFixed(3));
+  const flat = Match.shrink(new Float32Array(90).fill(7), 10, 9, 4, 3);
+  check('shrinking by averaging keeps a flat grey flat', flat.every(v => Math.abs(v - 7) < 1e-4));
+})();
+
 // A square mark must be untouched by all of this: it was never broken, and
 // the wide profile costs about three times the nominating work.
 check('an ordinary mark is sized exactly as before',

@@ -167,6 +167,26 @@ for (const name of readdirSync(bench).sort()) {
   await page.setInputFiles('#file', join(folder, doc));
   await page.waitForSelector('#view-review:not([hidden])', { timeout: 180000 });
   await page.waitForTimeout(1200);
+  // A document over the free page limit is opened with the price notice,
+  // and its draft is put back only once that is closed. Searching before
+  // then searched for nothing: the words and picked images were not back
+  // yet. Only that notice is answered -- "this is a different file" is a
+  // question about the benchmark, and is left for a person to see.
+  if (draft) {
+    for (let i = 0; i < 60; i++) {
+      const back = await page.evaluate(() => {
+        const box = document.getElementById('confirmbox');
+        if (box && !box.hidden && /license required/i.test(
+          document.getElementById('confirmhead').textContent)) {
+          document.getElementById('confirmyes').click();
+        }
+        const B = window.Blinded;
+        return B.state.terms.length > 0 || B.state.templates.length > 0;
+      });
+      if (back) break;
+      await page.waitForTimeout(250);
+    }
+  }
 
   // Each leg of the search timed on its own, not just the whole press.
   //
