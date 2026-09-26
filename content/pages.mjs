@@ -1534,11 +1534,11 @@ export const pages = [
 
   {
     slug: 'redact-pdf-quickly',
-    title: 'Redact a PDF quickly: the trick most people miss',
-    h1: 'Redact a PDF quickly: the trick most people miss',
+    title: 'Redact a long PDF document quickly: secret hack',
+    h1: 'Redact a long PDF document quickly: secret hack',
     description: 'The slow way is a box per mention. The fast way is to name '
       + 'each thing once and let every copy be found, even in pictures.',
-    keywords: ['redact PDF quickly', 'fastest way to redact a PDF',
+    keywords: ['redact PDF quickly', 'redact a long PDF quickly', 'fastest way to redact a PDF',
       'redact PDF fast', 'quick PDF redaction trick',
       'redact the same name on every page'],
     shot: { slide: 1, alt: 'A product line-up before and after: brand names '

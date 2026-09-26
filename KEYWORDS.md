@@ -191,11 +191,12 @@ pages, this list and the sitemap together.
 - redact a scanned PDF without Acrobat
 - find personal data in a scan
 
-## [Redact a PDF quickly: the trick most people miss](https://blinded.dev/redact-pdf-quickly/)
+## [Redact a long PDF document quickly: secret hack](https://blinded.dev/redact-pdf-quickly/)
 
 `/redact-pdf-quickly/` · 662 words · 3 questions
 
 - redact PDF quickly
+- redact a long PDF quickly
 - fastest way to redact a PDF
 - redact PDF fast
 - quick PDF redaction trick
