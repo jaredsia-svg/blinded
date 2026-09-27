@@ -6639,12 +6639,14 @@ try {
       document.getElementById('page-text').click();
       const tip = document.getElementById('tip');
       return { placing: window.Blinded.state.placingText,
-        said: tip.hidden === false && /tap the page/i.test(tip.textContent),
+        said: tip.hidden === true
+          && /tap the page to add a note.*Escape/i.test(
+            document.getElementById('page-text').getAttribute('title') || ''),
         pressed: document.getElementById('page-text').getAttribute('aria-pressed') };
     });
     check('Add a note arms the next tap on the page',
       armed.placing === true && armed.pressed === 'true', JSON.stringify(armed));
-    check('and says so, because nothing else in the tool waits for a tap',
+    check('and says how on its hover tip, not in a line under the toolbar',
       armed.said === true, JSON.stringify(armed));
 
     const placed = await page.evaluate(() => {
@@ -6881,12 +6883,15 @@ try {
       document.getElementById('page-draw').click();
       const tip = document.getElementById('tip');
       return { inking: window.Blinded.state.inking,
-        said: tip.hidden === false && /draw on the page/i.test(tip.textContent),
+        said: tip.hidden === true
+          && /draw on the page.*Escape, or the pen again/i.test(
+            document.getElementById('page-draw').getAttribute('title') || ''),
         pressed: document.getElementById('page-draw').getAttribute('aria-pressed') };
     });
     check('the pen arms the next press on the page',
       armed.inking === true && armed.pressed === 'true', JSON.stringify(armed));
-    check('and says how to put it away again', armed.said === true, JSON.stringify(armed));
+    check('and says how to put it away again, on its hover tip', armed.said === true,
+      JSON.stringify(armed));
 
     // The first press is not a line. It puts the colours and the thickness on
     // the page and leaves the page alone, so the choosing happens before the

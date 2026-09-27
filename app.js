@@ -5970,24 +5970,9 @@
     // the finger that would ordinarily drag the document is busy drawing the
     // box, so how to move the page is a genuine question; with a mouse it is
     // not, and a line about fingers there is noise.
-    if (state.placingText) {
-      // Said on every screen, not only a phone: nothing else in the tool
-      // waits for a tap on the document, so without a line here the button
-      // looks as though it did nothing.
-      tip.textContent = 'Tap the page to add a note, or a note to change it. '
-        + 'Escape, or the button again, to stop.';
-      tip.hidden = false;
-      return;
-    }
-    if (state.inking) {
-      // And the same for the pen, which changes what a press on the page
-      // means until it is put away. Both ways out are named, because a mode
-      // with no visible exit is a mode reviewers get stuck in.
-      tip.textContent = 'Draw on the page, or tap a line to change it. '
-        + 'Escape, or the pen again, to stop.';
-      tip.hidden = false;
-      return;
-    }
+    // How to use the note and the pen, and how to put them away, is said on
+    // the buttons themselves, on hover. A line appearing under the toolbar
+    // restated it every time either was picked up.
     const say = state.mode === 'pick' && onPhone();
     tip.textContent = say ? 'One finger to draw the box, two to scroll.' : '';
     tip.hidden = !say;
