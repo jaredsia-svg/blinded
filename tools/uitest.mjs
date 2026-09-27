@@ -4747,6 +4747,28 @@ try {
       && sound.off.muted === true && sound.off.icon && /on/i.test(sound.off.label),
       JSON.stringify(sound));
 
+    // A click on the film pauses it and the next one plays it again, as in
+    // any player.
+    const clicks = await page.evaluate(() => {
+      const v = document.getElementById('promovideo');
+      let paused = false;
+      Object.defineProperty(v, 'paused', { configurable: true, get: () => paused });
+      v.play = () => { paused = false; window.__promo.push('play');
+        v.dispatchEvent(new Event('play')); return Promise.resolve(); };
+      v.pause = () => { paused = true; window.__promo.push('pause');
+        v.dispatchEvent(new Event('pause')); };
+      v.click();
+      const first = { paused, icon: document.getElementById('promoplay').getAttribute('aria-label') };
+      v.click();
+      const second = { paused, icon: document.getElementById('promoplay').getAttribute('aria-label') };
+      // Left playing, as the checks below expect.
+      Object.defineProperty(v, 'paused', { configurable: true, get: () => false });
+      return { first, second };
+    });
+    check('one click on the film pauses it, and the next plays it again',
+      clicks.first.paused === true && clicks.first.icon === 'Play'
+      && clicks.second.paused === false && clicks.second.icon === 'Pause', JSON.stringify(clicks));
+
     // Play and stop at the bottom left, the time bar across the bottom.
     const bar = await page.evaluate(async () => {
       const v = document.getElementById('promovideo');
