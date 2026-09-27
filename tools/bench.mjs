@@ -234,10 +234,12 @@ for (const name of readdirSync(bench).sort()) {
   // back already answered, so the search is asked for directly rather than
   // through the button — which at that point means "redact".
   await page.evaluate(() => {
-    const offer = document.getElementById('sweepoffer');
-    if (offer && !offer.hidden) document.getElementById('sweepofferskip').click();
     const B = window.Blinded;
     B.state.searched = false;
+    // The draft also remembers which words its own check had covered. A word
+    // checked once is not checked again, so left in place the check below
+    // would have nothing to do.
+    B.state.sweptTerms = [];
     for (const logo of B.state.templates) { logo.searched = false; logo.matches = 0; }
     // The draft restored the marks its own run had found, at whatever bar it
     // was saved with. Left in place they mix with this run's and the report
@@ -252,8 +254,10 @@ for (const name of readdirSync(bench).sort()) {
       p.manual = [];
       p.dismissed = new Set();
     }
+    window.__searchEstimate = B.searchEstimate ? B.searchEstimate().seconds : 0;
     return B.runSearch();
   });
+  const searchEstimate = await page.evaluate(() => window.__searchEstimate);
   await page.waitForFunction(() => document.getElementById('busy').hidden,
     undefined, { timeout: 900000 });
   const searchTook = (Date.now() - started) / 1000;
@@ -379,6 +383,10 @@ for (const name of readdirSync(bench).sort()) {
 
   console.log('==', name, '·', out.pages, 'pages · ' + out.size.join('/') + ' · ' + out.dpi.join('/') + ' dpi · search ' + searchTook.toFixed(1)
     + 's · check ' + sweepTook.toFixed(1) + 's (+' + sweepAdded + ')');
+  if (searchEstimate > 0) {
+    console.log('   search estimate ' + searchEstimate.toFixed(1) + 's, took '
+      + searchTook.toFixed(1) + 's');
+  }
   if (estimate && estimate.seconds > 0) {
     console.log('   check estimate ' + estimate.seconds.toFixed(1) + 's for ' + estimate.pages
       + ' pages x ' + estimate.terms + ' words, took ' + sweepTook.toFixed(1) + 's');

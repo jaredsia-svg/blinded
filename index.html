@@ -99,7 +99,7 @@
   ]
 }
 </script>
-<link rel="stylesheet" href="app.css?v=782e69fb" integrity="sha384-kBUoH5rbblW8767Hrcs3t+08gVS7++dxNloWGWLdynLhwL1E3uvVYCmC3VZDGi9c">
+<link rel="stylesheet" href="app.css?v=c67319d4" integrity="sha384-y7qzYSIX1sRXHLM21z2mdldiO6LPko0Hfn5SukP/ufD/YTNvZ7WAXqB/s7gN0TSs">
 </head>
 <body>
 
@@ -771,6 +771,10 @@
            which is what a reviewer is doing while they wait. -->
       <!-- A search reports itself here rather than behind a dialog: it takes as
            long as it takes, and there is a document to read while it does. -->
+      <!-- The search's report and the check's bar, one above the other: the
+           check runs on from the search, and its bar belongs under the line
+           saying the search is done. -->
+      <div class="runstack">
       <div id="runfoot" class="runbar" hidden>
         <div id="runfoot-legs" class="runlegs"></div>
         <p class="hint" id="runfoot-text"></p>
@@ -780,6 +784,7 @@
            two kinds of waiting is one kind too many. -->
       <div id="sweeprun" class="runbar" hidden>
         <div id="sweeprun-legs" class="runlegs"></div>
+      </div>
       </div>
       <!-- Offered here rather than in the panel, because starting a run and
            watching it are the same place: the bars, the Stop and the report
@@ -859,24 +864,41 @@
 </div>
 
 
-<div id="sweepoffer" class="busy" hidden role="dialog" aria-modal="true"
-  aria-labelledby="sweepofferhead">
+<!-- Both phases of a search, and their waits, before either starts. The
+     second used to be offered only once the first had finished, which asked
+     the reviewer to decide on a second wait at the end of the first. -->
+<div id="searchplan" class="busy" hidden role="dialog" aria-modal="true"
+  aria-labelledby="searchplanhead">
   <div class="busy-inner nameinner confirminner sweepoffer-inner">
-    <button type="button" id="sweepofferx" class="dialog-x" aria-label="Close">
+    <button type="button" id="searchplanx" class="dialog-x" aria-label="Close">
       <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
         <path d="M6 6l12 12M18 6L6 18"/>
       </svg>
     </button>
-    <h2 class="namehead" id="sweepofferhead">Run a second check?</h2>
-    <!-- Written from script, because it names the wait for this document. -->
-    <p class="confirmbody" id="sweepofferbody"></p>
-    <!-- Side by side, and in the order they are read: the way out on the
-         left, the thing being offered on the right, where the eye finishes.
-         Amber because what the check finds is drawn amber -- the button and
-         its marks are the same colour throughout. -->
-    <div class="confirmgo sweepgo">
-      <button type="button" id="sweepofferskip" class="ghost confirm-action">Skip</button>
-      <button type="button" id="sweepoffergo" class="primary amber confirm-action">Proceed</button>
+    <h2 class="namehead" id="searchplanhead">Search in two phases</h2>
+    <p class="confirmbody">Blinded will search this document in two phases.
+      Marks from the first are ready to review while the second runs.</p>
+    <ol class="planlist">
+      <li class="planrow">
+        <label for="plan1">
+          <span class="plannum">1</span>
+          <span class="plantext">Text and image inputs
+            <span class="plantime" id="plantime1"></span></span>
+        </label>
+        <input type="checkbox" id="plan1" checked disabled
+          title="Always part of a search">
+      </li>
+      <li class="planrow">
+        <label for="plan2">
+          <span class="plannum">2</span>
+          <span class="plantext">A second check for text that appears as images
+            <span class="plantime" id="plantime2"></span></span>
+        </label>
+        <input type="checkbox" id="plan2" checked>
+      </li>
+    </ol>
+    <div class="confirmgo plango">
+      <button type="button" id="searchplango" class="primary hunt confirm-action">Begin search</button>
     </div>
   </div>
 </div>
@@ -1126,7 +1148,7 @@
 <script src="lib/pass.js?v=fa8e95c9" integrity="sha384-vdiGIUAtPsWUwbV/9iFB3JwVBPa1iWWzPkpwZOb2O6VlxQpGrlUP9RGGlQaNl17N"></script>
 <script src="lib/pay.js?v=6f94d998" integrity="sha384-1bByT5YqR1yybQrDsj8bxhmARIphzp5gXG9YVdSfl6J9KWFMMAqdEFPO5nmQDcnr"></script>
 <script src="lib/render.js?v=65c3fe76" integrity="sha384-hC2pL0Iz3qZPhOkr8LTwrOtpoDzQ/Yq+qnhe6ySQZDtipsMW1eMqd8M9ZeZmqODr"></script>
-<script src="app.js?v=9e278d85" integrity="sha384-efX4ENuyhhftCBUHMtOA3j/Cha6+sRZlacIgBN3wkslCCwiGXmId73Sx2CNnpCtU"></script>
+<script src="app.js?v=03540169" integrity="sha384-6E8hFgEPQauDfeXreABWgM2efNMqawCdCTvLY3w/ABheO5ohi7YBNp0uR/It5G8N"></script>
 <script type="module" src="lib/boot.mjs?v=8b98ed8f" integrity="sha384-/dJ3R23NfbIp89TMbKmNgtoFjuy8b5Kji1HBXxf7q7kKtAM2wTj9DeXCivsebPvb"></script>
 </body>
 </html>

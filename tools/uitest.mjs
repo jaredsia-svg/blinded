@@ -286,16 +286,24 @@ async function noDetectors(page) {
 // otherwise every click after a search lands on the dialog's backdrop, which
 // is exactly how this suite stopped running: the next press of Redact waited
 // for a button that something else was covering.
-async function dismissSweepOffer(page) {
-  // Pressed through the DOM rather than with the mouse: the dialog's own
-  // backdrop is what the pointer would land on, which is the whole reason
-  // this helper exists.
-  await page.evaluate(() => {
-    const box = document.getElementById('sweepoffer');
-    const skip = document.getElementById('sweepofferskip');
-    if (box && !box.hidden && skip) skip.click();
+// Presses Search and answers the plan it puts up, if it puts one up. Most
+// sections are about the first phase, and a second check running on behind
+// them would be minutes of work they did not ask for, so the second is
+// unticked unless the section wants it.
+async function clickSearch(page, { check = false } = {}) {
+  await page.click('#search');
+  // The plan goes up in the same moment as the press, so there is nothing to
+  // wait for: waiting would only let a short search finish unwatched.
+  const asked = await page.evaluate(() => {
+    const box = document.getElementById('searchplan');
+    return Boolean(box && !box.hidden);
   });
-  await page.waitForTimeout(60);
+  if (!asked) return false;
+  await page.evaluate(want => {
+    document.getElementById('plan2').checked = want;
+    document.getElementById('searchplango').click();
+  }, check);
+  return true;
 }
 
 // "Nothing is running", whichever way the run reports itself.
@@ -309,25 +317,22 @@ const settled = () => `!window.Blinded || (document.getElementById('busy').hidde
   && !window.Blinded.state.redacting && !window.Blinded.state.sweepRunning)`;
 
 async function redact(page) {
-  await dismissSweepOffer(page);
   // Search and Redact are two buttons, and only the one whose turn it is is
   // on screen. Search when there is something left to search for -- which is
   // exactly when that button is the one showing.
   if (await page.isVisible('#search') && !(await page.isDisabled('#search'))) {
-    await page.click('#search');
+    await clickSearch(page);
     await page.waitForFunction(() => window.Blinded.state.searched === true,
       undefined, { timeout: 240000 });
   }
   await page.waitForFunction(settled(),
     undefined, { timeout: 240000 });
-  await dismissSweepOffer(page);
   // Only if there is something to cover: with nothing found the button is
   // rightly dead, and a test that only wanted the search is finished.
   const canCover = await page.evaluate(() => !window.Blinded.state.applied
     && !document.getElementById('apply').disabled);
   if (canCover) {
-    await dismissSweepOffer(page);
-    await page.click('#apply');
+      await page.click('#apply');
     await page.waitForFunction(() => window.Blinded.state.applied === true,
       undefined, { timeout: 60000 });
   }
@@ -343,7 +348,6 @@ async function redact(page) {
 // looks like "the button does not work" half an hour into a run.
 const rawClick = page.click.bind(page);
 page.click = async (selector, options) => {
-  await dismissSweepOffer(page);
   return rawClick(selector, options);
 };
 
@@ -364,8 +368,7 @@ try {
   const newFile = async () => {
     // The second-check offer is modal, and a reviewer answers it before doing
     // anything else. Every route out of a searched document goes through it.
-    await dismissSweepOffer(page);
-    await page.click('#tool-close');
+      await page.click('#tool-close');
     if (await page.isVisible('#confirmbox')) await page.click('#confirmyes');
     await page.waitForSelector('#view-drop:not([hidden])', { timeout: 15000 });
   };
@@ -761,7 +764,7 @@ try {
     check('and turns the button red to match it',
       typed.red === true, JSON.stringify(typed));
 
-    await page.click('#search');
+    await clickSearch(page);
     await page.waitForFunction(() => window.Blinded.state.searched === true,
       undefined, { timeout: 240000 });
     await page.waitForFunction(settled(),
@@ -2379,12 +2382,11 @@ try {
   // A placeholder stands for something a search has actually found. Nothing
   // is labelled before one has run — a legend built out of unsearched guesses
   // would be naming things nobody has looked for yet.
-  await page.click('#search');
+  await clickSearch(page);
   await page.waitForFunction(() => window.Blinded.state.searched === true,
     undefined, { timeout: 240000 });
   await page.waitForFunction(settled(),
     undefined, { timeout: 240000 });
-  await dismissSweepOffer(page);
   await reveal(page, 'labelling');
   await page.check('#labelling');
   check('turning labelling on reveals the legend', await page.isVisible('#legendbox'));
@@ -2871,13 +2873,12 @@ try {
     // words typed, search run, marks on the page. A draft that forgets the
     // search comes back looking empty until the reviewer presses Search again,
     // which is the thing this block guards against below.
-    await page.click('#search');
+    await clickSearch(page);
     await page.waitForFunction(() => window.Blinded.state.searched === true,
       undefined, { timeout: 240000 });
     await page.waitForFunction(settled(),
       undefined, { timeout: 240000 });
-    await dismissSweepOffer(page);
-
+  
     const planted = await page.evaluate(() => {
       const B = window.Blinded;
       const p = B.state.pages[0];
@@ -3365,12 +3366,11 @@ try {
   // proposed it, and an unsearched detector proposes nothing — it is not on
   // the page to be clicked.
   await useDetectors(page);
-  await page.click('#search');
+  await clickSearch(page);
   await page.waitForFunction(() => window.Blinded.state.searched === true,
     undefined, { timeout: 240000 });
   await page.waitForFunction(settled(),
     undefined, { timeout: 240000 });
-  await dismissSweepOffer(page);
   await page.evaluate(() => {
     // Driving the pointer at a page is about marking, so it asks for the
     // tool that marks: dragging moves the pages until told otherwise.
@@ -3417,10 +3417,9 @@ try {
     await page.locator('#textview mark').count() === 0);
 
   await useDetectors(page);
-  await page.click('#search');
+  await clickSearch(page);
   await page.waitForFunction(() => window.Blinded.state.searched === true,
     undefined, { timeout: 120000 });
-  await dismissSweepOffer(page);
   const marks = await page.locator('#textview mark').count();
   // The phone number is no longer among them: the detector proposes only
   // +country-code forms now, and the fixture's "(415) 555-0132" is a local
@@ -3429,10 +3428,9 @@ try {
     marks === 3, String(marks));
 
   await setTerms(page, ["Jane Doe"]);
-  await page.click('#search');
+  await clickSearch(page);
   await page.waitForFunction(() => window.Blinded.state.searched === true,
     undefined, { timeout: 120000 });
-  await dismissSweepOffer(page);
   await page.waitForTimeout(200);
   check('a listed term adds a mark in the text view',
     await page.locator('#textview mark').count() === 4,
@@ -4519,7 +4517,11 @@ try {
         }
         const foot = document.getElementById('runfoot');
         const text = document.getElementById('runfoot-text').textContent;
-        if (!foot.hidden && /Search complete/.test(text)) seen.stale++;
+        // The check's own line from an earlier run is not left up while a
+        // new one works; the search's line is, and belongs there.
+        if (!foot.hidden && rows.length && /Second check (complete|stopped)/.test(text)) {
+          seen.stale++;
+        }
         if (/Checking page|carry on reviewing/.test(document.body.textContent)) {
           seen.sentence++;
         }
@@ -4550,7 +4552,7 @@ try {
       run.sentence === 0, JSON.stringify(run));
     check('the amber panel is never left up empty while it runs',
       run.boxEmpty === 0 && run.samples > 0, JSON.stringify(run));
-    check('the search stops claiming to be complete while the check works',
+    check('an earlier check\'s result is not left up while a new one works',
       run.stale === 0, JSON.stringify(run));
     check('and the foot says what the check itself did when it finishes',
       run.afterShown && run.runGone
@@ -7666,7 +7668,7 @@ try {
       B.runSweepCalled = () => {};
       // Not the real check, which takes minutes: what is being tested is
       // which of the two things the press does.
-      const box = document.getElementById('sweepoffer');
+      const box = document.getElementById('searchplan');
       document.querySelector('.exportbar .checklink').click();
       await new Promise(r => setTimeout(r, 150));
       started = B.state.sweepRunning;
@@ -7690,42 +7692,11 @@ try {
       B.state.footRan = null;
       B.renderSweep();
     });
-    // The way out on the left and the thing being offered on the right, where
-    // the eye finishes. They were stacked, so their order was set by number
-    // rather than by markup, and the numbers stayed behind when the two went
-    // side by side -- which put Proceed on the left, under the reader's eye
-    // before they had read what they were proceeding with.
-    const dialog = await page.evaluate(() => {
-      const go = document.getElementById('sweepoffergo');
-      const skip = document.getElementById('sweepofferskip');
-      const box = go.getBoundingClientRect();
-      const out = skip.getBoundingClientRect();
-      document.getElementById('sweepoffer').hidden = false;
-      const seen = go.getBoundingClientRect();
-      const seenSkip = skip.getBoundingClientRect();
-      const paint = getComputedStyle(go).backgroundColor;
-      document.getElementById('sweepoffer').hidden = true;
-      return { go: go.textContent.trim(), skip: skip.textContent.trim(),
-               goLeft: seen.left, skipLeft: seenSkip.left, paint,
-               hiddenBox: box.width + out.width };
-    });
-    check('the dialog offers two answers, named for what they do',
-      dialog.go === 'Proceed' && dialog.skip === 'Skip', JSON.stringify(dialog));
-    check('with the way out on the left and the offer on the right',
-      dialog.skipLeft < dialog.goLeft, JSON.stringify(dialog));
-    // Amber, because what the check finds is drawn amber: the button and its
-    // marks are the same colour the whole way through.
-    check('and the offer in the colour of what it will find',
-      dialog.paint === 'rgb(217, 139, 31)', JSON.stringify(dialog));
-    // Slow enough that springing it on someone would be a trap, so the wait
-    // is stated before it starts -- and taken from the work in front of it,
-    // not from "a couple of minutes" about any document at all.
-    const cost = await page.evaluate(() => {
-      window.Blinded.describeSweepOffer();
-      return document.getElementById('sweepofferbody').textContent;
-    });
-    check('and the dialog it opens says how long it will take',
-      /\(\d+ minutes?\)/i.test(cost), cost);
+    // The second check is not offered in a dialog at the end of a search any
+    // more: both phases are laid out before the search starts, each with its
+    // wait, and the second runs straight on unless it was unticked.
+    check('there is no dialog offering the check after a search',
+      (await page.evaluate(() => !document.getElementById('sweepoffer'))) === true);
 
     // The sweep draws every typeface, not the two the old fallback used: the
     // whole reason to run it is that the reading was defeated by unusual type.
@@ -9984,7 +9955,7 @@ try {
         resolve([...seen]);
       }, 25);
     }));
-    await page.click('#search');
+    await clickSearch(page);
     await page.waitForFunction(() => window.Blinded.state.searched === true,
       undefined, { timeout: 240000 });
     const legs = await watched;
@@ -9998,14 +9969,17 @@ try {
       !legs.some(l => /reading pages/i.test(l)), JSON.stringify(legs));
   });
 
-  // ---------- what the offer says ----------
+  // ---------- the plan, before a search ----------
   //
-  // The dialog used to say "a couple of minutes" whatever the document was,
-  // and the panel's estimate came from a constant measured before the sweep
-  // drew two typefaces instead of eight, before the shortlist grew and before
-  // the numerator moved into a transform: it was out by a factor of thirty,
-  // promising three seconds for a check that took ninety-two.
-  await part("what the offer says", async () => {
+  // Search lays out both phases before either starts, each with its wait:
+  // the text and the picked images, which is always done, and the second
+  // check for words that are pictures, which can be unticked. The second used
+  // to be offered in a dialog only once the first had finished. And the
+  // waits are worked out for the document in front of it: the old quote was
+  // "a couple of minutes" whatever the document, then a constant out by a
+  // factor of thirty, then one that said ten minutes for a check that took
+  // under three.
+  await part("the plan, before a search", async () => {
     if (await page.isVisible('#view-review')) await newFile();
     await page.waitForSelector('#view-drop:not([hidden])', { timeout: 15000 });
     await page.setInputFiles('#file', fixturePath);
@@ -10014,17 +9988,18 @@ try {
 
     const said = await page.evaluate(() => {
       const B = window.Blinded;
-      B.state.searched = true;
       B.state.sweptTerms = [];
       const real = B.state.pages;
-      const grow = n => Array.from({ length: n }, (_, i) => ({ ...real[0], index: i }));
+      // Pages that could hide a word as pixels, so the first phase has
+      // reading to do on them.
+      const grow = n => Array.from({ length: n }, (_, i) => ({ ...real[0], index: i,
+        couldHideText: true, ocrItems: undefined }));
       const at = n => {
         B.state.pages = grow(n);
         const cost = B.sweepEstimate();
-        B.describeSweepOffer();
         return { pages: n, seconds: Math.round(cost.seconds),
-          perPage: +cost.perPage.toFixed(1),
-          words: document.getElementById('sweepofferbody').textContent };
+          search: B.searchEstimate().seconds,
+          words: B.describeWait(cost.seconds) };
       };
       const out = { small: at(1), big: at(90) };
       // A device that has run a check before is quoted at its own pace.
@@ -10039,28 +10014,120 @@ try {
       out.learned = { slow: slow.seconds, fast: fast.seconds, speedup: fast.speedup,
         pageWords: fast.pageWords };
       B.state.pages = real;
+      out.ranges = [20, 90, 200, 600].map(B.describeWait);
       return out;
     });
-
-    check('the offer says why a second check is needed',
-      /appear as images in the document with no underlying text/.test(said.big.words),
-      said.big.words);
-    check('and how long it will take, for this document',
-      /This requires a second check \(.+\)\. Proceed\?/.test(said.big.words),
-      said.big.words);
-    // Not a constant: ninety pages is ninety times one page's work, and the
-    // sentence has to move with it or it is decoration.
-    // Less than ninety times: pages are searched side by side, and a quote
-    // that ignored that said ten minutes for a check that took under three.
+    // Less than ninety times one page: pages are searched side by side.
     check('an estimate that grows with the document',
       said.big.seconds > said.small.seconds * 3,
       JSON.stringify({ one: said.small.seconds, ninety: said.big.seconds }));
+    check('and so does the first phase\'s',
+      said.big.search > said.small.search, JSON.stringify(said));
     check('counting the pages each word still needs',
       said.learned.pageWords === 90, JSON.stringify(said.learned));
     check('and quoted at the pace this device has shown before',
       said.learned.slow > said.learned.fast * 1.8, JSON.stringify(said.learned));
-    check('and is quoted in minutes once it is minutes',
-      /\d+ minutes?\)/.test(said.big.words), said.big.words);
+    check('waits are said as a range of minutes, or under a minute',
+      said.ranges[0] === 'under a minute' && /^\d+–\d+ minutes$/.test(said.ranges[3]),
+      JSON.stringify(said.ranges));
+
+    // The dialog itself. The fixture is drawn text, which cannot hide a word
+    // as pixels; told otherwise, it has a second phase to offer.
+    await page.evaluate(() => {
+      window.__couldHideWas = window.Blinded.state.pages.map(p => p.couldHideText);
+      for (const p of window.Blinded.state.pages) p.couldHideText = true;
+    });
+    await page.click('#search');
+    await page.waitForSelector('#searchplan:not([hidden])', { timeout: 5000 });
+    const plan = await page.evaluate(() => {
+      const box = document.getElementById('searchplan');
+      const one = document.getElementById('plan1');
+      const two = document.getElementById('plan2');
+      const go = document.getElementById('searchplango');
+      const rows = [...box.querySelectorAll('.planrow')].map(row => {
+        const tick = row.querySelector('input').getBoundingClientRect();
+        const words = row.querySelector('.plantext').getBoundingClientRect();
+        return { text: row.textContent.replace(/\s+/g, ' ').trim(),
+                 tickRight: tick.left >= words.right - 1 };
+      });
+      const inner = box.querySelector('.busy-inner').getBoundingClientRect();
+      const button = go.getBoundingClientRect();
+      return { rows, one: { on: one.checked, locked: one.disabled },
+               two: { on: two.checked, locked: two.disabled },
+               go: go.textContent.trim(), paint: getComputedStyle(go).backgroundColor,
+               right: inner.right - button.right < 40,
+               searched: window.Blinded.state.searched };
+    });
+    check('Search puts up the plan before anything runs',
+      plan.searched === false && plan.rows.length === 2, JSON.stringify(plan));
+    check('the first phase is the text and image inputs, with its wait',
+      /Text and image inputs.*(minute)/.test(plan.rows[0].text), JSON.stringify(plan.rows));
+    check('the second is the check for text that appears as images, with its wait',
+      /second check for text that appears as images.*(minute)/i.test(plan.rows[1].text),
+      JSON.stringify(plan.rows));
+    check('each with its tick on the right',
+      plan.rows.every(row => row.tickRight), JSON.stringify(plan.rows));
+    check('both ticked, and the first cannot be unticked',
+      plan.one.on && plan.one.locked && plan.two.on && !plan.two.locked,
+      JSON.stringify(plan));
+    check('under a red Begin search on the right',
+      plan.go === 'Begin search' && plan.paint === 'rgb(217, 45, 32)' && plan.right,
+      JSON.stringify(plan));
+
+    // Closing it runs nothing.
+    await page.click('#searchplanx');
+    const closed = await page.evaluate(() => ({
+      shown: !document.getElementById('searchplan').hidden,
+      searched: window.Blinded.state.searched,
+      running: window.Blinded.state.redacting }));
+    check('closing the plan runs nothing',
+      !closed.shown && !closed.searched && !closed.running, JSON.stringify(closed));
+
+    // Both phases: the search, then the check straight on from it, with the
+    // search's line still up and the check's bar under it.
+    await clickSearch(page, { check: true });
+    await page.waitForFunction(() => window.Blinded.state.sweepRunning === true
+      || (window.Blinded.state.searched && window.Blinded.state.sweptTerms.length > 0),
+      undefined, { timeout: 240000 });
+    const during = await page.evaluate(() => {
+      const foot = document.getElementById('runfoot');
+      const run = document.getElementById('sweeprun');
+      const a = foot.getBoundingClientRect();
+      const b = run.getBoundingClientRect();
+      return { running: window.Blinded.state.sweepRunning,
+               line: foot.hidden ? '' : document.getElementById('runfoot-text').textContent,
+               barShown: !run.hidden, below: b.top >= a.bottom - 1 };
+    });
+    check('the second phase starts on its own once the first is done',
+      during.running === true, JSON.stringify(during));
+    check('with the search\'s green line still up while it runs',
+      /Initial search \(text \+ images\) complete/.test(during.line), JSON.stringify(during));
+    check('and the check\'s bar underneath it',
+      during.barShown && during.below, JSON.stringify(during));
+    await page.waitForFunction(() => !window.Blinded.state.sweepRunning,
+      undefined, { timeout: 240000 });
+    const after = await page.evaluate(() =>
+      document.getElementById('runfoot-text').textContent);
+    check('and both lines are there once it has finished',
+      /Initial search/.test(after) && /Second check (complete|stopped)/.test(after), after);
+
+    // Unticked, the search runs alone.
+    await setTerms(page, ['Zzyzx', 'Wvxqp']);
+    await page.evaluate(() => {
+      for (const p of window.Blinded.state.pages) p.couldHideText = true;
+    });
+    await clickSearch(page, { check: false });
+    await page.waitForFunction(() => window.Blinded.state.searched === true
+      && !window.Blinded.state.redacting, undefined, { timeout: 240000 });
+    await page.waitForTimeout(300);
+    const alone = await page.evaluate(() => ({
+      running: window.Blinded.state.sweepRunning,
+      swept: window.Blinded.state.sweptTerms.slice() }));
+    check('unticked, the search runs without the second check',
+      alone.running === false && !alone.swept.includes('Wvxqp'), JSON.stringify(alone));
+    await page.evaluate(() => {
+      window.Blinded.state.pages.forEach((p, i) => { p.couldHideText = window.__couldHideWas[i]; });
+    });
   });
 
   // ---------- a running check stays on screen ----------
@@ -10282,7 +10349,7 @@ try {
         resolve({ seen, spells, searchingSeen, searchingHidden, dialog });
       }, 30);
     }));
-    await page.click('#search');
+    await clickSearch(page);
     await page.waitForFunction(() => window.Blinded.state.searched === true,
       undefined, { timeout: 240000 });
     const overlay = await watched;
@@ -10681,7 +10748,7 @@ try {
     check('and what the section is for is a hint on it instead',
       before.hint === true, JSON.stringify(before));
 
-    await page.click('#search');
+    await clickSearch(page);
     await page.waitForFunction(() => window.Blinded.state.searched === true,
       null, { timeout: 90000 });
     const after = await readKinds();
@@ -11182,7 +11249,7 @@ try {
     check('before a run the word can be taken back out', free === false,
       String(free));
 
-    await held.click('#search');
+    await clickSearch(held);
     // Sampled rather than waited for: a short run can be over before a fixed
     // pause ends, and a test that misses the state it is about is a test that
     // passes for the wrong reason.
@@ -11247,7 +11314,7 @@ try {
     await quiet.fill('#termbox', 'zzzznotpresenthere');
     await quiet.press('#termbox', 'Enter');
     await quiet.waitForTimeout(200);
-    await quiet.click('#search');
+    await clickSearch(quiet);
     await quiet.waitForFunction(() => !window.Blinded.state.redacting,
       undefined, { timeout: 60000 });
     await quiet.waitForTimeout(400);
@@ -12122,7 +12189,7 @@ try {
     await old.setInputFiles('#file', refused);
     await old.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
     await setTerms(old, ['KAG']);
-    await old.click('#search');
+    await clickSearch(old);
     let finished = true;
     await old.waitForFunction(() => window.Blinded.state.searched === true,
       undefined, { timeout: 120000 }).catch(() => { finished = false; });
@@ -12141,7 +12208,6 @@ try {
     // its shape can find it.
     check('and still finds the word in the picture by its shape',
       /KAG\s*[1-9]/.test(after.counts), after.counts);
-    await dismissSweepOffer(old);
     await old.close();
   });
 

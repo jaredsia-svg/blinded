@@ -727,8 +727,13 @@ textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; border-
 .exportbar .leg .bar { background: #dbe1ea; }
 /* What is running, reported where the buttons that started it are. It takes
    the left of the row and lets the buttons keep the right. */
-.runbar {
+.runstack {
   flex: 1 1 260px; min-width: 200px;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.runstack:not(:has(> .runbar:not([hidden]))) { display: none; }
+.runbar {
+  flex: none; min-width: 0;
   display: flex; align-items: center; gap: 8px;
 }
 /* The bar itself keeps to the left half of the row. Stretched the whole way
@@ -1775,9 +1780,29 @@ body.reviewing .exportbar { position: static; flex: none; margin: 14px 0 18px; }
    thing being offered on the right, where the eye finishes -- these were
    stacked, so the order was set by number rather than by markup, and the
    numbers stayed behind when the two went side by side. */
-#sweepofferskip { order: 1; background: #fff; border: 1px solid var(--line); color: var(--ink); }
-#sweepoffergo { order: 2; }
-#sweepofferskip:hover { border-color: var(--ink-soft); background: #fafbfc; }
+/* The two phases of a search: a number, what it does and how long, and its
+   tick on the right. The first is always part of a search, so its tick is
+   shown set and cannot be cleared. */
+.planlist { list-style: none; margin: 14px 0 0; padding: 0; display: grid; gap: 8px; }
+.planrow {
+  display: flex; align-items: center; gap: 12px;
+  border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px;
+}
+.planrow label { flex: 1; display: flex; align-items: flex-start; gap: 10px; cursor: pointer; }
+.planrow input { flex: none; width: 18px; height: 18px; margin: 0; accent-color: var(--accent); cursor: pointer; }
+.planrow input:disabled { cursor: default; }
+.planrow:has(input:disabled) label { cursor: default; }
+.plannum {
+  flex: none; width: 22px; height: 22px; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: #fff; border: 1px solid var(--line-strong);
+  font-size: 12px; font-weight: 700; color: var(--ink);
+}
+.planrow { background: #fff; }
+.plantext { font-size: 14px; font-weight: 600; line-height: 1.4; color: var(--ink); }
+.plantime { display: block; font-weight: 400; font-size: 12.5px; color: var(--ink-soft); }
+.plango { flex-direction: row; justify-content: flex-end; }
+.plango .confirm-action { flex: none; width: auto; padding-left: 22px; padding-right: 22px; }
 
 /* Long sidebar notes: short summary, full text on expand. */
 .sidebar-note-more {
@@ -1898,7 +1923,7 @@ body.reviewing .exportbar { position: static; flex: none; margin: 14px 0 18px; }
   /* Equal thirds of whatever the screen is, rather than a fixed width each. */
   .exportgo > button { flex: 1 1 0; min-width: 0; padding: 10px 6px;
     white-space: nowrap; }
-  .runbar { flex: 1 1 100%; min-width: 0; }
+  .runstack { flex: 1 1 100%; min-width: 0; }
   .runlegs { flex: 1 1 auto; min-width: 0; }
   /* The report wraps to as many lines as it needs and takes no room when it
      has nothing to say. */

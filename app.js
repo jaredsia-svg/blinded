@@ -225,7 +225,6 @@
     sweepSkipped: false,
     // True once the post-Search second-check offer was shown or skipped
     // for the current search, so it does not pop again on redraw.
-    sweepOfferShown: false,
     // Spots the thorough check proposed and stood down from, so the note can
     // hand the reviewer each one rather than a number.
     sweepRefusedAt: [],
@@ -363,7 +362,7 @@
     // and it was wiping out the result of a check that had just finished. So
     // the places that change the question clear this, and here it is only
     // read.
-    if (state.redacting || state.sweepRunning) return;
+    if (state.redacting) return;
     if (!state.footRan && !sweepOnOffer) {
       said.textContent = '';
       foot.hidden = true;
@@ -379,7 +378,9 @@
     // because the reader read them as something else. True, and useful to
     // whoever wrote it, and to a reviewer it was a number with nothing to do:
     // it named no place and asked for nothing.
-    const check = state.footRan === 'check';
+    // While a check runs only the search's line is said; the check's own
+    // line is its bar, underneath.
+    const check = state.footRan === 'check' && !state.sweepRunning;
     // What the search found and what the check added are two different
     // counts, and each line has to answer for its own run: a check that adds
     // the only marks on a document must not put them under a green line
@@ -436,7 +437,7 @@
           + ' left to finish.';
         words.append(left, proceedLink());
       }
-    } else if (sweepOnOffer) {
+    } else if (sweepOnOffer && !state.sweepRunning) {
       // The offer, as the next line of the report rather than a button off to
       // the side. It is a remark about what the search found - some of these
       // words are pictures - and the question at the end of it opens the same
@@ -2589,7 +2590,6 @@
     // why and offers the Stop button that was always there.
     if (state.sweepRunning) return;
 
-    state.sweepOfferShown = false;
     state.redacting = true;
     state.paused = false;
     // What this run is looking for, snapshotted at the moment it starts.
@@ -2728,9 +2728,6 @@
     applyLabels();
     redrawAll();
     refreshApply();
-    // Offer the second check once the overlay is down so the choice is not
-    // buried under "Working…". Skip stays available from the panel button.
-    offerSweepAfterSearch();
   }
 
   // One frame, so that something just made visible is actually on screen
@@ -2763,10 +2760,18 @@
 
   // Which of the three the button means this time.
   async function searchButton() {
+    if (state.sweepRunning || state.redacting) return;
+    // Both phases, and their waits, before either starts.
+    const plan = await askSearchPlan();
+    if (!plan) return;
     // A search over a document that is already covered has to uncover it
     // first, or it would be looking at its own black boxes.
     if (state.applied) markPending();
     await runSearch();
+    // The second phase runs straight on, unless it was unticked or the first
+    // was paused part way: a search that has not finished has nothing to be
+    // a second check on.
+    if (plan.check && state.searched && !state.paused && !state.redacting) runSweep();
   }
 
   async function applyButton() {
@@ -8646,7 +8651,7 @@
   show('drop');
 
   el('busy-pause').addEventListener('click', requestPause);
-  bindSweepOffer();
+  bindSearchPlan();
 
   // Which published version this is. Render writes version.json at deploy
   // with the commit it is deploying (tools/version.sh); the footer names it
@@ -9468,14 +9473,11 @@
     }
     state.reviewed = new Set([...(state.reviewed || [])]
       .filter(id => !checking.has(termOf.get(id))));
-    // The foot is the check's now. The line the search left there — "Search
-    // complete, four marks proposed" — describes a run that finished before
-    // this one started, and leaving it up while the check works reports a
-    // state that is no longer the current one.
-    const said = el('runfoot-text');
-    if (said) said.textContent = '';
-    const foot = el('runfoot');
-    if (foot) foot.hidden = true;
+    // The search's line stays up while the check works, with the check's bar
+    // under it: the search's marks are ready to review now, and the reviewer
+    // should not have to wait for the second phase to be told so. What the
+    // check itself said last time is taken down (renderFoot leaves it out
+    // while a check runs).
     offerRunControl({ id: 'sweepstop', label: 'Pause',
       onPress: stopTheCheck });
     sweepProgress(0, pages.length);
@@ -9823,79 +9825,105 @@
   // opinion on that redaction: there is nothing to be thorough about before
   // there is a result to check.
 
-  // After the first Search finishes, offer the second check once — skippable,
-  // with the longer explanation collapsed. Runs the same background sweep
-  // the panel button uses.
-  function shouldOfferSweep() {
-    if (state.sweepOfferShown || state.sweepRunning) return false;
-    if (!state.searched || !state.terms.length || state.kind === 'text') return false;
-    const swept = state.sweptTerms.length
-      && state.sweptTerms.length === state.terms.length
-      && state.sweptTerms.every((t, i) => t === state.terms[i]);
-    if (swept) return false;
+  // ---------- the plan, before a search starts ----------
+  //
+  // The second check used to be offered in a dialog at the end of the search:
+  // the reviewer pressed Search, waited, and was then asked whether to wait
+  // again, with the check's cost only named at the point where saying no meant
+  // it had been a wasted wait for the answer. Both phases are now laid out
+  // before anything starts, each with its wait, and the second runs straight
+  // on from the first unless it was unticked.
+
+  // How long reading the pages and matching the picked images take, per page
+  // on one worker, from the bench: reading is about two seconds a page at two
+  // megapixels and grows slowly with size; matching one picked image is about
+  // a second a page a megapixel. Both are spread over workers as the check's
+  // work is (see sweepSpeedup).
+  const READ_SECONDS = 2.2;
+  const READ_PER_MP = 0.35;
+  const MATCH_SECONDS_PER_MP = 1;
+  const SEARCH_STARTUP_SECONDS = 2;
+
+  // What the first phase will cost.
+  function searchEstimate() {
+    const first = state.pages[0];
+    const megapixels = first ? (first.source.width * first.source.height) / 1e6 : 2;
+    // Reading only happens when something wants it (a word, or a detector)
+    // and only on pages not already read that could hide lettering.
+    const toRead = ocrPending() && !state.ocrRead
+      ? state.pages.filter(page => !page.ocrItems && page.couldHideText !== false).length : 0;
+    const engines = Ocr.engineCount ? Ocr.engineCount(toRead) : 1;
+    const read = toRead * (READ_SECONDS + READ_PER_MP * megapixels)
+      / Math.sqrt(Math.max(1, engines));
+    const pictures = state.templates.filter(t => !t.searched).length;
+    const match = pictures * state.pages.length * MATCH_SECONDS_PER_MP
+      * Math.min(SWEEP_MAX_MP, megapixels) / sweepSpeedup(state.pages.length);
+    return { seconds: SEARCH_STARTUP_SECONDS + read + match, toRead, pictures };
+  }
+
+  // A wait as a range, because it is an estimate and saying one number is
+  // claiming to know. "Under a minute" for anything that short: seconds invite
+  // arithmetic nobody wants to do.
+  function describeWait(seconds) {
+    const low = seconds * 0.8;
+    const high = seconds * 1.3;
+    if (high < 60) return 'under a minute';
+    const from = Math.max(1, Math.round(low / 60));
+    const to = Math.max(from, Math.round(high / 60));
+    if (to === from) return 'about ' + from + (from === 1 ? ' minute' : ' minutes');
+    return from + '–' + to + ' minutes';
+  }
+
+  // Whether this search has a second phase worth offering: words to look for,
+  // somewhere they could be hiding as pixels, and pages not already settled
+  // by the text. The same question the foot's offer asks after a search.
+  function checkPossible() {
+    if (state.kind === 'text' || !state.terms.length) return false;
+    if (!state.pages.some(page => page.couldHideText !== false)) return false;
     const work = sweepWorkload();
-    return !!(work.pages && work.terms);
+    return Boolean(work.pages && work.terms);
   }
 
-  function hideSweepOffer() {
-    const box = el('sweepoffer');
+  // Asks, and answers with what to run: null to run nothing, or whether to
+  // run the second phase after the first. Nothing to ask when there is no
+  // second phase.
+  let planAnswer = null;
+  function askSearchPlan() {
+    if (!checkPossible()) return Promise.resolve({ check: false });
+    const box = el('searchplan');
+    if (!box) return Promise.resolve({ check: true });
+    el('plantime1').textContent = describeWait(searchEstimate().seconds);
+    el('plantime2').textContent = describeWait(sweepEstimate().seconds);
+    el('plan2').checked = true;
+    box.hidden = false;
+    el('searchplango').focus();
+    return new Promise(done => { planAnswer = done; });
+  }
+
+  function answerSearchPlan(answer) {
+    const box = el('searchplan');
     if (box) box.hidden = true;
+    const done = planAnswer;
+    planAnswer = null;
+    if (done) done(answer);
   }
 
-  function offerSweepAfterSearch() {
-    // Only when a second check would actually do work (same gate as the
-    // panel button). Reading already settled -> no popout.
-    if (!shouldOfferSweep()) return;
-    state.sweepOfferShown = true;
-    describeSweepOffer();
-    el('sweepoffer').hidden = false;
-    el('sweepofferx').focus();
-  }
-
-  // Opened again from the foot, for a reviewer who skipped it the first time.
-  // Same dialog, same two answers: the cost is stated in one place only.
-  function reopenSweepOffer() {
-    describeSweepOffer();
-    el('sweepoffer').hidden = false;
-    el('sweepofferx').focus();
-  }
-
-  // What the dialog says, with the wait worked out for this document.
-  function describeSweepOffer() {
-    const body = el('sweepofferbody');
-    if (!body) return;
-    const cost = sweepEstimate();
-    // Always minutes here, even for a check of half a one. The question is
-    // whether to wait, and "1 minute" and "20 seconds" are answered the same
-    // way, while a number in seconds invites arithmetic nobody wants to do.
-    const minutes = Math.max(1, Math.round(cost.seconds / 60));
-    body.textContent = 'Some of the words you seek to redact appear as images'
-      + ' in the document with no underlying text. This requires a second'
-      + ' check (' + minutes + (minutes === 1 ? ' minute' : ' minutes')
-      + '). Proceed?';
-  }
-
-  function bindSweepOffer() {
-    const box = el('sweepoffer');
+  function bindSearchPlan() {
+    const box = el('searchplan');
     if (!box || box.dataset.bound) return;
     box.dataset.bound = '1';
-    const close = () => { hideSweepOffer(); };
-    const skip = () => { hideSweepOffer(); };
-    const go = () => {
-      hideSweepOffer();
-      runSweep();
-    };
-    el('sweepofferskip').addEventListener('click', skip);
-    el('sweepofferx').addEventListener('click', close);
-    el('sweepoffergo').addEventListener('click', go);
+    const cancel = () => answerSearchPlan(null);
+    el('searchplanx').addEventListener('click', cancel);
+    el('searchplango').addEventListener('click',
+      () => answerSearchPlan({ check: el('plan2').checked }));
     box.addEventListener('pointerdown', event => {
-      if (event.target === box) skip();
+      if (event.target === box) cancel();
     });
     document.addEventListener('keydown', event => {
       if (box.hidden) return;
       if (event.key === 'Escape') {
         event.preventDefault();
-        skip();
+        cancel();
       }
     }, true);
   }
@@ -10943,7 +10971,6 @@
     state.sweepStopped = false;
     state.sweepReached = 0;
     state.sweepSkipped = false;
-    state.sweepOfferShown = false;
     state.sweepRefused = 0;
     state.sweepRefusedAt = [];
     state.openTally = null;
@@ -11050,7 +11077,7 @@
     readPages, matchOcr, ocrPending, ocrMatchStale, showWordControls,
     sweepTemplates, sweepCaseOf, runSweep, renderSweep, alreadyCovered, readerContradicts, sweepPartsFor,
     readerSeedsFor, partnerSeedsFrom, markedAt,
-    sweepEstimate, describeSweepOffer, reopenSweepOffer, lowConfidenceMarks,
+    sweepEstimate, searchEstimate, describeWait, checkPossible, lowConfidenceMarks,
     pageHasConfidentTerm, pagesNeedingSweep, sweepWorkload,
     READER_SURE, sweepProgress,
     settleSweep,
