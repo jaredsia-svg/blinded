@@ -6363,6 +6363,26 @@ try {
     check('and it leaves the rest of the page alone',
       dropped.dismissedAfter === dropped.dismissedBefore, JSON.stringify(dropped));
 
+    // The list stays open while the reviewer works inside it, and closes once
+    // they go on to anything else in the panel -- not only when another count
+    // is opened.
+    const elsewhere = await page.evaluate(async () => {
+      const B = window.Blinded;
+      const stillOpen = document.querySelectorAll('#termcounts .tallywhere li').length;
+      const heading = [...document.querySelectorAll('.panel h2, .panel h3, .panel summary, .panel label')]
+        .find(el => !el.closest('.tally') && !el.closest('[aria-expanded]')
+          && el.getBoundingClientRect().height > 0);
+      heading.click();
+      await new Promise(r => setTimeout(r, 60));
+      return { stillOpen, what: heading.textContent.trim().slice(0, 40),
+               open: B.state.openTally,
+               rows: document.querySelectorAll('.panel .tallywhere li').length };
+    });
+    check('a list stays open while its own rows are used',
+      elsewhere.stillOpen > 0, JSON.stringify(elsewhere));
+    check('and closes when anything else in the panel is clicked',
+      elsewhere.open === null && elsewhere.rows === 0, JSON.stringify(elsewhere));
+
     await page.evaluate(() => { window.Blinded.state.openTally = null; });
   });
 

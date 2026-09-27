@@ -8665,6 +8665,28 @@
     })
     .catch(() => {});
 
+  // An open list of places closes when the reviewer goes on to anything else
+  // in the panel. It closed only when another count was opened, so a list of
+  // forty pages under one image stayed open while the reviewer typed a word
+  // or ticked a detector further down, pushing everything below it out of
+  // sight. Clicks inside the list itself (going to a page, turning a match
+  // down) and on the counts and settings that open lists are theirs to answer.
+  const panelNode = document.querySelector('.panel');
+  if (panelNode) {
+    panelNode.addEventListener('click', event => {
+      if (!state.openTally) return;
+      const target = event.target instanceof Element ? event.target : null;
+      // A control that redrew the panel under the click has already been
+      // answered, and what it was part of can no longer be asked.
+      if (!target || !target.isConnected) return;
+      if (target.closest('.tally, [aria-expanded], .barpip')) return;
+      state.openTally = null;
+      renderTemplates();
+      renderTermCounts();
+      renderKinds();
+    });
+  }
+
   // Working with the network gone (see sw.js). The worker keeps the app, the
   // PDF reader and the fonts as it installs; once the page has settled, it is
   // asked to keep the page reader too -- about seven megabytes, so not before
