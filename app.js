@@ -9924,8 +9924,8 @@
   // is battery spent on nobody. Not started at all for a reviewer whose
   // system asks for less motion.
   //
-  // The controls are the page's own -- play and stop, the time bar, sound and
-  // full screen -- so they look the same in every browser and stay put when
+  // The controls are the page's own -- play, the time bar, sound and full
+  // screen -- so they look the same in every browser and stay put when
   // the film fills the screen. Filling the screen turns the sound on: at that
   // size somebody has chosen to watch. On a phone it fills the screen by
   // covering the page instead of asking the browser for full screen, which a
@@ -9935,7 +9935,6 @@
     if (!video) return;
     const frame = video.closest('.promoframe');
     const play = el('promoplay');
-    const stop = el('promostop');
     const seek = el('promoseek');
     const time = el('promotime');
     const sound = el('promosound');
@@ -10000,14 +9999,6 @@
         else { heldByHand = true; video.pause(); }
       });
     }
-    if (stop) {
-      stop.addEventListener('click', () => {
-        heldByHand = true;
-        video.pause();
-        video.currentTime = 0;
-        showTime();
-      });
-    }
     if (seek) {
       seek.addEventListener('pointerdown', () => { seek.dragging = true; });
       seek.addEventListener('pointerup', () => { seek.dragging = false; });
@@ -10020,13 +10011,9 @@
       sound.addEventListener('click', () => {
         video.muted = !video.muted;
         showSound();
-        // Sound from the start: the middle of a sentence is a poor place to
-        // begin listening.
-        if (!video.muted) {
-          video.currentTime = 0;
-          heldByHand = false;
-          start();
-        }
+        // Carries on from where it is; turning the sound on is not asking to
+        // start again.
+        if (!video.muted && video.paused) { heldByHand = false; start(); }
       });
     }
 
@@ -10036,7 +10023,16 @@
       && window.matchMedia('(pointer: coarse)').matches;
     let mutedBefore = true;
     const big = () => frame.classList.contains('big');
+    // Full screen is a step the back button can undo. A phone's back button
+    // used to leave the page from inside the film; now it closes the film
+    // and the page stays where it was.
+    let stepped = false;
+    let swallow = false;
     const opened = () => {
+      if (!stepped) {
+        history.pushState({ ...(history.state || {}), film: true }, '');
+        stepped = true;
+      }
       mutedBefore = video.muted;
       frame.classList.add('big');
       video.muted = false;
@@ -10051,6 +10047,12 @@
       video.muted = mutedBefore;
       showSound();
       if (!seen && !video.paused) video.pause();
+      if (full) full.setAttribute('aria-label', 'Watch full screen');
+      // Closed some other way than Back: take the step off again, quietly.
+      if (stepped) {
+        stepped = false;
+        if (history.state && history.state.film) { swallow = true; history.back(); }
+      }
     };
     const enter = () => {
       if (!phone() && frame.requestFullscreen) {
@@ -10077,13 +10079,36 @@
       });
     }
     video.addEventListener('dblclick', () => { if (big()) leave(); else enter(); });
-    // A tap on the film itself plays or pauses it, as it does in any player.
-    video.addEventListener('click', () => { if (play) play.click(); });
+    // A tap on the film: the first one, while it is playing silently, turns
+    // the sound on -- somebody tapping a muted film wants to hear it. After
+    // that a tap plays or pauses it, as in any player.
+    video.addEventListener('click', () => {
+      if (video.muted) {
+        video.muted = false;
+        showSound();
+        if (video.paused) { heldByHand = false; start(); }
+        return;
+      }
+      if (play) play.click();
+    });
     document.addEventListener('fullscreenchange', () => {
       if (document.fullscreenElement !== frame && big() && !document.body.classList.contains('promo-big')) {
         closed();
         if (full) full.setAttribute('aria-label', 'Watch full screen');
       }
+    });
+    // Before the page's own handler, which would otherwise take this Back as
+    // a change of view.
+    window.addEventListener('popstate', event => {
+      if (swallow) {
+        swallow = false;
+        event.stopImmediatePropagation();
+        return;
+      }
+      if (!stepped) return;
+      stepped = false;
+      event.stopImmediatePropagation();
+      leave();
     });
     document.addEventListener('keydown', event => {
       if (event.key === 'Escape' && document.body.classList.contains('promo-big')) {

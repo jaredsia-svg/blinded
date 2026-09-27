@@ -4733,11 +4733,16 @@ try {
     const sound = await page.evaluate(() => {
       const v = document.getElementById('promovideo');
       const b = document.getElementById('promosound');
+      let rewound = false;
+      Object.defineProperty(v, 'currentTime', { configurable: true,
+        get: () => 12, set: () => { rewound = true; } });
       b.click();
       const on = { muted: v.muted, pressed: b.getAttribute('aria-pressed'),
         label: b.getAttribute('aria-label'), words: b.textContent.trim(),
         icon: getComputedStyle(b.querySelector('.i-sound')).display !== 'none' };
       b.click();
+      delete v.currentTime;
+      on.rewound = rewound;
       return { on, off: { muted: v.muted, label: b.getAttribute('aria-label'),
         icon: getComputedStyle(b.querySelector('.i-muted')).display !== 'none' } };
     });
@@ -4746,9 +4751,12 @@ try {
       && sound.on.icon && /off/i.test(sound.on.label)
       && sound.off.muted === true && sound.off.icon && /on/i.test(sound.off.label),
       JSON.stringify(sound));
+    check('and turning the sound on carries on from where the film is',
+      sound.on.rewound === false, JSON.stringify(sound));
 
-    // A click on the film pauses it and the next one plays it again, as in
-    // any player.
+    // A click on a silent film turns the sound on and leaves it playing;
+    // after that a click pauses it and the next plays it again, as in any
+    // player.
     const clicks = await page.evaluate(() => {
       const v = document.getElementById('promovideo');
       let paused = false;
@@ -4757,42 +4765,41 @@ try {
         v.dispatchEvent(new Event('play')); return Promise.resolve(); };
       v.pause = () => { paused = true; window.__promo.push('pause');
         v.dispatchEvent(new Event('pause')); };
+      v.muted = true;
+      v.click();
+      const unmuted = { paused, muted: v.muted };
       v.click();
       const first = { paused, icon: document.getElementById('promoplay').getAttribute('aria-label') };
       v.click();
       const second = { paused, icon: document.getElementById('promoplay').getAttribute('aria-label') };
+      v.muted = true;
       // Left playing, as the checks below expect.
       Object.defineProperty(v, 'paused', { configurable: true, get: () => false });
-      return { first, second };
+      return { unmuted, first, second };
     });
-    check('one click on the film pauses it, and the next plays it again',
+    check('a click on the silent film turns the sound on and keeps it playing',
+      clicks.unmuted.muted === false && clicks.unmuted.paused === false, JSON.stringify(clicks));
+    check('then one click pauses it, and the next plays it again',
       clicks.first.paused === true && clicks.first.icon === 'Play'
       && clicks.second.paused === false && clicks.second.icon === 'Pause', JSON.stringify(clicks));
 
-    // Play and stop at the bottom left, the time bar across the bottom.
+    // Play at the bottom left, the time bar across the bottom.
     const bar = await page.evaluate(async () => {
       const v = document.getElementById('promovideo');
       const bar = document.querySelector('.promobar').getBoundingClientRect();
       const frame = document.querySelector('.promoframe').getBoundingClientRect();
       const playBtn = document.getElementById('promoplay').getBoundingClientRect();
-      const stopBtn = document.getElementById('promostop').getBoundingClientRect();
       const seekBar = document.getElementById('promoseek').getBoundingClientRect();
-      window.__promo = [];
-      document.getElementById('promostop').click();
-      const stopped = { at: v.currentTime, asked: window.__promo.slice() };
       return {
+        noStop: !document.getElementById('promostop'),
         // Inside the frame's one-pixel border.
         alongBottom: Math.abs(bar.bottom - frame.bottom) <= 2 && bar.width >= frame.width - 2,
-        leftmost: playBtn.left < stopBtn.left && stopBtn.left < seekBar.left
-          && playBtn.left - frame.left < 40,
+        leftmost: playBtn.left < seekBar.left && playBtn.left - frame.left < 40,
         wide: seekBar.width > frame.width * 0.4,
-        stopped,
       };
     });
-    check('play and stop sit at the bottom left, before a time bar across the bottom',
-      bar.alongBottom && bar.leftmost && bar.wide, JSON.stringify(bar));
-    check('stop pauses the film and takes it back to the start',
-      bar.stopped.asked.includes('pause') && bar.stopped.at === 0, JSON.stringify(bar));
+    check('play sits at the bottom left, before a time bar across the bottom, and there is no stop',
+      bar.alongBottom && bar.leftmost && bar.wide && bar.noStop, JSON.stringify(bar));
 
     // Full screen is a press away, turns the sound on, and puts it back as it
     // was on the way out. Nothing offers to send the film to a television.
@@ -4833,11 +4840,23 @@ try {
       const out = { asked, covers: box.width === window.innerWidth && box.height === window.innerHeight,
         muted: v.muted };
       document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
-      await new Promise(r => setTimeout(r, 50));
+      await new Promise(r => setTimeout(r, 100));
       out.closed = !frame.classList.contains('big');
+      // And the back button closes it, leaving the page where it was.
+      const where = { url: location.href, drop: !document.getElementById('view-drop').hidden };
+      document.getElementById('promofull').click();
+      await new Promise(r => setTimeout(r, 50));
+      const openAgain = frame.classList.contains('big');
+      history.back();
+      await new Promise(r => setTimeout(r, 300));
+      out.back = { openAgain, closed: !frame.classList.contains('big'),
+        samePage: location.href === where.url
+          && !document.getElementById('view-drop').hidden === where.drop };
       window.matchMedia = real;
       return out;
     });
+    check('the back button closes the full-screen film and stays on the page',
+      phone.back.openAgain && phone.back.closed && phone.back.samePage, JSON.stringify(phone));
     check('on a phone it covers the screen without the browser\'s full screen',
       phone.asked === 0 && phone.covers && phone.muted === false, JSON.stringify(phone));
     check('and closes again', phone.closed, JSON.stringify(phone));
