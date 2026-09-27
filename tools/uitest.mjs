@@ -4202,36 +4202,34 @@ try {
     }
   });
 
-  // ---------- looking again where nothing was found ----------
+  // ---------- a word found nowhere is not searched for again ----------
   //
-  // The nominating pass proposes a position only if it scores 0.4 on a
-  // shrunken page, and only a few dozen positions per page are checked
-  // properly. Both are right for an ordinary page and wrong for a hard one:
-  // measured on a slide whose wordmark sits in white over a photograph, the
-  // true position of "Tokenomics" scored under 0.4 and was never offered for
-  // verification — a best of 0.000 for a word plainly on the page.
-  //
-  // The shortlist part of that has since been measured properly and moved to
-  // the check's first pass, where it costs about four percent of the slowest
-  // document. What stays here for a word with no mark anywhere is the gate
-  // itself: dropping it to 0.22 is what roughly doubles the work, so it is
-  // spent only where there is nothing to lose and something to find.
-  await part("looking again where nothing was found", async () => {
-    const deep = await page.evaluate(async () => {
+  // A deeper second pass used to run for any word the document held no mark
+  // for: every page again, with a lower bar. On a long document that was most
+  // of the wait, nearly always for a word that is not there at all, and on
+  // the bench it found one mark. A word found nowhere now costs the check
+  // what any other word costs.
+  await part("a word found nowhere is not searched for again", async () => {
+    const run = await page.evaluate(async () => {
       const B = window.Blinded;
       const was = B.state.terms.slice();
       B.state.terms = ['Jane', 'Qzzxwvunlikely'];
+      const names = new Set();
+      const look = () => {
+        for (const row of document.querySelectorAll('#sweeprun-legs .leg')) {
+          names.add(row.querySelector('.leg-label span').textContent);
+        }
+      };
+      const poll = setInterval(look, 10);
       await B.runSweep();
-      const out = { deepened: (B.state.sweepDeepened || []).slice(),
-        found: B.state.pages.reduce((n, p) =>
-          n + (p.imageHits || []).filter(m => m.term === 'Jane').length, 0) };
+      clearInterval(poll);
       B.state.terms = was;
-      return out;
+      return { names: [...names], left: 'sweepDeepened' in B.state };
     });
-    check('a word the document holds no mark for is looked for again, harder',
-      deep.deepened.includes('Qzzxwvunlikely'), JSON.stringify(deep));
-    check('and a word that was found is left alone',
-      !deep.deepened.includes('Jane') || deep.found === 0, JSON.stringify(deep));
+    check('the check runs one pass for it, not a second harder one',
+      !run.names.includes('Running final checks'), JSON.stringify(run));
+    check('and keeps no record of a pass that no longer exists',
+      run.left === false, JSON.stringify(run));
   });
 
   // ---------- how long a shortlist each pass works from ----------
@@ -4490,10 +4488,7 @@ try {
     const run = await page.evaluate(async () => {
       const B = window.Blinded;
       const was = B.state.terms.slice();
-      // One word the document has and one it does not: the second is placed
-      // nowhere, so the check runs its deeper "looking again" pass, which is
-      // the phase whose progress line used to be left on screen after the run
-      // had finished.
+      // One word the document has and one it does not.
       B.state.terms = ['Jane', 'Zzyzx'];
       const seen = { samples: 0, boxEmpty: 0, legs: 0, stale: 0, sentence: 0,
         deep: 0, later: new Set() };
@@ -4528,7 +4523,6 @@ try {
       seen.runGone = document.getElementById('sweeprun').hidden;
       seen.oldBar = Boolean(document.getElementById('sweepprogress')
         || document.getElementById('sweepfill'));
-      seen.deepened = (B.state.sweepDeepened || []).slice();
       // Nothing of the run is left anywhere on the page once it is over.
       seen.leftovers = document.querySelectorAll('#sweeprun-legs .leg').length;
       seen.stillSaysChecking = /Checking page|Looking again/
@@ -4557,10 +4551,8 @@ try {
     // at. What they do not get is a bar each, naming itself: "looking again
     // where nothing was found" is the tool explaining its own internals to
     // somebody waiting for an answer.
-    check('the deeper pass has a bar of its own',
-      run.deepened.includes('Zzyzx') && run.deep > 0, JSON.stringify(run));
-    check('under one name, whichever later pass is running',
-      run.later.length === 1 && run.later[0] === 'Running final checks',
+    check('a later pass, when there is one, runs under one name',
+      run.later.every(name => name === 'Running final checks'),
       JSON.stringify(run));
     check('and nothing of it is left on the page once the check is over',
       run.leftovers === 0 && run.stillSaysChecking === false,

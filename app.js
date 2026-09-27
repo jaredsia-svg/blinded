@@ -9293,8 +9293,8 @@
   // one distinctive picture on a page. A word is not that: a page of body
   // text offers hundreds of places that correlate weakly with any ten-letter
   // shape, so the true copy of a name can sit outside a 110-long shortlist
-  // and never be verified at all. These numbers are the second look's, moved
-  // up to the first pass.
+  // and never be verified at all. These numbers are raised for
+  // words on the first pass.
   //
   // Measured across the nine benchmark documents: one further true copy of a
   // name is found on the scanned deck, along with one false mark on a word of
@@ -9310,19 +9310,8 @@
   const SWEEP_PER_SCALE = 24;
   const SWEEP_VERIFY = 64;
 
-  // What the second look changes on top of that: only the gate a place has to
-  // clear to be nominated at all. Measured over the benchmark set: at this
-  // threshold a word the first pass placed nowhere is found on two documents
-  // that had been missing it, no document loses a mark it already had, and no
-  // new false positive appeared on the one document that is prone to them.
-  const DEEP_COARSE = 0.22;
-  const DEEP_CANDIDATES = SWEEP_CANDIDATES;
-  const DEEP_PER_SCALE = SWEEP_PER_SCALE;
-  const DEEP_VERIFY = SWEEP_VERIFY;
-
   // Whether the document holds any mark for a word at all — read off the page
-  // or found by shape, on any page. Both the deeper second look and the offer
-  // below turn on this exact question, and they have to agree on it.
+  // or found by shape, on any page. The offer below turns on this question.
   function hasMarkAnywhere(term) {
     return state.pages.some(page =>
       (page.imageHits || []).some(mark => mark.term === term)
@@ -9409,7 +9398,6 @@
     // again, because what it found may not be what it found before.
     state.offersDismissed = new Set();
     state.reviewed = new Set();
-    state.sweepDeepened = [];
     // The foot is the check's now. The line the search left there — "Search
     // complete, four marks proposed" — describes a run that finished before
     // this one started, and leaving it up while the check works reports a
@@ -9563,85 +9551,18 @@
 
     placeResults(entries, results);
 
-    // A second, deeper look — but only where the first found nothing.
-    //
-    // The nominating pass proposes a position only if it scores 0.4 on a
-    // shrunken copy of the page, and then only a few dozen positions per page
-    // survive to be checked properly. Both numbers are right for an ordinary
-    // page and wrong for a hard one: measured on a slide whose wordmark sits
-    // in white over a photograph of a data hall, the true position of
-    // "Tokenomics" scored under 0.4 at nomination and was never offered for
-    // verification at all — the search reported a best of 0.000 for a word
-    // plainly on the page. Dropping the gate alone is not the answer either:
-    // it floods the same fixed budget, and on another document it pushed a
-    // true "Singapore" out of the shortlist. The two have to move together.
-    //
-    // Moving them together everywhere would roughly double the check. So they
-    // move only for a word the first pass could not place at all, over only
-    // the pages where it could not place it. A document whose words are all
-    // found pays nothing for this; the deck above pays it for one word on one
-    // page, and finds it.
-    // Only a word the document holds no mark for at all — not a word found on
-    // page two and not on page nine.
-    //
-    // The difference is the whole cost. Deepening wherever a word was missing
-    // from some page meant deepening nearly everything: on a two-page scan
-    // every word qualified somewhere and the check went from two and a half
-    // minutes to seven. Deepening only for a word found nowhere leaves that
-    // document untouched and costs nothing on four of the five benchmarks,
-    // while still answering the one where a word was invisible.
-    //
-    // Any mark counts, not just this check's: a word the reading found is a
-    // word the tool can plainly see, and looking harder for it is looking
-    // harder for something already in hand.
-    const missing = new Map();
-    for (const term of new Set(entries.map(e => e.term))) {
-      if (!state.terms.includes(term)) continue;
-      if (hasMarkAnywhere(term)) continue;
-      const need = pagesNeedingSweep(term);
-      if (need.length) missing.set(term, new Set(need.map(page => page.index)));
-    }
+    // There used to be a deeper look here, for a word the document held no
+    // mark for at all: every page searched again with the nominating gate
+    // dropped from 0.4 to 0.22. It found one word on one slide of the bench --
+    // a display-font wordmark in white over a photograph, which the words
+    // drawn in the bundled fonts only faintly resemble -- and on a long
+    // document it was most of the wait: a hundred pages searched again, each
+    // slower than the first time, nearly always for a word that is simply not
+    // there (a typo, a name the document never uses). Picking the wordmark as
+    // an image finds it in its own lettering, which is the better answer to
+    // that slide. Removed; the bench lost that one mark and nothing else.
 
-    // What the deeper look was asked to do, so the run can be described
-    // afterwards rather than guessed at.
-    state.sweepDeepened = [...missing.keys()];
-    // Kept so the second look's near misses count towards what each word best
-    // managed. Without this a word only the deeper pass came close to placing
-    // reports whatever the first pass scored, which is lower and not where it
-    // looked.
-    let deepEntries = null;
-    let deepResults = null;
-    if (missing.size && !state.sweepStopped) {
-      const deeper = entries
-        .filter(entry => missing.has(entry.term))
-        .map(entry => ({ ...entry,
-          key: 'deep:' + entry.key,
-          pageIndexes: missing.get(entry.term) }));
-      const over = pages.filter(page =>
-        [...missing.values()].some(set => set.has(page.index)));
-      try {
-        // Its bar goes up as it starts, not when its first page comes back:
-        // on a short pass that is the moment before it ends, and the bar was
-        // there for less time than anyone could see it.
-        sweepProgress(pages.length, pages.length, 0, over.length);
-        const again = await ImageSearch.searchAllParallel(over, deeper, {
-          stop: () => state.sweepStopped,
-          // Low enough to nominate a word the page is fighting, deep enough
-          // that nominating it does not push it back out again.
-          coarseThreshold: DEEP_COARSE,
-          maxCandidates: DEEP_CANDIDATES,
-          perScale: DEEP_PER_SCALE,
-          verifyLimit: DEEP_VERIFY,
-        }, done => sweepProgress(pages.length, pages.length, done, over.length));
-        placeResults(deeper, again);
-        deepEntries = deeper;
-        deepResults = again;
-      } catch (_) {
-        // A deeper look that fails leaves the ordinary one's answer standing.
-      }
-    }
-
-    // A third look, at the places the page reader can point to.
+    // The last look, at the places the page reader can point to.
     //
     // Nomination correlates a shrunken page and proposes where a shape might
     // be. Everything above is that, twice, with more of a budget the second
@@ -9685,12 +9606,11 @@
         const seedOpts = { stop: () => state.sweepStopped, seedsOnly: true };
         const over = indexes => pages.filter(page => indexes.has(page.index));
         try {
-          sweepProgress(pages.length, pages.length, null, null, 0, pages.length);
+          sweepProgress(pages.length, pages.length, 0, pages.length);
           const found = await ImageSearch.searchAllParallel(
             over(new Set(anchors.flatMap(e => [...e.pageIndexes]))), anchors,
             seedOpts,
-            done => sweepProgress(pages.length, pages.length, null, null,
-              done, pages.length));
+            done => sweepProgress(pages.length, pages.length, done, pages.length));
 
           // Round two: the other half of a phrase, measured off the half just
           // matched rather than off a box the reader drew round the wrong
@@ -9752,7 +9672,6 @@
     freeRun();
     state.sweepBest = {};
     recordBest(entries, results);
-    if (deepResults) recordBest(deepEntries, deepResults);
     if (seedResults) recordBest(seedEntries, seedResults);
     // A run that was stopped part way has not answered the document, so it
     // does not get to claim it has: the offer stands, and the note says how
@@ -9774,10 +9693,10 @@
     return added;
   }
 
-  // `deep` and `deepOf` describe the second look, which runs over a few pages
-  // after the first pass and would otherwise make the bar sit at the end while
-  // the check was plainly still working.
-  function sweepProgress(done, total, deep, deepOf, seeded, seededOf) {
+  // `seeded` and `seededOf` describe the last look, which runs over a few
+  // pages after the first pass and would otherwise make the bar sit at the
+  // end while the check was plainly still working.
+  function sweepProgress(done, total, seeded, seededOf) {
     state.sweepDone = done;
     state.sweepTotal = total;
     const host = el('sweeprun-legs');
@@ -9802,8 +9721,8 @@
     // the tool explaining its own internals to somebody waiting for an
     // answer. "Running final checks" says the only thing the reviewer needs:
     // it is nearly over.
-    const finalTotal = deepOf || seededOf || 0;
-    const finalDone = deepOf ? deep : seededOf ? seeded : 0;
+    const finalTotal = seededOf || 0;
+    const finalDone = seededOf ? seeded : 0;
     const want = [{ key: 'sweep', label: 'Second check', total }];
     if (finalTotal) want.push({ key: 'final', label: 'Running final checks',
                                 total: finalTotal });

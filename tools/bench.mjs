@@ -133,7 +133,9 @@ const TYPES = {
 };
 const server = createServer((req, res) => {
   const want = decodeURIComponent(new URL(req.url, 'http://x').pathname);
-  const path = join(root, want === '/' ? '/index.html' : want);
+  // A folder answers with its index.html, as the live site does: the
+  // offline copy asks for /license/ by that name.
+  const path = join(root, want.endsWith('/') ? want + 'index.html' : want);
   if (!path.startsWith(root)) { res.writeHead(403).end('no'); return; }
   try { statSync(path); } catch { res.writeHead(404).end('no'); return; }
   res.writeHead(200, { 'Content-Type': TYPES[extname(path)] || 'application/octet-stream' });
@@ -305,7 +307,6 @@ for (const name of readdirSync(bench).sort()) {
       // shown is the thing worth reporting.
       // Which words the later passes were spent on, and what the panel
       // thinks the whole check will cost before it starts.
-      deepened: (B.state.sweepDeepened || []).slice(),
       seeded: (B.state.sweepSeeded || []).slice(),
       seedReport: (B.state.sweepSeedReport || []).slice(),
       offers: [...document.querySelectorAll('.termcounts .offer')].map(card => ({
@@ -418,9 +419,8 @@ for (const name of readdirSync(bench).sort()) {
     console.log('   refused ' + [...byTerm].map(([t, n]) => JSON.stringify(t) + ' x' + n)
       .join(', '));
   }
-  if ((out.deepened || []).length || (out.seeded || []).length) {
-    console.log('   looked again for ' + JSON.stringify(out.deepened || [])
-      + ', seeded from the reader for ' + JSON.stringify(out.seeded || []));
+  if ((out.seeded || []).length) {
+    console.log('   seeded from the reader for ' + JSON.stringify(out.seeded || []));
   }
   for (const one of out.seedReport || []) {
     console.log('      seeded "' + one.part + '" at ' + one.seeds + ' places · best '
