@@ -3726,6 +3726,23 @@
       // already have. It never travels into the export.
       what.textContent = entry.value ? entry.value : entry.description;
       what.title = entry.description + (entry.value ? ' – "' + entry.value + '"' : '');
+      // A picked image is shown as itself. "A logo or other image" named the
+      // kind of thing and not which one, and with two picks it could not say
+      // which label went with which.
+      const picked = /^logo:/.test(entry.identity || '')
+        && state.templates.find(t => 'logo:' + t.id === entry.identity);
+      if (picked && picked.thumbnail) {
+        const shot = document.createElement('canvas');
+        shot.width = picked.thumbnail.width;
+        shot.height = picked.thumbnail.height;
+        shot.getContext('2d').drawImage(picked.thumbnail, 0, 0);
+        shot.className = 'labelshot';
+        shot.setAttribute('role', 'img');
+        shot.setAttribute('aria-label', 'The picked image');
+        what.textContent = '';
+        what.title = 'The picked image';
+        what.append(shot);
+      }
 
       const count = document.createElement('span');
       count.className = 'n';

@@ -2017,6 +2017,27 @@ try {
   check('and one above double it',
     matched.scales.some(w => w > 60 * 2 * 1.8), JSON.stringify(matched.scales));
   check('the decoy mark is not matched', matched.total === 4);
+  // In the list of labels, a picked image is shown as itself rather than as
+  // "a logo or other image", which could not say which pick a label was for.
+  const pickLegend = await page.evaluate(async () => {
+    const box = document.getElementById('labelling');
+    const was = box.checked;
+    box.checked = true;
+    box.dispatchEvent(new Event('change', { bubbles: true }));
+    await new Promise(r => setTimeout(r, 100));
+    const rows = [...document.querySelectorAll('#legend li')].map(li => ({
+      label: li.querySelector('.labelinput').value,
+      words: li.querySelector('.what').textContent,
+      shot: Boolean(li.querySelector('.what canvas.labelshot')),
+    }));
+    box.checked = was;
+    box.dispatchEvent(new Event('change', { bubbles: true }));
+    return rows;
+  });
+  const logoRow = pickLegend.find(row => /^L/.test(row.label));
+  check('the label for a picked image shows the picture, not a description',
+    Boolean(logoRow) && logoRow.shot && !/logo or other image/.test(logoRow.words),
+    JSON.stringify(pickLegend));
   // The thumbnail is 42 pixels wide — enough to tell two picks apart, not
   // enough to check that the right thing was picked.
   const bigger = await page.evaluate(() => {
