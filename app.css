@@ -1156,11 +1156,16 @@ body.picking .tools {
 .barpip.now {
   border-color: var(--accent); background: rgba(31, 111, 235, .1); color: var(--accent);
 }
-.barpip[aria-expanded="true"] {
-  background: var(--accent); border-color: var(--accent); color: #fff;
-}
-.barpip[aria-expanded="true"] b, .barpip[aria-expanded="true"] i { color: #fff; }
 .barpip.now b, .barpip.now i { color: var(--accent); }
+/* Open, showing where its matches are: a heavier ring and a halo round the
+   circle rather than a fill. Filled blue it lost its own numbers -- the
+   in-use circle's blue lettering sat on a blue ground -- and the numbers are
+   the point of it. */
+.barpip[aria-expanded="true"] {
+  border: 2px solid var(--accent);
+  box-shadow: 0 0 0 3px rgba(31, 111, 235, .22);
+}
+.barpip[aria-expanded="true"]:not(.now) b { color: var(--ink); }
 /* And what the scores point at when the bar is somewhere else, because the
    reviewer moved it: outlined, and one press away. */
 .barpip.best:not(.now) { border-color: var(--accent); }
