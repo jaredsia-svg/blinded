@@ -6049,6 +6049,32 @@ try {
     check('and a page nothing has read un-reads the document',
       unknown.searched === false && unknown.swept === 0 && unknown.read === false,
       JSON.stringify(unknown));
+    // And says so the way anything unanswered does: the tallies go back to a
+    // red ? and Search turns red, while what was found on the other pages
+    // stays.
+    const waiting = await page.evaluate(() => {
+      const B = window.Blinded;
+      const was = { terms: B.state.terms.slice(), counted: B.state.countedTerms.slice() };
+      B.state.terms = ['Jane'];
+      B.state.countedTerms = ['Jane'];
+      B.renderTermCounts();
+      B.refreshApply();
+      const out = {
+        newPages: B.state.pages.filter(p => p.unsearched).length,
+        question: Boolean(document.querySelector('#termcounts .n.unknown')),
+        red: document.getElementById('search').classList.contains('hunt'),
+        offered: !document.getElementById('search').disabled,
+      };
+      B.state.terms = was.terms;
+      B.state.countedTerms = was.counted;
+      B.renderTermCounts();
+      B.refreshApply();
+      return out;
+    });
+    check('only the added page is marked as not yet searched',
+      waiting.newPages === 1, JSON.stringify(waiting));
+    check('and the tallies go back to a red ? with a red Search',
+      waiting.question && waiting.red && waiting.offered, JSON.stringify(waiting));
 
     // What the search knows is a claim about a set of pages, and changing
     // which pages there are has to withdraw it. This is the quiet one: the
@@ -6076,8 +6102,10 @@ try {
     check('moving a page leaves what the search knows alone',
       knowledge.afterMove.searched === true && knowledge.afterMove.swept === 1,
       JSON.stringify(knowledge));
-    check('but removing one withdraws the thorough check',
-      knowledge.afterDrop.searched === false && knowledge.afterDrop.swept === 0,
+    // Removing a page takes its marks with it and leaves every answer about
+    // the pages that are left standing: there is nothing new to look at.
+    check('removing one leaves it alone too',
+      knowledge.afterDrop.searched === true && knowledge.afterDrop.swept === 1,
       JSON.stringify(knowledge));
     check('and what is left is still read, because losing a page un-reads nothing',
       knowledge.afterDrop.read === true, JSON.stringify(knowledge));
@@ -6550,6 +6578,12 @@ try {
       // A hand-drawn box, to see whether what is measured against the page
       // travels with it.
       first.manual.push({ id: 'turn-test', x: 10, y: 20, w: 30, h: 40 });
+      // And a word found in the text layer, to see whether its mark turns too.
+      const word = (first.text.match(/[A-Za-z]{4,}/) || [''])[0];
+      const termsWere = B.state.terms.slice();
+      B.state.terms = [word];
+      B.rescan({ settled: true });
+      const markWas = first.hits[0] && first.hits[0].rects[0];
       B.state.searched = true;
       B.state.sweptTerms = ['whatever'];
       B.state.ocrRead = true;
@@ -6560,8 +6594,11 @@ try {
       document.getElementById('page-turn').click();
       const box = first.manual.find(m => m.id === 'turn-test');
       const wrap = first.canvas.parentElement;
+      const markNow = first.hits[0] && first.hits[0].rects[0];
+      const markWanted = markWas && window.BlindedBoxes.turn(markWas, was.h);
+      B.state.terms = termsWere;
       return {
-        offered, was,
+        offered, was, word, markNow, markWanted,
         now: { w: first.source.width, h: first.source.height,
           widthPt: first.widthPt, heightPt: first.heightPt },
         turn: first.turn,
@@ -6570,7 +6607,7 @@ try {
         wanted: { x: was.h - (20 + 40), y: 10, w: 40, h: 30 },
         shape: wrap.style.aspectRatio,
         layer: first.items.length,
-        readAgain: first.ocrText === null && B.state.ocrRead === false,
+        readKept: first.ocrText === 'read already' && B.state.ocrRead === true,
         searched: B.state.searched,
         swept: B.state.sweptTerms.length,
         label: (B.undoStack[B.undoStack.length - 1] || {}).label,
@@ -6589,16 +6626,20 @@ try {
       turned.box.x === turned.wanted.x && turned.box.y === turned.wanted.y
       && turned.box.w === turned.wanted.w && turned.box.h === turned.wanted.h,
       JSON.stringify([turned.box, turned.wanted]));
-    // The honest cost, asserted rather than hoped for: the text layer's runs
-    // advance along the page's x axis, and turned they would be drawn across
-    // the words instead of along them. So it goes, and the page is read again
-    // from its new pixels.
-    check('the text layer, which cannot be turned, is dropped',
-      turned.layer === 0 && turned.was.items > 0, JSON.stringify(turned));
-    check('and so is what was read off the page',
-      turned.readAgain === true, JSON.stringify(turned));
-    check('a turn withdraws the search rather than leaving it standing',
-      turned.searched === false && turned.swept === 0, JSON.stringify(turned));
+    // Turning changes which way up a page is, not what it says. The text
+    // layer and what was read off the page used to be thrown away, which
+    // meant searching again and, until then, the words already found on the
+    // page going uncovered.
+    check('the text layer is kept through a turn',
+      turned.layer === turned.was.items && turned.was.items > 0, JSON.stringify(turned));
+    check('and a word found in it is marked where it now is, turned with the page',
+      Boolean(turned.markNow && turned.markWanted)
+      && ['x', 'y', 'w', 'h'].every(k => Math.abs(turned.markNow[k] - turned.markWanted[k]) < 0.5),
+      JSON.stringify({ word: turned.word, now: turned.markNow, wanted: turned.markWanted }));
+    check('what was read off the page is kept as well',
+      turned.readKept === true, JSON.stringify(turned));
+    check('and the search and the check still stand, so nothing asks for Search',
+      turned.searched === true && turned.swept === 1, JSON.stringify(turned));
     check('and is undoable', turned.label === 'turning a page', String(turned.label));
 
     const back = await page.evaluate(() => {

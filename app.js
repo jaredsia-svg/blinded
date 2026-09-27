@@ -1231,12 +1231,32 @@
       ? state.baseDigest + '+' + organiseStamp() : null;
   }
 
+  // Page numbers held outside the pages themselves, moved with them. The
+  // check keeps the best place it found for each word it could not place, by
+  // page number, and shows a crop of it; after pages move that number points
+  // at another page, and after a page goes it points at nothing.
+  function remapSweepPages(was, at) {
+    const moved = index => {
+      const page = was[index];
+      return page && at.has(page) ? at.get(page) : -1;
+    };
+    for (const [term, best] of Object.entries(state.sweepBest || {})) {
+      if (!best || !best.at) continue;
+      const now = moved(best.at.p);
+      if (now < 0) delete state.sweepBest[term];
+      else best.at = { ...best.at, p: now };
+    }
+    state.sweepRefusedAt = (state.sweepRefusedAt || [])
+      .map(one => ({ ...one, pageIndex: moved(one.pageIndex) }))
+      .filter(one => one.pageIndex >= 0);
+  }
+
   // The one place the page list changes.
   function setOrder(pages, label, before) {
     const was = before || state.pages.slice();
     const wasPicked = new Set(state.picked);
     const knew = { searched: state.searched, swept: state.sweptTerms.slice(),
-      read: state.ocrRead };
+      read: state.ocrRead, footRan: state.footRan };
     state.pages = pages;
     state.pages.forEach((page, i) => { page.index = i; });
     // A logo remembers the page it was cut from by number. Re-point it at the
@@ -1244,12 +1264,15 @@
     // leaving it pointing at whatever is now in that slot would re-cut the
     // logo from the wrong picture the next time the bar moved.
     const at = new Map(state.pages.map((page, i) => [page, i]));
-    state.templates = state.templates.filter(template => {
-      const home = was[template.pageIndex];
-      if (!home || !at.has(home)) return false;
-      template.pageIndex = at.get(home);
-      return true;
-    });
+    // A picked image whose page has gone is kept: what it matches is its own
+    // copy of the pixels, and removing the page it happened to be cut from is
+    // not a reason to lose every copy it found on the pages that are left. It
+    // no longer has a page to be shown from, so its number is let go.
+    for (const template of state.templates) {
+      const home = template.home || was[template.pageIndex];
+      if (home) template.home = home;
+      template.pageIndex = home && at.has(home) ? at.get(home) : -1;
+    }
     for (const page of [...state.picked]) if (!at.has(page)) state.picked.delete(page);
 
     // What the search knows is a claim about a set of pages. Moving them
@@ -1261,17 +1284,29 @@
     // saying the check has been done, over pages it has never seen. That is
     // the worst shape a bug can take here: it does not look like a failure, it
     // looks like an answer.
+    //
+    // Only pages that were not there before change it. Moving, removing or
+    // keeping only some of the pages leaves every answer about the pages that
+    // are left standing: their marks live on them and go where they go, and
+    // the ones on a page that has gone go with it. The search, the check and
+    // what the foot says about them all still hold. A page that is new has
+    // never been looked at, so it is marked as such: every tally goes back to
+    // a red ? and Search is asked for again, while what was found on the
+    // other pages stays on screen.
     const had = new Set(was);
     const added = state.pages.filter(page => !had.has(page));
     const gone = was.filter(page => !at.has(page));
-    if (added.length || gone.length) {
+    if (added.length) {
+      for (const page of added) page.unsearched = true;
       state.sweptTerms = [];
       state.searched = false;
       state.footRan = null;
+      // Reading is a claim about every page, so a new one un-reads the
+      // document. Losing a page does not: what is left has still been read.
+      state.ocrRead = false;
     }
-    // Reading is a claim about every page, so a new one un-reads the document.
-    // Losing a page does not: what is left has still been read.
-    if (added.length) state.ocrRead = false;
+    // The check's near misses name the page they were on by number.
+    if (gone.length || added.length) remapSweepPages(was, at);
 
     restamp();
     if (label) {
@@ -1282,6 +1317,7 @@
         state.searched = knew.searched;
         state.sweptTerms = knew.swept;
         state.ocrRead = knew.read;
+        state.footRan = knew.footRan;
         restamp();
         rebuildAfterOrder();
       });
@@ -1943,14 +1979,43 @@
       }
     }
 
-    page.items = [];
-    page.text = '';
-    page.findings = [];
-    page.hits = [];
-    page.ocrItems = null;
-    page.ocrText = null;
-    page.ocrPlaced = null;
-    page.ocrSkipped = false;
+    // What was read off the page stays, turned with it. The text layer and
+    // the reader's words are facts about what the page says, and turning it
+    // does not change a word; throwing them away meant a turned page had to
+    // be searched again from nothing, and until it was, the words already
+    // found on it were uncovered. The reader's boxes are turned here, once.
+    // The text layer is kept as it was read and its boxes turned whenever
+    // they are measured (see textBoxes): its runs are laid out along a line,
+    // and a line on its side is not something the measuring can follow.
+    if (!page.textDims) page.textDims = { w: was.width, h: was.height };
+    page.textTurn = ((page.textTurn || 0) + 1) % 4;
+    const turnWord = word => {
+      if (!word || !word.rect) return word;
+      const rect = Boxes.turn(word.rect, tall);
+      return { ...word, rect, x: rect.x, y: rect.y, w: rect.w, h: rect.h };
+    };
+    if (page.ocrItems) page.ocrItems = page.ocrItems.map(turnWord);
+    if (page.ocrPlaced) page.ocrPlaced = page.ocrPlaced.map(turnWord);
+  }
+
+  // A box measured on the text layer, turned the way the page has been turned
+  // since the layer was read.
+  function turnedText(page, rect) {
+    const times = page.textTurn || 0;
+    if (!times || !rect || !page.textDims) return rect;
+    let out = rect;
+    let tall = page.textDims.h;
+    let wide = page.textDims.w;
+    for (let i = 0; i < times; i++) {
+      out = Boxes.turn(out, tall);
+      [tall, wide] = [wide, tall];
+    }
+    return out;
+  }
+
+  function textBoxes(page, findings) {
+    return Boxes.boxesForSpans(page.items, findings, { advance: measure })
+      .map(rect => turnedText(page, rect));
   }
 
   // Everything a turn changes about one page, kept so that Undo can put it
@@ -1958,6 +2023,7 @@
   // reading are thrown away by the first turn and no amount of turning brings
   // them back.
   const PAGE_KEPT = ['source', 'thumb', 'thumbFrom', 'widthPt', 'heightPt', 'turn',
+    'textTurn', 'textDims',
     'items', 'text', 'findings', 'hits', 'manual', 'imageHits', 'texts', 'inks',
     'ocrItems', 'ocrText', 'ocrPlaced', 'ocrSkipped'];
 
@@ -1976,14 +2042,10 @@
       read: state.ocrRead };
 
     for (const page of turning) turnPage(page);
-    // The turned pages have to be read again, and only they do: the reader
-    // skips pages that already have their words. A search that has been run
-    // no longer covers the document, so it is withdrawn rather than left
-    // standing over pages it has never seen in this orientation.
-    state.ocrRead = false;
-    state.searched = false;
-    state.sweptTerms = [];
-    state.footRan = null;
+    // Nothing is withdrawn. Every mark on a turned page turns with it, and
+    // what was read off it is kept and turned too, so the search and the
+    // check still describe the page: turning changes which way up it is, not
+    // what it says.
 
     pushUndo(turning.length === 1 ? 'turning a page' : 'turning ' + turning.length + ' pages',
       () => {
@@ -2217,12 +2279,12 @@
     if (!items.length) return null;
     const mapped = items.map(it => ({
       str: it.str,
-      rect: {
+      rect: turnedText(page, {
         x: it.x,
         y: it.y - (it.h || 10),
         w: it.w,
         h: it.h || 10,
-      },
+      }),
     }));
     const w = page.width || page.widthPt || 1;
     const h = page.height || page.heightPt || 1;
@@ -2260,14 +2322,14 @@
         page.roles = roles;
         const proposed = scanText(page.text);
         page.findings = proposed.filter(f => {
-          const rects = Boxes.boxesForSpans(page.items, [f], { advance: measure });
+          const rects = textBoxes(page, [f]);
           const union = PageRole.unionRects(rects);
           return PageRole.allowDetector(roles, f.kind, union);
         });
         page.dismissed = new Set(Array.from(page.dismissed));
         page.hits = onePerPlace(page.findings.map(f => ({
           finding: f,
-          rects: Boxes.boxesForSpans(page.items, [f], { advance: measure }),
+          rects: textBoxes(page, [f]),
         })));
         drawPage(page);
       }
@@ -2376,7 +2438,7 @@
     const unsearched = state.templates.filter(t => !t.searched).length
       + termsNeedingPictures().length
       + (ocrPending() ? 1 : 0);
-    return !state.searched || unsearched > 0 || unknownKinds() > 0;
+    return !state.searched || unsearched > 0 || unknownKinds() > 0 || newPagesWaiting();
   }
 
   // Rows a run has taken charge of, and cannot be pulled out from under it.
@@ -2444,7 +2506,9 @@
     // from, so the two cannot disagree.
     const unanswered = state.terms.filter(t => !state.countedTerms.includes(t)).length
       + state.templates.filter(t => !t.searched).length
-      + unknownKinds();
+      + unknownKinds()
+      + (newPagesWaiting() && (state.terms.length || state.templates.length
+        || acceptedKinds().length) ? 1 : 0);
 
     // The button wears the panel's red only while there is a red ? for it to
     // answer. Red with nothing outstanding is an alarm about nothing: the
@@ -2703,6 +2767,8 @@
     // Which words this search answered. A word added afterwards has no number
     // yet, and must not borrow the confidence of the ones that do.
     state.countedTerms = state.terms.slice();
+    // Every page has now been looked at, the added ones included.
+    for (const page of state.pages) delete page.unsearched;
     // And which detectors. Only the ticked ones were looked for, so only they
     // have an answer.
     state.countedKinds = acceptedKinds();
@@ -2969,8 +3035,11 @@
   function pendingTemplates() {
     const entries = [];
 
+    // Every picked image is looked for again when pages have been added: the
+    // new pages have never been searched for any of them.
+    const again = newPagesWaiting();
     for (const template of state.templates) {
-      if (template.searched) continue;
+      if (template.searched && !again) continue;
       entries.push({ key: 'logo:' + template.id, template: template.cut, logo: template,
                      // Its own bar, not a shared one: this is the whole point
                      // of the slider sitting on the row.
@@ -3044,6 +3113,13 @@
         entry.logo.autoBar = null;
       }
 
+      // A picked image searched again, after pages were added, is answered
+      // afresh over all of them: what it found before is replaced, not added
+      // to.
+      for (const page of state.pages) {
+        page.imageHits = page.imageHits.filter(
+          mark => mark.bySweep || mark.templateId !== entry.logo.id);
+      }
       distribute(found.matches, hit => ({
         id: entry.logo.id + ':' + hit.pageIndex + ':' + Math.round(hit.x) + ':' + Math.round(hit.y),
         templateId: entry.logo.id,
@@ -3821,7 +3897,15 @@
   // a time: ticking Names of people after a search is the same act as typing
   // a new word, and it has the same answer — nothing knows yet, press Search.
   function kindAnswered(kind) {
-    return state.kind === 'text' || state.countedKinds.includes(kind);
+    return state.kind === 'text'
+      || (state.countedKinds.includes(kind) && !newPagesWaiting());
+  }
+
+  // Pages added since the last search, which nothing has looked at. Every
+  // answer in the panel is about the pages that were there, so while any of
+  // these wait the tallies are questions again.
+  function newPagesWaiting() {
+    return state.kind !== 'text' && state.pages.some(page => page.unsearched);
   }
 
   // A mark from a search that has already run. New terms, detectors and
@@ -4208,7 +4292,7 @@
 
     if (!state.labelling) {
       // Merged across findings, which closes the gaps between adjacent bars.
-      return Boxes.boxesForSpans(page.items, live.map(h => h.finding), { advance: measure })
+      return textBoxes(page, live.map(h => h.finding))
         // The flag rides along with the rect: this is the path the page draws
         // through unless labelling is on, so dropping it here would mean the
         // sweep's marks were amber only for reviewers using placeholders.
@@ -6389,7 +6473,8 @@
   function showTemplate(templateId) {
     const template = state.templates.find(t => t.id === templateId);
     if (!template) return;
-    const page = state.pages[template.pageIndex];
+    // A removed page is still held by the image picked from it.
+    const page = state.pages[template.pageIndex] || template.home;
     const canvas = el('imagefull');
     const rect = template.rect;
     const wide = Math.max(1, Math.round(rect.w));
@@ -6410,8 +6495,9 @@
         0, 0, canvas.width, canvas.height);
     }
 
-    el('imagenote').textContent = wide + ' by ' + tall + ' pixels, from page '
-      + ((template.pageIndex || 0) + 1)
+    el('imagenote').textContent = wide + ' by ' + tall + ' pixels, '
+      + (template.pageIndex >= 0 ? 'from page ' + (template.pageIndex + 1)
+        : 'from a page since removed')
       + (scale > 1 ? ', shown ' + (Math.round(scale * 10) / 10) + ' times larger.' : '.');
     el('imagebox').hidden = false;
     el('imageclose').focus();
@@ -6534,10 +6620,11 @@
       // Green, the same as a word's tally: both answer "how many were found",
       // and a picked image's answer is no less of an answer for being a
       // picture. Grey read as a disabled control.
-      count.className = template.searched ? 'n dot-green' : 'n unknown';
-      count.textContent = template.searched ? String(live) : '?';
-      count.disabled = !template.searched || live === 0;
-      if (!template.searched) count.title = 'Not searched for yet  - press Search';
+      const known = template.searched && !newPagesWaiting();
+      count.className = known ? 'n dot-green' : 'n unknown';
+      count.textContent = known ? String(live) : '?';
+      count.disabled = !known || live === 0;
+      if (!known) count.title = 'Not searched for yet  - press Search';
       if (!count.disabled) {
         count.title = 'Where ' + (live === 1 ? 'it is' : 'they are');
         count.setAttribute('aria-expanded', String(state.openTally === template.id));
@@ -6816,7 +6903,7 @@
       // page was at pains to make. The green circle is what the reading found;
       // the amber one beside it, only when there is one, is what the check
       // added.
-      const counted = state.countedTerms.includes(term);
+      const counted = state.countedTerms.includes(term) && !newPagesWaiting();
       const byReading = where.filter(spot => spot.kind !== 'shape');
       const byShape = where.filter(spot => spot.kind === 'shape');
 
@@ -7144,7 +7231,9 @@
       },
       // A logo is stored as where it was cut from, not as the pixels: the
       // pixels are in the document, and the document is not in the draft.
-      templates: state.templates.map(t => ({
+      // Only those whose page is still in the document: a draft re-cuts each
+      // one from its page, and a removed page is not there to cut from.
+      templates: state.templates.filter(t => t.pageIndex >= 0).map(t => ({
         id: t.id, pageIndex: t.pageIndex, rect: t.rect,
         // Each image's own bar. It used to be one number for the whole
         // document, kept under settings.
@@ -9282,7 +9371,7 @@
     for (const item of page.items || []) {
       if (!item || !item.str || !String(item.str).trim()) continue;
       if (item.w <= 0 || item.h <= 0) continue;
-      const hostRect = textItemRect(item);
+      const hostRect = turnedText(page, textItemRect(item));
       if (!hostOverlapsHit(hostRect, rect)) continue;
       hosts.push({ text: item.str, rect: hostRect });
     }
