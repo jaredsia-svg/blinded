@@ -8728,24 +8728,34 @@
     }
   }
 
-  // How long the check takes, per page, per word, per megapixel.
+  // How long the check takes, per page, per word, per megapixel, on one
+  // worker.
   //
-  // Measured again once the transforms and the small windows moved into the
-  // SIMD kernel, which made the check about twice as fast: the old figure of
-  // three had the offer quoting two to five times the real wait. The bench
-  // now prints the offer's estimate beside the time actually taken, over
-  // nine documents. Seconds a page a word, divided by the page's megapixels:
+  // The estimate used to be pages x words x megapixels x one second, set on
+  // documents of one to seven pages. Two things made it quote ten minutes for
+  // a 101-page deck with three words that took two minutes fifty:
   //
-  //   photographed slides  0.6, 0.8     investor decks   0.76, 0.86
-  //   watch catalogue      0.59         CIM page         0.70
-  //   headshot captions    1.47         pre-IPO deck     1.5
-  //   synthetic test       1.4
+  //   - It multiplied every page by every word. A word already read with
+  //     confidence on a page is not looked for there again, so the work is
+  //     the pages each word still needs, added up.
+  //   - It ignored the workers. Pages are searched side by side, one per
+  //     worker, up to eight; on a one-page document only one of them has
+  //     anything to do, so the documents it was set on never showed it. More
+  //     workers help less than one each (they share memory and the page
+  //     hand-off), and the square root of their number fits both the bench
+  //     and that deck.
   //
-  // One is a little above the middle, on purpose: a wait that ends early is
-  // a better surprise than one that runs over. Measured on the machine the
-  // bench runs on; a slow laptop or a phone takes longer, which is another
-  // reason not to shave it to the median.
-  const SWEEP_SECONDS_PER_MP = 1;
+  // With those two, one worker costs about 0.5 to 0.7 seconds a page a word a
+  // megapixel on the bench's single-page documents; 0.8 leans a little high,
+  // because a wait that ends early is a better surprise than one that runs
+  // over. Plus a few seconds for starting the workers and drawing the words,
+  // which is most of the time on a short document.
+  //
+  // After that the machine answers for itself: every finished check records
+  // how fast it actually went, and the next estimate on this device uses it.
+  const SWEEP_SECONDS_PER_MP = 0.8;
+  const SWEEP_STARTUP_SECONDS = 3;
+  const SWEEP_PACE_KEY = 'blinded.checkPace';
 
   // Page area stops mattering past about four megapixels: the matcher caps
   // its own working resolution, so a twelve-megapixel photograph costs what a
@@ -8753,18 +8763,56 @@
   // cheapest per megapixel of the ten for exactly this reason.
   const SWEEP_MAX_MP = 4;
 
+  // How much faster the workers make it than one alone.
+  function sweepSpeedup(pages) {
+    const workers = ImageSearch.workerCount ? ImageSearch.workerCount() : 1;
+    return Math.sqrt(Math.max(1, Math.min(workers, pages)));
+  }
+
+  // This device's own measured pace, when a check has run on it before.
+  // Kept in this browser only, like the other preferences; it is a number of
+  // seconds and says nothing about any document.
+  function learnedPace() {
+    try {
+      const pace = Number(localStorage.getItem(SWEEP_PACE_KEY));
+      return pace > 0 ? pace : null;
+    } catch {
+      return null;
+    }
+  }
+
+  function learnPace(took, cost) {
+    // A short run is mostly start-up, and says little about the pace.
+    if (!(took >= 20) || !(cost.pageWords > 0) || !(cost.megapixels > 0)) return;
+    const pace = Math.max(0.05, Math.min(5,
+      (took - SWEEP_STARTUP_SECONDS) * cost.speedup / (cost.pageWords * cost.megapixels)));
+    const before = learnedPace();
+    try {
+      localStorage.setItem(SWEEP_PACE_KEY,
+        String(Math.round((before ? (before + pace) / 2 : pace) * 1000) / 1000));
+    } catch {
+      // Storage refused: the next estimate uses the default, as the first did.
+    }
+  }
+
   // What the check in front of us will cost.
   function sweepEstimate() {
     const work = sweepWorkload();
     const first = state.pages[0];
     const megapixels = first
       ? Math.min(SWEEP_MAX_MP, (first.source.width * first.source.height) / 1e6) : 2;
-    const seconds = work.pages * work.terms * megapixels * SWEEP_SECONDS_PER_MP;
+    const speedup = sweepSpeedup(work.pages);
+    const pace = learnedPace() || SWEEP_SECONDS_PER_MP;
+    const seconds = work.pageWords
+      ? SWEEP_STARTUP_SECONDS + work.pageWords * megapixels * pace / speedup : 0;
     return {
       seconds,
       perPage: work.pages ? seconds / work.pages : 0,
       pages: work.pages,
       terms: work.terms,
+      pageWords: work.pageWords,
+      megapixels,
+      speedup,
     };
   }
 
@@ -8829,6 +8877,12 @@
   }
 
   function pagesNeedingSweep(term) {
+    // A word this document has already been checked for is done. Add a word
+    // after a check and search again, and the next check is for that word
+    // alone: its estimate, its bar and its work. The earlier words' amber
+    // marks stay where they are (a search keeps them), and anything that
+    // changes which pages there are clears this list and asks again.
+    if (state.sweptTerms.includes(term)) return [];
     return state.pages.filter(page => !pageHasConfidentTerm(page, term));
   }
 
@@ -8836,13 +8890,17 @@
   function sweepWorkload() {
     let pageSet = new Set();
     let terms = 0;
+    // Each word only on the pages it still needs: the real amount of work.
+    // A phrase is searched a part at a time, so "Srinivas Rao" is two.
+    let pageWords = 0;
     for (const term of state.terms) {
       const pages = pagesNeedingSweep(term);
       if (!pages.length) continue;
       terms++;
+      pageWords += pages.length * Math.max(1, sweepPartsFor(term).length);
       for (const p of pages) pageSet.add(p.index);
     }
-    return { terms, pages: pageSet.size, pageIndexes: pageSet };
+    return { terms, pages: pageSet.size, pageIndexes: pageSet, pageWords };
   }
 
   // Where the page reader can point, for one typed word.
@@ -9388,16 +9446,28 @@
     // because nothing useful can be done while it runs; this one is a second
     // opinion on a redaction that already exists, so the reviewer keeps the
     // document and a bar in the panel says how far it has got.
+    // Timed against what the estimate said, so the next one can be better.
+    const quoted = sweepEstimate();
+    const startedAt = performance.now();
     state.sweepRunning = true;
     state.sweepStopped = false;
     state.sweepSkipped = false;
     // The second check reads the same words and pictures, so it holds them
     // for the same reason the first pass does.
     holdRun(state.terms, state.templates);
-    // A new run is a new answer: a word turned down last time is asked about
-    // again, because what it found may not be what it found before.
-    state.offersDismissed = new Set();
-    state.reviewed = new Set();
+    // A new run is a new answer for the words it checks: a word turned down
+    // last time is asked about again, because what it found may not be what
+    // it found before. A word it does not check keeps the answers given.
+    const checking = new Set(entries.map(entry => entry.term));
+    const sweptBefore = state.sweptTerms.slice();
+    state.offersDismissed = new Set([...(state.offersDismissed || [])]
+      .filter(term => !checking.has(term)));
+    const termOf = new Map();
+    for (const page of state.pages) {
+      for (const mark of page.imageHits || []) termOf.set(mark.id, mark.term);
+    }
+    state.reviewed = new Set([...(state.reviewed || [])]
+      .filter(id => !checking.has(termOf.get(id))));
     // The foot is the check's now. The line the search left there — "Search
     // complete, four marks proposed" — describes a run that finished before
     // this one started, and leaving it up while the check works reports a
@@ -9670,13 +9740,17 @@
 
     state.sweepRunning = false;
     freeRun();
-    state.sweepBest = {};
+    if (!state.sweepStopped) learnPace((performance.now() - startedAt) / 1000, quoted);
+    state.sweepBest = state.sweepBest || {};
+    for (const term of checking) delete state.sweepBest[term];
     recordBest(entries, results);
     if (seedResults) recordBest(seedEntries, seedResults);
     // A run that was stopped part way has not answered the document, so it
     // does not get to claim it has: the offer stands, and the note says how
     // far it reached.
-    state.sweptTerms = state.sweepStopped ? [] : asked.filter(t => state.terms.includes(t));
+    // Words checked by an earlier run still count as checked.
+    state.sweptTerms = (state.sweepStopped ? sweptBefore : asked)
+      .filter(t => state.terms.includes(t));
     state.sweepAdded = added;
     // What the reader threw out, and where each one was.
     state.sweepRefused = refused.length;

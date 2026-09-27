@@ -4223,13 +4223,22 @@ try {
       const poll = setInterval(look, 10);
       await B.runSweep();
       clearInterval(poll);
+      // A word added after the check: the next check is for it alone.
+      const swept = B.state.sweptTerms.slice();
+      B.state.terms = ['Jane', 'Qzzxwvunlikely', 'Wvxqpunlikely'];
+      const work = B.sweepWorkload();
+      const drawn = [...new Set(B.sweepTemplates().map(entry => entry.term))];
       B.state.terms = was;
-      return { names: [...names], left: 'sweepDeepened' in B.state };
+      return { names: [...names], left: 'sweepDeepened' in B.state,
+               swept, workTerms: work.terms, drawn };
     });
     check('the check runs one pass for it, not a second harder one',
       !run.names.includes('Running final checks'), JSON.stringify(run));
     check('and keeps no record of a pass that no longer exists',
       run.left === false, JSON.stringify(run));
+    check('a word added after a check is the only one the next check looks for',
+      run.swept.includes('Qzzxwvunlikely') && run.workTerms === 1
+      && run.drawn.length === 1 && run.drawn[0] === 'Wvxqpunlikely', JSON.stringify(run));
   });
 
   // ---------- how long a shortlist each pass works from ----------
@@ -4254,6 +4263,8 @@ try {
       try {
         const was = window.Blinded.state.terms.slice();
         window.Blinded.state.terms = ['Jane'];
+        // Checked by the section before; this one needs the check to run.
+        window.Blinded.state.sweptTerms = [];
         await window.Blinded.runSweep();
         window.Blinded.state.terms = was;
         await window.Blinded.runSearch();
@@ -10016,6 +10027,17 @@ try {
           words: document.getElementById('sweepofferbody').textContent };
       };
       const out = { small: at(1), big: at(90) };
+      // A device that has run a check before is quoted at its own pace.
+      B.state.pages = grow(90);
+      const key = 'blinded.checkPace';
+      const had = localStorage.getItem(key);
+      localStorage.setItem(key, '0.4');
+      const slow = B.sweepEstimate();
+      localStorage.setItem(key, '0.2');
+      const fast = B.sweepEstimate();
+      if (had === null) localStorage.removeItem(key); else localStorage.setItem(key, had);
+      out.learned = { slow: slow.seconds, fast: fast.seconds, speedup: fast.speedup,
+        pageWords: fast.pageWords };
       B.state.pages = real;
       return out;
     });
@@ -10028,9 +10050,15 @@ try {
       said.big.words);
     // Not a constant: ninety pages is ninety times one page's work, and the
     // sentence has to move with it or it is decoration.
+    // Less than ninety times: pages are searched side by side, and a quote
+    // that ignored that said ten minutes for a check that took under three.
     check('an estimate that grows with the document',
-      said.big.seconds > said.small.seconds * 50,
+      said.big.seconds > said.small.seconds * 3,
       JSON.stringify({ one: said.small.seconds, ninety: said.big.seconds }));
+    check('counting the pages each word still needs',
+      said.learned.pageWords === 90, JSON.stringify(said.learned));
+    check('and quoted at the pace this device has shown before',
+      said.learned.slow > said.learned.fast * 1.8, JSON.stringify(said.learned));
     check('and is quoted in minutes once it is minutes',
       /\d+ minutes?\)/.test(said.big.words), said.big.words);
   });
