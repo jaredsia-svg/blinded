@@ -962,22 +962,58 @@ body.picking .tools {
   aspect-ratio: 16 / 9; box-shadow: 0 6px 24px rgba(16, 22, 32, .08);
 }
 .promovideo { display: block; width: 100%; height: 100%; object-fit: cover; }
-.promoctl {
-  position: absolute; right: 12px; bottom: 12px;
-  display: flex; gap: 8px; align-items: center;
+.promobar {
+  position: absolute; left: 0; right: 0; bottom: 0;
+  display: flex; align-items: center; gap: 6px;
+  padding: 18px 10px 8px;
+  background: linear-gradient(to top, rgba(10, 14, 22, .72), rgba(10, 14, 22, 0));
+  color: #fff;
 }
-.promosound, .promofull {
-  height: 32px; border-radius: 999px; border: 0;
-  background: rgba(16, 22, 32, .72); color: #fff; cursor: pointer;
-  font: inherit; font-size: 12.5px; font-weight: 600;
+.promobtn {
+  flex: none; width: 32px; height: 32px; padding: 0; border: 0; border-radius: 8px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: transparent; color: inherit; cursor: pointer;
 }
-.promosound { padding: 0 12px; }
-.promofull { width: 32px; padding: 0; display: inline-flex; align-items: center; justify-content: center; }
-.promofull svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-.promosound:hover, .promofull:hover { background: rgba(16, 22, 32, .88); }
-.promosound:focus-visible, .promofull:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
-/* Full screen shows the whole film, letterboxed, rather than cropped. */
-.promovideo:fullscreen { object-fit: contain; background: #000; }
+.promobtn:hover { background: rgba(255, 255, 255, .16); }
+.promobtn:focus-visible { outline: 2px solid #fff; outline-offset: 1px; }
+.promobtn svg {
+  width: 20px; height: 20px; fill: none; stroke: currentColor;
+  stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;
+}
+.promobtn svg .fill { fill: currentColor; stroke: none; }
+/* One button, two pictures: which is showing is the state it would change. */
+#promoplay .i-play, #promoplay.paused .i-pause { display: none; }
+#promoplay.paused .i-play { display: block; }
+#promosound .i-sound, #promosound[aria-pressed="true"] .i-muted { display: none; }
+#promosound[aria-pressed="true"] .i-sound { display: block; }
+#promofull .i-shrink, .promoframe.big #promofull .i-grow { display: none; }
+.promoframe.big #promofull .i-shrink { display: block; }
+.promoseek {
+  flex: 1; min-width: 40px; height: 4px; margin: 0 6px;
+  -webkit-appearance: none; appearance: none; cursor: pointer;
+  border-radius: 999px; outline-offset: 6px;
+  background: linear-gradient(to right, #fff var(--done, 0%), rgba(255, 255, 255, .35) var(--done, 0%));
+}
+.promoseek::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 12px; height: 12px; border-radius: 50%; background: #fff; border: 0;
+}
+.promoseek::-moz-range-thumb { width: 12px; height: 12px; border-radius: 50%; background: #fff; border: 0; }
+.promotime {
+  flex: none; font-size: 12px; font-variant-numeric: tabular-nums; opacity: .9;
+  margin-right: 2px; white-space: nowrap;
+}
+@media (max-width: 480px) { .promotime { display: none; } }
+/* Full screen, and its stand-in on a phone: the whole film, letterboxed,
+   with the bar along the bottom of the screen. The stand-in covers the page
+   rather than asking the browser for full screen, because a phone's browser
+   answers that with a notice over the film about how to leave it. */
+.promoframe:fullscreen, .promoframe.big {
+  border: 0; border-radius: 0; box-shadow: none; background: #000; aspect-ratio: auto;
+}
+.promoframe.big { position: fixed; inset: 0; z-index: 1000; }
+.promoframe:fullscreen .promovideo, .promoframe.big .promovideo { object-fit: contain; }
+body.promo-big { overflow: hidden; }
 .gallery h2 { font-size: 19px; margin: 0 0 6px; letter-spacing: -0.01em; }
 
 .galtop {

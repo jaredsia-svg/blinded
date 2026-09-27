@@ -111,7 +111,7 @@
   "duration": "PT56S"
 }
 </script>
-<link rel="stylesheet" href="app.css?v=2bd91fdd" integrity="sha384-AEl1i+RuotNOFGj04h6LdsYXfw5B6yTtZemOV8ENSglVTNbMFNACFSc5+G4yzP04">
+<link rel="stylesheet" href="app.css?v=4a6f4823" integrity="sha384-MKFbaGdGRQpz2B1gxF5BMjAxV8FD51TgFzzYnoYLEioQUw1co4rGjbYKz1ZDOkkt">
 </head>
 <body>
 
@@ -244,13 +244,27 @@
           aria-label="A walkthrough of Blinded: dropping in a slide deck, boxing a logo once, finding it on every slide, reviewing the matches, labelling each redaction and exporting a clean PDF.">
           <source src="media/blinded-redact-logos-every-page.mp4" type="video/mp4">
         </video>
-        <div class="promoctl">
-          <button type="button" class="promosound" id="promosound" aria-pressed="false">Sound on</button>
-          <button type="button" class="promofull" id="promofull" title="Full screen"
-            aria-label="Watch full screen">
-            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-              <path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>
-            </svg>
+        <!-- The player's own controls, drawn here rather than by the
+             browser, so they look the same everywhere and stay when the film
+             fills the screen. -->
+        <div class="promobar">
+          <button type="button" class="promobtn" id="promoplay" aria-label="Pause">
+            <svg class="i-pause" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M8 5v14M16 5v14"/></svg>
+            <svg class="i-play" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path class="fill" d="M8 5l11 7-11 7z"/></svg>
+          </button>
+          <button type="button" class="promobtn" id="promostop" aria-label="Stop">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect class="fill" x="6.5" y="6.5" width="11" height="11" rx="1.5"/></svg>
+          </button>
+          <input type="range" class="promoseek" id="promoseek" min="0" max="1000" step="1" value="0"
+            aria-label="Position in the film">
+          <span class="promotime" id="promotime">0:00 / 0:56</span>
+          <button type="button" class="promobtn" id="promosound" aria-pressed="false" aria-label="Turn sound on">
+            <svg class="i-muted" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path class="fill" d="M4 9h4l5-4v14l-5-4H4z"/><path d="M17 9l5 6M22 9l-5 6"/></svg>
+            <svg class="i-sound" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path class="fill" d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/></svg>
+          </button>
+          <button type="button" class="promobtn" id="promofull" aria-label="Watch full screen">
+            <svg class="i-grow" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
+            <svg class="i-shrink" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></svg>
           </button>
         </div>
       </div>
@@ -1193,7 +1207,7 @@
 <script src="lib/pass.js?v=fa8e95c9" integrity="sha384-vdiGIUAtPsWUwbV/9iFB3JwVBPa1iWWzPkpwZOb2O6VlxQpGrlUP9RGGlQaNl17N"></script>
 <script src="lib/pay.js?v=6f94d998" integrity="sha384-1bByT5YqR1yybQrDsj8bxhmARIphzp5gXG9YVdSfl6J9KWFMMAqdEFPO5nmQDcnr"></script>
 <script src="lib/render.js?v=65c3fe76" integrity="sha384-hC2pL0Iz3qZPhOkr8LTwrOtpoDzQ/Yq+qnhe6ySQZDtipsMW1eMqd8M9ZeZmqODr"></script>
-<script src="app.js?v=3c9b367c" integrity="sha384-bAGD7GTX/94N5TWICIQlNrtkRCbKLY2NnqSB5U+glpgrzQ6GnDorajyticjymhfV"></script>
+<script src="app.js?v=c2d3d28a" integrity="sha384-5NXjpY5e49aw4Xs3S31l4Gn1zelrc0oeg+bvAZpl2AkyzZ1NZQrVqI+4pNZEsCfi"></script>
 <script type="module" src="lib/boot.mjs?v=8b98ed8f" integrity="sha384-/dJ3R23NfbIp89TMbKmNgtoFjuy8b5Kji1HBXxf7q7kKtAM2wTj9DeXCivsebPvb"></script>
 </body>
 </html>

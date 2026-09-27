@@ -4729,31 +4729,96 @@ try {
       JSON.stringify(state));
     check('muted, on a loop and inline',
       state.muted && state.loop && state.inline, JSON.stringify(state));
+    // The sound is an icon now, and says what it does to a screen reader.
     const sound = await page.evaluate(() => {
       const v = document.getElementById('promovideo');
       const b = document.getElementById('promosound');
       b.click();
-      const on = { muted: v.muted, said: b.textContent, pressed: b.getAttribute('aria-pressed') };
+      const on = { muted: v.muted, pressed: b.getAttribute('aria-pressed'),
+        label: b.getAttribute('aria-label'), words: b.textContent.trim(),
+        icon: getComputedStyle(b.querySelector('.i-sound')).display !== 'none' };
       b.click();
-      return { on, off: { muted: v.muted, said: b.textContent } };
+      return { on, off: { muted: v.muted, label: b.getAttribute('aria-label'),
+        icon: getComputedStyle(b.querySelector('.i-muted')).display !== 'none' } };
     });
-    // Full screen is a press away as well, and nothing offers to send the
-    // film to a television.
-    const big = await page.evaluate(() => {
+    check('the sound is an icon, one press away, and the same press takes it off',
+      sound.on.muted === false && sound.on.pressed === 'true' && sound.on.words === ''
+      && sound.on.icon && /off/i.test(sound.on.label)
+      && sound.off.muted === true && sound.off.icon && /on/i.test(sound.off.label),
+      JSON.stringify(sound));
+
+    // Play and stop at the bottom left, the time bar across the bottom.
+    const bar = await page.evaluate(async () => {
       const v = document.getElementById('promovideo');
+      const bar = document.querySelector('.promobar').getBoundingClientRect();
+      const frame = document.querySelector('.promoframe').getBoundingClientRect();
+      const playBtn = document.getElementById('promoplay').getBoundingClientRect();
+      const stopBtn = document.getElementById('promostop').getBoundingClientRect();
+      const seekBar = document.getElementById('promoseek').getBoundingClientRect();
+      window.__promo = [];
+      document.getElementById('promostop').click();
+      const stopped = { at: v.currentTime, asked: window.__promo.slice() };
+      return {
+        // Inside the frame's one-pixel border.
+        alongBottom: Math.abs(bar.bottom - frame.bottom) <= 2 && bar.width >= frame.width - 2,
+        leftmost: playBtn.left < stopBtn.left && stopBtn.left < seekBar.left
+          && playBtn.left - frame.left < 40,
+        wide: seekBar.width > frame.width * 0.4,
+        stopped,
+      };
+    });
+    check('play and stop sit at the bottom left, before a time bar across the bottom',
+      bar.alongBottom && bar.leftmost && bar.wide, JSON.stringify(bar));
+    check('stop pauses the film and takes it back to the start',
+      bar.stopped.asked.includes('pause') && bar.stopped.at === 0, JSON.stringify(bar));
+
+    // Full screen is a press away, turns the sound on, and puts it back as it
+    // was on the way out. Nothing offers to send the film to a television.
+    const big = await page.evaluate(async () => {
+      const v = document.getElementById('promovideo');
+      const frame = document.querySelector('.promoframe');
+      v.muted = true;
       let asked = 0;
-      v.requestFullscreen = () => { asked++; return Promise.resolve(); };
+      frame.requestFullscreen = () => { asked++; return Promise.resolve(); };
       document.getElementById('promofull').click();
-      return { asked, shown: !document.getElementById('promofull').hidden,
+      await new Promise(r => setTimeout(r, 50));
+      const inside = { muted: v.muted, big: frame.classList.contains('big') };
+      document.getElementById('promofull').click();
+      await new Promise(r => setTimeout(r, 50));
+      return { asked, inside, after: { muted: v.muted, big: frame.classList.contains('big') },
         noCast: v.disableRemotePlayback === true
           && /noremoteplayback/.test(v.getAttribute('controlslist') || '')
           && v.getAttribute('x-webkit-airplay') === 'deny' };
     });
-    check('the film can be watched full screen', big.shown && big.asked === 1, JSON.stringify(big));
+    check('the film can be watched full screen, with the sound on',
+      big.asked === 1 && big.inside.big && big.inside.muted === false, JSON.stringify(big));
+    check('and leaving puts the sound back as it was',
+      big.after.big === false && big.after.muted === true, JSON.stringify(big));
     check('and there is no button to cast it to a television', big.noCast, JSON.stringify(big));
-    check('the sound is one press away, and the same press takes it off',
-      sound.on.muted === false && sound.on.pressed === 'true' && /off/i.test(sound.on.said)
-      && sound.off.muted === true && /on/i.test(sound.off.said), JSON.stringify(sound));
+
+    // On a phone the film covers the page instead of asking the browser for
+    // full screen, which a phone's browser answers with a notice over it.
+    const phone = await page.evaluate(async () => {
+      const v = document.getElementById('promovideo');
+      const frame = document.querySelector('.promoframe');
+      const real = window.matchMedia;
+      window.matchMedia = q => (/pointer: coarse/.test(q) ? { matches: true } : real.call(window, q));
+      let asked = 0;
+      frame.requestFullscreen = () => { asked++; return Promise.resolve(); };
+      document.getElementById('promofull').click();
+      await new Promise(r => setTimeout(r, 50));
+      const box = frame.getBoundingClientRect();
+      const out = { asked, covers: box.width === window.innerWidth && box.height === window.innerHeight,
+        muted: v.muted };
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+      await new Promise(r => setTimeout(r, 50));
+      out.closed = !frame.classList.contains('big');
+      window.matchMedia = real;
+      return out;
+    });
+    check('on a phone it covers the screen without the browser\'s full screen',
+      phone.asked === 0 && phone.covers && phone.muted === false, JSON.stringify(phone));
+    check('and closes again', phone.closed, JSON.stringify(phone));
     await page.evaluate(() => {
       Object.defineProperty(document.getElementById('promovideo'), 'paused',
         { configurable: true, get: () => false });

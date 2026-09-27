@@ -9922,70 +9922,177 @@
   // Muted and looping, started only while it is on screen: a browser lets a
   // video start by itself only without sound, and one playing below the fold
   // is battery spent on nobody. Not started at all for a reviewer whose
-  // system asks for less motion; they get the controls and the choice.
+  // system asks for less motion.
+  //
+  // The controls are the page's own -- play and stop, the time bar, sound and
+  // full screen -- so they look the same in every browser and stay put when
+  // the film fills the screen. Filling the screen turns the sound on: at that
+  // size somebody has chosen to watch. On a phone it fills the screen by
+  // covering the page instead of asking the browser for full screen, which a
+  // phone's browser answers with a notice over the film about how to leave.
   function bindPromo() {
     const video = el('promovideo');
-    const sound = el('promosound');
     if (!video) return;
+    const frame = video.closest('.promoframe');
+    const play = el('promoplay');
+    const stop = el('promostop');
+    const seek = el('promoseek');
+    const time = el('promotime');
+    const sound = el('promosound');
+    const full = el('promofull');
     const still = window.matchMedia
       && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    if (still) {
-      video.controls = true;
-      video.removeAttribute('loop');
-    } else if (typeof IntersectionObserver === 'function') {
+    // A press on pause is a decision, and scrolling back past the film must
+    // not overrule it.
+    let heldByHand = still;
+    let seen = false;
+
+    const start = () => {
+      const playing = video.play();
+      // A film that could not start is paused, whatever the 'play' event
+      // that came first said.
+      if (playing && playing.catch) playing.catch(() => showPlaying());
+    };
+    const clock = seconds => {
+      const whole = Math.max(0, Math.floor(seconds || 0));
+      return Math.floor(whole / 60) + ':' + String(whole % 60).padStart(2, '0');
+    };
+    const showTime = () => {
+      const length = video.duration || 0;
+      const at = video.currentTime || 0;
+      const share = length ? at / length : 0;
+      if (seek && !seek.dragging) seek.value = String(Math.round(share * 1000));
+      if (seek) seek.style.setProperty('--done', (share * 100).toFixed(2) + '%');
+      if (time) time.textContent = clock(at) + ' / ' + clock(length || 56);
+    };
+    const showPlaying = () => {
+      if (!play) return;
+      play.classList.toggle('paused', video.paused);
+      play.setAttribute('aria-label', video.paused ? 'Play' : 'Pause');
+    };
+    const showSound = () => {
+      if (!sound) return;
+      sound.setAttribute('aria-pressed', String(!video.muted));
+      sound.setAttribute('aria-label', video.muted ? 'Turn sound on' : 'Turn sound off');
+    };
+    video.addEventListener('timeupdate', showTime);
+    video.addEventListener('loadedmetadata', showTime);
+    video.addEventListener('play', showPlaying);
+    video.addEventListener('pause', showPlaying);
+    video.addEventListener('volumechange', showSound);
+    showPlaying();
+    showSound();
+
+    if (!still && typeof IntersectionObserver === 'function') {
       new IntersectionObserver(entries => {
         for (const entry of entries) {
-          if (entry.isIntersecting && entry.intersectionRatio >= 0.4) {
-            const playing = video.play();
-            if (playing && playing.catch) playing.catch(() => { video.controls = true; });
-          } else if (!video.paused) {
-            video.pause();
-          }
+          seen = entry.isIntersecting && entry.intersectionRatio >= 0.4;
+          if (big()) continue;
+          if (seen && !heldByHand) start();
+          else if (!seen && !video.paused) video.pause();
         }
       }, { threshold: [0, 0.4] }).observe(video);
     }
-    // Full screen, with the player's own controls while it lasts: at that
-    // size somebody is watching, and wants to pause and scrub. iPhones only
-    // take a video to full screen through their own player.
-    const full = el('promofull');
-    const enter = () => {
-      if (video.requestFullscreen) {
-        const going = video.requestFullscreen();
-        if (going && going.catch) going.catch(() => {});
-      } else if (video.webkitEnterFullscreen) {
-        video.webkitEnterFullscreen();
-      }
-    };
-    if (full) {
-      if (!video.requestFullscreen && !video.webkitEnterFullscreen) full.hidden = true;
-      full.addEventListener('click', enter);
+
+    if (play) {
+      play.addEventListener('click', () => {
+        if (video.paused) { heldByHand = false; start(); }
+        else { heldByHand = true; video.pause(); }
+      });
     }
-    video.addEventListener('dblclick', enter);
-    const settle = () => {
-      const on = document.fullscreenElement === video;
-      video.controls = on || still;
-      if (!on && sound) {
-        // The player's own mute may have been used in there.
-        sound.setAttribute('aria-pressed', String(!video.muted));
-        sound.textContent = video.muted ? 'Sound on' : 'Sound off';
-      }
-    };
-    document.addEventListener('fullscreenchange', settle);
-    video.addEventListener('webkitendfullscreen', settle);
+    if (stop) {
+      stop.addEventListener('click', () => {
+        heldByHand = true;
+        video.pause();
+        video.currentTime = 0;
+        showTime();
+      });
+    }
+    if (seek) {
+      seek.addEventListener('pointerdown', () => { seek.dragging = true; });
+      seek.addEventListener('pointerup', () => { seek.dragging = false; });
+      seek.addEventListener('input', () => {
+        if (video.duration) video.currentTime = (Number(seek.value) / 1000) * video.duration;
+        showTime();
+      });
+    }
     if (sound) {
       sound.addEventListener('click', () => {
         video.muted = !video.muted;
-        sound.setAttribute('aria-pressed', String(!video.muted));
-        sound.textContent = video.muted ? 'Sound on' : 'Sound off';
+        showSound();
         // Sound from the start: the middle of a sentence is a poor place to
         // begin listening.
         if (!video.muted) {
           video.currentTime = 0;
-          const playing = video.play();
-          if (playing && playing.catch) playing.catch(() => {});
+          heldByHand = false;
+          start();
         }
       });
     }
+
+    // Full screen. Real full screen on a computer; on a phone, the film
+    // covering the page.
+    const phone = () => window.matchMedia
+      && window.matchMedia('(pointer: coarse)').matches;
+    let mutedBefore = true;
+    const big = () => frame.classList.contains('big');
+    const opened = () => {
+      mutedBefore = video.muted;
+      frame.classList.add('big');
+      video.muted = false;
+      showSound();
+      heldByHand = false;
+      start();
+    };
+    const closed = () => {
+      frame.classList.remove('big');
+      document.body.classList.remove('promo-big');
+      // Back to how it was: sound on only if it was on before.
+      video.muted = mutedBefore;
+      showSound();
+      if (!seen && !video.paused) video.pause();
+    };
+    const enter = () => {
+      if (!phone() && frame.requestFullscreen) {
+        const going = frame.requestFullscreen();
+        if (going && going.then) going.then(opened, () => {});
+        else opened();
+        return;
+      }
+      document.body.classList.add('promo-big');
+      opened();
+    };
+    const leave = () => {
+      if (document.fullscreenElement === frame) {
+        const going = document.exitFullscreen();
+        if (going && going.catch) going.catch(() => {});
+      } else {
+        closed();
+      }
+    };
+    if (full) {
+      full.addEventListener('click', () => {
+        if (big()) leave(); else enter();
+        full.setAttribute('aria-label', big() ? 'Leave full screen' : 'Watch full screen');
+      });
+    }
+    video.addEventListener('dblclick', () => { if (big()) leave(); else enter(); });
+    // A tap on the film itself plays or pauses it, as it does in any player.
+    video.addEventListener('click', () => { if (play) play.click(); });
+    document.addEventListener('fullscreenchange', () => {
+      if (document.fullscreenElement !== frame && big() && !document.body.classList.contains('promo-big')) {
+        closed();
+        if (full) full.setAttribute('aria-label', 'Watch full screen');
+      }
+    });
+    document.addEventListener('keydown', event => {
+      if (event.key === 'Escape' && document.body.classList.contains('promo-big')) {
+        event.preventDefault();
+        closed();
+        if (full) full.setAttribute('aria-label', 'Watch full screen');
+      }
+    });
+    showTime();
   }
 
   // ---------- the plan, before a search starts ----------
