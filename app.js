@@ -9944,6 +9944,34 @@
         }
       }, { threshold: [0, 0.4] }).observe(video);
     }
+    // Full screen, with the player's own controls while it lasts: at that
+    // size somebody is watching, and wants to pause and scrub. iPhones only
+    // take a video to full screen through their own player.
+    const full = el('promofull');
+    const enter = () => {
+      if (video.requestFullscreen) {
+        const going = video.requestFullscreen();
+        if (going && going.catch) going.catch(() => {});
+      } else if (video.webkitEnterFullscreen) {
+        video.webkitEnterFullscreen();
+      }
+    };
+    if (full) {
+      if (!video.requestFullscreen && !video.webkitEnterFullscreen) full.hidden = true;
+      full.addEventListener('click', enter);
+    }
+    video.addEventListener('dblclick', enter);
+    const settle = () => {
+      const on = document.fullscreenElement === video;
+      video.controls = on || still;
+      if (!on && sound) {
+        // The player's own mute may have been used in there.
+        sound.setAttribute('aria-pressed', String(!video.muted));
+        sound.textContent = video.muted ? 'Sound on' : 'Sound off';
+      }
+    };
+    document.addEventListener('fullscreenchange', settle);
+    video.addEventListener('webkitendfullscreen', settle);
     if (sound) {
       sound.addEventListener('click', () => {
         video.muted = !video.muted;

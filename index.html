@@ -111,7 +111,7 @@
   "duration": "PT56S"
 }
 </script>
-<link rel="stylesheet" href="app.css?v=ef82c793" integrity="sha384-sk2KSp/kJmNinF/i1QKaEp+IJ5ok4i9ujqQhRDxIcLSBjMqwNb6vd5bsQC25XmKh">
+<link rel="stylesheet" href="app.css?v=2bd91fdd" integrity="sha384-AEl1i+RuotNOFGj04h6LdsYXfw5B6yTtZemOV8ENSglVTNbMFNACFSc5+G4yzP04">
 </head>
 <body>
 
@@ -233,13 +233,26 @@
     <section class="promo" id="promo">
       <h2 class="sr-only">Blinded in under a minute</h2>
       <div class="promoframe">
+        <!-- No casting: a thirty-second loop on a front page is not something
+             anyone sends to a television, and the phone's cast button sat
+             over the film. -->
         <video id="promovideo" class="promovideo" muted loop playsinline
+          disableremoteplayback x-webkit-airplay="deny"
+          controlslist="nodownload noremoteplayback"
           preload="metadata" width="1280" height="720"
           poster="media/blinded-redact-logos-every-page-poster.webp"
           aria-label="A walkthrough of Blinded: dropping in a slide deck, boxing a logo once, finding it on every slide, reviewing the matches, labelling each redaction and exporting a clean PDF.">
           <source src="media/blinded-redact-logos-every-page.mp4" type="video/mp4">
         </video>
-        <button type="button" class="promosound" id="promosound" aria-pressed="false">Sound on</button>
+        <div class="promoctl">
+          <button type="button" class="promosound" id="promosound" aria-pressed="false">Sound on</button>
+          <button type="button" class="promofull" id="promofull" title="Full screen"
+            aria-label="Watch full screen">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>
+            </svg>
+          </button>
+        </div>
       </div>
     </section>
 
@@ -1180,7 +1193,7 @@
 <script src="lib/pass.js?v=fa8e95c9" integrity="sha384-vdiGIUAtPsWUwbV/9iFB3JwVBPa1iWWzPkpwZOb2O6VlxQpGrlUP9RGGlQaNl17N"></script>
 <script src="lib/pay.js?v=6f94d998" integrity="sha384-1bByT5YqR1yybQrDsj8bxhmARIphzp5gXG9YVdSfl6J9KWFMMAqdEFPO5nmQDcnr"></script>
 <script src="lib/render.js?v=65c3fe76" integrity="sha384-hC2pL0Iz3qZPhOkr8LTwrOtpoDzQ/Yq+qnhe6ySQZDtipsMW1eMqd8M9ZeZmqODr"></script>
-<script src="app.js?v=4099f8ae" integrity="sha384-eXRP/ZCitc/Of+8AjcrfcWzAe1OtAYp9IYnBMXMcy9zvWyvEmeJKtLNO8EPkY5AE"></script>
+<script src="app.js?v=3c9b367c" integrity="sha384-bAGD7GTX/94N5TWICIQlNrtkRCbKLY2NnqSB5U+glpgrzQ6GnDorajyticjymhfV"></script>
 <script type="module" src="lib/boot.mjs?v=8b98ed8f" integrity="sha384-/dJ3R23NfbIp89TMbKmNgtoFjuy8b5Kji1HBXxf7q7kKtAM2wTj9DeXCivsebPvb"></script>
 </body>
 </html>

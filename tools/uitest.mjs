@@ -4737,6 +4737,20 @@ try {
       b.click();
       return { on, off: { muted: v.muted, said: b.textContent } };
     });
+    // Full screen is a press away as well, and nothing offers to send the
+    // film to a television.
+    const big = await page.evaluate(() => {
+      const v = document.getElementById('promovideo');
+      let asked = 0;
+      v.requestFullscreen = () => { asked++; return Promise.resolve(); };
+      document.getElementById('promofull').click();
+      return { asked, shown: !document.getElementById('promofull').hidden,
+        noCast: v.disableRemotePlayback === true
+          && /noremoteplayback/.test(v.getAttribute('controlslist') || '')
+          && v.getAttribute('x-webkit-airplay') === 'deny' };
+    });
+    check('the film can be watched full screen', big.shown && big.asked === 1, JSON.stringify(big));
+    check('and there is no button to cast it to a television', big.noCast, JSON.stringify(big));
     check('the sound is one press away, and the same press takes it off',
       sound.on.muted === false && sound.on.pressed === 'true' && /off/i.test(sound.on.said)
       && sound.off.muted === true && /on/i.test(sound.off.said), JSON.stringify(sound));

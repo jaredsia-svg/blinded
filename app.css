@@ -962,14 +962,22 @@ body.picking .tools {
   aspect-ratio: 16 / 9; box-shadow: 0 6px 24px rgba(16, 22, 32, .08);
 }
 .promovideo { display: block; width: 100%; height: 100%; object-fit: cover; }
-.promosound {
+.promoctl {
   position: absolute; right: 12px; bottom: 12px;
-  padding: 6px 12px; border-radius: 999px; border: 0;
-  background: rgba(16, 22, 32, .72); color: #fff;
-  font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer;
+  display: flex; gap: 8px; align-items: center;
 }
-.promosound:hover { background: rgba(16, 22, 32, .88); }
-.promosound:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+.promosound, .promofull {
+  height: 32px; border-radius: 999px; border: 0;
+  background: rgba(16, 22, 32, .72); color: #fff; cursor: pointer;
+  font: inherit; font-size: 12.5px; font-weight: 600;
+}
+.promosound { padding: 0 12px; }
+.promofull { width: 32px; padding: 0; display: inline-flex; align-items: center; justify-content: center; }
+.promofull svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.promosound:hover, .promofull:hover { background: rgba(16, 22, 32, .88); }
+.promosound:focus-visible, .promofull:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+/* Full screen shows the whole film, letterboxed, rather than cropped. */
+.promovideo:fullscreen { object-fit: contain; background: #000; }
 .gallery h2 { font-size: 19px; margin: 0 0 6px; letter-spacing: -0.01em; }
 
 .galtop {
