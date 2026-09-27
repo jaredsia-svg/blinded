@@ -125,6 +125,12 @@ function headersFor(requested) {
 function serve() {
   const server = createServer((req, res) => {
     const requested = decodeURIComponent(new URL(req.url, 'http://x').pathname);
+    // The one file the deploy writes rather than the repository holds
+    // (tools/version.sh). Served here as Render would, with a made-up commit.
+    if (requested === '/version.json') {
+      res.writeHead(200, Object.assign(headersFor(requested), { 'Content-Type': 'application/json' }));
+      return res.end(JSON.stringify({ commit: TEST_COMMIT }));
+    }
     // A directory is its index, which is how the landing pages are addressed.
     const wanted = requested === '/' ? '/index.html'
       : requested.endsWith('/') ? requested + 'index.html' : requested;
@@ -141,6 +147,7 @@ function serve() {
   return new Promise(done => server.listen(0, () => done({ server, port: server.address().port })));
 }
 
+const TEST_COMMIT = '0123456789abcdef0123456789abcdef01234567';
 const { server, port } = await serve();
 const base = 'http://127.0.0.1:' + port + '/';
 
@@ -12112,6 +12119,24 @@ try {
   // that failed ("Setting up fake worker failed"). sw.js keeps them. This is
   // the reviewer's own test: load the page, go offline, open a document, and
   // search it -- the text layer and the page reader both.
+  // Which published code this is, at the foot of the tool (tools/version.sh).
+  await part("the footer names the published version", async () => {
+    const tab = await context.newPage();
+    await tab.goto(base);
+    const shown = await tab.waitForFunction(() => !document.getElementById('foot-version-wrap').hidden,
+      undefined, { timeout: 10000 }).then(() => true, () => false);
+    const link = await tab.evaluate(() => {
+      const a = document.getElementById('foot-version');
+      return { text: a.textContent, href: a.href, target: a.target };
+    });
+    check('the footer names the version deployed', shown && link.text === 'Version 0123456',
+      JSON.stringify(link));
+    check('and links to that exact commit of the published code, in a tab of its own',
+      link.href === 'https://github.com/jaredsia-svg/blinded/tree/' + TEST_COMMIT && link.target === '_blank',
+      JSON.stringify(link));
+    await tab.close();
+  });
+
   await part("it keeps working with the network gone", async () => {
     const offline = await browser.newContext();
     try {

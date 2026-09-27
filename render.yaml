@@ -28,7 +28,10 @@ services:
     name: blinded
     runtime: static
     staticPublishPath: .
-    buildCommand: ""
+    # Writes version.json with the commit being deployed, for the footer
+    # (see tools/version.sh). Nothing else is built: every other file is
+    # served exactly as it is in the repository.
+    buildCommand: sh tools/version.sh
     headers:
       - path: /*
         name: Content-Security-Policy

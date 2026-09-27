@@ -8648,6 +8648,23 @@
   el('busy-pause').addEventListener('click', requestPause);
   bindSweepOffer();
 
+  // Which published version this is. Render writes version.json at deploy
+  // with the commit it is deploying (tools/version.sh); the footer names it
+  // and links to that exact code on GitHub. Where there is no such file -- a
+  // copy run from a checkout -- nothing is shown rather than a guess.
+  fetch('version.json', { cache: 'no-store', credentials: 'omit' })
+    .then(answer => (answer.ok ? answer.json() : null))
+    .then(built => {
+      const commit = built && /^[0-9a-f]{40}$/.test(built.commit) ? built.commit : null;
+      if (!commit) return;
+      const link = el('foot-version');
+      link.textContent = 'Version ' + commit.slice(0, 7);
+      link.href = 'https://github.com/jaredsia-svg/blinded/tree/' + commit;
+      link.title = 'The published code this page was built from';
+      el('foot-version-wrap').hidden = false;
+    })
+    .catch(() => {});
+
   // Working with the network gone (see sw.js). The worker keeps the app, the
   // PDF reader and the fonts as it installs; once the page has settled, it is
   // asked to keep the page reader too -- about seven megabytes, so not before

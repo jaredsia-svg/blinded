@@ -2859,6 +2859,30 @@ check('no creation date is carried into the output', !meta.info.CreationDate);
       /url\.origin !== self\.location\.origin\) return;/.test(sw)
         && /request\.method !== 'GET'\) return;/.test(sw));
   }
+  // Tying the live site to the published code. Every script and stylesheet a
+  // page loads carries the fingerprint of the published file, so a browser
+  // refuses anything else; and the deploy writes which commit it is, for the
+  // footer, into a file that is never committed.
+  {
+    const { stamped } = await import('./stamp.mjs');
+    for (const name of ['index.html', 'unlock.html', 'license/index.html']) {
+      const html = readFileSync(join(root, name), 'utf8');
+      const tags = [...html.matchAll(/<(?:script|link)\b[^>]*\s(?:src|href)="(?![a-z]+:)[^"]+\.(?:js|mjs|css)[^"]*"[^>]*>/g)]
+        .map(m => m[0]).filter(tag => /^<script/.test(tag) || /rel="stylesheet"/.test(tag));
+      check(name + ': every script and stylesheet it loads is fingerprinted',
+        tags.length > 0 && tags.every(tag => /\sintegrity="sha384-[A-Za-z0-9+\/=]+"/.test(tag)),
+        tags.filter(tag => !/integrity=/.test(tag)).join(' '));
+      check(name + ': and each fingerprint is the published file\u2019s',
+        stamped(html) === html, 'run: node tools/stamp.mjs');
+    }
+    const yaml = readFileSync(join(root, 'render.yaml'), 'utf8');
+    check('the deploy writes which commit it is',
+      /buildCommand: sh tools\/version\.sh/.test(yaml) && existsSync(join(root, 'tools', 'version.sh')));
+    check('and that file is never committed',
+      /^version\.json$/m.test(readFileSync(join(root, '.gitignore'), 'utf8')));
+    check('and the footer has a place to name it',
+      /id="foot-version"/.test(readFileSync(join(root, 'index.html'), 'utf8')));
+  }
   check('and robots.txt says where the sitemap is',
     /Sitemap: https:\/\/\S+\/sitemap\.xml/.test(readFileSync(join(root, 'robots.txt'), 'utf8')));
 }

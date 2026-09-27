@@ -31,11 +31,33 @@ const PAGES = ['index.html', 'unlock.html', 'license/index.html'];
 const LINK = /(\s(?:href|src)=")([A-Za-z0-9_./-]+\.(?:css|js|mjs))(?:\?v=[0-9a-f]+)?(")/g;
 
 export function stamped(html) {
-  return html.replace(LINK, (whole, before, path, after) => {
+  return fingerprinted(html.replace(LINK, (whole, before, path, after) => {
     let body;
     try { body = readFileSync(join(root, path)); } catch { return whole; }
     const hash = createHash('sha256').update(body).digest('hex').slice(0, 8);
     return before + path + '?v=' + hash + after;
+  }));
+}
+
+// And the whole file's fingerprint on the tag that loads it, as the browser's
+// subresource integrity attribute. The version stamp above makes a browser
+// fetch a changed file; this makes it refuse a file that is not the one
+// published. A script whose bytes do not hash to the value in the page is not
+// run, whoever served it -- so a page that matches the published source can
+// only run the published scripts, and checking the one page checks them all.
+const TAG = /<(script|link)\b[^>]*>/g;
+const WHERE = /\s(?:src|href)="([A-Za-z0-9_./-]+\.(?:css|js|mjs))(?:\?v=[0-9a-f]+)?"/;
+
+function fingerprinted(html) {
+  return html.replace(TAG, tag => {
+    const at = WHERE.exec(tag);
+    if (!at) return tag;
+    if (/^<link/.test(tag) && !/\srel="stylesheet"/.test(tag)) return tag;
+    let body;
+    try { body = readFileSync(join(root, at[1])); } catch { return tag; }
+    const sri = 'sha384-' + createHash('sha384').update(body).digest('base64');
+    const plain = tag.replace(/\s+integrity="[^"]*"/, '');
+    return plain.replace(/\s*\/?>$/, end => ' integrity="' + sri + '"' + end);
   });
 }
 

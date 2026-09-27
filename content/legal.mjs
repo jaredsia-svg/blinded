@@ -369,8 +369,23 @@ export const pages = [
           + 'your browser runs. The one compiled file, the matching engine '
           + '<code>lib/fft.wasm</code>, is built from <code>lib/fft.c</code> '
           + 'beside it, and rebuilding it gives the same bytes, which the '
-          + 'project\u2019s own tests check. '
-          + 'Search it for <code>fetch(</code>: every request the tool makes is '
+          + 'project\u2019s own tests check.',
+          'Which version is live is shown at the foot of the tool: '
+          + '<em>Version</em> and a short code, linking to that exact commit on '
+          + 'GitHub. It is written when the site is deployed, so it is the one '
+          + 'file on the site that is not in the repository.',
+          'And the page cannot quietly run anything else. Every script and '
+          + 'stylesheet the tool page loads carries a fingerprint of the '
+          + 'published file (the <code>integrity</code> attribute on each '
+          + '<code>&lt;script&gt;</code> tag, which you can read with View '
+          + 'Source). Your browser computes the fingerprint of what it '
+          + 'receives and refuses to run a file that does not match. So if the '
+          + 'page matches the published one, so does every script it loads. '
+          + 'The files those scripts load in turn, the PDF reader, the text '
+          + 'recognition engine, the search worker and the fonts, come from '
+          + 'fixed addresses written in that checked code, but do not carry '
+          + 'fingerprints of their own.',
+          'Search it for <code>fetch(</code>: every request the tool makes is '
           + 'for one of its own files, the questions page, the license page, '
           + 'the matching engine and the reader’s data. There is no upload '
           + 'code to find.'] },

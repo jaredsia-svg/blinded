@@ -8,3 +8,7 @@ bench/
 # The pass signing key. This file is the business: it mints every pass ever
 # sold, and a copy of it lets anybody mint their own. Never commit it.
 .pass-key.json
+
+# Written at deploy with the commit being deployed (tools/version.sh). A
+# commit cannot contain its own id, so this is never committed.
+version.json
