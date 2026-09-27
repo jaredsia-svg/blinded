@@ -8743,6 +8743,7 @@
 
   el('busy-pause').addEventListener('click', requestPause);
   bindSearchPlan();
+  bindPromo();
 
   // Which published version this is. Render writes version.json at deploy
   // with the commit it is deploying (tools/version.sh); the footer names it
@@ -9915,6 +9916,49 @@
   // Offered only once a redaction has been done, because it is the second
   // opinion on that redaction: there is nothing to be thorough about before
   // there is a result to check.
+
+  // ---------- the video on the front page ----------
+  //
+  // Muted and looping, started only while it is on screen: a browser lets a
+  // video start by itself only without sound, and one playing below the fold
+  // is battery spent on nobody. Not started at all for a reviewer whose
+  // system asks for less motion; they get the controls and the choice.
+  function bindPromo() {
+    const video = el('promovideo');
+    const sound = el('promosound');
+    if (!video) return;
+    const still = window.matchMedia
+      && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (still) {
+      video.controls = true;
+      video.removeAttribute('loop');
+    } else if (typeof IntersectionObserver === 'function') {
+      new IntersectionObserver(entries => {
+        for (const entry of entries) {
+          if (entry.isIntersecting && entry.intersectionRatio >= 0.4) {
+            const playing = video.play();
+            if (playing && playing.catch) playing.catch(() => { video.controls = true; });
+          } else if (!video.paused) {
+            video.pause();
+          }
+        }
+      }, { threshold: [0, 0.4] }).observe(video);
+    }
+    if (sound) {
+      sound.addEventListener('click', () => {
+        video.muted = !video.muted;
+        sound.setAttribute('aria-pressed', String(!video.muted));
+        sound.textContent = video.muted ? 'Sound on' : 'Sound off';
+        // Sound from the start: the middle of a sentence is a poor place to
+        // begin listening.
+        if (!video.muted) {
+          video.currentTime = 0;
+          const playing = video.play();
+          if (playing && playing.catch) playing.catch(() => {});
+        }
+      });
+    }
+  }
 
   // ---------- the plan, before a search starts ----------
   //

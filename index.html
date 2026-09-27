@@ -99,7 +99,19 @@
   ]
 }
 </script>
-<link rel="stylesheet" href="app.css?v=30668362" integrity="sha384-9zxeKHm5TQsxUe4Ew1CCzvp1p2yYpGOlnq+Kv66UROVm7oIiVU49PHu9dQt39zRY">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "VideoObject",
+  "name": "Blinded: redact a logo on every page of a PDF, without uploading it",
+  "description": "A walkthrough of Blinded: drop in a slide deck, box a logo once and find it on every slide at any size, review each match, label each redaction and export a clean, flattened PDF. Everything runs in the browser.",
+  "thumbnailUrl": "https://blinded.dev/media/blinded-redact-logos-every-page-poster.webp",
+  "contentUrl": "https://blinded.dev/media/blinded-redact-logos-every-page.mp4",
+  "uploadDate": "2026-09-27",
+  "duration": "PT56S"
+}
+</script>
+<link rel="stylesheet" href="app.css?v=ef82c793" integrity="sha384-sk2KSp/kJmNinF/i1QKaEp+IJ5ok4i9ujqQhRDxIcLSBjMqwNb6vd5bsQC25XmKh">
 </head>
 <body>
 
@@ -210,74 +222,25 @@
     </ul>
     </section>
 
-    <!-- What people actually open this for.
-
-         Written as jobs rather than as features: somebody arrives with a
-         document and a deadline, not with an interest in correlation
-         thresholds. Two lines each, because a card nobody finishes reading
-         says less than a card that stops. The first is the one growing
-         fastest and the one nobody else answers – a file cannot go to a model
-         until the names are out of it, and a tool that uploads the file to do
-         that has not solved the problem it was brought in for. -->
-    <section class="uses">
-      <h2>Top use cases</h2>
-
-      <ul class="usegrid">
-        <li class="usecard">
-          <span class="useico" aria-hidden="true">
-            <svg viewBox="0 0 24 24" focusable="false">
-              <path d="M12 3a4 4 0 0 1 4 4v1a4 4 0 0 1 0 8v1a4 4 0 0 1-8 0v-1a4 4 0 0 1 0-8V7a4 4 0 0 1 4-4z"/>
-              <path d="M12 3v18"/>
-            </svg>
-          </span>
-          <p><strong>Before it goes to an AI.</strong> Take the names and logos
-            out, then paste the file into any model. The numbers and the
-            argument survive; the party does not.</p>
-        </li>
-        <li class="usecard">
-          <span class="useico" aria-hidden="true">
-            <svg viewBox="0 0 24 24" focusable="false">
-              <path d="M4 7h16v13H4z"/>
-              <path d="M9 7V4h6v3M4 12h16"/>
-            </svg>
-          </span>
-          <p><strong>Deal materials.</strong> CIMs, board decks, diligence
-            packs. Cover the target once and every copy goes, down to the badge
-            in a chart on page 63.</p>
-        </li>
-        <li class="usecard">
-          <span class="useico" aria-hidden="true">
-            <svg viewBox="0 0 24 24" focusable="false">
-              <path d="M12 4v16M5 8h14M7 8l-3 6a3 3 0 0 0 6 0zM17 8l-3 6a3 3 0 0 0 6 0z"/>
-            </svg>
-          </span>
-          <p><strong>Legal agreements.</strong> Counterparties, prices and
-            signatures out. The clauses stay readable, so the precedent can be
-            shared without the deal.</p>
-        </li>
-        <li class="usecard">
-          <span class="useico" aria-hidden="true">
-            <svg viewBox="0 0 24 24" focusable="false">
-              <path d="M6 3h8l4 4v14H6z"/>
-              <path d="M14 3v4h4M9 12h6M9 16h4"/>
-            </svg>
-          </span>
-          <p><strong>Discovery and FOIA.</strong> Covered text is gone from the
-            file, not hidden under a rectangle somebody can select through.
-            Each bar says what it removed.</p>
-        </li>
-        <li class="usecard">
-          <span class="useico" aria-hidden="true">
-            <svg viewBox="0 0 24 24" focusable="false">
-              <path d="M4 5h16v14H4z"/>
-              <path d="M12 9v6M9 12h6"/>
-            </svg>
-          </span>
-          <p><strong>Medical records.</strong> Names, dates, record numbers and
-            hospital marks off a chart before it is used for research, teaching
-            or a second opinion.</p>
-        </li>
-      </ul>
+    <!-- The tool in use, for anyone who would rather watch than read. Served
+         from this site like everything else: an embed from a video service
+         would bring that service's scripts and cookies onto the one page
+         whose whole claim is that nothing leaves the browser, and the
+         security policy does not allow frames anyway. Plays muted and on a
+         loop, which is the only way a browser lets a video start by itself;
+         sound is a press away. Not autoplayed for anyone who has asked their
+         system for less motion, and paused while it is off screen. -->
+    <section class="promo" id="promo">
+      <h2 class="sr-only">Blinded in under a minute</h2>
+      <div class="promoframe">
+        <video id="promovideo" class="promovideo" muted loop playsinline
+          preload="metadata" width="1280" height="720"
+          poster="media/blinded-redact-logos-every-page-poster.webp"
+          aria-label="A walkthrough of Blinded: dropping in a slide deck, boxing a logo once, finding it on every slide, reviewing the matches, labelling each redaction and exporting a clean PDF.">
+          <source src="media/blinded-redact-logos-every-page.mp4" type="video/mp4">
+        </video>
+        <button type="button" class="promosound" id="promosound" aria-pressed="false">Sound on</button>
+      </div>
     </section>
 
     <!-- A real deck, both ways round. The slides are pages of a published
@@ -287,13 +250,6 @@
          and why every one but the first slide's is loaded lazily. -->
     <section class="gallery" id="gallery">
       <h2>A real deck, redacted</h2>
-      <p class="sample-lede">This is Kimberly Clark's investor presentation on
-        their acquisition of Kenvue. Blinded is able to redact the two
-        companies’ logos and names, specific key brands, people's names across
-        the deck, in small print and inside the artwork, while the figures, the
-        charts and the rival brands are left readable. Each redaction is
-        labelled, so the sentence around it still reads coherently, with the
-        private key file only accessible by you.</p>
 
       <div class="galtop">
         <div class="galswitch" role="group" aria-label="Show the slides before or after redaction">
@@ -378,6 +334,84 @@
           </button>
         </li>
       </ol>
+      <!-- Under the slides rather than over them: the slides are the point,
+           and a paragraph above them was something to read before seeing
+           anything. -->
+      <p class="sample-lede">Kimberly-Clark's investor presentation on buying
+        Kenvue. Both companies' logos and names, key brands and people's names
+        are redacted on every slide, even inside the artwork, while the figures,
+        charts and rival brands stay readable. Each bar is labelled, so the
+        sentences still read.</p>
+    </section>
+
+    <!-- What people actually open this for.
+
+         Written as jobs rather than as features: somebody arrives with a
+         document and a deadline, not with an interest in correlation
+         thresholds. Two lines each, because a card nobody finishes reading
+         says less than a card that stops. The first is the one growing
+         fastest and the one nobody else answers – a file cannot go to a model
+         until the names are out of it, and a tool that uploads the file to do
+         that has not solved the problem it was brought in for. -->
+    <section class="uses">
+      <h2>Top use cases</h2>
+
+      <ul class="usegrid">
+        <li class="usecard">
+          <span class="useico" aria-hidden="true">
+            <svg viewBox="0 0 24 24" focusable="false">
+              <path d="M12 3a4 4 0 0 1 4 4v1a4 4 0 0 1 0 8v1a4 4 0 0 1-8 0v-1a4 4 0 0 1 0-8V7a4 4 0 0 1 4-4z"/>
+              <path d="M12 3v18"/>
+            </svg>
+          </span>
+          <p><strong>Before it goes to an AI.</strong> Take the names and logos
+            out, then paste the file into any model. The numbers and the
+            argument survive; the party does not.</p>
+        </li>
+        <li class="usecard">
+          <span class="useico" aria-hidden="true">
+            <svg viewBox="0 0 24 24" focusable="false">
+              <path d="M4 7h16v13H4z"/>
+              <path d="M9 7V4h6v3M4 12h16"/>
+            </svg>
+          </span>
+          <p><strong>Deal materials.</strong> CIMs, board decks, diligence
+            packs. Cover the target once and every copy goes, down to the badge
+            in a chart on page 63.</p>
+        </li>
+        <li class="usecard">
+          <span class="useico" aria-hidden="true">
+            <svg viewBox="0 0 24 24" focusable="false">
+              <path d="M12 4v16M5 8h14M7 8l-3 6a3 3 0 0 0 6 0zM17 8l-3 6a3 3 0 0 0 6 0z"/>
+            </svg>
+          </span>
+          <p><strong>Legal agreements.</strong> Counterparties, prices and
+            signatures out. The clauses stay readable, so the precedent can be
+            shared without the deal.</p>
+        </li>
+        <li class="usecard">
+          <span class="useico" aria-hidden="true">
+            <svg viewBox="0 0 24 24" focusable="false">
+              <path d="M6 3h8l4 4v14H6z"/>
+              <path d="M14 3v4h4M9 12h6M9 16h4"/>
+            </svg>
+          </span>
+          <p><strong>Discovery and FOIA.</strong> Covered text is gone from the
+            file, not hidden under a rectangle somebody can select through.
+            Each bar says what it removed.</p>
+        </li>
+        <li class="usecard">
+          <span class="useico" aria-hidden="true">
+            <svg viewBox="0 0 24 24" focusable="false">
+              <path d="M4 5h16v14H4z"/>
+              <path d="M12 9v6M9 12h6"/>
+            </svg>
+          </span>
+          <p><strong>Medical records.</strong> Names, dates, record numbers and
+            hospital marks off a chart before it is used for research, teaching
+            or a second opinion.</p>
+        </li>
+      </ul>
     </section>
 
     <!-- Against the tools people already have. Every claim here is about a
@@ -1146,7 +1180,7 @@
 <script src="lib/pass.js?v=fa8e95c9" integrity="sha384-vdiGIUAtPsWUwbV/9iFB3JwVBPa1iWWzPkpwZOb2O6VlxQpGrlUP9RGGlQaNl17N"></script>
 <script src="lib/pay.js?v=6f94d998" integrity="sha384-1bByT5YqR1yybQrDsj8bxhmARIphzp5gXG9YVdSfl6J9KWFMMAqdEFPO5nmQDcnr"></script>
 <script src="lib/render.js?v=65c3fe76" integrity="sha384-hC2pL0Iz3qZPhOkr8LTwrOtpoDzQ/Yq+qnhe6ySQZDtipsMW1eMqd8M9ZeZmqODr"></script>
-<script src="app.js?v=3f36308a" integrity="sha384-/balwowkJR8D2Z6nKOvlgwiJgzxrnzvL4MGLcFvAy0N+XbnXMVd4gvLjs0+dGIMk"></script>
+<script src="app.js?v=4099f8ae" integrity="sha384-eXRP/ZCitc/Of+8AjcrfcWzAe1OtAYp9IYnBMXMcy9zvWyvEmeJKtLNO8EPkY5AE"></script>
 <script type="module" src="lib/boot.mjs?v=8b98ed8f" integrity="sha384-/dJ3R23NfbIp89TMbKmNgtoFjuy8b5Kji1HBXxf7q7kKtAM2wTj9DeXCivsebPvb"></script>
 </body>
 </html>

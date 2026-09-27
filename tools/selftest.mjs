@@ -2195,6 +2195,38 @@ check('no creation date is carried into the output', !meta.info.CreationDate);
     JSON.stringify(spans('Tokenomics,Tokenomics', 'Tokenomics')));
 }
 
+// ---------- the video on the front page ----------
+//
+// Served from this site, small enough for a front page, never kept for
+// offline use, and described for search engines with the file it points at.
+{
+  const home = readFileSync(join(root, 'index.html'), 'utf8');
+  const src = (/<video[^>]*id="promovideo"[\s\S]*?<source src="([^"]+)"/.exec(home) || [])[1];
+  const poster = (/<video[^>]*poster="([^"]+)"/.exec(home) || [])[1];
+  check('the front page video is a file of this site',
+    Boolean(src) && !/^https?:/.test(src) && existsSync(join(root, src)), String(src));
+  check('and small enough for a front page',
+    Boolean(src) && existsSync(join(root, src)) && statSync(join(root, src)).size < 5e6,
+    src && existsSync(join(root, src)) ? statSync(join(root, src)).size + ' bytes' : 'missing');
+  check('with a poster frame that exists',
+    Boolean(poster) && existsSync(join(root, poster)), String(poster));
+  const tag = (/<video[^>]*id="promovideo"[^>]*>/.exec(home) || [''])[0];
+  check('muted, looping and inline, which is what lets a browser start it',
+    /\bmuted\b/.test(tag) && /\bloop\b/.test(tag) && /\bplaysinline\b/.test(tag), tag);
+  check('and not loaded in full before it is wanted',
+    /preload="(metadata|none)"/.test(tag), tag);
+  const sw = readFileSync(join(root, 'sw.js'), 'utf8');
+  check('the offline copy leaves the video alone',
+    /startsWith\('\/media\/'\)\) return/.test(sw) && !/\/media\//.test((/const CORE = \[([\s\S]*?)\];/.exec(sw) || [])[1] || ''));
+  const blocks = [...home.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)]
+    .map(m => { try { return JSON.parse(m[1]); } catch { return null; } });
+  const video = blocks.find(one => one && one['@type'] === 'VideoObject');
+  check('and it is described for search, pointing at the file that is served',
+    Boolean(video) && video.contentUrl === 'https://blinded.dev/' + src
+    && video.thumbnailUrl === 'https://blinded.dev/' + poster && /^PT\d+S$/.test(video.duration),
+    JSON.stringify(video));
+}
+
 // ---------- the gallery on the front page ----------
 //
 // It began as a drawing, invented end to end, then became one real page. It is

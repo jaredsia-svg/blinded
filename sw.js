@@ -119,6 +119,9 @@ self.addEventListener('fetch', event => {
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
   if (NEVER.includes(url.pathname)) return;
+  // The front page's video is not kept: it is several megabytes of something
+  // nobody needs offline, and the tool works without it.
+  if (url.pathname.startsWith('/media/')) return;
   event.respondWith((async () => {
     try {
       const answer = await fetch(request);

@@ -64,7 +64,7 @@ const TYPES = {
   // and the page still passed, because nothing was asking whether the
   // pictures had pixels in them.
   '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp',
-  '.svg': 'image/svg+xml', '.xml': 'application/xml',
+  '.svg': 'image/svg+xml', '.xml': 'application/xml', '.mp4': 'video/mp4',
 };
 
 // The response headers render.yaml tells Render to send, sent here too.
@@ -4680,6 +4680,77 @@ try {
   // able to see what it produces without handing one over first. At thumbnail
   // size the labels — which are the whole point — are not readable, so it
   // opens.
+  // ---------- the video on the front page ----------
+  //
+  // Under the four key features and over the deck, in that order, with the
+  // use cases after the deck and before the comparison. It starts muted once
+  // it is on screen, which is the only way a browser allows, and sound is one
+  // press away.
+  await part("the video on the front page", async () => {
+    if (await page.isVisible('#view-review')) await newFile();
+    await page.waitForSelector('#view-drop:not([hidden])', { timeout: 15000 });
+    const order = await page.evaluate(() => {
+      const top = sel => {
+        const one = document.querySelector('#view-drop ' + sel);
+        return one ? Math.round(one.getBoundingClientRect().top + window.scrollY) : null;
+      };
+      return ['.keyfeatures', '.promo', '.gallery', '.uses', '.versus'].map(top);
+    });
+    check('the video sits under the key features and over the deck, and the use cases after the deck',
+      order.every(v => v !== null) && order.every((v, i) => i === 0 || v > order[i - 1]),
+      JSON.stringify(order));
+    const lede = await page.evaluate(() => {
+      const strip = document.querySelector('.gallery .galstrip').getBoundingClientRect();
+      const words = document.querySelector('.gallery .sample-lede');
+      return { below: words.getBoundingClientRect().top >= strip.bottom - 1,
+               length: words.textContent.trim().split(/\s+/).length };
+    });
+    check('the deck\'s paragraph comes after its slides, and is short',
+      lede.below && lede.length < 50, JSON.stringify(lede));
+
+    // The browser the suite drives is open-source Chromium, which has no
+    // H.264 decoder; every browser a visitor uses has one. So what is tested
+    // is what the page asks of the video -- play when it comes on screen,
+    // pause when it leaves -- rather than whether frames come out.
+    await page.evaluate(() => {
+      const v = document.getElementById('promovideo');
+      window.__promo = [];
+      v.play = () => { window.__promo.push('play'); return Promise.resolve(); };
+      v.pause = () => { window.__promo.push('pause'); };
+      v.scrollIntoView({ block: 'center' });
+    });
+    await page.waitForTimeout(400);
+    const state = await page.evaluate(() => {
+      const v = document.getElementById('promovideo');
+      return { asked: window.__promo.slice(), muted: v.muted, loop: v.loop,
+        inline: v.playsInline, h264: v.canPlayType('video/mp4; codecs="avc1.640028"') };
+    });
+    check('it is asked to play once it is on screen', state.asked.includes('play'),
+      JSON.stringify(state));
+    check('muted, on a loop and inline',
+      state.muted && state.loop && state.inline, JSON.stringify(state));
+    const sound = await page.evaluate(() => {
+      const v = document.getElementById('promovideo');
+      const b = document.getElementById('promosound');
+      b.click();
+      const on = { muted: v.muted, said: b.textContent, pressed: b.getAttribute('aria-pressed') };
+      b.click();
+      return { on, off: { muted: v.muted, said: b.textContent } };
+    });
+    check('the sound is one press away, and the same press takes it off',
+      sound.on.muted === false && sound.on.pressed === 'true' && /off/i.test(sound.on.said)
+      && sound.off.muted === true && /on/i.test(sound.off.said), JSON.stringify(sound));
+    await page.evaluate(() => {
+      Object.defineProperty(document.getElementById('promovideo'), 'paused',
+        { configurable: true, get: () => false });
+      window.__promo = [];
+      window.scrollTo(0, 0);
+    });
+    await page.waitForTimeout(400);
+    const away = await page.evaluate(() => window.__promo.slice());
+    check('and is paused once it is scrolled away', away.includes('pause'), JSON.stringify(away));
+  });
+
   await part("the sample slide on the front page", async () => {
     if (await page.isVisible('#view-review')) await newFile();
     await page.waitForSelector('#view-drop:not([hidden])', { timeout: 15000 });
