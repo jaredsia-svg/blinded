@@ -10808,7 +10808,7 @@ try {
       };
     });
     check('the page ends with its name, the questions and the source',
-      foot && /Blinded · FAQ · License · Source code on GitHub/.test(foot.says),
+      foot && /Blinded · FAQ · License · Verify · Contact/.test(foot.says) && /Source/.test(foot.says),
       JSON.stringify(foot));
     check('and the source link points at the repository',
       foot && /github\.com\/.+\/blinded/.test(foot.source) && foot.safe === true,
@@ -12129,7 +12129,7 @@ try {
       const a = document.getElementById('foot-version');
       return { text: a.textContent, href: a.href, target: a.target };
     });
-    check('the footer names the version deployed', shown && link.text === 'Version 0123456',
+    check('the footer names the version deployed, beside the source', shown && link.text === '0123456',
       JSON.stringify(link));
     check('and links to that exact commit of the published code, in a tab of its own',
       link.href === 'https://github.com/jaredsia-svg/blinded/tree/' + TEST_COMMIT && link.target === '_blank',

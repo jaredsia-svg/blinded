@@ -370,8 +370,8 @@ export const pages = [
           + '<code>lib/fft.wasm</code>, is built from <code>lib/fft.c</code> '
           + 'beside it, and rebuilding it gives the same bytes, which the '
           + 'project\u2019s own tests check.',
-          'Which version is live is shown at the foot of the tool: '
-          + '<em>Version</em> and a short code, linking to that exact commit on '
+          'Which version is live is shown at the foot of the tool: the short '
+          + 'code beside <em>Source</em>, linking to that exact commit on '
           + 'GitHub. It is written when the site is deployed, so it is the one '
           + 'file on the site that is not in the repository.',
           'And the page cannot quietly run anything else. Every script and '

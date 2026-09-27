@@ -8658,9 +8658,9 @@
       const commit = built && /^[0-9a-f]{40}$/.test(built.commit) ? built.commit : null;
       if (!commit) return;
       const link = el('foot-version');
-      link.textContent = 'Version ' + commit.slice(0, 7);
+      link.textContent = commit.slice(0, 7);
       link.href = 'https://github.com/jaredsia-svg/blinded/tree/' + commit;
-      link.title = 'The published code this page was built from';
+      link.title = 'Version ' + commit.slice(0, 7) + ': the published code this page was built from';
       el('foot-version-wrap').hidden = false;
     })
     .catch(() => {});

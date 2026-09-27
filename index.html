@@ -99,7 +99,7 @@
   ]
 }
 </script>
-<link rel="stylesheet" href="app.css?v=f1a19517" integrity="sha384-0w2vKFiLdVogkX6hTHGKy+ikwxBAe9eNrbcfaPocpH53q+0QLjr8MLNO438NvhCt">
+<link rel="stylesheet" href="app.css?v=3a174c56" integrity="sha384-n0QmS+SitH6RmiyvJK6YqZ9i0U70HqJ+CM89hZxWQAi4RQ486AkRvMpzBhQFXXmM">
 </head>
 <body>
 
@@ -487,7 +487,12 @@
       </ul>
     </nav>
 
+    <!-- Two rows: what somebody reading the page reaches for, then the fine
+         print. Fewer words each -- "Contact" is the address, "Source" is the
+         repository, and the version deployed sits beside it, linked to that
+         exact commit (tools/version.sh). -->
     <p class="foot">
+      <span class="foot-row">
       <span class="foot-name">Blinded</span>
       <span class="foot-dot" aria-hidden="true">·</span>
       <a class="footlink" id="foot-faq" href="/faq.html">FAQ</a>
@@ -499,23 +504,24 @@
            here there is no document, and the link is the right answer. -->
       <a class="footlink" id="foot-prem" href="/license/">License</a>
       <span class="foot-dot" aria-hidden="true">·</span>
-      <a class="footlink" href="https://github.com/jaredsia-svg/blinded" rel="noopener">Source code on GitHub</a>
+      <a class="footlink" href="/verify/">Verify</a>
       <span class="foot-dot" aria-hidden="true">·</span>
-      <a class="footlink" href="mailto:support@blinded.dev">support@blinded.dev</a>
-      <span class="foot-dot" aria-hidden="true">·</span>
+      <a class="footlink" href="mailto:support@blinded.dev" title="support@blinded.dev">Contact</a>
+      </span>
       <!-- Ordinary links rather than views, unlike the two above. Somebody
            reading a refund policy is not reading about the thing they are
            doing, and a reviewer with a document open is warned before the
            page goes anywhere. -->
+      <span class="foot-row foot-fine">
       <a class="footlink" href="/privacy/">Privacy</a>
       <span class="foot-dot" aria-hidden="true">·</span>
       <a class="footlink" href="/terms/">Terms</a>
       <span class="foot-dot" aria-hidden="true">·</span>
       <a class="footlink" href="/refunds/">Refunds</a>
       <span class="foot-dot" aria-hidden="true">·</span>
-      <a class="footlink" href="/verify/">Verify</a>
-      <span id="foot-version-wrap" hidden><span class="foot-dot" aria-hidden="true">·</span>
-      <a class="footlink" id="foot-version" target="_blank" rel="noopener"></a></span>
+      <a class="footlink" href="https://github.com/jaredsia-svg/blinded" rel="noopener">Source</a>
+      <span id="foot-version-wrap" hidden><a class="footlink foot-version" id="foot-version" target="_blank" rel="noopener"></a></span>
+      </span>
     </p>
   </section>
 
@@ -1120,7 +1126,7 @@
 <script src="lib/pass.js?v=fa8e95c9" integrity="sha384-vdiGIUAtPsWUwbV/9iFB3JwVBPa1iWWzPkpwZOb2O6VlxQpGrlUP9RGGlQaNl17N"></script>
 <script src="lib/pay.js?v=6f94d998" integrity="sha384-1bByT5YqR1yybQrDsj8bxhmARIphzp5gXG9YVdSfl6J9KWFMMAqdEFPO5nmQDcnr"></script>
 <script src="lib/render.js?v=65c3fe76" integrity="sha384-hC2pL0Iz3qZPhOkr8LTwrOtpoDzQ/Yq+qnhe6ySQZDtipsMW1eMqd8M9ZeZmqODr"></script>
-<script src="app.js?v=09f87265" integrity="sha384-+YMPtexa4Mv7B20nNPaV13AyYIfOwuqvmNjP3m7wStw2PTXFwe+dk6ud+m3M7lIt"></script>
+<script src="app.js?v=50f12bff" integrity="sha384-yTFJbE+nTGEY3YOSILbQwRUyuQITCjMWLx+RUI2kZ+KXwQGHpF+Idr0ElwDlgd5S"></script>
 <script type="module" src="lib/boot.mjs?v=8b98ed8f" integrity="sha384-/dJ3R23NfbIp89TMbKmNgtoFjuy8b5Kji1HBXxf7q7kKtAM2wTj9DeXCivsebPvb"></script>
 </body>
 </html>
