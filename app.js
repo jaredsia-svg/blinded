@@ -3833,8 +3833,18 @@
       // matches were dropped as duplicates of it. The panel said "4 matches"
       // and the tally said 0, and on the page the wordmark was covered while
       // the red triangle beside it was left showing.
+      // What the reader read comes before what the check matched by shape,
+      // whatever order they were found in. They are usually found in that
+      // order anyway; a reopened draft is the exception. Its check marks come
+      // back first, and the reading that a new search makes of the same
+      // words, better now than when the draft was saved, was then dropped as
+      // a duplicate of them: the panel said amber and 0 read, and where the
+      // old mark covered only "East" of "Middle East", that is all that was
+      // covered.
+      const byWeight = page.imageHits.filter(m => !m.bySweep)
+        .concat(page.imageHits.filter(m => m.bySweep));
       const kept = [];
-      for (const match of page.imageHits) {
+      for (const match of byWeight) {
         const overText = textRects.some(
           rect => Match.coveredFraction(match.rect, rect) > SAME_MARK);
         const overImage = kept.some(
