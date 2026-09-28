@@ -7339,7 +7339,7 @@
   // as done, however often it was reopened.
   //
   // Drafts saved before this existed count as 1.
-  const FINDER_VERSION = 2;
+  const FINDER_VERSION = 3;
 
   // Names the source file exactly enough to catch the wrong one being picked.
   // The digest is the real test; name and size are what the message quotes,
