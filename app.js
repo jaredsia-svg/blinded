@@ -2715,6 +2715,7 @@
     if (ocrPending()) {
       try {
         await readPages(done => leg('read', done));
+        await rereadForTerms();
         matchOcr(done => leg('read', done));
         detectOcr();
         markDuplicates();
@@ -2906,6 +2907,139 @@
     });
     state.ocrLoaded = true;
     state.ocrRead = state.pages.every(page => page.ocrItems);
+  }
+
+  // ---------- reading a typed word again, closer ----------
+  //
+  // The reader's own second look (lib/ocr.js) zooms in on the words it was
+  // least sure of, and only a couple of dozen of them a page. On a photograph
+  // of a slide that is nowhere near enough: measured on one, 139 words came
+  // back unsure and the one that mattered -- "F&N", read as "ran" at 68 --
+  // was not among the lines it re-read. The same word cut out and read at
+  // twice the size comes back "F&N" at 90.
+  //
+  // The reader does not know which words the reviewer typed; this does. So
+  // it looks, for each typed word, at readings that are unsure and one letter
+  // from it once look-alikes are folded together ("ran" and "fan" for "F&N"),
+  // closest first and only a few, and reads each again enlarged. A new
+  // reading is taken only when it is the typed word itself, confidently: an
+  // enlarged guess that is merely nearer is still a guess.
+  //
+  // Measured on the bench: one more true mark (that "F&N"), no new false
+  // ones, nothing else changed; about a second and a half more on the
+  // photographed slide, nothing measurable elsewhere.
+  const TERM_REREAD_BELOW = 80;
+  const TERM_REREAD_PER_WORD = 8;
+  const TERM_REREAD_SURE = 80;
+  const TERM_REREAD_SCALE = 2;
+  // What one enlarged read costs, for the wait quoted before a search.
+  const TERM_REREAD_SECONDS = 0.6;
+
+  function plainWord(text) {
+    return String(text || '').toLowerCase().replace(/[^a-z0-9&]+/g, '');
+  }
+
+  // The typed words, a part at a time, that a closer read could help.
+  function rereadParts() {
+    return [...new Set(state.terms.flatMap(term => sweepPartsFor(term)))]
+      .filter(part => !/\s/.test(part) && plainWord(part).length >= 3);
+  }
+
+  // The unsure readings worth reading again for one part, closest first.
+  function rereadCandidates(part) {
+    const want = plainWord(part);
+    const folded = Detect.ocrFold(part);
+    const tried = 'reread:' + want;
+    const candidates = [];
+    for (const page of state.pages) {
+      for (const item of page.ocrItems || []) {
+        if (!item || !item.rect || !item.str || item[tried]) continue;
+        if (typeof item.confidence !== 'number' || item.confidence >= TERM_REREAD_BELOW) continue;
+        const have = plainWord(item.str);
+        if (!have || have === want) continue;
+        if (Math.abs(have.length - want.length) > 1) continue;
+        const distance = Detect.levenshtein(Detect.ocrFold(item.str), folded);
+        if (distance > (want.length <= 4 ? 1 : 2)) continue;
+        candidates.push({ page, item, distance });
+      }
+    }
+    candidates.sort((a, b) => a.distance - b.distance || a.item.confidence - b.item.confidence);
+    return candidates.slice(0, TERM_REREAD_PER_WORD);
+  }
+
+  async function rereadForTerms() {
+    if (!Ocr || !Ocr.readPage || !Detect.ocrFold || !Detect.levenshtein) return 0;
+    let changed = 0;
+    for (const part of rereadParts()) {
+      if (state.paused) break;
+      const want = plainWord(part);
+      const tried = 'reread:' + want;
+      for (const { page, item } of rereadCandidates(part)) {
+        if (state.paused) break;
+        item[tried] = true;
+        const r = item.rect;
+        // A strip of the line, not the word alone: measured, "ran" cut out
+        // with two heights either side re-read as "FAN", and with six as
+        // "F&N" at 88. The reader leans on the words around a word.
+        const padX = r.h * 6;
+        const padY = r.h * 1.1;
+        const x0 = Math.max(0, Math.floor(r.x - padX));
+        const y0 = Math.max(0, Math.floor(r.y - padY));
+        const x1 = Math.min(page.source.width, Math.ceil(r.x + r.w + padX));
+        const y1 = Math.min(page.source.height, Math.ceil(r.y + r.h + padY));
+        if (x1 - x0 < 4 || y1 - y0 < 4) continue;
+        const crop = document.createElement('canvas');
+        crop.width = (x1 - x0) * TERM_REREAD_SCALE;
+        crop.height = (y1 - y0) * TERM_REREAD_SCALE;
+        const ctx = crop.getContext('2d', { alpha: false });
+        ctx.imageSmoothingQuality = 'high';
+        ctx.drawImage(page.source, x0, y0, x1 - x0, y1 - y0, 0, 0, crop.width, crop.height);
+        let read;
+        try { read = await Ocr.readPage(crop); } catch { continue; }
+        const back = v => v / TERM_REREAD_SCALE;
+        const found = (read || []).map(word => ({ ...word,
+          rect: word.rect && { x: x0 + back(word.rect.x), y: y0 + back(word.rect.y),
+            w: back(word.rect.w), h: back(word.rect.h) } }))
+          .find(word => word.rect && plainWord(word.str) === want
+            && typeof word.confidence === 'number' && word.confidence >= TERM_REREAD_SURE
+            && overlapShare(word.rect, r) >= 0.3);
+        if (!found) continue;
+        const at = page.ocrItems.indexOf(item);
+        page.ocrItems[at] = { ...item, str: found.str, confidence: found.confidence,
+          rect: found.rect, x: found.rect.x, y: found.rect.y, w: found.rect.w, h: found.rect.h,
+          lineY: item.lineY ?? item.y, fromTermReread: true };
+        const stitched = Ocr.stitch(page.ocrItems);
+        page.ocrText = stitched.text;
+        page.ocrPlaced = stitched.items;
+        changed++;
+      }
+    }
+    return changed;
+  }
+
+  // How many closer reads the next search will make. Pages already read are
+  // counted exactly. Pages not yet read cannot be, so each word is guessed at
+  // one near miss for every four such pages, up to its full share. Assuming
+  // the full share everywhere quoted a one-page slide at 29 seconds for a
+  // search that took 6: near misses of a typed word are rare, and a short
+  // document has few of them.
+  function rereadsExpected() {
+    if (!state.useOcr || state.kind === 'text' || !Detect.ocrFold) return 0;
+    const unread = state.pages.filter(page => !page.ocrItems && page.couldHideText !== false).length;
+    const guess = Math.min(TERM_REREAD_PER_WORD, Math.max(1, Math.ceil(unread / 4)));
+    let reads = 0;
+    for (const part of rereadParts()) {
+      reads += unread ? guess : rereadCandidates(part).length;
+    }
+    return reads;
+  }
+
+  // How much of `a` lies over `b`, as a share of the smaller of the two.
+  function overlapShare(a, b) {
+    const w = Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x);
+    const h = Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y);
+    if (w <= 0 || h <= 0) return 0;
+    return (w * h) / Math.max(1, Math.min(a.w * a.h, b.w * b.h));
   }
 
   function describeTime(seconds) {
@@ -10153,7 +10287,10 @@
     const pictures = state.templates.filter(t => !t.searched).length;
     const match = pictures * state.pages.length * MATCH_SECONDS_PER_MP
       * Math.min(SWEEP_MAX_MP, megapixels) / sweepSpeedup(state.pages.length);
-    return { seconds: SEARCH_STARTUP_SECONDS + read + match, toRead, pictures };
+    // And the closer reads of near misses for the typed words, one at a time.
+    const rereads = ocrPending() ? rereadsExpected() : 0;
+    const closer = rereads * TERM_REREAD_SECONDS;
+    return { seconds: SEARCH_STARTUP_SECONDS + read + match + closer, toRead, pictures, rereads };
   }
 
   // A wait as a range, because it is an estimate and saying one number is

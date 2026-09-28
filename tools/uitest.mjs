@@ -10271,6 +10271,16 @@ try {
       if (had === null) localStorage.removeItem(key); else localStorage.setItem(key, had);
       out.learned = { slow: slow.seconds, fast: fast.seconds, speedup: fast.speedup,
         pageWords: fast.pageWords };
+      // The first phase's wait includes the closer reads of near misses for
+      // each typed word: on pages not yet read, a full share per word.
+      B.state.pages = grow(4);
+      const one = B.searchEstimate();
+      const termsWere = B.state.terms.slice();
+      B.state.terms = ['Zzyzx', 'Wvxqp'];
+      const two = B.searchEstimate();
+      B.state.terms = termsWere;
+      out.rereads = { one: one.rereads, two: two.rereads,
+        grew: two.seconds - one.seconds };
       B.state.pages = real;
       out.ranges = [20, 90, 200, 600].map(B.describeWait);
       return out;
@@ -10288,6 +10298,10 @@ try {
     check('waits are said as a range of minutes, or under a minute',
       said.ranges[0] === 'under a minute' && /^\d+–\d+ minutes$/.test(said.ranges[3]),
       JSON.stringify(said.ranges));
+    // Four unread pages: one near miss guessed per word.
+    check('and the first phase counts the closer reads each typed word may need',
+      said.rereads.one === 1 && said.rereads.two === 2 && said.rereads.grew > 0,
+      JSON.stringify(said.rereads));
 
     // The dialog itself. The fixture is drawn text, which cannot hide a word
     // as pixels; told otherwise, it has a second phase to offer.
