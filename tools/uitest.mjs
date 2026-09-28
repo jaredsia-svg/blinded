@@ -3007,6 +3007,40 @@ try {
     check('and its text marks are on the page already',
       restored.hits > 0, JSON.stringify(restored));
 
+    // A draft answered by an older search is asked again. It was reopened as
+    // answered, and the check as already run for its words, so a better
+    // search never reached them: a photo's table stayed covered only by the
+    // older check's partial marks however often the draft was reopened.
+    check('a draft records which search answered it', typeof parsed.finder === 'number',
+      JSON.stringify(parsed.finder));
+    const oldDraftPath = join(tmpdir(), 'blinded-olddraft.blinded.json');
+    const older = { ...parsed, sweptTerms: parsed.terms.slice() };
+    delete older.finder;
+    writeFileSync(oldDraftPath, JSON.stringify(older));
+    await newFile();
+    await page.setInputFiles('#file', oldDraftPath);
+    await page.waitForTimeout(400);
+    await page.setInputFiles('#file', fixturePath);
+    await page.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
+    await page.waitForTimeout(600);
+    const reopened = await page.evaluate(() => {
+      const B = window.Blinded;
+      const p = B.state.pages[0];
+      B.refreshApply();
+      return { searched: B.state.searched, swept: B.state.sweptTerms.length,
+        waiting: B.state.pages.every(page => page.unsearched),
+        kept: p.imageHits.filter(m => m.bySweep).length, hits: (p.hits || []).length,
+        question: Boolean(document.querySelector('#termcounts .n.unknown')),
+        red: document.getElementById('search').classList.contains('hunt') };
+    });
+    check('a draft from an older search asks to be searched again',
+      reopened.searched === false && reopened.waiting && reopened.question && reopened.red,
+      JSON.stringify(reopened));
+    check('with the check to run again for every word',
+      reopened.swept === 0, JSON.stringify(reopened));
+    check('and what it had covered still on the page meanwhile',
+      reopened.kept === 1 && reopened.hits > 0, JSON.stringify(reopened));
+
     // A picked image has to come back too. It never did: a template did not
     // record which page it was cut from, so restoring one skipped every
     // picked image and the Images section came back empty.

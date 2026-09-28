@@ -7329,6 +7329,18 @@
   // the draft records enough to be sure it is the right one.
   const DRAFT_VERSION = 1;
 
+  // Which search a draft's answers came from. Raised whenever what the search
+  // or the check finds changes, so a draft saved before the change is
+  // searched again rather than reopened as answered: its words were marked by
+  // an older search, and the check was recorded as already run for them, so
+  // nothing a better search would find ever reached it. Measured on a photo:
+  // a draft saved before the reader could read a table kept "Philippines"
+  // and "Middle East" as the check's two amber marks, with the check marked
+  // as done, however often it was reopened.
+  //
+  // Drafts saved before this existed count as 1.
+  const FINDER_VERSION = 2;
+
   // Names the source file exactly enough to catch the wrong one being picked.
   // The digest is the real test; name and size are what the message quotes,
   // and are the fallback where crypto.subtle is missing (it needs a secure
@@ -7344,6 +7356,7 @@
   function draftData() {
     return {
       blindedDraft: DRAFT_VERSION,
+      finder: FINDER_VERSION,
       savedAt: new Date().toISOString(),
       source: { name: state.name, size: state.sourceSize || 0,
                 digest: state.sourceDigest || null, kind: state.kind,
@@ -7572,6 +7585,15 @@
       state.searched = Boolean(answered.searched);
       state.countedTerms = (answered.terms || []).slice();
       state.countedKinds = (answered.kinds || []).slice();
+    }
+    // Answered by an older search: asked again, the way pages added since a
+    // search are. Every tally goes back to a red ?, Search turns red, and the
+    // check runs again for every word; the marks the draft brought stay on
+    // the page meanwhile, so nothing it covered is uncovered by reopening it.
+    if (answered && answered.searched && (data.finder || 1) < FINDER_VERSION) {
+      for (const page of state.pages) page.unsearched = true;
+      state.sweptTerms = [];
+      state.searched = false;
     }
     renderTemplates();
     renderTermCounts();
