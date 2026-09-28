@@ -4720,6 +4720,42 @@ try {
   // use cases after the deck and before the comparison. It starts muted once
   // it is on screen, which is the only way a browser allows, and sound is one
   // press away.
+  // ---------- a new document opens with the defaults ----------
+  //
+  // Zoom and labelling were carried over from the previous document, so a
+  // new one could open at 200% with its bars labelled.
+  await part("a new document opens with the defaults", async () => {
+    if (await page.isVisible('#view-review')) await newFile();
+    await page.waitForSelector('#view-drop:not([hidden])', { timeout: 15000 });
+    await page.setInputFiles('#file', fixturePath);
+    await page.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
+    await page.evaluate(() => {
+      const box = document.getElementById('labelling');
+      box.checked = true;
+      box.dispatchEvent(new Event('change', { bubbles: true }));
+      document.getElementById('zoom-in').click();
+      document.getElementById('zoom-in').click();
+    });
+    const before = await page.evaluate(() => ({ zoom: window.Blinded.state.zoom,
+      labelling: window.Blinded.state.labelling }));
+    await newFile();
+    await page.waitForSelector('#view-drop:not([hidden])', { timeout: 15000 });
+    await page.setInputFiles('#file', fixturePath);
+    await page.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
+    const after = await page.evaluate(() => ({ zoom: window.Blinded.state.zoom,
+      labelling: window.Blinded.state.labelling,
+      ticked: document.getElementById('labelling').checked,
+      legend: !document.getElementById('legendbox').hidden,
+      cssZoom: document.getElementById('pages').style.getPropertyValue('--zoom') }));
+    check('the previous document was zoomed and labelled',
+      before.zoom > 1 && before.labelling === true, JSON.stringify(before));
+    check('a new document opens at 100% zoom',
+      after.zoom === 1 && after.cssZoom === '1', JSON.stringify(after));
+    check('and with labelling off',
+      after.labelling === false && after.ticked === false && after.legend === false,
+      JSON.stringify(after));
+  });
+
   await part("the video on the front page", async () => {
     if (await page.isVisible('#view-review')) await newFile();
     await page.waitForSelector('#view-drop:not([hidden])', { timeout: 15000 });

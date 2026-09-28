@@ -180,10 +180,13 @@ a.mark { color: inherit; text-decoration: none; }
    page is making stops being visible without scrolling. Taken back from the
    title's own size and the gap under it, not from the cards. */
 .hero { max-width: 720px; margin: 4px auto 14px; text-align: center; }
+.hero h1 .h1line { display: block; }
 .hero h1 {
   font-size: clamp(26px, 3.9vw, 35px); line-height: 1.12; letter-spacing: -0.022em;
   margin: 0 0 10px; font-weight: 680;
 }
+/* On a phone each half of the headline should still fit on its own line. */
+@media (max-width: 480px) { .hero h1 { font-size: max(21px, 6.1vw); } }
 .lede { margin: 0; font-size: 15.5px; line-height: 1.5; color: var(--ink-soft); }
 .lede em { font-style: normal; color: var(--ink); font-weight: 600; }
 

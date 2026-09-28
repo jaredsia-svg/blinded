@@ -1174,7 +1174,18 @@
     // document after organising the first and the panel would still be in
     // whatever shape that left it.
     openSections();
+    // And the settings a document opens with are the defaults, not whatever
+    // the last one was left at: a new document at 200% zoom with its bars
+    // labelled, because the previous one was, is a document set up by
+    // somebody else. A draft that is put back afterwards brings its own.
+    state.labelling = false;
+    el('labelling').checked = false;
+    el('legendbox').hidden = true;
+    state.labelOverrides = {};
+    state.zoom = 1;
+    el('pages').style.setProperty('--zoom', '1');
     if (kind !== 'text') buildPageElements();
+    setZoom(1);
     renderSheet();
     showTool('review');
     rescan();
