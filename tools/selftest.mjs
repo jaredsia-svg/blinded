@@ -3695,6 +3695,30 @@ check('no creation date is carried into the output', !meta.info.CreationDate);
     }
   }
 
+  // One footer on every page. The generated pages take it from
+  // tools/footer.mjs; the hand-written ones must carry the same markup, and
+  // the front page (which has ids and a version the app fills in) the same
+  // links in the same order.
+  {
+    const { footer } = await import('./footer.mjs');
+    const hrefs = html => [...(/<p class="foot">([\s\S]*?)<\/p>/.exec(html) || [, ''])[1]
+      .matchAll(/<a class="footlink[^"]*"[^>]*?href="([^"]+)"/g)].map(m => m[1]).join(' ');
+    for (const [file, current] of [['license/index.html', '/license/'],
+      ['faq.html', '/faq.html'], ['unlock.html', null]]) {
+      const html = readFileSync(join(root, file), 'utf8');
+      const want = footer(current).split('\n').slice(1).join('\n');
+      check(file + ': carries the standard footer', html.includes(want),
+        'copy the output of footer() in tools/footer.mjs');
+    }
+    for (const lander of landers) {
+      const html = readFileSync(join(root, lander.slug, 'index.html'), 'utf8');
+      check(lander.slug + ': carries the standard footer', html.includes(footer(null)));
+    }
+    const front = readFileSync(join(root, 'index.html'), 'utf8');
+    check('the front page footer has the same links in the same order',
+      hrefs(front) === hrefs(footer(null)), hrefs(front));
+  }
+
   // Reachable without knowing they exist. A policy that is only at a URL
   // somebody has to guess is not published.
   const foot = readFileSync(join(root, 'index.html'), 'utf8');

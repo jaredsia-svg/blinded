@@ -13,6 +13,7 @@ import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { SITE, pages, GALLERY } from '../content/pages.mjs';
 import { pages as legal } from '../content/legal.mjs';
+import { footer } from './footer.mjs';
 
 // Through fileURLToPath rather than .pathname. On Windows a file URL's
 // pathname is "/C:/Users/..." -- with a leading slash -- and resolve() reads
@@ -179,21 +180,15 @@ ${page.faq.map(one => `    <h3>${esc(one.q)}</h3>
     <h2>Also</h2>
     <ul class="landalso">
 ${alsoLinks(page)}
-        <li><a href="/faq.html">How it works, in full</a></li>
-        <li><a href="/license/">What it costs, and what stays free</a></li>
-        <li><a href="https://github.com/jaredsia-svg/blinded" rel="noopener">Read the source on GitHub</a></li>
-        <li><a href="/verify/">Verify it yourself: nothing is uploaded</a></li>
-        <li><a href="/privacy/">Privacy and security</a></li>
-        <li><a href="/terms/">Terms of service</a></li>
-        <li><a href="/refunds/">Refunds and cancellation</a></li>
-        <li><a href="mailto:support@blinded.dev">support@blinded.dev</a></li>
     </ul>
   </section>
 
   <p class="faqback"><a class="faqbackbtn" href="/">Open the tool</a></p>
 
+
 </article>
 </main>
+${footer(null)}
 
 </body>
 </html>

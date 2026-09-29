@@ -2353,6 +2353,10 @@ body.choosing { -webkit-user-select: none; user-select: none; }
 }
 .footlink:hover { color: var(--accent); text-decoration: underline; }
 .footlink:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* The page being read, marked in its own footer. */
+.footlink[aria-current="page"] { color: var(--ink); font-weight: 600; }
+/* Tighter on a phone, so the first row stays one line. */
+@media (max-width: 420px) { .foot { padding-left: 12px; padding-right: 12px; } .foot-row { gap: 6px; } }
 
 
 /* ---------- the thumb down the side of a long document ---------- */

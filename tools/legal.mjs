@@ -12,6 +12,7 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { pages, JURISDICTION } from '../content/legal.mjs';
+import { footer } from './footer.mjs';
 
 // Through fileURLToPath rather than .pathname, for the Windows drive letter.
 const root = fileURLToPath(new URL('..', import.meta.url));
@@ -25,13 +26,6 @@ const MARK = `<svg class="markmark" viewBox="0 0 26 15" aria-hidden="true" focus
           <rect x="22.2" y="8.6" width="2" height="6.4" rx="1"/>
         </g>
       </svg>`;
-
-// The other two, so each page carries the ones it is not. Somebody reading
-// the refund policy is often about to want the terms.
-export function siblings(slug) {
-  return pages.filter(one => one.slug !== slug)
-    .map(one => `<a href="/${one.slug}/">${one.title}</a>`).join(' · ');
-}
 
 export function renderLegal(page) {
   const body = page.sections.map(one => `  <h2>${one.h}</h2>\n`
@@ -102,10 +96,9 @@ ${body}
 
   <p class="faqback"><a class="faqbackbtn" href="/">Open the tool</a></p>
 
-  <p class="hint">${siblings(page.slug)}</p>
-
 </article>
 </main>
+${footer('/' + page.slug + '/')}
 
 </body>
 </html>
