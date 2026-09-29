@@ -2969,21 +2969,32 @@
     for (const page of state.pages) {
       for (const item of page.ocrItems || []) {
         if (!item || !item.rect || !item.str || item[tried]) continue;
-        if (typeof item.confidence !== 'number' || item.confidence >= TERM_REREAD_BELOW) continue;
+        if (typeof item.confidence !== 'number') continue;
         const have = plainWord(item.str);
         if (!have || have === want) continue;
         // Or a piece of it: a brand name set in red mid-sentence came back as
-        // its last four letters at 59, the first letters lost. No edit distance reaches that,
-        // and read again enlarged it can come back whole. Tried after the near
-        // misses, and held to the same rule: only the whole word, confidently.
+        // its last four letters at 59, the first letters lost. No edit
+        // distance reaches that, and read again enlarged it can come back
+        // whole. Tried after the near misses, and held to the same rule: only
+        // the whole word, confidently.
         const piece = Detect.ocrFragmentOf ? Detect.ocrFragmentOf(item.str, part) : null;
         if (!piece && Math.abs(have.length - want.length) > 1) continue;
         const distance = piece ? 3 : Detect.levenshtein(Detect.ocrFold(item.str), folded);
         if (!piece && distance > (want.length <= 4 ? 1 : 2)) continue;
-        candidates.push({ page, item, distance });
+        // A reading the reader was sure of is normally left alone. Not when
+        // it is one letter off a long word, or a piece of one: the same red
+        // word came back as "auguin" at 91 on another computer -- sure of
+        // itself, and not a word -- and was never looked at again. A sure
+        // reading of a real word ("cared" near "jared") only reads back as
+        // itself, which changes nothing.
+        const sure = item.confidence >= TERM_REREAD_BELOW;
+        if (sure && !(want.length >= 5 && (piece || distance <= 1))) continue;
+        candidates.push({ page, item, distance, sure });
       }
     }
-    candidates.sort((a, b) => a.distance - b.distance || a.item.confidence - b.item.confidence);
+    // Doubtful readings first; the sure ones take whatever places are left.
+    candidates.sort((a, b) => a.sure - b.sure || a.distance - b.distance
+      || a.item.confidence - b.item.confidence);
     return candidates.slice(0, TERM_REREAD_PER_WORD);
   }
 
