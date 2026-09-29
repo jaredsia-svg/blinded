@@ -2283,7 +2283,7 @@ check('no creation date is carried into the output', !meta.info.CreationDate);
     // input now, so the picker opens before the app has loaded -- with the
     // input still outside it, which is the whole point of this check.
     const dropTag = (/<(\w+)[^>]*id="drop"/.exec(html) || [])[1] || 'div';
-    const dropClose = html.indexOf('</' + dropTag + '>', html.indexOf('drop-faint', dropOpen));
+    const dropClose = html.indexOf('</' + dropTag + '>', html.indexOf('drop-sub', dropOpen));
     const dropInner = dropOpen >= 0 && dropClose >= 0
       ? html.slice(dropOpen, dropClose) : '';
     check('the drop box markup is present for nesting checks', dropInner.includes('drop-lead'));

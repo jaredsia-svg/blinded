@@ -111,7 +111,7 @@
   "duration": "PT56S"
 }
 </script>
-<link rel="stylesheet" href="app.css?v=dc6f5084" integrity="sha384-D8GXx9RTVUddI5WGZN3mO8SySGApl9EvpdRDHj+GBBxvxdv5S3esfC60p2mex8N+">
+<link rel="stylesheet" href="app.css?v=ca040755" integrity="sha384-QAIL6S34JSec0OaslsRPdWdxhVBdcj4OIvVLMVV9lIW2+jc6GwdrFOsqOaookMUw">
 </head>
 <body>
 
@@ -167,7 +167,7 @@
         <span class="h1line">for recurring images &amp; text</span></h1>
       <p class="lede">Select a name, a logo or an image <em>once</em> – every
         copy gets deleted, at any size or colour, even inside a scanned
-        document in under a minute.</p>
+        document in under a minute. Nothing is uploaded.</p>
     </div>
 
     <!-- A label for the file input, so the picker opens on the first tap
@@ -186,7 +186,6 @@
       </svg>
       <p class="drop-lead">Drop a document here</p>
       <p class="drop-sub">PDF, PNG, JPEG, or a saved draft – or <span class="link">browse</span></p>
-      <p class="drop-faint">Nothing is uploaded.</p>
     </label>
     <!-- Outside the drop box: a file input nested inside a click-to-browse
          control often opens and immediately closes the picker (the same click
@@ -201,26 +200,24 @@
       <li>
         <h3><svg class="ico" viewBox="0 0 20 20" aria-hidden="true"><path d="M10 3l6 2.5v4.2c0 3.4-2.4 6.3-6 7.3-3.6-1-6-3.9-6-7.3V5.5L10 3z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg> Nothing is uploaded</h3>
         <p>No server, no account, no analytics. The document is opened, read and
-          rewritten inside this tab. No LLM is used. Close it and nothing
-          remains. <a class="featlink" href="/verify/" target="_blank" rel="noopener">Verify it yourself</a></p>
+          rewritten inside this tab. No LLM is used. <a class="featlink" href="/verify/" target="_blank" rel="noopener">Verify it yourself</a></p>
       </li>
       <li>
         <h3><svg class="ico" viewBox="0 0 20 20" aria-hidden="true"><rect x="3" y="4" width="14" height="12" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="7.5" cy="8" r="1.4" fill="currentColor"/><path d="M4 14l4-4 3.5 3.5L14 11l2.5 3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg> Text, logos and pictures</h3>
         <p>Type any word and every occurrence is redacted, even if the word is
-          an image and not in text format. Pick out a logo, signature, or image
-          and every other copy is redacted, regardless of size or colour.</p>
+          a scanned image. Same for logos and images, regardless of size or
+          colour.</p>
       </li>
       <li>
-        <h3><svg class="ico" viewBox="0 0 20 20" aria-hidden="true"><path d="M7.5 4H5v12h2.5M12.5 4H15v12h-2.5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg> Placeholders, not blanks</h3>
+        <h3><svg class="ico" viewBox="0 0 20 20" aria-hidden="true"><path d="M7.5 4H5v12h2.5M12.5 4H15v12h-2.5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg> Labels, not blanks</h3>
         <p>Optionally label each redaction <code>[P1]</code>, <code>[E2]</code>,
           so a later reader – or a model – can still follow the sentence. The
           same thing always gets the same label.</p>
       </li>
       <li>
         <h3><svg class="ico" viewBox="0 0 20 20" aria-hidden="true"><rect x="3" y="4" width="9" height="12" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M14 7v9h-7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg> A full set of PDF tools</h3>
-        <p>Merge files, pull pages out, turn them, add text, draw on the page.
-          Save a draft and pick the work up later. Works on a phone as well as
-          a desktop.</p>
+        <p>Audit and trace each redaction easily. Extract, rotate, add text to
+          pages. Save a draft and continue later. Works on mobile too.</p>
       </li>
     </ul>
     </section>

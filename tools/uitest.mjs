@@ -2960,15 +2960,14 @@ try {
       /choose that file/i.test(asks || '') && /\.pdf/.test(asks || ''), asks);
     check('and says what a draft does and does not hold',
       /not the document/i.test(await page.textContent('#drafthint')));
-    // Drafts moved up a line, into the list of what can be dropped, and the
-    // faint line under it carries the promise instead -- which is the thing
-    // somebody standing over a confidential file wants to read there.
+    // Drafts sit in the list of what can be dropped; the promise that
+    // nothing leaves is in the line under the headline.
     check('the front page says a saved draft can be dropped',
       /saved draft/i.test(await page.textContent('.drop-sub')),
       await page.textContent('.drop-sub'));
-    check('and promises nothing leaves, where the eye lands last',
-      /nothing is uploaded/i.test(await page.textContent('.drop-faint')),
-      await page.textContent('.drop-faint'));
+    check('and promises nothing leaves, under the headline',
+      /nothing is uploaded/i.test(await page.textContent('.hero .lede')),
+      await page.textContent('.hero .lede'));
 
     await page.setInputFiles('#file', fixturePath);
     await page.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
