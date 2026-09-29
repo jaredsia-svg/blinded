@@ -1756,7 +1756,7 @@ body.reviewing .exportbar { position: static; flex: none; margin: 14px 0 18px; }
 
 /* ---------- naming the file on the way out ---------- */
 /*
-   A file called "Project Falcon - KAG term sheet.pdf" undoes a redaction the
+   A file called "Project Falcon - ZAG term sheet.pdf" undoes a redaction the
    moment it is attached to an email, and nothing inside the document is to
    blame. So the name is offered for editing before anything is saved, with
    anything that was covered inside the document taken out of it first.

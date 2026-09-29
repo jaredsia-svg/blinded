@@ -61,7 +61,7 @@ check('finds an email', kindsIn('write to a.b+c@sub.example.co.uk now').includes
 check('email keeps its whole domain',
   textsOf('write to a.b+c@sub.example.co.uk now', 'email')[0] === 'a.b+c@sub.example.co.uk');
 
-for (const phone of ['+44 20 7946 0958', '+1 (415) 555-0132', '+84 28 3821 9930', '+65 6123 4567']) {
+for (const phone of ['+44 20 7946 0958', '+1 (415) 555-0132', '+84 28 3555 0142', '+65 6123 4567']) {
   check('finds phone ' + phone, kindsIn('call ' + phone + ' today').includes('phone'), phone);
 }
 // Local forms without a + country code are deliberately not phones. OCR of
@@ -148,21 +148,21 @@ check('Vietnamese Duong without a postal code is not an address',
 check('and the brand Chuong Duong is not an address',
   addr('Water, Crystal, and Chuong Duong Drinks').length === 0);
 check('a floor or building alone is not an address',
-  addr('17th Floor, Sun Wah Tower').length === 0);
+  addr('17th Floor, Jade Harbour Tower').length === 0);
 check('a Hong Kong floor line without a postal code is not an address',
   addr('Suite 2701, 27/F, Two IFC').length === 0);
 check('a contact slide without a postal code yields no street address', (() => {
-  const slide = 'KIM-LAN-DANG\nVice President, Principal Investments\n'
-    + 'T: +84 28 3821 9930 (Ext. 288)\n17th Floor, Sun Wah Tower,\n'
-    + '115 Nguyen Hue, Sai Gon Ward, HCMC, Vietnam\nvinacapital.com';
+  const slide = 'MAI-ANH-VO\nVice President, Principal Investments\n'
+    + 'T: +84 28 3555 0142 (Ext. 210)\n17th Floor, Jade Harbour Tower,\n'
+    + '88 Le Loi, Ben Thanh Ward, HCMC, Vietnam\nexample.com.vn';
   return addr(slide).length === 0;
 })());
 check('the same slide with a postcode covers the street through the code', (() => {
-  const slide = '17th Floor, Sun Wah Tower,\n'
-    + '115 Nguyen Hue Street, Sai Gon Ward, HCMC 700000, Vietnam';
+  const slide = '17th Floor, Jade Harbour Tower,\n'
+    + '88 Le Loi Street, Ben Thanh Ward, HCMC 700000, Vietnam';
   const lines = addr(slide);
-  return lines.some(t => t.includes('115 Nguyen Hue Street') && t.includes('700000'));
-})(), JSON.stringify(addr('17th Floor, Sun Wah Tower,\n115 Nguyen Hue Street, Sai Gon Ward, HCMC 700000, Vietnam')));
+  return lines.some(t => t.includes('88 Le Loi Street') && t.includes('700000'));
+})(), JSON.stringify(addr('17th Floor, Jade Harbour Tower,\n88 Le Loi Street, Ben Thanh Ward, HCMC 700000, Vietnam')));
 check('a Singapore address line with postcode is taken through the code',
   addr('10 Marina Boulevard, Singapore 018983')
     .some(t => t.includes('10 Marina Boulevard') && t.includes('018983')),
@@ -174,8 +174,8 @@ check('a sentence with a floor in it is not an address',
     .length === 0,
   JSON.stringify(addr('Revenue, EBITDA and Margin all rose in the 3rd Floor refurbishment programme')));
 check('nor is a list of buildings that were bought',
-  addr('Acquired Sun Wah Tower, Bitexco, Landmark 81, and other assets in 2023').length === 0,
-  JSON.stringify(addr('Acquired Sun Wah Tower, Bitexco, Landmark 81, and other assets in 2023')));
+  addr('Acquired Jade Harbour Tower, Riverside Plaza, Harbour Point 8, and other assets in 2023').length === 0,
+  JSON.stringify(addr('Acquired Jade Harbour Tower, Riverside Plaza, Harbour Point 8, and other assets in 2023')));
 check('nor a District mentioned in prose',
   addr('The Company, the Purchaser, and the Vendor each agreed District 1 terms').length === 0,
   JSON.stringify(addr('The Company, the Purchaser, and the Vendor each agreed District 1 terms')));
@@ -247,14 +247,14 @@ check('a name over a job title is found',
   who('Jane Doe\nChief Executive Officer').includes('Jane Doe'),
   JSON.stringify(who('Jane Doe\nChief Executive Officer')));
 check('including one in capitals with hyphens, which no name list would hold',
-  who('KIM-LAN-DANG\nVice President, Principal Investments').includes('KIM-LAN-DANG'),
-  JSON.stringify(who('KIM-LAN-DANG\nVice President, Principal Investments')));
+  who('MAI-ANH-VO\nVice President, Principal Investments').includes('MAI-ANH-VO'),
+  JSON.stringify(who('MAI-ANH-VO\nVice President, Principal Investments')));
 check('and a Vietnamese name, because the name is never read',
   who('Tran Van Minh\nManaging Director').includes('Tran Van Minh'),
   JSON.stringify(who('Tran Van Minh\nManaging Director')));
 check('a name over a contact line is found',
-  who('Jane Doe\nT: +84 28 3821 9930').includes('Jane Doe'),
-  JSON.stringify(who('Jane Doe\nT: +84 28 3821 9930')));
+  who('Jane Doe\nT: +84 28 3555 0142').includes('Jane Doe'),
+  JSON.stringify(who('Jane Doe\nT: +84 28 3555 0142')));
 check('and over a bare email address',
   who('Jane Doe\njane.doe@example.com').includes('Jane Doe'),
   JSON.stringify(who('Jane Doe\njane.doe@example.com')));
@@ -278,14 +278,14 @@ check('and the other way round',
 // detector looks for — they are separated by what the words mean, not by
 // where they sit.
 check('a company over its own email is not a person',
-  who('VinaCapital Group\ninfo@vinacapital.com').length === 0,
-  JSON.stringify(who('VinaCapital Group\ninfo@vinacapital.com')));
+  who('VinaCapital Group\ninfo@example.com.vn').length === 0,
+  JSON.stringify(who('VinaCapital Group\ninfo@example.com.vn')));
 check('a city over a phone number is not a person',
-  who('Ho Chi Minh City\nT: +84 28 3821 9930').length === 0,
-  JSON.stringify(who('Ho Chi Minh City\nT: +84 28 3821 9930')));
+  who('Ho Chi Minh City\nT: +84 28 3555 0142').length === 0,
+  JSON.stringify(who('Ho Chi Minh City\nT: +84 28 3555 0142')));
 check('a building is not a person',
-  who('Sun Wah Tower\nT: +84 28 3821 9930').length === 0,
-  JSON.stringify(who('Sun Wah Tower\nT: +84 28 3821 9930')));
+  who('Jade Harbour Tower\nT: +84 28 3555 0142').length === 0,
+  JSON.stringify(who('Jade Harbour Tower\nT: +84 28 3555 0142')));
 check('a slide heading is not a person',
   who('Executive Summary\nManaging Director commentary follows').length === 0,
   JSON.stringify(who('Executive Summary\nManaging Director commentary follows')));
@@ -293,8 +293,8 @@ check('a single capitalised word is never a person',
   who('Victory\nManaging Director').length === 0,
   JSON.stringify(who('Victory\nManaging Director')));
 check('and a job title on its own is not the person holding it',
-  who('Chief Executive Officer\nT: +84 28 3821 9930').length === 0,
-  JSON.stringify(who('Chief Executive Officer\nT: +84 28 3821 9930')));
+  who('Chief Executive Officer\nT: +84 28 3555 0142').length === 0,
+  JSON.stringify(who('Chief Executive Officer\nT: +84 28 3555 0142')));
 check('a name with no anchor anywhere near it is not proposed',
   who('Jane Doe\nNothing else on this line at all').length === 0,
   JSON.stringify(who('Jane Doe\nNothing else on this line at all')));
@@ -316,17 +316,17 @@ check('OCR still finds a name over a short job title',
   who('Jane Doe\nChief Executive Officer', { fromOcr: true }).includes('Jane Doe'),
   JSON.stringify(who('Jane Doe\nChief Executive Officer', { fromOcr: true })));
 check('and OCR still finds a name over a contact line',
-  who('Jane Doe\nT: +84 28 3821 9930', { fromOcr: true }).includes('Jane Doe'),
-  JSON.stringify(who('Jane Doe\nT: +84 28 3821 9930', { fromOcr: true })));
+  who('Jane Doe\nT: +84 28 3555 0142', { fromOcr: true }).includes('Jane Doe'),
+  JSON.stringify(who('Jane Doe\nT: +84 28 3555 0142', { fromOcr: true })));
 check('OCR still finds a name over a weak title when a phone follows',
-  who('Jane Doe\nAssociate\nT: +84 28 3821 9930', { fromOcr: true }).includes('Jane Doe'),
-  JSON.stringify(who('Jane Doe\nAssociate\nT: +84 28 3821 9930', { fromOcr: true })));
+  who('Jane Doe\nAssociate\nT: +84 28 3555 0142', { fromOcr: true }).includes('Jane Doe'),
+  JSON.stringify(who('Jane Doe\nAssociate\nT: +84 28 3555 0142', { fromOcr: true })));
 
 // The whole contact slide, which is what this was built for.
 {
-  const slide = 'KIM-LAN-DANG\nVice President, Principal Investments – Private Equity\n'
-    + 'T: +84 28 3821 9930 (Ext. 288)\nM: +84 902 307 325\n'
-    + '17th Floor, Sun Wah Tower,\n115 Nguyen Hue, Sai Gon Ward, HCMC, Vietnam';
+  const slide = 'MAI-ANH-VO\nVice President, Principal Investments – Private Equity\n'
+    + 'T: +84 28 3555 0142 (Ext. 210)\nM: +84 909 555 014\n'
+    + '17th Floor, Jade Harbour Tower,\n88 Le Loi, Ben Thanh Ward, HCMC, Vietnam';
   const kinds = kindsIn(slide);
   for (const want of ['person', 'phone']) {
     check('the contact slide gives up its ' + want, kinds.includes(want), kinds.join(','));
@@ -357,29 +357,29 @@ check('a term with punctuation still matches',
 // was set plainly and missed it wherever a designer had styled it: the least
 // helpful possible failure, and a silent one.
 check('a term still matches when the document tracked its letters apart',
-  textsOf('K A G ’s value', 'term', { terms: ['KAG'] })[0] === 'K A G');
+  textsOf('Z A G ’s value', 'term', { terms: ['ZAG'] })[0] === 'Z A G');
 check('and the match spans the gaps, so the box covers the whole word',
-  (textsOf('K A G ’s value', 'term', { terms: ['KAG'] })[0] || '').length === 5);
+  (textsOf('Z A G ’s value', 'term', { terms: ['ZAG'] })[0] || '').length === 5);
 check('wider tracking is matched too',
-  textsOf('K   A   G here', 'term', { terms: ['KAG'] }).length === 1);
+  textsOf('Z   A   G here', 'term', { terms: ['ZAG'] }).length === 1);
 check('a tracked term is matched across a line break',
-  textsOf('K\nA\nG here', 'term', { terms: ['KAG'] }).length === 1);
+  textsOf('Z\nA\nG here', 'term', { terms: ['ZAG'] }).length === 1);
 check('a term containing a space still requires one',
   Detect.findAll('JaneDoe signed', { terms: ['Jane Doe'] }).length === 0);
 check('but tolerates a document that spaced that name out as well',
   textsOf('J a n e  D o e signed', 'term', { terms: ['Jane Doe'] }).length === 1);
 // Only whitespace may separate the letters, and the ends still have to be
-// word boundaries — otherwise "KAG" would swallow half the dictionary.
+// word boundaries — otherwise "ZAG" would swallow half the dictionary.
 check('tolerating whitespace does not weaken the leading boundary',
-  Detect.findAll('MyKAG value', { terms: ['KAG'] }).length === 0);
+  Detect.findAll('MyZAG value', { terms: ['ZAG'] }).length === 0);
 check('nor match a longer word that merely starts the same way',
-  Detect.findAll('KAGS differs', { terms: ['KAG'] }).length === 0);
+  Detect.findAll('ZAGS differs', { terms: ['ZAG'] }).length === 0);
 check('letters separated by other words are not a match',
-  Detect.findAll('a K then A then G', { terms: ['KAG'] }).length === 0);
+  Detect.findAll('a Z then A then G', { terms: ['ZAG'] }).length === 0);
 check('the pattern demands a space where the term has one',
   Detect.termPattern('Jane Doe').includes('\\s+'));
 check('and permits an optional one between letters',
-  Detect.termPattern('KAG') === 'K\\s*A\\s*G', Detect.termPattern('KAG'));
+  Detect.termPattern('ZAG') === 'Z\\s*A\\s*G', Detect.termPattern('ZAG'));
 
 // ---------- overlap ----------
 
@@ -1005,25 +1005,25 @@ check('a degenerate size does not throw',
 // lib/boxes.js has to guess where the spaces are, because pdf.js hands it runs
 // of glyphs and a gap that may or may not be a word break. OCR needs no
 // guessing: every item is one word. Guessing anyway cost real matches — small
-// footnote text stitched as "veryyearwithKAG", and a search for the name found
+// footnote text stitched as "veryyearwithZAG", and a search for the name found
 // nothing there, because the word boundary it needs had gone.
 (() => {
   const word = (str, x, y, hasEOL) => ({ str, x, y, w: str.length * 6, h: 12, hasEOL });
   const items = [
     word('every', 10, 100, false), word('year', 50, 100, false),
-    word('with', 80, 100, false), word('KAG', 110, 100, true),
+    word('with', 80, 100, false), word('ZAG', 110, 100, true),
     word('Since', 10, 120, false), word('then', 50, 120, true),
   ];
   const out = Ocr.stitch(items);
   check('every word is separated from the next',
-    out.text === 'every year with KAG\nSince then', JSON.stringify(out.text));
+    out.text === 'every year with ZAG\nSince then', JSON.stringify(out.text));
   check('so the term is findable in what was read',
-    Detect.findAll(out.text, { terms: ['KAG'] }).length === 1);
+    Detect.findAll(out.text, { terms: ['ZAG'] }).length === 1);
   check('a line end becomes a line break, not a space',
-    out.text.includes('KAG\nSince'), JSON.stringify(out.text));
+    out.text.includes('ZAG\nSince'), JSON.stringify(out.text));
   check('each word knows where it landed in the text',
-    out.items[3].start === out.text.indexOf('KAG')
-      && out.items[3].end === out.text.indexOf('KAG') + 3,
+    out.items[3].start === out.text.indexOf('ZAG')
+      && out.items[3].end === out.text.indexOf('ZAG') + 3,
     JSON.stringify(out.items[3]));
   check('the words themselves are carried through',
     out.items.length === items.length && out.items[0].str === 'every');
@@ -1032,9 +1032,9 @@ check('a degenerate size does not throw',
   // The geometric rule this replaced produced the failure above. Prove the
   // separator does not depend on the gap between words at all: these two sit
   // flush against each other and must still be two words.
-  const flush = Ocr.stitch([word('with', 0, 10, false), word('KAG', 24, 10, true)]);
+  const flush = Ocr.stitch([word('with', 0, 10, false), word('ZAG', 24, 10, true)]);
   check('words that touch are still separated',
-    flush.text === 'with KAG', JSON.stringify(flush.text));
+    flush.text === 'with ZAG', JSON.stringify(flush.text));
 })();
 
 // The closer second read of small, unsure words: what it re-reads, and what
@@ -1123,18 +1123,18 @@ check('and it is served from this origin, never a CDN',
   check('the sweep faces are the bundled sans',
     TextImage.SWEEP_FACES.length === 2 && TextImage.SWEEP_FACES.every(f => /Arimo/.test(f.family)));
 }
-check('a short word gets no relief at all', TextImage.shapeRelief('KAG') === 0);
+check('a short word gets no relief at all', TextImage.shapeRelief('ZAG') === 0);
 check('nor does a four-letter acronym', TextImage.shapeRelief('TDTC') === 0);
 check('a long word gets some', TextImage.shapeRelief('proprietary') > 0);
 check('and a longer word gets more',
   TextImage.shapeRelief('proprietaryness') > TextImage.shapeRelief('proprietary'));
 check('the relief is capped', TextImage.shapeRelief('a'.repeat(200)) === TextImage.RELIEF_MAX);
-// The numbers that made this worth doing: on one page "KAG" was true from
+// The numbers that made this worth doing: on one page "ZAG" was true from
 // 0.679 up with the best false at 0.554, while "proprietary" was true at 0.639
 // with its best false at 0.587. A bar of 0.66 serves the first and misses the
 // second; 0.66 less this relief serves both.
 check('at the default bar a short word is held at 0.66',
-  Math.abs((0.66 - TextImage.shapeRelief('KAG')) - 0.66) < 1e-9);
+  Math.abs((0.66 - TextImage.shapeRelief('ZAG')) - 0.66) < 1e-9);
 check('and a long word is let down far enough to catch it, but not its noise',
   (() => {
     const bar = 0.66 - TextImage.shapeRelief('proprietary');
@@ -1265,7 +1265,7 @@ check('an empty term is harmless', TextImage.shapeRelief('') === 0
   check('longer terms still allowed in logo_grid',
     PageRole.allowShortAcronymShape(logoRoles, 'TEXAS', hit) === true);
   check('pageHint logo_grid refuses short shape without a region hit',
-    PageRole.allowShortAcronymShape({ pageHint: 'logo_grid', regions: [] }, 'KNW', hit) === false);
+    PageRole.allowShortAcronymShape({ pageHint: 'logo_grid', regions: [] }, 'ZNW', hit) === false);
 })();
 
 // Mid-word short-acronym shape FPs (KAS inside TEXAS).
@@ -1919,7 +1919,7 @@ check('a hyphenated or apostrophised name still is', Labels.looksLikeName("O'Bri
 // legend — the part of the document a later reader actually trusts. Found by
 // typing a real company's initials into the terms box and being told they were
 // somebody's name.
-check('an acronym is not assumed to be a person', !Labels.looksLikeName('KAG'));
+check('an acronym is not assumed to be a person', !Labels.looksLikeName('ZAG'));
 check('nor is a longer one', !Labels.looksLikeName('NHS'));
 check('nor is a name shouted in capitals', !Labels.looksLikeName('JANE DOE'));
 check('a lower-case word is not assumed to be a name', !Labels.looksLikeName('invoice'));
@@ -2100,7 +2100,7 @@ check('a second, differently sized page survives too',
 // and the term has to survive that and still produce a box wide enough to
 // cover the whole word.
 
-const trackedDoc = await pdfjs.getDocument({ data: new Uint8Array(buildTrackedPdf('KAG')) }).promise;
+const trackedDoc = await pdfjs.getDocument({ data: new Uint8Array(buildTrackedPdf('ZAG')) }).promise;
 const trackedPdfPage = await trackedDoc.getPage(1);
 const trackedViewport = trackedPdfPage.getViewport({ scale: 1 });
 // The same normalisation lib/pdfread.js does in the browser: place each item
@@ -2126,15 +2126,15 @@ const trackedPage = Boxes.buildPageText(trackedItems);
 // would pass for the wrong reason — so fail loudly here rather than quietly
 // there.
 check('the tracked heading reaches us with its letters spaced apart',
-  /K\s+A\s+G/.test(trackedPage.text), JSON.stringify(trackedPage.text));
+  /Z\s+A\s+G/.test(trackedPage.text), JSON.stringify(trackedPage.text));
 check('while the plain occurrences arrive unspaced',
-  (trackedPage.text.match(/KAG/g) || []).length === 2, JSON.stringify(trackedPage.text));
+  (trackedPage.text.match(/ZAG/g) || []).length === 2, JSON.stringify(trackedPage.text));
 
-const trackedSpans = Detect.findAll(trackedPage.text, { terms: ['KAG'] });
+const trackedSpans = Detect.findAll(trackedPage.text, { terms: ['ZAG'] });
 check('all three occurrences are found, the tracked one included',
   trackedSpans.length === 3, trackedSpans.length + ' found in ' + JSON.stringify(trackedPage.text));
 check('and the tracked match covers the gaps, not just the first letter',
-  trackedSpans.some(s => s.text === 'K A G'),
+  trackedSpans.some(s => s.text === 'Z A G'),
   JSON.stringify(trackedSpans.map(s => s.text)));
 
 const trackedBoxes = Boxes.boxesForSpans(trackedPage.items, trackedSpans);

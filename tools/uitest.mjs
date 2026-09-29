@@ -1564,9 +1564,9 @@ try {
   const naming = await page.evaluate(() => {
     const B = window.Blinded;
     const was = B.state.terms.slice();
-    B.state.terms = ['Falcon', 'KAG'];
+    B.state.terms = ['Falcon', 'ZAG'];
     const out = {
-      stripped: B.cleanName('Project Falcon - KAG term sheet'),
+      stripped: B.cleanName('Project Falcon - ZAG term sheet'),
       leavesTheRest: B.cleanName('Board pack Q3'),
       // Case is not a hiding place.
       anyCase: B.cleanName('project falcon summary'),
@@ -1578,7 +1578,7 @@ try {
     return out;
   });
   check('a covered word is taken out of the file name',
-    !/Falcon/i.test(naming.stripped) && !/KAG/.test(naming.stripped),
+    !/Falcon/i.test(naming.stripped) && !/ZAG/.test(naming.stripped),
     JSON.stringify(naming));
   check('and what is left still reads as a name',
     /term sheet/.test(naming.stripped), JSON.stringify(naming.stripped));
@@ -2685,11 +2685,11 @@ try {
     x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height);
     x.fillStyle = '#111';
     x.font = '400 46px Helvetica, Arial, sans-serif';
-    x.fillText('Report prepared for KAG Holdings', 90, 180);
+    x.fillText('Report prepared for ZAG Holdings', 90, 180);
     x.font = '700 64px Helvetica, Arial, sans-serif';
-    x.fillText('KAG', 90, 400);
+    x.fillText('ZAG', 90, 400);
     x.font = '400 40px "Times New Roman", Times, serif';
-    x.fillText('countersigned by KAG on the third', 90, 600);
+    x.fillText('countersigned by ZAG on the third', 90, 600);
     x.font = '400 46px Helvetica, Arial, sans-serif';
     x.fillText('Nothing sensitive on this line', 90, 800);
     const img = await window.BlindedRender.encodeForPdf(c, false);
@@ -2707,7 +2707,7 @@ try {
     (await page.evaluate(() => window.Blinded.state.pages[0].text.trim())) === '',
     await page.evaluate(() => window.Blinded.state.pages[0].text.slice(0, 60)));
 
-  await setTerms(page, ["KAG"]);
+  await setTerms(page, ["ZAG"]);
   await page.waitForTimeout(400);
   check('and so a typed word finds nothing in it by text',
     await page.evaluate(() => window.Blinded.state.pages[0].hits.length) === 0);
@@ -2736,7 +2736,7 @@ try {
 
   const pictured = await page.evaluate(() => {
     const p = window.Blinded.state.pages[0];
-    const mine = p.imageHits.filter(m => m.term === 'KAG');
+    const mine = p.imageHits.filter(m => m.term === 'ZAG');
     return {
       found: mine.length,
       worst: mine.length ? Math.min(...mine.map(m => m.score)) : 0,
@@ -3123,7 +3123,7 @@ try {
       x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height);
       x.fillStyle = '#111';
       x.font = '700 64px Helvetica, Arial, sans-serif';
-      x.fillText('KAG', 90, 180);
+      x.fillText('ZAG', 90, 180);
       x.font = '400 40px Helvetica, Arial, sans-serif';
       for (let k = 0; k < 8; k++) x.fillText('Body line ' + k + ' of page ' + (i + 1), 90, 320 + k * 70);
       x.fillStyle = '#0b2a5b'; x.fillRect(820, 110, 300, 100);
@@ -3147,7 +3147,7 @@ try {
     const pages = window.Blinded.state.pages;
     const logo = IS.templateFrom(pages[0].source, { x: 820, y: 110, w: 300, h: 100 });
     const entries = [{ key: 'logo', template: logo }]
-      .concat(TI.templatesFor('KAG').map((t, i) => ({ key: 'face' + i, template: t })));
+      .concat(TI.templatesFor('ZAG').map((t, i) => ({ key: 'face' + i, template: t })));
 
     const shape = map => [...map.entries()]
       .map(([key, v]) => key + ':' + v.matches
@@ -3205,7 +3205,7 @@ try {
       const y = 120 + i * 170;
       x.fillStyle = bg; x.fillRect(70, y - 70, 420, 120);
       x.fillStyle = fg; x.font = '700 72px Helvetica, Arial, sans-serif';
-      x.textBaseline = 'middle'; x.fillText('KAG', 110, y - 10);
+      x.textBaseline = 'middle'; x.fillText('ZAG', 110, y - 10);
     });
     const img = await window.BlindedRender.encodeForPdf(c, false);
     return Array.from(window.BlindedPdfWrite.build([{ widthPt: 612, heightPt: 792, image: img }]));
@@ -3217,7 +3217,7 @@ try {
   await page.waitForSelector('#view-drop:not([hidden])');
   await page.setInputFiles('#file', colourPath);
   await page.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
-  await setTerms(page, ["KAG"]);
+  await setTerms(page, ["ZAG"]);
   await page.waitForTimeout(400);
   // Reading the pages is the default, but this fixture exists to test the
   // shape matcher — the fallback — so it is asked for explicitly.
@@ -3229,7 +3229,7 @@ try {
 
   const coloured = await page.evaluate((combos) => {
     const p = window.Blinded.state.pages[0];
-    const mine = p.imageHits.filter(m => m.term === 'KAG');
+    const mine = p.imageHits.filter(m => m.term === 'ZAG');
     // The embedded image is exactly the size the page renders at, so canvas
     // coordinates map one to one — no scaling between them.
     return combos.map(([name], i) => {
@@ -6505,7 +6505,7 @@ try {
     await page.waitForSelector('#view-drop:not([hidden])', { timeout: 15000 });
     await page.setInputFiles('#file', stackedPath);
     await page.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
-    await setTerms(page, ['KAG']);
+    await setTerms(page, ['ZAG']);
     await page.waitForTimeout(300);
 
     const stacked = await page.evaluate(() => {
@@ -6514,10 +6514,10 @@ try {
       return {
         // What the file says, which is what makes this fixture worth having:
         // without duplicates in the text layer the rest passes vacuously.
-        inFile: window.BlindedDetect.findTerms(p.text, ['KAG']).length,
-        marks: p.hits.filter(h => h.finding.term === 'KAG').length,
-        counted: B.occurrencesFor('KAG').length,
-        pages: B.occurrencesFor('KAG').map(spot => spot.pageIndex),
+        inFile: window.BlindedDetect.findTerms(p.text, ['ZAG']).length,
+        marks: p.hits.filter(h => h.finding.term === 'ZAG').length,
+        counted: B.occurrencesFor('ZAG').length,
+        pages: B.occurrencesFor('ZAG').map(spot => spot.pageIndex),
       };
     });
     check('the fixture really does say it several times over',
@@ -7739,7 +7739,7 @@ try {
       // picked image's own row.
       sharedImageControl: Boolean(document.getElementById('sens')),
       base: B.wordSensitivity(),
-      shortBar: B.wordBarFor('KAG'),
+      shortBar: B.wordBarFor('ZAG'),
       longBar: B.wordBarFor('proprietary'),
       phraseBar: B.wordBarFor('proprietary innovation'),
     };
@@ -7762,7 +7762,7 @@ try {
   //
   // A word set as a picture in body text or a caption is only a dozen pixels
   // tall, and the template has to shrink to meet it. At that size letterforms
-  // smear: on a real slide a caption reading "KAG" scored 0.314, in the wrong
+  // smear: on a real slide a caption reading "ZAG" scored 0.314, in the wrong
   // place, while the same word in the title scored 0.725. Searching a
   // resampled copy of the page recovers it without re-rendering anything.
   //
@@ -7778,7 +7778,7 @@ try {
     // Roughly the size the caption was on the slide.
     ctx.font = '600 13px Helvetica, Arial, sans-serif';
     ctx.textBaseline = 'top';
-    ctx.fillText('Singapore, within KAG\u2019s HQ', 20, 52);
+    ctx.fillText('Singapore, within ZAG\u2019s HQ', 20, 52);
     // Some other text, so the page is not one word on a blank field.
     ctx.font = '13px Helvetica, Arial, sans-serif';
     ctx.fillText('Innovation and design under one roof', 20, 20);
@@ -7788,7 +7788,7 @@ try {
     const M = BlindedMatch, S = BlindedImageSearch;
     const run = smallText => {
       const pooled = [];
-      for (const t of BlindedTextImage.templatesFor('KAG')) {
+      for (const t of BlindedTextImage.templatesFor('ZAG')) {
         const ready = S.prepareTemplate(t, {});
         if (!ready) continue;
         const r = S.searchPage(gray, c.width, c.height, { ...ready, smallText },
@@ -8030,7 +8030,7 @@ try {
     const faces = await page.evaluate(() => {
       const TI = window.BlindedTextImage;
       const B = window.Blinded;
-      B.state.terms = ['KNW'];
+      B.state.terms = ['ZNW'];
       const entries = B.sweepTemplates();
       return { count: entries.length, all: TI.FACES.length,
         used: TI.SWEEP_FACES.map(f => f.name),
@@ -8059,7 +8059,7 @@ try {
       const B = window.Blinded;
       const p = B.state.pages[0];
       const kept = { x: 100, y: 100, w: 60, h: 20 };
-      p.imageHits = [{ id: 'existing', term: 'KNW', rect: kept, score: 1 }];
+      p.imageHits = [{ id: 'existing', term: 'ZNW', rect: kept, score: 1 }];
       const out = {
         onTop: B.alreadyCovered(p, { x: 104, y: 102, w: 60, h: 20 }),
         elsewhere: B.alreadyCovered(p, { x: 400, y: 400, w: 60, h: 20 }),
@@ -8072,7 +8072,7 @@ try {
     // already found here, a different one covers it, or they drew a box over
     // it themselves.
     check('a spot already marked is not proposed again',
-      typeof dedupe.onTop === 'string' && dedupe.onTop.includes('KNW'),
+      typeof dedupe.onTop === 'string' && dedupe.onTop.includes('ZNW'),
       JSON.stringify(dedupe));
     check('but a spot nothing has touched is', dedupe.elsewhere === null,
       JSON.stringify(dedupe));
@@ -8095,17 +8095,17 @@ try {
       // these marks claim to be is typed and counted, exactly as a real
       // search would have left it.
       B.state.searched = true;
-      if (!B.state.terms.includes('KNW')) B.state.terms.push('KNW');
-      if (!B.state.countedTerms.includes('KNW')) B.state.countedTerms.push('KNW');
+      if (!B.state.terms.includes('ZNW')) B.state.terms.push('ZNW');
+      if (!B.state.countedTerms.includes('ZNW')) B.state.countedTerms.push('ZNW');
       p.imageHits = [];
       B.redrawAll();
       const plain = at();
 
-      p.imageHits = [{ id: 'ordinary', term: 'KNW', rect, score: 1 }];
+      p.imageHits = [{ id: 'ordinary', term: 'ZNW', rect, score: 1 }];
       B.redrawAll();
       const red = at();
 
-      p.imageHits = [{ id: 'found', term: 'KNW', rect, score: 1, bySweep: true }];
+      p.imageHits = [{ id: 'found', term: 'ZNW', rect, score: 1, bySweep: true }];
       B.redrawAll();
       const amber = at();
 
@@ -8927,7 +8927,7 @@ try {
     check('and forgets that the last one fell back',
       carried.failed === false, JSON.stringify(carried));
 
-    await setTerms(page, ["KAG"]);
+    await setTerms(page, ["ZAG"]);
     await page.waitForTimeout(300);
     await redact(page);
     const second = await page.evaluate(() =>
@@ -8940,7 +8940,7 @@ try {
   //
   // Bold was always covered by a bold face. Italic was not, and a slanted word
   // is a different shape rather than the same shape drawn differently: on a
-  // real slide an italic "KAG\u2019s" in a caption scored 0.386 against the
+  // real slide an italic "ZAG\u2019s" in a caption scored 0.386 against the
   // upright faces, indistinguishable from the page around it.
   const slanted = await page.evaluate(() => {
     const M = BlindedMatch, S = BlindedImageSearch, TI = BlindedTextImage;
@@ -8952,7 +8952,7 @@ try {
       ctx.fillStyle = '#1a1a1a';
       ctx.font = style + ' 15px Helvetica, Arial, sans-serif';
       ctx.textBaseline = 'top';
-      ctx.fillText('supported by KAG\u2019s proprietary innovation', 16, 36);
+      ctx.fillText('supported by ZAG\u2019s proprietary innovation', 16, 36);
       ctx.font = '15px Helvetica, Arial, sans-serif';
       ctx.fillText('Resolves complex technical issues on-site', 16, 10);
       return c;
@@ -8960,7 +8960,7 @@ try {
     const hunt = canvas => {
       const gray = S.grayOf(canvas);
       const pooled = [];
-      for (const t of TI.templatesFor('KAG')) {
+      for (const t of TI.templatesFor('ZAG')) {
         const ready = S.prepareTemplate(t, {});
         if (!ready) continue;
         const r = S.searchPage(gray, canvas.width, canvas.height,
@@ -12521,7 +12521,7 @@ try {
       x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height);
       x.fillStyle = '#111';
       x.font = '700 64px Helvetica, Arial, sans-serif';
-      x.fillText('KAG', 90, 400);
+      x.fillText('ZAG', 90, 400);
       const img = await window.BlindedRender.encodeForPdf(c, false);
       return Array.from(window.BlindedPdfWrite.build([{ widthPt: 612, heightPt: 792, image: img }]));
     });
@@ -12529,7 +12529,7 @@ try {
     writeFileSync(refused, Buffer.from(bytes));
     await old.setInputFiles('#file', refused);
     await old.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
-    await setTerms(old, ['KAG']);
+    await setTerms(old, ['ZAG']);
     await clickSearch(old);
     let finished = true;
     await old.waitForFunction(() => window.Blinded.state.searched === true,
@@ -12548,7 +12548,7 @@ try {
     // The whole point of the fallback: the word is in the picture and only
     // its shape can find it.
     check('and still finds the word in the picture by its shape',
-      /KAG\s*[1-9]/.test(after.counts), after.counts);
+      /ZAG\s*[1-9]/.test(after.counts), after.counts);
     await old.close();
   });
 

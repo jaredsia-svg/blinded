@@ -258,11 +258,11 @@ export function buildSmallLogoPdf() {
 // nothing, so a duplicate never arises and a test of duplicate suppression
 // passes without testing anything. Set at 28pt, both routes find it and the
 // duplicate is real.
-export const DOUBLE_TERM = 'KAG';
+export const DOUBLE_TERM = 'ZAG';
 
 export function buildDoubleFoundPdf() {
-  const body = 'BT /F1 28 Tf 70 700 Td (KAG is a company) Tj ET\n'
-    + 'BT /F1 28 Tf 70 640 Td (and KAG again here) Tj ET\n';
+  const body = 'BT /F1 28 Tf 70 700 Td (ZAG is a company) Tj ET\n'
+    + 'BT /F1 28 Tf 70 640 Td (and ZAG again here) Tj ET\n';
 
   const chunks = [];
   let length = 0;
@@ -341,9 +341,9 @@ export function buildPausePdf(n = 8) {
 }
 
 export function buildStackedPdf() {
-  const line = 'BT /F1 24 Tf 60 700 Td (On the back-end, KAG supplies parts) Tj ET\n';
+  const line = 'BT /F1 24 Tf 60 700 Td (On the back-end, ZAG supplies parts) Tj ET\n';
   const body = line.repeat(6)
-    + 'BT /F1 24 Tf 60 640 Td (KAG again, once) Tj ET\n';
+    + 'BT /F1 24 Tf 60 640 Td (ZAG again, once) Tj ET\n';
 
   const chunks = [];
   let length = 0;
@@ -366,7 +366,7 @@ export function buildStackedPdf() {
   return Buffer.concat(chunks);
 }
 
-export function buildTrackedPdf(word = 'KAG') {
+export function buildTrackedPdf(word = 'ZAG') {
   const chunks = [];
   let length = 0;
   const offsets = [0];

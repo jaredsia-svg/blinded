@@ -3088,8 +3088,8 @@
         // Slicing part of a word out would mean knowing where its letters sit
         // inside it, and OCR reports one box for the word, not one per glyph.
         // Dividing that box evenly is what a fallback would do, and it is
-        // wrong in exactly the direction that matters: "KAG" inside the word
-        // "KAG's" came out three fifths of the way across, and the bar landed
+        // wrong in exactly the direction that matters: "ZAG" inside the word
+        // "ZAG's" came out three fifths of the way across, and the bar landed
         // over "KA" with the G still legible. Covering the apostrophe-s too is
         // the harmless error; leaving a letter showing is not.
         for (const item of page.ocrPlaced) {
@@ -5726,7 +5726,7 @@
   // length earns back. See lib/textimage.js for the measurements behind it.
   function wordBarFor(term, inPhrase) {
     let bar = wordSensitivity() - TextImage.shapeRelief(term);
-    // Short acronyms (KAS/KAG/KNW) correlate inside longer wordmarks. Hold the
+    // Short acronyms (KAS/ZAG/ZNW) correlate inside longer wordmarks. Hold the
     // shape bar higher; green OCR/text hits are unchanged.
     //
     // Not when the short word is one part of a phrase. The penalty buys
@@ -9419,7 +9419,7 @@
   // That case has no words over the spot, so nothing vetoes it.
   // Measured twice, and the second measurement moved it. On a text report the
   // words the reader used to refuse a guess came back at 91 to 96. On a deck,
-  // looking for "KAS", the check proposed the title "KAG's" — and the reader
+  // looking for "KAS", the check proposed the title "ZAG's" — and the reader
   // had read that title correctly at 70, so a bar of 75 let the wrong mark
   // through by five points. Large coloured display type is read correctly and
   // scored lower than body text, which is a property of the reader rather

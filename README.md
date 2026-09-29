@@ -112,8 +112,8 @@ that has to stay short enough to read. Anyone who needs one can type it.
 identifies a name by looking at it — a name is capitalised words, and so is
 half a deal document. A dictionary of common first names does no better and
 fails both ways at once: measured against a real contact slide it misses
-`KIM-LAN-DANG` (capitals, hyphenated, not a Western given name) while flagging
-`Sun Wah Tower` two lines below it, because Sun is a common given name. It also
+`MAI-ANH-VO` (capitals, hyphenated, not a Western given name) while flagging
+`Jade Harbour Tower` two lines below it, because Jade is a common given name. It also
 only ever catches the given name, and half a redacted name is not redacted.
 
 What identifies a name is the company it keeps, and names keep company in three
@@ -170,11 +170,11 @@ otherwise, and the failure is silent until the document is already out.
 
 Matching tolerates the spacing a document puts inside a word. A heading set
 with letter-spacing — the styled box header on a designed slide — is drawn as
-separate glyphs, and the text underneath a document arrives as `K A G` rather
-than `KAG`. Typing `KAG` covers all of them, and the box drawn over the tracked
+separate glyphs, and the text underneath a document arrives as `Z A G` rather
+than `ZAG`. Typing `ZAG` covers all of them, and the box drawn over the tracked
 one is wide enough to include the gaps. Only whitespace may come between the
-letters, and the ends still have to be word boundaries, so `KAG` does not match
-`MyKAG`, `KAGS`, or "a K then A then G".
+letters, and the ends still have to be word boundaries, so `ZAG` does not match
+`MyZAG`, `ZAGS`, or "a Z then A then G".
 
 ### Words that are not text
 
@@ -184,7 +184,7 @@ italic and bold italic — and hunted for visually as well as read out of the
 text layer.
 
 Italic earns its place there. A slanted word is a different shape, not the same
-shape drawn differently: an italic "KAG's" in a real slide's caption scored
+shape drawn differently: an italic "ZAG's" in a real slide's caption scored
 0.386 against upright faces, which is indistinguishable from the page around
 it, and 0.564 once a slanted template was among them — while the upright
 occurrence on the same page was unaffected. Underlining needs nothing special:
@@ -195,7 +195,7 @@ italics is a word it silently leaves in the document.
 
 This is for the case the text layer cannot reach at all: a word inside a logo,
 a scanned page, a screenshot, a chart label baked into a bitmap. On a page that
-is purely ink, with an empty text layer, typing `KAG` finds every occurrence of
+is purely ink, with an empty text layer, typing `ZAG` finds every occurrence of
 it — set in sans, set in bold, set in serif — and leaves the rest of the page
 alone. A picture of a word shares the word's placeholder, so `[T1]` covers the
 written mentions and the pictured ones alike.
@@ -262,7 +262,7 @@ across engines.
 ### Checking the reading, thoroughly
 
 OCR misreads, and it says so when it does. On a real slide the badge reading
-`("KNW")` came back as `CRW)` at 41 confidence while every word around it read
+`("ZNW")` came back as `CRW)` at 41 confidence while every word around it read
 at 90 or better — the reading was wrong, and the number said so.
 
 The tool used to act on that directly, outlining every poorly-read spot that
