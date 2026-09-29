@@ -2201,8 +2201,9 @@ check('no creation date is carried into the output', !meta.info.CreationDate);
 // offline use, and described for search engines with the file it points at.
 {
   const home = readFileSync(join(root, 'index.html'), 'utf8');
-  const src = (/<video[^>]*id="promovideo"[\s\S]*?<source src="([^"]+)"/.exec(home) || [])[1];
-  const poster = (/<video[^>]*poster="([^"]+)"/.exec(home) || [])[1];
+  // Without the version stamp tools/stamp.mjs adds, which is not part of the file's name.
+  const src = (/<video[^>]*id="promovideo"[\s\S]*?<source src="([^"?]+)/.exec(home) || [])[1];
+  const poster = (/<video[^>]*poster="([^"?]+)/.exec(home) || [])[1];
   check('the front page video is a file of this site',
     Boolean(src) && !/^https?:/.test(src) && existsSync(join(root, src)), String(src));
   check('and small enough for a front page',
@@ -2243,7 +2244,7 @@ check('no creation date is carried into the output', !meta.info.CreationDate);
   // Twelve pictures: six slides, each one before and after. Both halves have
   // to be present, because a toggle with nothing on one side of it is worse
   // than no toggle.
-  const wanted = [...html.matchAll(/<img class="galimg[^>]*src="(gallery\/[^"]+)"/g)]
+  const wanted = [...html.matchAll(/<img class="galimg[^>]*src="(gallery\/[^"?]+)/g)]
     .map(m => m[1]);
   check('the gallery names twelve pictures', wanted.length === 12, String(wanted.length));
   const missing = wanted.filter(name => !existsSync(new URL('../' + name, import.meta.url)));
@@ -2297,7 +2298,7 @@ check('no creation date is carried into the output', !meta.info.CreationDate);
 
   // The picture the enlargement opens on has to be one of the gallery's, or
   // the first press of it shows something that is not on the page.
-  const big = html.match(/id="samplebig" src="([^"]+)"/);
+  const big = html.match(/id="samplebig" src="([^"?]+)/);
   check('the enlargement opens on a picture the gallery holds',
     Boolean(big) && wanted.includes(big[1]), big ? big[1] : 'no src');
 

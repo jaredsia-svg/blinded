@@ -28,7 +28,9 @@ const root = resolve(join(dirname(fileURLToPath(import.meta.url)), '..'));
 const PAGES = ['index.html', 'unlock.html', 'license/index.html'];
 
 // Only local assets: a versioned URL for a file we do not control is a lie.
-const LINK = /(\s(?:href|src)=")([A-Za-z0-9_./-]+\.(?:css|js|mjs))(?:\?v=[0-9a-f]+)?(")/g;
+// The film and its poster too: replaced under the same name, a browser or the
+// host's cache went on showing the old cut.
+const LINK = /(\s(?:href|src|poster)=")([A-Za-z0-9_./-]+\.(?:css|js|mjs|mp4|webp))(?:\?v=[0-9a-f]+)?(")/g;
 
 export function stamped(html) {
   return fingerprinted(html.replace(LINK, (whole, before, path, after) => {
