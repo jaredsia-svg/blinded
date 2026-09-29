@@ -111,7 +111,7 @@
   "duration": "PT59S"
 }
 </script>
-<link rel="stylesheet" href="app.css?v=cb967b14" integrity="sha384-7kPUCrdXXfgUN/Dnivl4hxMy13eduMZPgMfOkDzF49S8YK1zJ09eJc3RgPadNomM">
+<link rel="stylesheet" href="app.css?v=c3a19b2e" integrity="sha384-cNYqz2dHQ29TTlvz6shco8PFA+fTeRhaQlKVeU+cK3Co1QMaJ260Gf/XqByOSCPi">
 </head>
 <body>
 
@@ -545,42 +545,6 @@
       </ul>
     </nav>
 
-    <!-- Two rows: what somebody reading the page reaches for, then the fine
-         print. Fewer words each -- "Contact" is the address, "Source" is the
-         repository, and the version deployed sits beside it, linked to that
-         exact commit (tools/version.sh). -->
-    <p class="foot">
-      <span class="foot-row">
-      <span class="foot-name">Blinded</span>
-      <span class="foot-dot" aria-hidden="true">·</span>
-      <a class="footlink" id="foot-faq" href="/faq.html">FAQ</a>
-      <span class="foot-dot" aria-hidden="true">·</span>
-      <!-- Links the app takes over, like the two in the header. The pages
-           this tool has are views of it: following a link to one would close
-           the document to go and read about the thing you were doing, so
-           once the app is here they open as views instead. Before it is
-           here there is no document, and the link is the right answer. -->
-      <a class="footlink" id="foot-prem" href="/license/">License</a>
-      <span class="foot-dot" aria-hidden="true">·</span>
-      <a class="footlink" href="/verify/">Verify</a>
-      <span class="foot-dot" aria-hidden="true">·</span>
-      <a class="footlink" href="mailto:support@blinded.dev" title="support@blinded.dev">Contact</a>
-      </span>
-      <!-- Ordinary links rather than views, unlike the two above. Somebody
-           reading a refund policy is not reading about the thing they are
-           doing, and a reviewer with a document open is warned before the
-           page goes anywhere. -->
-      <span class="foot-row foot-fine">
-      <a class="footlink" href="/privacy/">Privacy</a>
-      <span class="foot-dot" aria-hidden="true">·</span>
-      <a class="footlink" href="/terms/">Terms</a>
-      <span class="foot-dot" aria-hidden="true">·</span>
-      <a class="footlink" href="/refunds/">Refunds</a>
-      <span class="foot-dot" aria-hidden="true">·</span>
-      <a class="footlink" href="https://github.com/jaredsia-svg/blinded" rel="noopener">Source</a>
-      <span id="foot-version-wrap" hidden><a class="footlink foot-version" id="foot-version" target="_blank" rel="noopener"></a></span>
-      </span>
-    </p>
   </section>
 
   <!-- ---------- 2. review ---------- -->
@@ -892,6 +856,45 @@
   <p class="faqback"><button type="button" class="faqbackbtn" id="faq-back-bottom">Back to the tool</button></p>
 
 </section>
+
+  <!-- Outside the views, so it sits under the front page, the questions and
+       the license alike; hidden while a document is open. Two rows: what
+       somebody reading the page reaches for, then the fine print. Fewer
+       words each -- "Contact" is the address, "Source" is the repository,
+       and the version deployed sits beside it, linked to that exact commit
+       (tools/version.sh). -->
+  <p class="foot" id="site-foot">
+    <span class="foot-row">
+    <span class="foot-name">Blinded</span>
+    <span class="foot-dot" aria-hidden="true">·</span>
+    <a class="footlink" id="foot-faq" href="/faq.html">FAQ</a>
+    <span class="foot-dot" aria-hidden="true">·</span>
+    <!-- Links the app takes over, like the two in the header. The pages
+         this tool has are views of it: following a link to one would close
+         the document to go and read about the thing you were doing, so
+         once the app is here they open as views instead. Before it is
+         here there is no document, and the link is the right answer. -->
+    <a class="footlink" id="foot-prem" href="/license/">License</a>
+    <span class="foot-dot" aria-hidden="true">·</span>
+    <a class="footlink" href="/verify/">Verify</a>
+    <span class="foot-dot" aria-hidden="true">·</span>
+    <a class="footlink" href="mailto:support@blinded.dev" title="support@blinded.dev">Contact</a>
+    </span>
+    <!-- Ordinary links rather than views, unlike the two above. Somebody
+         reading a refund policy is not reading about the thing they are
+         doing, and a reviewer with a document open is warned before the
+         page goes anywhere. -->
+    <span class="foot-row foot-fine">
+    <a class="footlink" href="/privacy/">Privacy</a>
+    <span class="foot-dot" aria-hidden="true">·</span>
+    <a class="footlink" href="/terms/">Terms</a>
+    <span class="foot-dot" aria-hidden="true">·</span>
+    <a class="footlink" href="/refunds/">Refunds</a>
+    <span class="foot-dot" aria-hidden="true">·</span>
+    <a class="footlink" href="https://github.com/jaredsia-svg/blinded" rel="noopener">Source</a>
+    <span id="foot-version-wrap" hidden><a class="footlink foot-version" id="foot-version" target="_blank" rel="noopener"></a></span>
+    </span>
+  </p>
 
   <div id="draftbox" class="busy" hidden>
   <div class="busy-inner nameinner">

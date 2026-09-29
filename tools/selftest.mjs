@@ -3702,7 +3702,7 @@ check('no creation date is carried into the output', !meta.info.CreationDate);
   // links in the same order.
   {
     const { footer } = await import('./footer.mjs');
-    const hrefs = html => [...(/<p class="foot">([\s\S]*?)<\/p>/.exec(html) || [, ''])[1]
+    const hrefs = html => [...(/<p class="foot"[^>]*>([\s\S]*?)<\/p>/.exec(html) || [, ''])[1]
       .matchAll(/<a class="footlink[^"]*"[^>]*?href="([^"]+)"/g)].map(m => m[1]).join(' ');
     for (const [file, current] of [['license/index.html', '/license/'],
       ['faq.html', '/faq.html'], ['unlock.html', null]]) {
@@ -3718,6 +3718,11 @@ check('no creation date is carried into the output', !meta.info.CreationDate);
     const front = readFileSync(join(root, 'index.html'), 'utf8');
     check('the front page footer has the same links in the same order',
       hrefs(front) === hrefs(footer(null)), hrefs(front));
+    // Below the views rather than inside the front one, or opening the
+    // questions or the license inside the tool leaves them with no footer.
+    check('the front page footer sits under every view, not inside one',
+      front.indexOf('id="site-foot"') > front.indexOf('id="view-faq"')
+      && front.indexOf('id="view-faq"') > front.indexOf('id="view-premium"'));
   }
 
   // Reachable without knowing they exist. A policy that is only at a URL
