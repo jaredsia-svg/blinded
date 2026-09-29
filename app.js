@@ -9213,6 +9213,16 @@
   // it reaches nowhere the reader has not pointed.
   const SEED_RELIEF = 0.06;
 
+  // A reading of a short word (four letters or fewer) that is the word with
+  // one letter changed, once the reader's look-alikes are folded together.
+  function shortNearMiss(str, part) {
+    if (!Detect.ocrFold || !Detect.levenshtein) return false;
+    const want = Detect.ocrFold(part);
+    const have = Detect.ocrFold(str);
+    if (want.length < 3 || want.length > 4 || have.length !== want.length) return false;
+    return have !== want && Detect.levenshtein(have, want) === 1;
+  }
+
   function readerSeedsFor(part, pages) {
     const out = [];
     if (!part) return out;
@@ -9223,12 +9233,20 @@
       str => Detect.ocrFuzzyPartMatch(str, part),
       str => Boolean(Detect.ocrConfusableMatch) && !Detect.ocrFuzzyPartMatch(str, part)
         && Detect.ocrConfusableMatch(str, part),
+      // Last, a short word read one letter off, where the reader itself was
+      // unsure. Short words get no edits in the rules above, rightly: a
+      // confident "FAN" is a fan. But measured on a photographed slide at full
+      // size, "F&N" in white on a purple header came back as "FEN" at 41, and
+      // nothing pointed the check there; at half the size the same header
+      // read "F&N" at 80. The reader's doubt is what makes it a place to look.
+      (str, item) => shortNearMiss(str, part) && typeof item.confidence === 'number'
+        && item.confidence < READER_SURE,
     ];
     for (const rule of rules) {
       for (const page of pages || []) {
         for (const item of page.ocrPlaced || page.ocrItems || []) {
           if (!item || !item.rect || !item.str) continue;
-          if (!rule(item.str)) continue;
+          if (!rule(item.str, item)) continue;
           // A place already marked is not a place to look again, and is left
           // out before it can take one of the few places there are: on a page
           // where the word was read right eight times, those eight used to
@@ -9472,6 +9490,9 @@
   // How much of a shape match's width the reader's own words must span before
   // they can refuse it (readerContradicts).
   const READER_ACCOUNTS = 0.45;
+  // How sure the reader must be of a spelling one letter off the typed word
+  // before that spelling can refuse a shape match for it.
+  const READER_NEAR_SURE = 85;
 
   // Text-layer items use baseline y; match the box geometry boxes.js uses.
   function textItemRect(item) {
@@ -9580,7 +9601,15 @@
       for (const item of placed) {
         if (!item.rect || !hostOverlapsHit(item.rect, rect)) continue;
         if (!(typeof item.confidence === 'number' && item.confidence >= READER_SURE)) continue;
-        read.push({ text: page.ocrText.slice(item.start, item.end), rect: item.rect });
+        const text = page.ocrText.slice(item.start, item.end);
+        // A long word read one letter off is the reader agreeing, badly
+        // spelt, unless it was very sure of the other spelling. Measured on a
+        // photographed slide at full size: "ThaiBev's" read as "ThaiBey's" at
+        // 64 refused the shape match there, which at half the size was read
+        // right. The words that refused "jared" were two letters off and read
+        // at 91 to 96, and still do.
+        if (item.confidence < READER_NEAR_SURE && Detect.ocrFuzzyPartMatch(text, term)) continue;
+        read.push({ text, rect: item.rect });
       }
       // Only if what the reader read there accounts for the spot. Measured on
       // a word in white on a green banner: the reader lost "Gaugu" and kept

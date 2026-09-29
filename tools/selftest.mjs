@@ -1227,6 +1227,9 @@ check('an empty term is harmless', TextImage.shapeRelief('') === 0
   check('and a piece of the word does not refuse a match for it',
     Detect.hostContradictsShapeTerm('loway', 'Calloway') === false
     && Detect.hostContradictsShapeTerm('shared', 'jared') === true);
+  check('a possessive is not a letter wrong',
+    Detect.ocrFuzzyPartMatch('Harbey\u2019s', 'Harbev') && Detect.ocrFuzzyPartMatch("Harbey's", 'Harbev')
+    && !Detect.ocrFuzzyPartMatch("Harbxy's", 'Harbev'));
   check('two fuzzy parts cannot invent Porter and Nash',
     Detect.findTerms('Portor Nasb limited', ['Porter and Nash'], { fromOcr: true })
       .filter(h => h.term === 'Porter and Nash').length === 0);
