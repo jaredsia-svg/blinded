@@ -1564,28 +1564,28 @@ try {
   const naming = await page.evaluate(() => {
     const B = window.Blinded;
     const was = B.state.terms.slice();
-    B.state.terms = ['Falcon', 'ZAG'];
+    B.state.terms = ['Heron', 'ZAG'];
     const out = {
-      stripped: B.cleanName('Project Falcon - ZAG term sheet'),
+      stripped: B.cleanName('Project Heron - ZAG term sheet'),
       leavesTheRest: B.cleanName('Board pack Q3'),
       // Case is not a hiding place.
-      anyCase: B.cleanName('project falcon summary'),
+      anyCase: B.cleanName('project heron summary'),
       // Nor is a name that is nothing but the secret.
-      allOfIt: B.cleanName('Falcon'),
-      covered: B.coveredText().includes('Falcon'),
+      allOfIt: B.cleanName('Heron'),
+      covered: B.coveredText().includes('Heron'),
     };
     B.state.terms = was;
     return out;
   });
   check('a covered word is taken out of the file name',
-    !/Falcon/i.test(naming.stripped) && !/ZAG/.test(naming.stripped),
+    !/Heron/i.test(naming.stripped) && !/ZAG/.test(naming.stripped),
     JSON.stringify(naming));
   check('and what is left still reads as a name',
     /term sheet/.test(naming.stripped), JSON.stringify(naming.stripped));
   check('a name with nothing covered in it is left alone',
     naming.leavesTheRest === 'Board pack Q3', JSON.stringify(naming.leavesTheRest));
   check('matching the name ignores case',
-    !/falcon/i.test(naming.anyCase), JSON.stringify(naming.anyCase));
+    !/heron/i.test(naming.anyCase), JSON.stringify(naming.anyCase));
   check('a name that was only the covered word does not survive as one',
     naming.allOfIt === '', JSON.stringify(naming.allOfIt));
   check('the detectors\' matches count as covered too, not just typed words',
@@ -4407,17 +4407,17 @@ try {
   // CONFIDENTIAL, there is nothing to contradict.
   //
   // But the text layer hands over runs, not words. Measured on a teaser deck
-  // looking for "Victory": the run "Victory's Monthly Performance in SEA
+  // looking for "Vantage": the run "Vantage's Monthly Performance in SEA
   // (Ex-Vietnam)" spans the line, and it was vouching for a shape hit sitting
   // on "(Ex-Vietnam)" at the far end of it, while the reader's own word box
   // there said "(Ex-Vietnam)" at confidence 71 and contradicted. "Vietnam"
-  // scores 0.69 against "Victory", over its bar of 0.636, so nothing else was
+  // scores 0.69 against "Vantage", over its bar of 0.636, so nothing else was
   // going to stop it: the word was redacted on the page twice.
   await part("a whole heading does not vouch for one word in it", async () => {
     const veto = await page.evaluate(() => {
       const B = window.Blinded;
       const hit = { x: 452, y: 602, w: 55, h: 16 };
-      const heading = "Victory\u2019s Monthly Performance in SEA (Ex-Vietnam)";
+      const heading = "Vantage\u2019s Monthly Performance in SEA (Ex-Vietnam)";
       const spread = {
         ocrText: '(Ex-Vietnam)',
         ocrPlaced: [{ str: '(Ex-Vietnam)', start: 0, end: 12, confidence: 71,
@@ -4436,8 +4436,8 @@ try {
           x: 50, y: 118, w: 600, h: 16 },
       ] };
       return {
-        spread: B.readerContradicts(spread, hit, 'Victory'),
-        quiet: B.readerContradicts(quiet, hit, 'Victory'),
+        spread: B.readerContradicts(spread, hit, 'Vantage'),
+        quiet: B.readerContradicts(quiet, hit, 'Vantage'),
         agrees: B.readerContradicts(agrees,
           { x: 100, y: 102, w: 120, h: 16 }, 'confidential'),
       };
@@ -4634,7 +4634,7 @@ try {
   // and it only accounts for this one if it actually covers it.
   //
   // Measured: on a photographed slide, "Thailand" was found at 0.724 against a
-  // bar of 0.63 and thrown away; on another, all four copies of "ThaiBev" at
+  // bar of 0.63 and thrown away; on another, all four copies of "SiamBrew" at
   // 0.849 against 0.64. In both the mark that swallowed them belonged to the
   // same word, which is correct — but the rule that let it would equally have
   // let a large mark for one word bury a small candidate for another, because
@@ -4679,11 +4679,11 @@ try {
   //
   // The check looks for a word by drawing it and correlating the picture. What
   // it draws is therefore a real decision, and lower case is the wrong answer:
-  // lower-case letterforms are mostly x-height blobs, so "rolex" resembles an
+  // lower-case letterforms are mostly x-height blobs, so "marlow" resembles an
   // enormous amount of ordinary body text. Measured on a six-page deck, the
   // check proposed eight places for it and every one was the word "roles" in
   // "held senior roles with"; the same deck searched for the capitalised form
-  // proposed none, and the deck contains no Rolex to miss.
+  // proposed none, and the deck contains no Marlow to miss.
   //
   // Nothing is lost by capitalising: the letters themselves are found by
   // reading the page, which does not care about case, and this check only runs
@@ -4692,19 +4692,19 @@ try {
     const drawn = await page.evaluate(() => {
       const B = window.Blinded;
       return {
-        lower: B.sweepCaseOf('rolex'),
-        already: B.sweepCaseOf('Rolex'),
-        acronym: B.sweepCaseOf('TDTC'),
+        lower: B.sweepCaseOf('marlow'),
+        already: B.sweepCaseOf('Marlow'),
+        acronym: B.sweepCaseOf('QDTC'),
         mixed: B.sweepCaseOf('iPhone'),
         empty: B.sweepCaseOf(''),
       };
     });
     check('a word typed in lower case is drawn with a capital',
-      drawn.lower === 'Rolex', JSON.stringify(drawn));
+      drawn.lower === 'Marlow', JSON.stringify(drawn));
     check('one that already has a capital is drawn as typed',
-      drawn.already === 'Rolex' && drawn.mixed === 'iPhone', JSON.stringify(drawn));
+      drawn.already === 'Marlow' && drawn.mixed === 'iPhone', JSON.stringify(drawn));
     check('and an acronym is left alone, having plenty of shape already',
-      drawn.acronym === 'TDTC' && drawn.empty === '', JSON.stringify(drawn));
+      drawn.acronym === 'QDTC' && drawn.empty === '', JSON.stringify(drawn));
   });
 
   // ---------- the sample slide on the front page ----------
@@ -7740,14 +7740,14 @@ try {
       sharedImageControl: Boolean(document.getElementById('sens')),
       base: B.wordSensitivity(),
       shortBar: B.wordBarFor('ZAG'),
-      longBar: B.wordBarFor('proprietary'),
-      phraseBar: B.wordBarFor('proprietary innovation'),
+      longBar: B.wordBarFor('distinctive'),
+      phraseBar: B.wordBarFor('distinctive technology'),
     };
   });
   check('the word sensitivity control is gone', bars.wordControl === false);
   check('and so is the one slider that governed every picked image at once',
     bars.sharedImageControl === false);
-  // A three-letter acronym is held *above* the measured bar, not at it: KAS
+  // A three-letter acronym is held *above* the measured bar, not at it: VAS
   // correlates happily inside TEXAS, and the shape pass is the one that
   // cannot read what it is looking at. Length relief still applies to a long
   // word, which scores lower for honest reasons.
@@ -7778,7 +7778,7 @@ try {
     // Roughly the size the caption was on the slide.
     ctx.font = '600 13px Helvetica, Arial, sans-serif';
     ctx.textBaseline = 'top';
-    ctx.fillText('Singapore, within ZAG\u2019s HQ', 20, 52);
+    ctx.fillText('Lisbon, within ZAG\u2019s HQ', 20, 52);
     // Some other text, so the page is not one word on a blank field.
     ctx.font = '13px Helvetica, Arial, sans-serif';
     ctx.fillText('Innovation and design under one roof', 20, 20);
@@ -8313,7 +8313,7 @@ try {
         out.pageNotRead = B.readerContradicts(p, at, 'jared');
         // The text layer answers too, and it is the half that was added: a
         // shape claiming one word where the file itself says another is the
-        // KAS-inside-TEXAS case this was built for. No OCR at all here.
+        // VAS-inside-TEXAS case this was built for. No OCR at all here.
         out.textLayerSaysOtherwise =
           B.readerContradicts(p, { x: 100, y: 100, w: 60, h: 20 }, 'jared');
         out.textLayerSaysTheWord =
@@ -8952,7 +8952,7 @@ try {
       ctx.fillStyle = '#1a1a1a';
       ctx.font = style + ' 15px Helvetica, Arial, sans-serif';
       ctx.textBaseline = 'top';
-      ctx.fillText('supported by ZAG\u2019s proprietary innovation', 16, 36);
+      ctx.fillText('supported by ZAG\u2019s distinctive technology', 16, 36);
       ctx.font = '15px Helvetica, Arial, sans-serif';
       ctx.fillText('Resolves complex technical issues on-site', 16, 10);
       return c;

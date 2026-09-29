@@ -290,8 +290,8 @@ check('a slide heading is not a person',
   who('Executive Summary\nManaging Director commentary follows').length === 0,
   JSON.stringify(who('Executive Summary\nManaging Director commentary follows')));
 check('a single capitalised word is never a person',
-  who('Victory\nManaging Director').length === 0,
-  JSON.stringify(who('Victory\nManaging Director')));
+  who('Vantage\nManaging Director').length === 0,
+  JSON.stringify(who('Vantage\nManaging Director')));
 check('and a job title on its own is not the person holding it',
   who('Chief Executive Officer\nT: +84 28 3555 0142').length === 0,
   JSON.stringify(who('Chief Executive Officer\nT: +84 28 3555 0142')));
@@ -1042,7 +1042,7 @@ check('a degenerate size does not throw',
 (() => {
   const w = (str, conf, x, y, width, h) => ({ str, confidence: conf, x, y: y + h, w: width, h,
     rect: { x, y, w: width, h } });
-  const page = [w('srw', 0, 100, 100, 55, 8), w('Rao', 20, 160, 100, 20, 8),
+  const page = [w('srw', 0, 100, 100, 55, 8), w('Das', 20, 160, 100, 20, 8),
     w('Director', 90, 300, 100, 50, 8), w('Headline', 10, 100, 300, 200, 60)];
   const crops = Ocr.rereadCrops(page, 1, 2000, 2000);
   check('unsure small words on one line are read again as one crop',
@@ -1052,21 +1052,21 @@ check('a degenerate size does not throw',
   check('a confident word is never re-read by itself',
     Ocr.rereadCrops([w('Director', 90, 300, 100, 50, 8)], 1, 2000, 2000).length === 0);
   check('a clearly surer reading replaces the words it lies over',
-    (Ocr.rereadReplaces(w('Srinivas', 70, 100, 100, 50, 8), page) || []).length === 1);
+    (Ocr.rereadReplaces(w('Harikesh', 70, 100, 100, 50, 8), page) || []).length === 1);
   check('a reading that is not clearly surer keeps the original',
     Ocr.rereadReplaces(w('Rax', 25, 160, 100, 20, 8), page) === null);
   check('a confident word is not replaced by a re-read',
     Ocr.rereadReplaces(w('Directer', 95, 300, 100, 50, 8), page) === null);
   check('new ink needs the inverted-pass bar',
-    Ocr.rereadReplaces(w('Sanjeev', 49, 700, 700, 40, 8), page) === null
-    && (Ocr.rereadReplaces(w('Sanjeev', 60, 700, 700, 40, 8), page) || [1]).length === 0);
+    Ocr.rereadReplaces(w('Rohan', 49, 700, 700, 40, 8), page) === null
+    && (Ocr.rereadReplaces(w('Rohan', 60, 700, 700, 40, 8), page) || [1]).length === 0);
   const back = Ocr.fromEnlarged([w('x', 90, 30, 60, 30, 15)], { x: 10, y: 20 }, 2);
   check('re-read words land back in the page\'s own pixels',
     back[0].rect.x === (10 + 30 / Ocr.REREAD_SCALE) * 2 && back[0].rect.h === 15 * 2 / Ocr.REREAD_SCALE,
     JSON.stringify(back[0].rect));
   check('one word of a phrase agrees with the phrase rather than vetoing it',
-    Detect.hostContradictsShapeTerm('Inderpreet', 'Inderpreet Wadhwa') === false
-    && Detect.hostContradictsShapeTerm('Sanjeev', 'Inderpreet Wadhwa') === true
+    Detect.hostContradictsShapeTerm('Gurvinder', 'Gurvinder Sahni') === false
+    && Detect.hostContradictsShapeTerm('Rohan', 'Gurvinder Sahni') === true
     && Detect.hostContradictsShapeTerm('and', 'Fraser and Neave') === false);
 })();
 
@@ -1124,33 +1124,33 @@ check('and it is served from this origin, never a CDN',
     TextImage.SWEEP_FACES.length === 2 && TextImage.SWEEP_FACES.every(f => /Arimo/.test(f.family)));
 }
 check('a short word gets no relief at all', TextImage.shapeRelief('ZAG') === 0);
-check('nor does a four-letter acronym', TextImage.shapeRelief('TDTC') === 0);
-check('a long word gets some', TextImage.shapeRelief('proprietary') > 0);
+check('nor does a four-letter acronym', TextImage.shapeRelief('QDTC') === 0);
+check('a long word gets some', TextImage.shapeRelief('distinctive') > 0);
 check('and a longer word gets more',
-  TextImage.shapeRelief('proprietaryness') > TextImage.shapeRelief('proprietary'));
+  TextImage.shapeRelief('distinctiveness') > TextImage.shapeRelief('distinctive'));
 check('the relief is capped', TextImage.shapeRelief('a'.repeat(200)) === TextImage.RELIEF_MAX);
 // The numbers that made this worth doing: on one page "ZAG" was true from
-// 0.679 up with the best false at 0.554, while "proprietary" was true at 0.639
+// 0.679 up with the best false at 0.554, while "distinctive" was true at 0.639
 // with its best false at 0.587. A bar of 0.66 serves the first and misses the
 // second; 0.66 less this relief serves both.
 check('at the default bar a short word is held at 0.66',
   Math.abs((0.66 - TextImage.shapeRelief('ZAG')) - 0.66) < 1e-9);
 check('and a long word is let down far enough to catch it, but not its noise',
   (() => {
-    const bar = 0.66 - TextImage.shapeRelief('proprietary');
+    const bar = 0.66 - TextImage.shapeRelief('distinctive');
     return bar < 0.639 && bar > 0.587;
-  })(), String(0.66 - TextImage.shapeRelief('proprietary')));
+  })(), String(0.66 - TextImage.shapeRelief('distinctive')));
 
 // A phrase is matched as one picture, and the space in the template is rarely
 // the width of the space in the document, so the second word lands misaligned.
-// Measured: "proprietary innovation" scores 0.455 where it really appears,
+// Measured: "distinctive technology" scores 0.455 where it really appears,
 // below four things on that page which are not it. Relief there would admit
 // those four and still miss the real one.
 check('a phrase gets no relief, however long',
-  TextImage.shapeRelief('proprietary innovation') === 0);
+  TextImage.shapeRelief('distinctive technology') === 0);
 check('nor does a two-word name', TextImage.shapeRelief('KA Group') === 0);
 check('leading and trailing space does not make a word a phrase',
-  TextImage.shapeRelief('  proprietary  ') === TextImage.shapeRelief('proprietary'));
+  TextImage.shapeRelief('  distinctive  ') === TextImage.shapeRelief('distinctive'));
 check('an empty term is harmless', TextImage.shapeRelief('') === 0
   && TextImage.shapeRelief(null) === 0);
 
@@ -1158,12 +1158,12 @@ check('an empty term is harmless', TextImage.shapeRelief('') === 0
 
 // Typed terms: OCR-tolerant connectors and second-check settlement cues.
 (() => {
-  check('F&N matches itself',
-    Detect.findTerms('F&N is leading', ['F&N']).length === 1);
-  check('F&N matches F and N',
-    Detect.findTerms('F and N is leading', ['F&N']).some(h => h.term === 'F&N'));
-  check('F&N matches inside F&N\'s',
-    Detect.findTerms("F&N's Financials", ['F&N']).length === 1);
+  check('P&N matches itself',
+    Detect.findTerms('P&N is leading', ['P&N']).length === 1);
+  check('P&N matches P and N',
+    Detect.findTerms('P and N is leading', ['P&N']).some(h => h.term === 'P&N'));
+  check('P&N matches inside P&N\'s',
+    Detect.findTerms("P&N's Financials", ['P&N']).length === 1);
   check('OCR may glue FraserandNeave',
     Detect.findTerms('segment and FraserandNeave', ['Fraser and Neave'], { fromOcr: true })
       .some(h => h.term === 'Fraser and Neave'));
@@ -1172,8 +1172,8 @@ check('an empty term is harmless', TextImage.shapeRelief('') === 0
   check('Fraser and Neave matches Fraser & Neave under OCR rules',
     Detect.findTerms('Fraser & Neave, Limited', ['Fraser and Neave'], { fromOcr: true })
       .length === 1);
-  check('Fan is not silently accepted as F&N',
-    Detect.findTerms('Fan is leading', ['F&N'], { fromOcr: true }).length === 0);
+  check('Pan is not silently accepted as P&N',
+    Detect.findTerms('Pan is leading', ['P&N'], { fromOcr: true }).length === 0);
 })();
 
 
@@ -1202,20 +1202,20 @@ check('an empty term is harmless', TextImage.shapeRelief('') === 0
   check('South is too far from Middle',
     Detect.ocrFuzzyPartMatch('South', 'Middle') === false);
   // Look-alikes, for seeding the shape check only: equal once folded.
-  check('a look-alike read seeds its word (FaN\'s for F&N, Ra0 for Rao)',
-    Detect.ocrConfusableMatch("FaN's", 'F&N') && Detect.ocrConfusableMatch('Ra0', 'Rao')
+  check('a look-alike read seeds its word (PaN\'s for P&N, Da5 for Das)',
+    Detect.ocrConfusableMatch("PaN's", 'P&N') && Detect.ocrConfusableMatch('Da5', 'Das')
     && Detect.ocrConfusableMatch('K1mberly', 'Kimberly'));
   check('a look-alike has to be equal, not near (ran, can, TDC, Hocges)',
-    !Detect.ocrConfusableMatch('ran', 'F&N') && !Detect.ocrConfusableMatch('can', 'F&N')
-    && !Detect.ocrConfusableMatch('TDC', 'TDTC') && !Detect.ocrConfusableMatch('Hocges', 'Huggies'));
+    !Detect.ocrConfusableMatch('ran', 'P&N') && !Detect.ocrConfusableMatch('can', 'P&N')
+    && !Detect.ocrConfusableMatch('QDC', 'QDTC') && !Detect.ocrConfusableMatch('Hocges', 'Huggies'));
   check('look-alikes need three marks (Il is not 11)',
     !Detect.ocrConfusableMatch('Il', '11') && !Detect.ocrConfusableMatch('', ''));
   check('a look-alike host agrees rather than contradicts',
-    Detect.hostContradictsShapeTerm("FaN's", 'F&N') === false);
-  check('the TEXAS veto on KAS still holds',
-    Detect.hostContradictsShapeTerm('TEXAS', 'KAS') === true);
+    Detect.hostContradictsShapeTerm("PaN's", 'P&N') === false);
+  check('the TEXAS veto on VAS still holds',
+    Detect.hostContradictsShapeTerm('TEXAS', 'VAS') === true);
   check('a look-alike never becomes a text finding on its own',
-    Detect.findTerms("FaN's Financials", ['F&N'], { fromOcr: true }).length === 0);
+    Detect.findTerms("PaN's Financials", ['P&N'], { fromOcr: true }).length === 0);
   check('two fuzzy parts cannot invent Fraser and Neave',
     Detect.findTerms('Frasor Neavo limited', ['Fraser and Neave'], { fromOcr: true })
       .filter(h => h.term === 'Fraser and Neave').length === 0);
@@ -1247,7 +1247,7 @@ check('an empty term is harmless', TextImage.shapeRelief('') === 0
 
 
 
-// Short acronym shape hits inside logo grids (KAS⊂TEXAS).
+// Short acronym shape hits inside logo grids (VAS⊂TEXAS).
 (() => {
   const logoRoles = {
     pageHint: 'logo_grid',
@@ -1258,30 +1258,30 @@ check('an empty term is harmless', TextImage.shapeRelief('') === 0
     regions: [{ role: 'body', score: 0.7, rect: { x: 0, y: 0, w: 400, h: 200 }, n: 8 }],
   };
   const hit = { x: 40, y: 40, w: 30, h: 14 };
-  check('KAS shape refused in logo_grid region',
-    PageRole.allowShortAcronymShape(logoRoles, 'KAS', hit) === false);
-  check('KAS shape allowed in body text',
-    PageRole.allowShortAcronymShape(bodyRoles, 'KAS', hit) === true);
+  check('VAS shape refused in logo_grid region',
+    PageRole.allowShortAcronymShape(logoRoles, 'VAS', hit) === false);
+  check('VAS shape allowed in body text',
+    PageRole.allowShortAcronymShape(bodyRoles, 'VAS', hit) === true);
   check('longer terms still allowed in logo_grid',
     PageRole.allowShortAcronymShape(logoRoles, 'TEXAS', hit) === true);
   check('pageHint logo_grid refuses short shape without a region hit',
     PageRole.allowShortAcronymShape({ pageHint: 'logo_grid', regions: [] }, 'ZNW', hit) === false);
 })();
 
-// Mid-word short-acronym shape FPs (KAS inside TEXAS).
+// Mid-word short-acronym shape FPs (VAS inside TEXAS).
 (() => {
-  check('TEXAS contradicts a KAS shape hit',
-    Detect.hostContradictsShapeTerm('TEXAS', 'KAS') === true);
-  check('TEXAS INSTRUMENTS host still contradicts KAS',
-    Detect.hostContradictsShapeTerm('TEXAS', 'KAS') === true);
-  check('a real KAS host does not contradict',
-    Detect.hostContradictsShapeTerm('KAS', 'KAS') === false);
-  check("KAS's still counts as the term",
-    Detect.hostContradictsShapeTerm("KAS's", 'KAS') === false);
+  check('TEXAS contradicts a VAS shape hit',
+    Detect.hostContradictsShapeTerm('TEXAS', 'VAS') === true);
+  check('TEXAS INSTRUMENTS host still contradicts VAS',
+    Detect.hostContradictsShapeTerm('TEXAS', 'VAS') === true);
+  check('a real VAS host does not contradict',
+    Detect.hostContradictsShapeTerm('VAS', 'VAS') === false);
+  check("VAS's still counts as the term",
+    Detect.hostContradictsShapeTerm("VAS's", 'VAS') === false);
   check('offered contradicts jared',
     Detect.hostContradictsShapeTerm('offered', 'jared') === true);
   check('empty host is harmless',
-    Detect.hostContradictsShapeTerm('', 'KAS') === false);
+    Detect.hostContradictsShapeTerm('', 'VAS') === false);
 })();
 
 // Second-check phrase sweeps: content parts + adjacent pairing.
@@ -1340,7 +1340,7 @@ check('an empty term is harmless', TextImage.shapeRelief('') === 0
 
   // A name set over two lines is ordinary — on a slide, in a signature block,
   // under a photograph — and a phrase searched only along the line can never
-  // find one. Measured: "Inderpreet Wadhwa" appears stacked on a deck and the
+  // find one. Measured: "Gurvinder Sahni" appears stacked on a deck and the
   // check found neither copy while finding each word on its own.
   const over = { x: 100, y: 40, w: 60, h: 14, score: 0.8 };
   const under = { x: 104, y: 56, w: 52, h: 14, score: 0.78 };
@@ -1354,8 +1354,8 @@ check('an empty term is harmless', TextImage.shapeRelief('') === 0
   check('nor one three lines down',
     Match.phraseHitsStacked(over, { x: 104, y: 110, w: 52, h: 14 }) === false);
 
-  const stackedParts = new Map([['Inderpreet', [over]], ['Wadhwa', [under]]]);
-  const chained = Match.pairPhraseHits(['Inderpreet', 'Wadhwa'], stackedParts, [0]);
+  const stackedParts = new Map([['Gurvinder', [over]], ['Sahni', [under]]]);
+  const chained = Match.pairPhraseHits(['Gurvinder', 'Sahni'], stackedParts, [0]);
   check('a stacked phrase is chained into one mark',
     chained.length === 1, JSON.stringify(chained));
   if (chained.length) {
@@ -2157,7 +2157,7 @@ check('no creation date is carried into the output', !meta.info.CreationDate);
 //
 // \b treats letters and digits as one class, so a word with a stray number
 // stuck to its front is not at a word boundary at all. Measured on a deck
-// whose whole text layer read "54Tokenomics Digital Tech Co." — the 54 a slide
+// whose whole text layer read "54Quillstone Digital Tech Co." — the 54 a slide
 // number the exporter ran into the next run — where typing the company's name
 // found nothing on a page that plainly says it.
 {
@@ -2165,14 +2165,14 @@ check('no creation date is carried into the output', !meta.info.CreationDate);
   const hits = (text, term) => spans(text, term).length;
 
   check('a word glued to a number in front of it is still that word',
-    hits('54Tokenomics Digital Tech Co.', 'Tokenomics') === 1,
-    JSON.stringify(spans('54Tokenomics Digital Tech Co.', 'Tokenomics')));
+    hits('54Quillstone Digital Tech Co.', 'Quillstone') === 1,
+    JSON.stringify(spans('54Quillstone Digital Tech Co.', 'Quillstone')));
   check('and the span starts at the word, not at the number',
-    (spans('54Tokenomics Digital', 'Tokenomics')[0] || {}).start === 2,
-    JSON.stringify(spans('54Tokenomics Digital', 'Tokenomics')));
+    (spans('54Quillstone Digital', 'Quillstone')[0] || {}).start === 2,
+    JSON.stringify(spans('54Quillstone Digital', 'Quillstone')));
   check('and ends at the end of it',
-    (spans('54Tokenomics Digital', 'Tokenomics')[0] || {}).end === 12,
-    JSON.stringify(spans('54Tokenomics Digital', 'Tokenomics')));
+    (spans('54Quillstone Digital', 'Quillstone')[0] || {}).end === 12,
+    JSON.stringify(spans('54Quillstone Digital', 'Quillstone')));
   check('a number glued to a word is still that number',
     hits('page7 4242424242424242', '4242424242424242') === 1);
 
@@ -2186,13 +2186,13 @@ check('no creation date is carried into the output', !meta.info.CreationDate);
   check('nor a number inside a longer number', hits('120245', '2024') === 0);
 
   // The ordinary cases, unchanged.
-  check('a word on its own is found', hits('the Tokenomics deck', 'Tokenomics') === 1);
-  check('punctuation is a boundary', hits('(Tokenomics)', 'Tokenomics') === 1);
-  check('the start of the text is a boundary', hits('Tokenomics leads', 'Tokenomics') === 1);
-  check('and two occurrences are two', hits('Tokenomics and Tokenomics', 'Tokenomics') === 2);
+  check('a word on its own is found', hits('the Quillstone deck', 'Quillstone') === 1);
+  check('punctuation is a boundary', hits('(Quillstone)', 'Quillstone') === 1);
+  check('the start of the text is a boundary', hits('Quillstone leads', 'Quillstone') === 1);
+  check('and two occurrences are two', hits('Quillstone and Quillstone', 'Quillstone') === 2);
   check('including two split only by punctuation',
-    hits('Tokenomics,Tokenomics', 'Tokenomics') === 2,
-    JSON.stringify(spans('Tokenomics,Tokenomics', 'Tokenomics')));
+    hits('Quillstone,Quillstone', 'Quillstone') === 2,
+    JSON.stringify(spans('Quillstone,Quillstone', 'Quillstone')));
 }
 
 // ---------- the video on the front page ----------

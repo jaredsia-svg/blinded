@@ -2929,18 +2929,18 @@
   // The reader's own second look (lib/ocr.js) zooms in on the words it was
   // least sure of, and only a couple of dozen of them a page. On a photograph
   // of a slide that is nowhere near enough: measured on one, 139 words came
-  // back unsure and the one that mattered -- "F&N", read as "ran" at 68 --
+  // back unsure and the one that mattered -- "P&N", read as "ran" at 68 --
   // was not among the lines it re-read. The same word cut out and read at
-  // twice the size comes back "F&N" at 90.
+  // twice the size comes back "P&N" at 90.
   //
   // The reader does not know which words the reviewer typed; this does. So
   // it looks, for each typed word, at readings that are unsure and one letter
-  // from it once look-alikes are folded together ("ran" and "fan" for "F&N"),
+  // from it once look-alikes are folded together ("ran" and "pan" for "P&N"),
   // closest first and only a few, and reads each again enlarged. A new
   // reading is taken only when it is the typed word itself, confidently: an
   // enlarged guess that is merely nearer is still a guess.
   //
-  // Measured on the bench: one more true mark (that "F&N"), no new false
+  // Measured on the bench: one more true mark (that "P&N"), no new false
   // ones, nothing else changed; about a second and a half more on the
   // photographed slide, nothing measurable elsewhere.
   const TERM_REREAD_BELOW = 80;
@@ -2995,7 +2995,7 @@
         const r = item.rect;
         // A strip of the line, not the word alone: measured, "ran" cut out
         // with two heights either side re-read as "FAN", and with six as
-        // "F&N" at 88. The reader leans on the words around a word.
+        // "P&N" at 88. The reader leans on the words around a word.
         const padX = r.h * 6;
         const padY = r.h * 1.1;
         const x0 = Math.max(0, Math.floor(r.x - padX));
@@ -5701,7 +5701,7 @@
   // the word scored 0.598 and the best thing that was not scored 0.465. On
   // the next document a four-letter acronym matched 333 times, because a
   // short word resembles far more of a page than a long one does — in the
-  // same panel, "TDTC" was matching everywhere while "Tokenomics Digital
+  // same panel, "QDTC" was matching everywhere while "Quillstone Digital
   // Tech" matched once.
   //
   // No constant satisfies both: one needs 0.60 or lower, the other 0.65 or
@@ -5726,16 +5726,16 @@
   // length earns back. See lib/textimage.js for the measurements behind it.
   function wordBarFor(term, inPhrase) {
     let bar = wordSensitivity() - TextImage.shapeRelief(term);
-    // Short acronyms (KAS/ZAG/ZNW) correlate inside longer wordmarks. Hold the
+    // Short acronyms (VAS/ZAG/ZNW) correlate inside longer wordmarks. Hold the
     // shape bar higher; green OCR/text hits are unchanged.
     //
     // Not when the short word is one part of a phrase. The penalty buys
     // evidence that a three-letter shape is really that word rather than a
     // fragment of a longer one — and a part of a phrase already has that
     // evidence from somewhere better: it is only marked when its partner sits
-    // beside it or directly above it. Measured on a scanned deck, "Rao" at the
-    // acronym bar blocked two of the three copies of "Srinivas Rao" while
-    // "Srinivas" found all three.
+    // beside it or directly above it. Measured on a scanned deck, "Das" at the
+    // acronym bar blocked two of the three copies of "Harikesh Das" while
+    // "Harikesh" found all three.
     const letters = String(term || '').replace(/[^A-Za-z]/g, '');
     if (!inPhrase && letters.length > 0 && letters.length <= 3) bar += 0.12;
     return Math.max(0.3, Math.round(bar * 1000) / 1000);
@@ -9138,7 +9138,7 @@
     // Only where the reading can say *where*. A finding with no rectangle is a
     // match in the characters that could not be placed on the page — the text
     // layer holds the word but not the boxes for it — so nothing is drawn and
-    // nothing is covered. Measured on a slide deck: "Tokenomics" was found in
+    // nothing is covered. Measured on a slide deck: "Quillstone" was found in
     // the text at offset 2, given no rectangle, marked nowhere, and the
     // second check then skipped the page as already answered. The word
     // was on the page in plain sight the whole time. A reading that cannot
@@ -9146,10 +9146,10 @@
     for (const f of page.findings || []) {
       if (f.kind === 'term' && f.term === term && f.rects && f.rects.length) return true;
     }
-    // OCR hits do NOT settle the page. Measured on a photographed TCC slide
-    // where "F&N" was typed: OCR boxed four copies confidently and skipped
-    // the second check, while other copies were read as "Fan" / "FEN" / missed
-    // on white-on-blue and in "F&N's Financials". One good OCR hit is not
+    // OCR hits do NOT settle the page. Measured on a photographed conference slide
+    // where "P&N" was typed: OCR boxed four copies confidently and skipped
+    // the second check, while other copies were read as "Pan" / "PEN" / missed
+    // on white-on-blue and in "P&N's Financials". One good OCR hit is not
     // proof every copy was read. Shape search is the second look for that.
     return false;
   }
@@ -9169,7 +9169,7 @@
     let pageSet = new Set();
     let terms = 0;
     // Each word only on the pages it still needs: the real amount of work.
-    // A phrase is searched a part at a time, so "Srinivas Rao" is two.
+    // A phrase is searched a part at a time, so "Harikesh Das" is two.
     let pageWords = 0;
     for (const term of state.terms) {
       const pages = pagesNeedingSweep(term);
@@ -9189,7 +9189,7 @@
   // size. `ocrFuzzyPartMatch` is the same near-miss rule the OCR phrase
   // matcher uses — one edit, on a word long enough for one edit to mean
   // something, so "Widdle" still reaches "Middle" and "South" does not.
-  // `ocrConfusableMatch` adds the look-alikes ("FaN's" for "F&N"), equal
+  // `ocrConfusableMatch` adds the look-alikes ("PaN's" for "P&N"), equal
   // once folded rather than near, since short words get no edits at all.
   const SEEDS_PER_PART = 8;
 
@@ -9212,7 +9212,7 @@
     const out = [];
     if (!part) return out;
     // Near misses first, look-alikes after, so that a common word which only
-    // folds to this one ("Fan" for "F&N") cannot use up the places before a
+    // folds to this one ("Pan" for "P&N") cannot use up the places before a
     // real near miss is reached.
     const rules = [
       str => Detect.ocrFuzzyPartMatch(str, part),
@@ -9283,7 +9283,7 @@
   // How a word is drawn for the visual check.
   //
   // A word typed in lower case is drawn in lower case, and lower-case
-  // letterforms are mostly x-height blobs: "rolex" resembles an enormous
+  // letterforms are mostly x-height blobs: "marlow" resembles an enormous
   // amount of ordinary body text, and on a real document the check proposed
   // dozens of places that were not it. The same word capitalised has an
   // ascender and a cap at the front, which is structure, and the same document
@@ -9347,7 +9347,7 @@
   //
   // Measured. On a photographed slide, "Thailand" was found at 0.724 against a
   // bar of 0.63 and thrown away as covered — by a mark for "Singapore". On
-  // another, all four copies of "ThaiBev" were found at 0.849 against a bar of
+  // another, all four copies of "SiamBrew" were found at 0.849 against a bar of
   // 0.64 and all four were thrown away the same way. Both words then reported
   // as found nowhere, which is how a redaction goes missing while every part
   // of the machinery believes it did its job.
@@ -9367,8 +9367,8 @@
     //
     // The same box means both ways round. Measured against the smaller of the
     // two it means "one of these is inside the other", which is how the phrase
-    // "Inderpreet Wadhwa" came to be thrown away as already dealt with by the
-    // one-word mark on "Wadhwa" sitting inside it. A word inside a phrase is
+    // "Gurvinder Sahni" came to be thrown away as already dealt with by the
+    // one-word mark on "Sahni" sitting inside it. A word inside a phrase is
     // not the phrase; covering half a name is not covering the name.
     return Match.coveredFraction(rect, mark) >= REALLY_COVERED
       || (Match.coveredFraction(rect, mark) >= SAME_SPOT
@@ -9419,7 +9419,7 @@
   // That case has no words over the spot, so nothing vetoes it.
   // Measured twice, and the second measurement moved it. On a text report the
   // words the reader used to refuse a guess came back at 91 to 96. On a deck,
-  // looking for "KAS", the check proposed the title "ZAG's" — and the reader
+  // looking for "VAS", the check proposed the title "ZAG's" — and the reader
   // had read that title correctly at 70, so a bar of 75 let the wrong mark
   // through by five points. Large coloured display type is read correctly and
   // scored lower than body text, which is a property of the reader rather
@@ -9499,11 +9499,11 @@
   // The text layer hands over runs, not words: one item can be a whole
   // heading. A run that contains the word somewhere says nothing about the
   // fifty pixels the shape matched. Measured on a teaser deck looking for
-  // "Victory": the run "Victory's Monthly Performance in SEA (Ex-Vietnam)"
+  // "Vantage": the run "Vantage's Monthly Performance in SEA (Ex-Vietnam)"
   // spans the line, and it was granting agreement to a shape hit sitting on
   // "(Ex-Vietnam)" at the far end of it — while the reader's own word box
   // there said "(Ex-Vietnam)" at confidence 71 and contradicted. "Vietnam"
-  // scores 0.69 against "Victory", over its bar of 0.636, so nothing else
+  // scores 0.69 against "Vantage", over its bar of 0.636, so nothing else
   // was going to stop it.
   //
   // So agreement has to be positional: a host vouches for the hit only if the
@@ -9516,7 +9516,7 @@
 
   function hostSaysItHere(host, term, rect) {
     // A single word the reader drew a box round, which is the term under its
-    // look-alikes ("FaN's" for "F&N"), says it here: the whole box is the word.
+    // look-alikes ("PaN's" for "P&N"), says it here: the whole box is the word.
     if (host.rect && Detect.ocrConfusableMatch
       && Detect.ocrConfusableMatch(host.text, term)) return true;
     const spans = Detect.findTerms(host.text, [term]);
@@ -9562,7 +9562,7 @@
 
     // One host agreeing is the end of the argument.
     //
-    // The rule below prefers the longest host, so that a misread "KAS" crumb
+    // The rule below prefers the longest host, so that a misread "VAS" crumb
     // beside a real "TEXAS" cannot keep a false mark alive. But a spot can
     // overlap more than one run — a word and the line under it — and taking
     // the longest of those refused a shape match that the run directly over
@@ -9577,7 +9577,7 @@
       }
     }
 
-    // Prefer longer hosts so a misread "KAS" crumb next to a real "TEXAS"
+    // Prefer longer hosts so a misread "VAS" crumb next to a real "TEXAS"
     // does not keep the false mark alive.
     hosts.sort((a, b) =>
       Detect.lettersOf(b.text).length - Detect.lettersOf(a.text).length);
@@ -9634,7 +9634,7 @@
   //
   // Measured across the nine benchmark documents: one further true copy of a
   // name is found on the scanned deck, along with one false mark on a word of
-  // similar shape ("commitment," read as "Inderpreet" at 0.637 against that
+  // similar shape ("commitment," read as "Gurvinder" at 0.637 against that
   // word's 0.612 bar); the other eight documents are unchanged, mark for
   // mark, and the slowest check grows about four percent. An intermediate
   // shortlist (200/12/32) was measured too and changes nothing at all, so
@@ -10448,9 +10448,9 @@
   // ---------- what the bar turned away ----------
   //
   // A word the check placed nowhere is not necessarily a word that is not
-  // there. Measured on two benchmark decks: "TDTC" scored 0.600 against a bar
+  // there. Measured on two benchmark decks: "QDTC" scored 0.600 against a bar
   // of 0.66 and is genuinely on the page, in lavender lettering over a
-  // photograph; "rolex" scored 0.628 against a bar of 0.652 and is the word
+  // photograph; "marlow" scored 0.628 against a bar of 0.652 and is the word
   // "Revenue". The true miss scores lower than the false one, so no threshold
   // separates them — and a sensitivity control for this check, whatever it
   // looked like, could not be set correctly on both documents at once.
@@ -10461,7 +10461,7 @@
   //
   // It can only ever add a mark for a word that has none anywhere, so it
   // cannot flood a document the way lowering the bar does: taking the bar to
-  // 0.50 to reach that TDTC put twelve false marks on the other deck.
+  // 0.50 to reach that QDTC put twelve false marks on the other deck.
 
   // How wide the cut-out is drawn, in CSS pixels. The panel is narrow and the
   // point is legibility, not fidelity to the page.
