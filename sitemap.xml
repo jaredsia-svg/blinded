@@ -94,6 +94,11 @@
     <priority>0.7</priority>
   </url>
   <url>
+    <loc>https://blinded.dev/ilovepdf-smallpdf-pdfgear-redaction/</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
     <loc>https://blinded.dev/remove-letterhead-stamp-signature/</loc>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>

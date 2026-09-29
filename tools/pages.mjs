@@ -81,6 +81,28 @@ function structured(page) {
   ], null, 2);
 }
 
+// A comparison, in the front page's table style. The first column after the
+// row heading is Blinded's, and is marked as ours the way the front page does.
+function table(t) {
+  return `    <div class="versus-scroll">
+      <table class="versus-table">
+        <caption class="sr-only">${esc(t.caption)}</caption>
+        <thead>
+          <tr>
+            <th scope="col"><span class="sr-only">What is being compared</span></th>
+${t.head.map((name, i) => '            <th scope="col"' + (i === 0 ? ' class="us"' : '') + '>' + esc(name) + '</th>').join('\n')}
+          </tr>
+        </thead>
+        <tbody>
+${t.rows.map(row => `          <tr>
+            <th scope="row">${esc(row[0])}</th>
+${row.slice(1).map((cell, i) => '            <td' + (i === 0 ? ' class="us"' : '') + '>' + esc(cell) + '</td>').join('\n')}
+          </tr>`).join('\n')}
+        </tbody>
+      </table>
+    </div>`;
+}
+
 // The other five, so every page is one click from every other and none of
 // them is a dead end a crawler has to leave by the way it came in.
 function alsoLinks(page) {
@@ -154,8 +176,18 @@ ${mark()} Blinded</a>
 
 ${page.sections.map(one => `  <section class="faq">
     <h2>${esc(one.h)}</h2>
-${one.p.map(para => '    <p>' + esc(para) + '</p>').join('\n')}
+${one.p.map(para => '    <p>' + esc(para) + '</p>').join('\n')}${one.table ? '\n' + table(one.table) : ''}
   </section>`).join('\n\n')}
+${page.sources ? `
+  <section class="faq">
+    <h2>Sources</h2>
+    <p>${esc(page.sources.note)}</p>
+    <ul class="landsources">
+${page.sources.links.map(one => '      <li>' + esc(one.name) + ': <a href="' + esc(one.url)
+    + '" rel="nofollow noopener">' + esc(one.url.replace(/^https?:\/\//, '')) + '</a></li>').join('\n')}
+    </ul>
+  </section>
+` : ''}
 
   <section class="faq">
     <h2>How to do it, in four steps</h2>

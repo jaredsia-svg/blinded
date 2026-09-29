@@ -181,6 +181,18 @@ pages, this list and the sitemap together.
 - Acrobat redact vs
 - free alternative to Acrobat redaction
 
+## [iLovePDF vs Smallpdf vs PDFgear vs Blinded for redaction](https://blinded.dev/ilovepdf-smallpdf-pdfgear-redaction/)
+
+`/ilovepdf-smallpdf-pdfgear-redaction/` · 794 words · 4 questions
+
+- iLovePDF redact
+- Smallpdf redact
+- PDFgear redact
+- iLovePDF vs Smallpdf
+- PDFgear vs Smallpdf
+- best free PDF redaction tool
+- redact PDF without uploading
+
 ## [Remove a letterhead or stamp from every page](https://blinded.dev/remove-letterhead-stamp-signature/)
 
 `/remove-letterhead-stamp-signature/` · 614 words · 3 questions

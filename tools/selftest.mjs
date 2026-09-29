@@ -1067,7 +1067,7 @@ check('a degenerate size does not throw',
   check('one word of a phrase agrees with the phrase rather than vetoing it',
     Detect.hostContradictsShapeTerm('Gurvinder', 'Gurvinder Sahni') === false
     && Detect.hostContradictsShapeTerm('Rohan', 'Gurvinder Sahni') === true
-    && Detect.hostContradictsShapeTerm('and', 'Fraser and Neave') === false);
+    && Detect.hostContradictsShapeTerm('and', 'Porter and Nash') === false);
 })();
 
 // The SIMD probe has to fail only when SIMD is missing, never because it is
@@ -1164,13 +1164,13 @@ check('an empty term is harmless', TextImage.shapeRelief('') === 0
     Detect.findTerms('P and N is leading', ['P&N']).some(h => h.term === 'P&N'));
   check('P&N matches inside P&N\'s',
     Detect.findTerms("P&N's Financials", ['P&N']).length === 1);
-  check('OCR may glue FraserandNeave',
-    Detect.findTerms('segment and FraserandNeave', ['Fraser and Neave'], { fromOcr: true })
-      .some(h => h.term === 'Fraser and Neave'));
+  check('OCR may glue PorterandNash',
+    Detect.findTerms('segment and PorterandNash', ['Porter and Nash'], { fromOcr: true })
+      .some(h => h.term === 'Porter and Nash'));
   check('but the text layer still demands real spaces between words',
-    Detect.findTerms('FraserandNeave', ['Fraser and Neave']).length === 0);
-  check('Fraser and Neave matches Fraser & Neave under OCR rules',
-    Detect.findTerms('Fraser & Neave, Limited', ['Fraser and Neave'], { fromOcr: true })
+    Detect.findTerms('PorterandNash', ['Porter and Nash']).length === 0);
+  check('Porter and Nash matches Porter & Nash under OCR rules',
+    Detect.findTerms('Porter & Nash, Limited', ['Porter and Nash'], { fromOcr: true })
       .length === 1);
   check('Pan is not silently accepted as P&N',
     Detect.findTerms('Pan is leading', ['P&N'], { fromOcr: true }).length === 0);
@@ -1216,12 +1216,23 @@ check('an empty term is harmless', TextImage.shapeRelief('') === 0
     Detect.hostContradictsShapeTerm('TEXAS', 'VAS') === true);
   check('a look-alike never becomes a text finding on its own',
     Detect.findTerms("PaN's Financials", ['P&N'], { fromOcr: true }).length === 0);
-  check('two fuzzy parts cannot invent Fraser and Neave',
-    Detect.findTerms('Frasor Neavo limited', ['Fraser and Neave'], { fromOcr: true })
-      .filter(h => h.term === 'Fraser and Neave').length === 0);
-  check('one fuzzy + one exact still recovers Fraser and Neave',
-    Detect.findTerms('Frasor and Neave limited', ['Fraser and Neave'], { fromOcr: true })
-      .some(h => h.term === 'Fraser and Neave'));
+  // A reader that read only the start or end of a word ("loway" for
+  // "Calloway") has pointed at it; a crumb or the middle of it has not.
+  check('the end of a word read alone is a piece of it',
+    Detect.ocrFragmentOf('loway', 'Calloway') === 'suffix'
+    && Detect.ocrFragmentOf('Callo', 'Calloway') === 'prefix');
+  check('but two letters, or the middle, are not',
+    Detect.ocrFragmentOf('ay', 'Calloway') === null && Detect.ocrFragmentOf('allow', 'Calloway') === null
+    && Detect.ocrFragmentOf('Calloway', 'Calloway') === null);
+  check('and a piece of the word does not refuse a match for it',
+    Detect.hostContradictsShapeTerm('loway', 'Calloway') === false
+    && Detect.hostContradictsShapeTerm('shared', 'jared') === true);
+  check('two fuzzy parts cannot invent Porter and Nash',
+    Detect.findTerms('Portor Nasb limited', ['Porter and Nash'], { fromOcr: true })
+      .filter(h => h.term === 'Porter and Nash').length === 0);
+  check('one fuzzy + one exact still recovers Porter and Nash',
+    Detect.findTerms('Portor and Nash limited', ['Porter and Nash'], { fromOcr: true })
+      .some(h => h.term === 'Porter and Nash'));
 })();
 
 // OCR phrase recovery: content-word chains + hyphen/bullet glue.
@@ -1232,9 +1243,9 @@ check('an empty term is harmless', TextImage.shapeRelief('') === 0
   check('OCR matches Middle-East as Middle East',
     Detect.findTerms('sales in Middle-East grew', ['Middle East'], { fromOcr: true })
       .some(h => h.term === 'Middle East'));
-  check('OCR recovers Fraser and Neave when and is a bullet',
-    Detect.findTerms('Fraser · Neave limited', ['Fraser and Neave'], { fromOcr: true })
-      .some(h => h.term === 'Fraser and Neave'));
+  check('OCR recovers Porter and Nash when and is a bullet',
+    Detect.findTerms('Porter · Nash limited', ['Porter and Nash'], { fromOcr: true })
+      .some(h => h.term === 'Porter and Nash'));
   check('unpaired East is not Middle East',
     Detect.findTerms('Looking East for growth', ['Middle East'], { fromOcr: true })
       .filter(h => h.term === 'Middle East').length === 0);
@@ -1287,7 +1298,7 @@ check('an empty term is harmless', TextImage.shapeRelief('') === 0
 // Second-check phrase sweeps: content parts + adjacent pairing.
 (() => {
   check('phraseContentParts drops connectors',
-    JSON.stringify(TextImage.phraseContentParts('Fraser and Neave')) === JSON.stringify(['Fraser', 'Neave']));
+    JSON.stringify(TextImage.phraseContentParts('Porter and Nash')) === JSON.stringify(['Porter', 'Nash']));
   check('Middle East keeps both words',
     JSON.stringify(TextImage.phraseContentParts('Middle East')) === JSON.stringify(['Middle', 'East']));
   check('a single word is one part',
@@ -1336,7 +1347,7 @@ check('an empty term is harmless', TextImage.shapeRelief('') === 0
       paired[0].x === 10 && paired[0].w >= 80);
   }
   check('skippedConnectorsBetween counts and',
-    Match.skippedConnectorsBetween('Fraser and Neave', 'Fraser', 'Neave') === 1);
+    Match.skippedConnectorsBetween('Porter and Nash', 'Porter', 'Nash') === 1);
 
   // A name set over two lines is ordinary — on a slide, in a signature block,
   // under a photograph — and a phrase searched only along the line can never

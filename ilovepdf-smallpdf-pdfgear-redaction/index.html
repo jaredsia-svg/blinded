@@ -1,0 +1,362 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="
+  default-src 'self';
+  script-src 'self' 'wasm-unsafe-eval';
+  style-src 'self' 'unsafe-inline';
+  img-src 'self' data: blob:;
+  connect-src 'self' blob:;
+  worker-src 'self' blob:;
+  frame-src 'none';
+  object-src 'none';
+  base-uri 'none';
+  form-action 'none'">
+<title>Redaction compared: iLovePDF, Smallpdf, PDFgear – Blinded</title>
+<meta name="description" content="Where your file goes, what each finds for you, scans, and price: four PDF redaction tools side by side, from their own pages.">
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="icon" href="/icon-192.png" type="image/png" sizes="192x192">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="canonical" href="https://blinded.dev/ilovepdf-smallpdf-pdfgear-redaction/">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Blinded">
+<meta property="og:title" content="Redaction compared: iLovePDF, Smallpdf, PDFgear">
+<meta property="og:description" content="Where your file goes, what each finds for you, scans, and price: four PDF redaction tools side by side, from their own pages.">
+<meta property="og:url" content="https://blinded.dev/ilovepdf-smallpdf-pdfgear-redaction/">
+<meta property="og:image" content="https://blinded.dev/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="A slide before and after redaction: names and logos gone from the second copy.">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="stylesheet" href="/app.css">
+<script type="application/ld+json">
+[
+  {
+    "@context": "https://schema.org",
+    "@type": "Article",
+    "headline": "iLovePDF vs Smallpdf vs PDFgear vs Blinded for redaction",
+    "description": "Where your file goes, what each finds for you, scans, and price: four PDF redaction tools side by side, from their own pages.",
+    "mainEntityOfPage": "https://blinded.dev/ilovepdf-smallpdf-pdfgear-redaction/",
+    "image": [
+      "https://blinded.dev/gallery/redact-brand-wordmarks-logo-row-after.webp",
+      "https://blinded.dev/gallery/redact-brand-wordmarks-logo-row-before.webp",
+      "https://blinded.dev/og.png"
+    ],
+    "about": {
+      "@type": "WebApplication",
+      "name": "Blinded",
+      "url": "https://blinded.dev/",
+      "applicationCategory": "SecurityApplication",
+      "operatingSystem": "Any browser"
+    }
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": [
+      {
+        "@type": "Question",
+        "name": "Does iLovePDF upload my file to redact it?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "The website does: its privacy page says files are processed on its servers and deleted within two hours. Its separate Desktop app processes files on your computer."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Is PDFgear redaction free and offline?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "By PDFgear’s own pages, yes: the desktop app redacts and runs OCR for free and works offline. You draw a box over each thing to remove."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Which of these finds every copy of a logo?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Of the four, only Blinded says so. The others remove an image you mark, one mark at a time."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Are these details current?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "They are as each vendor published them on 29 September 2026. Features and prices change, so check the linked pages before relying on one."
+        }
+      }
+    ]
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    "itemListElement": [
+      {
+        "@type": "ListItem",
+        "position": 1,
+        "name": "Blinded",
+        "item": "https://blinded.dev/"
+      },
+      {
+        "@type": "ListItem",
+        "position": 2,
+        "name": "iLovePDF vs Smallpdf vs PDFgear vs Blinded for redaction",
+        "item": "https://blinded.dev/ilovepdf-smallpdf-pdfgear-redaction/"
+      }
+    ]
+  }
+]
+</script>
+</head>
+<body class="plainpage">
+
+<header class="top">
+  <div class="wrap top-inner">
+    <a class="mark" href="/">
+      <svg class="markmark" viewBox="0 0 26 15" aria-hidden="true" focusable="false">
+        <g fill="currentColor">
+          <rect width="26" height="6.4" rx="2"/>
+          <rect y="8.6" width="14" height="6.4" rx="2"/>
+          <rect x="16.6" y="8.6" width="3.6" height="6.4" rx="1.5"/>
+          <rect x="22.2" y="8.6" width="2" height="6.4" rx="1"/>
+        </g>
+      </svg> Blinded</a>
+    <div class="top-actions">
+      <a class="top-link" href="/license/">License</a>
+      <a class="top-link" href="/faq.html">Q&amp;A</a>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+<article class="view faqmain lander">
+
+  <h1 class="faqtitle">iLovePDF vs Smallpdf vs PDFgear vs Blinded for redaction</h1>
+  <p class="lede">iLovePDF, Smallpdf and PDFgear all have a real redaction tool: each says the content is removed, not just covered. Where they differ is where your file goes while that happens, how much of the finding they do for you, and what happens with a scanned page. This compares all three with Blinded, from what each vendor publishes about itself.</p>
+
+  <p class="landgo"><a class="landcta" href="/">Open the tool</a>
+    <span class="landfree">Free below twenty pages, in your browser. Nothing is uploaded.</span></p>
+
+  <figure class="landshot">
+    <div class="landpair">
+      <span><b>Before</b><img src="/gallery/redact-brand-wordmarks-logo-row-before.webp"
+        alt="Six claims about the combined business, a row of ten brand wordmarks, and a panel of revenue and EBITDA figures." loading="lazy" width="1280" height="720"></span>
+      <span><b>After</b><img src="/gallery/redact-brand-wordmarks-logo-row-after.webp"
+        alt="A customer logo wall before and after: two of the ten brand marks are replaced with labelled black bars." loading="lazy" width="1280" height="720"></span>
+    </div>
+    <figcaption>A customer logo wall before and after: two of the ten brand marks are replaced with labelled black bars.</figcaption>
+  </figure>
+
+  <section class="faq">
+    <h2>Side by side</h2>
+    <p>As each vendor’s own pages described their tools on 29 September 2026. Features and prices change, so check their pages before relying on a detail.</p>
+    <div class="versus-scroll">
+      <table class="versus-table">
+        <caption class="sr-only">Blinded compared with iLovePDF, Smallpdf and PDFgear for redaction</caption>
+        <thead>
+          <tr>
+            <th scope="col"><span class="sr-only">What is being compared</span></th>
+            <th scope="col" class="us">Blinded</th>
+            <th scope="col">iLovePDF</th>
+            <th scope="col">Smallpdf</th>
+            <th scope="col">PDFgear</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <th scope="row">Where the file goes</th>
+            <td class="us">Stays in your browser tab. Works offline.</td>
+            <td>The website uploads it to their servers. A separate Desktop app works locally.</td>
+            <td>Their servers, for the web tool.</td>
+            <td>Stays on your computer with the desktop app.</td>
+          </tr>
+          <tr>
+            <th scope="row">How long a copy is kept</th>
+            <td class="us">No copy is made anywhere.</td>
+            <td>Deleted within two hours of processing.</td>
+            <td>Deleted after one hour; in some cases up to 14 days.</td>
+            <td>Not stored by the desktop app.</td>
+          </tr>
+          <tr>
+            <th scope="row">Every copy of a word</th>
+            <td class="us">Type it once: found in the text, pictures and scans.</td>
+            <td>Yes, by keyword search.</td>
+            <td>Not stated: you select what to remove.</td>
+            <td>Not stated: you draw a box over each.</td>
+          </tr>
+          <tr>
+            <th scope="row">Emails, phone numbers</th>
+            <td class="us">Found for you, with web and street addresses and names.</td>
+            <td>Found for you, with card numbers.</td>
+            <td>Not stated.</td>
+            <td>Not stated.</td>
+          </tr>
+          <tr>
+            <th scope="row">Logos and pictures</th>
+            <td class="us">Pick one: every copy is found, at any size or colour.</td>
+            <td>Removes what you mark.</td>
+            <td>Removes what you select.</td>
+            <td>Removes what you box.</td>
+          </tr>
+          <tr>
+            <th scope="row">Scanned pages</th>
+            <td class="us">Read as part of the search.</td>
+            <td>Run the separate OCR tool first.</td>
+            <td>Run OCR first, a Pro feature.</td>
+            <td>Run its free OCR first.</td>
+          </tr>
+          <tr>
+            <th scope="row">Content removed, not covered</th>
+            <td class="us">Yes: every page is rebuilt from pixels.</td>
+            <td>Yes, they say.</td>
+            <td>Yes, they say.</td>
+            <td>Yes, they say.</td>
+          </tr>
+          <tr>
+            <th scope="row">Price</th>
+            <td class="us">Free up to 20 pages; a one-off license beyond.</td>
+            <td>Free with limits; Premium $5 a month billed yearly, or $9 monthly.</td>
+            <td>Free with usage limits; OCR needs the paid Pro plan.</td>
+            <td>Desktop redaction and OCR free.</td>
+          </tr>
+          <tr>
+            <th scope="row">Runs on</th>
+            <td class="us">Any modern browser, computer or phone. Nothing to install.</td>
+            <td>Web, Windows, Mac, iOS, Android.</td>
+            <td>Web browsers and a mobile app.</td>
+            <td>Windows and Mac, and iOS.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="faq">
+    <h2>Where your file goes</h2>
+    <p>This is the biggest difference, and the one most often blurred. iLovePDF is two products under one name. The website, ilovepdf.com, uploads the file to its servers and, by its privacy page, deletes it within two hours of processing. Its Desktop app, a separate install, processes files on your computer and gained a redaction tool in version 2.2.0. Only the Desktop app is local.</p>
+    <p>Smallpdf’s redaction page describes server processing with files deleted after one hour, while another line on the same page describes processing in the browser. Its privacy policy gives the fuller rule: an hour for signed-in users unless the file is saved to account storage, and up to 14 days from last opening in some other cases.</p>
+    <p>PDFgear’s desktop app says it works entirely offline, so the document never leaves the device. Its privacy policy notes that its AI features can send a PDF’s content to Microsoft’s Azure OpenAI service, but only after you agree in the app.</p>
+    <p>Blinded runs in the browser tab and has no server to send the file to. The page is not permitted by the browser to send anything anywhere, and it keeps working with the internet switched off.</p>
+  </section>
+
+  <section class="faq">
+    <h2>How much of the finding is done for you</h2>
+    <p>iLovePDF’s web tool can search for a keyword and mark every match, and can find credit card numbers, phone numbers and email addresses automatically. On the pages reviewed, Smallpdf and PDFgear describe selecting or boxing content by hand, with no search-and-mark-all step stated.</p>
+    <p>None of the three claims to find every copy of a logo or picture. Each can remove an image you mark; a logo on forty pages is forty marks. In Blinded you pick it once and every copy is found by what it looks like, at any size or colour, and a typed name is found inside pictures and screenshots as well as in the text.</p>
+  </section>
+
+  <section class="faq">
+    <h2>Scanned pages</h2>
+    <p>All three say the same thing about scans: run OCR first, so the text becomes selectable, and then redact. With iLovePDF that is a separate tool; with Smallpdf it is part of the paid Pro plan; with PDFgear it is a free part of the desktop app. In Blinded the pages are read as part of the search, and a second check looks for words the reading missed by their shape.</p>
+  </section>
+
+  <section class="faq">
+    <h2>Which one to use</h2>
+    <p>If you want a free desktop app and are happy to box each thing yourself, PDFgear keeps the file on your computer and costs nothing. If you want a full PDF suite with keyword and pattern redaction, and uploading is acceptable for the document, iLovePDF’s website does that, and its Desktop app does it locally. Smallpdf suits occasional redaction of a few things you can select by hand.</p>
+    <p>Blinded is for the cases the others leave to you: the same name or logo repeated across many pages, words inside pictures and scans, and documents that must not be uploaded, with nothing to install. It is a redactor rather than a full PDF editor.</p>
+  </section>
+
+  <section class="faq">
+    <h2>Sources</h2>
+    <p>Compiled on 29 September 2026 from each vendor’s own pricing, redaction and privacy pages. This is a reading of what they publish, not a test of their tools. iLovePDF, Smallpdf and PDFgear are trademarks of their owners, who are not connected with Blinded.</p>
+    <ul class="landsources">
+      <li>iLovePDF redaction: <a href="https://www.ilovepdf.com/blog/how-to-redact-pdf" rel="nofollow noopener">www.ilovepdf.com/blog/how-to-redact-pdf</a></li>
+      <li>iLovePDF privacy: <a href="https://www.ilovepdf.com/help/privacy" rel="nofollow noopener">www.ilovepdf.com/help/privacy</a></li>
+      <li>iLovePDF pricing: <a href="https://www.ilovepdf.com/pricing" rel="nofollow noopener">www.ilovepdf.com/pricing</a></li>
+      <li>iLovePDF Desktop: <a href="https://www.ilovepdf.com/desktop" rel="nofollow noopener">www.ilovepdf.com/desktop</a></li>
+      <li>Smallpdf redaction: <a href="https://smallpdf.com/redact-pdf" rel="nofollow noopener">smallpdf.com/redact-pdf</a></li>
+      <li>Smallpdf free and Pro: <a href="https://smallpdf.com/blog/smallpdf-free-vs-pro-plan-comparison" rel="nofollow noopener">smallpdf.com/blog/smallpdf-free-vs-pro-plan-comparison</a></li>
+      <li>Smallpdf privacy: <a href="https://smallpdf.com/es/privacidad" rel="nofollow noopener">smallpdf.com/es/privacidad</a></li>
+      <li>PDFgear redaction: <a href="https://www.pdfgear.com/pdf-editor-reader/how-to-redact-a-pdf.htm" rel="nofollow noopener">www.pdfgear.com/pdf-editor-reader/how-to-redact-a-pdf.htm</a></li>
+      <li>PDFgear privacy: <a href="https://www.pdfgear.com/privacy/" rel="nofollow noopener">www.pdfgear.com/privacy/</a></li>
+    </ul>
+  </section>
+
+
+  <section class="faq">
+    <h2>How to do it, in four steps</h2>
+    <ol class="landsteps">
+      <li>Open the PDF in Blinded. Nothing is uploaded or installed.</li>
+      <li>Type each name once, and pick each logo once.</li>
+      <li>Check the list of what was found, page by page.</li>
+      <li>Redact and export. The pages are rebuilt, so nothing is left underneath.</li>
+    </ol>
+  </section>
+
+  <section class="faq">
+    <h2>Who it is for</h2>
+    <p>Anyone choosing a redaction tool who needs to know where the file goes, and anyone who has redacted with one of these and found the same name or logo left behind on page forty.</p>
+    <p class="landgo"><a class="landcta" href="/">Open the tool</a></p>
+  </section>
+
+  <section class="faq">
+    <h2>Questions</h2>
+    <h3>Does iLovePDF upload my file to redact it?</h3>
+    <p>The website does: its privacy page says files are processed on its servers and deleted within two hours. Its separate Desktop app processes files on your computer.</p>
+    <h3>Is PDFgear redaction free and offline?</h3>
+    <p>By PDFgear’s own pages, yes: the desktop app redacts and runs OCR for free and works offline. You draw a box over each thing to remove.</p>
+    <h3>Which of these finds every copy of a logo?</h3>
+    <p>Of the four, only Blinded says so. The others remove an image you mark, one mark at a time.</p>
+    <h3>Are these details current?</h3>
+    <p>They are as each vendor published them on 29 September 2026. Features and prices change, so check the linked pages before relying on one.</p>
+  </section>
+
+  <section class="faq">
+    <h2>Also</h2>
+    <ul class="landalso">
+        <li><a href="/how-to-redact-a-pdf/">How to redact a PDF properly</a></li>
+        <li><a href="/redact-image-photo-screenshot/">Redact an image, photo or screenshot</a></li>
+        <li><a href="/redact-pdf-mac/">Redact a PDF on a Mac</a></li>
+        <li><a href="/ai-redaction/">AI redaction without uploading your document</a></li>
+        <li><a href="/redact-cim/">Redact a CIM or teaser without uploading it</a></li>
+        <li><a href="/foia-redaction/">FOIA redaction without sending the records anywhere</a></li>
+        <li><a href="/de-identify-scanned-records/">De-identify scanned records</a></li>
+        <li><a href="/redacted-text-still-extractable/">Your redacted text is still extractable. Here is why</a></li>
+        <li><a href="/redact-before-ai/">Redact a PDF before you paste it into ChatGPT or Claude</a></li>
+        <li><a href="/redact-board-pack/">Redact a board pack</a></li>
+        <li><a href="/blind-cv-screening/">Redact CVs for blind screening</a></li>
+        <li><a href="/remove-names-photos-reports/">Remove names and faces from photographs in a report</a></li>
+        <li><a href="/redact-bank-statement/">Redact a bank statement</a></li>
+        <li><a href="/remove-logo-from-every-page-pdf/">Remove a logo from every page of a PDF</a></li>
+        <li><a href="/adobe-acrobat-redaction-vs-blinded/">Redact a PDF without Adobe Acrobat Pro</a></li>
+        <li><a href="/remove-letterhead-stamp-signature/">Remove a letterhead or stamp from every page</a></li>
+        <li><a href="/redact-images-pdf-powerpoint/">Redact images in a PDF or PowerPoint deck</a></li>
+        <li><a href="/redact-scanned-documents-automatically/">Redact scanned documents automatically</a></li>
+    </ul>
+  </section>
+
+  <p class="faqback"><a class="faqbackbtn" href="/">Back home</a></p>
+
+
+</article>
+</main>
+<!-- The same footer on every page: the front page's two rows. -->
+<p class="foot">
+  <span class="foot-row">
+  <span class="foot-name">Blinded</span>
+  <span class="foot-dot" aria-hidden="true">&middot;</span>
+  <a class="footlink" href="/faq.html">FAQ</a>
+  <span class="foot-dot" aria-hidden="true">&middot;</span>
+  <a class="footlink" href="/license/">License</a>
+  <span class="foot-dot" aria-hidden="true">&middot;</span>
+  <a class="footlink" href="/verify/">Verify</a>
+  <span class="foot-dot" aria-hidden="true">&middot;</span>
+  <a class="footlink" href="mailto:support@blinded.dev" title="support@blinded.dev">Contact</a>
+  </span>
+  <span class="foot-row foot-fine">
+  <a class="footlink" href="/privacy/">Privacy</a>
+  <span class="foot-dot" aria-hidden="true">&middot;</span>
+  <a class="footlink" href="/terms/">Terms</a>
+  <span class="foot-dot" aria-hidden="true">&middot;</span>
+  <a class="footlink" href="/refunds/">Refunds</a>
+  <span class="foot-dot" aria-hidden="true">&middot;</span>
+  <a class="footlink" href="https://github.com/jaredsia-svg/blinded" rel="noopener">Source</a>
+  </span>
+</p>
+
+</body>
+</html>

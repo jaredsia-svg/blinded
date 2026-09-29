@@ -1461,6 +1461,155 @@ export const pages = [
   },
 
   {
+    slug: 'ilovepdf-smallpdf-pdfgear-redaction',
+    title: 'Redaction compared: iLovePDF, Smallpdf, PDFgear',
+    h1: 'iLovePDF vs Smallpdf vs PDFgear vs Blinded for redaction',
+    description: 'Where your file goes, what each finds for you, scans, and '
+      + 'price: four PDF redaction tools side by side, from their own pages.',
+    keywords: ['iLovePDF redact', 'Smallpdf redact', 'PDFgear redact',
+      'iLovePDF vs Smallpdf', 'PDFgear vs Smallpdf', 'best free PDF redaction tool',
+      'redact PDF without uploading'],
+    shot: { slide: 5, alt: 'A customer logo wall before and after: two of the '
+      + 'ten brand marks are replaced with labelled black bars.' },
+    lede: 'iLovePDF, Smallpdf and PDFgear all have a real redaction tool: each '
+      + 'says the content is removed, not just covered. Where they differ is '
+      + 'where your file goes while that happens, how much of the finding they '
+      + 'do for you, and what happens with a scanned page. This compares all '
+      + 'three with Blinded, from what each vendor publishes about itself.',
+    sections: [
+      { h: 'Side by side',
+        p: ['As each vendor’s own pages described their tools on 29 '
+          + 'September 2026. Features and prices change, so check their pages '
+          + 'before relying on a detail.'],
+        table: {
+          caption: 'Blinded compared with iLovePDF, Smallpdf and PDFgear for redaction',
+          head: ['Blinded', 'iLovePDF', 'Smallpdf', 'PDFgear'],
+          rows: [
+            ['Where the file goes', 'Stays in your browser tab. Works offline.',
+              'The website uploads it to their servers. A separate Desktop app works locally.',
+              'Their servers, for the web tool.', 'Stays on your computer with the desktop app.'],
+            ['How long a copy is kept', 'No copy is made anywhere.',
+              'Deleted within two hours of processing.',
+              'Deleted after one hour; in some cases up to 14 days.',
+              'Not stored by the desktop app.'],
+            ['Every copy of a word', 'Type it once: found in the text, pictures and scans.',
+              'Yes, by keyword search.', 'Not stated: you select what to remove.',
+              'Not stated: you draw a box over each.'],
+            ['Emails, phone numbers', 'Found for you, with web and street addresses and names.',
+              'Found for you, with card numbers.', 'Not stated.', 'Not stated.'],
+            ['Logos and pictures', 'Pick one: every copy is found, at any size or colour.',
+              'Removes what you mark.', 'Removes what you select.', 'Removes what you box.'],
+            ['Scanned pages', 'Read as part of the search.',
+              'Run the separate OCR tool first.', 'Run OCR first, a Pro feature.',
+              'Run its free OCR first.'],
+            ['Content removed, not covered', 'Yes: every page is rebuilt from pixels.',
+              'Yes, they say.', 'Yes, they say.', 'Yes, they say.'],
+            ['Price', 'Free up to 20 pages; a one-off license beyond.',
+              'Free with limits; Premium $5 a month billed yearly, or $9 monthly.',
+              'Free with usage limits; OCR needs the paid Pro plan.',
+              'Desktop redaction and OCR free.'],
+            ['Runs on', 'Any modern browser, computer or phone. Nothing to install.',
+              'Web, Windows, Mac, iOS, Android.', 'Web browsers and a mobile app.',
+              'Windows and Mac, and iOS.'],
+          ],
+        } },
+      { h: 'Where your file goes',
+        p: ['This is the biggest difference, and the one most often blurred. '
+          + 'iLovePDF is two products under one name. The website, '
+          + 'ilovepdf.com, uploads the file to its servers and, by its privacy '
+          + 'page, deletes it within two hours of processing. Its Desktop app, '
+          + 'a separate install, processes files on your computer and gained a '
+          + 'redaction tool in version 2.2.0. Only the Desktop app is local.',
+          'Smallpdf’s redaction page describes server processing with '
+          + 'files deleted after one hour, while another line on the same page '
+          + 'describes processing in the browser. Its privacy policy gives the '
+          + 'fuller rule: an hour for signed-in users unless the file is saved '
+          + 'to account storage, and up to 14 days from last opening in some '
+          + 'other cases.',
+          'PDFgear’s desktop app says it works entirely offline, so the '
+          + 'document never leaves the device. Its privacy policy notes that its '
+          + 'AI features can send a PDF’s content to Microsoft’s Azure '
+          + 'OpenAI service, but only after you agree in the app.',
+          'Blinded runs in the browser tab and has no server to send the file '
+          + 'to. The page is not permitted by the browser to send anything '
+          + 'anywhere, and it keeps working with the internet switched off.'] },
+      { h: 'How much of the finding is done for you',
+        p: ['iLovePDF’s web tool can search for a keyword and mark every '
+          + 'match, and can find credit card numbers, phone numbers and email '
+          + 'addresses automatically. On the pages reviewed, Smallpdf and '
+          + 'PDFgear describe selecting or boxing content by hand, with no '
+          + 'search-and-mark-all step stated.',
+          'None of the three claims to find every copy of a logo or picture. '
+          + 'Each can remove an image you mark; a logo on forty pages is forty '
+          + 'marks. In Blinded you pick it once and every copy is found by what '
+          + 'it looks like, at any size or colour, and a typed name is found '
+          + 'inside pictures and screenshots as well as in the text.'] },
+      { h: 'Scanned pages',
+        p: ['All three say the same thing about scans: run OCR first, so the '
+          + 'text becomes selectable, and then redact. With iLovePDF that is a '
+          + 'separate tool; with Smallpdf it is part of the paid Pro plan; with '
+          + 'PDFgear it is a free part of the desktop app. In Blinded the pages '
+          + 'are read as part of the search, and a second check looks for words '
+          + 'the reading missed by their shape.'] },
+      { h: 'Which one to use',
+        p: ['If you want a free desktop app and are happy to box each thing '
+          + 'yourself, PDFgear keeps the file on your computer and costs '
+          + 'nothing. If you want a full PDF suite with keyword and pattern '
+          + 'redaction, and uploading is acceptable for the document, '
+          + 'iLovePDF’s website does that, and its Desktop app does it '
+          + 'locally. Smallpdf suits occasional redaction of a few things you '
+          + 'can select by hand.',
+          'Blinded is for the cases the others leave to you: the same name or '
+          + 'logo repeated across many pages, words inside pictures and scans, '
+          + 'and documents that must not be uploaded, with nothing to install. '
+          + 'It is a redactor rather than a full PDF editor.'] },
+    ],
+    sources: {
+      note: 'Compiled on 29 September 2026 from each vendor’s own pricing, '
+        + 'redaction and privacy pages. This is a reading of what they publish, '
+        + 'not a test of their tools. iLovePDF, Smallpdf and PDFgear are '
+        + 'trademarks of their owners, who are not connected with Blinded.',
+      links: [
+        { name: 'iLovePDF redaction', url: 'https://www.ilovepdf.com/blog/how-to-redact-pdf' },
+        { name: 'iLovePDF privacy', url: 'https://www.ilovepdf.com/help/privacy' },
+        { name: 'iLovePDF pricing', url: 'https://www.ilovepdf.com/pricing' },
+        { name: 'iLovePDF Desktop', url: 'https://www.ilovepdf.com/desktop' },
+        { name: 'Smallpdf redaction', url: 'https://smallpdf.com/redact-pdf' },
+        { name: 'Smallpdf free and Pro', url: 'https://smallpdf.com/blog/smallpdf-free-vs-pro-plan-comparison' },
+        { name: 'Smallpdf privacy', url: 'https://smallpdf.com/es/privacidad' },
+        { name: 'PDFgear redaction', url: 'https://www.pdfgear.com/pdf-editor-reader/how-to-redact-a-pdf.htm' },
+        { name: 'PDFgear privacy', url: 'https://www.pdfgear.com/privacy/' },
+      ],
+    },
+    steps: [
+      'Open the PDF in Blinded. Nothing is uploaded or installed.',
+      'Type each name once, and pick each logo once.',
+      'Check the list of what was found, page by page.',
+      'Redact and export. The pages are rebuilt, so nothing is left underneath.',
+    ],
+    who: 'Anyone choosing a redaction tool who needs to know where the file '
+      + 'goes, and anyone who has redacted with one of these and found the same '
+      + 'name or logo left behind on page forty.',
+    faq: [
+      { q: 'Does iLovePDF upload my file to redact it?',
+        a: 'The website does: its privacy page says files are processed on its '
+          + 'servers and deleted within two hours. Its separate Desktop app '
+          + 'processes files on your computer.' },
+      { q: 'Is PDFgear redaction free and offline?',
+        a: 'By PDFgear’s own pages, yes: the desktop app redacts and runs '
+          + 'OCR for free and works offline. You draw a box over each thing to '
+          + 'remove.' },
+      { q: 'Which of these finds every copy of a logo?',
+        a: 'Of the four, only Blinded says so. The others remove an image you '
+          + 'mark, one mark at a time.' },
+      { q: 'Are these details current?',
+        a: 'They are as each vendor published them on 29 September 2026. '
+          + 'Features and prices change, so check the linked pages before '
+          + 'relying on one.' },
+    ],
+  },
+
+  {
     slug: 'remove-letterhead-stamp-signature',
     title: 'Remove a letterhead or stamp from every page',
     h1: 'Remove a letterhead or stamp from every page',

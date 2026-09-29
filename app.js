@@ -2972,9 +2972,14 @@
         if (typeof item.confidence !== 'number' || item.confidence >= TERM_REREAD_BELOW) continue;
         const have = plainWord(item.str);
         if (!have || have === want) continue;
-        if (Math.abs(have.length - want.length) > 1) continue;
-        const distance = Detect.levenshtein(Detect.ocrFold(item.str), folded);
-        if (distance > (want.length <= 4 ? 1 : 2)) continue;
+        // Or a piece of it: a brand name set in red mid-sentence came back as
+        // its last four letters at 59, the first letters lost. No edit distance reaches that,
+        // and read again enlarged it can come back whole. Tried after the near
+        // misses, and held to the same rule: only the whole word, confidently.
+        const piece = Detect.ocrFragmentOf ? Detect.ocrFragmentOf(item.str, part) : null;
+        if (!piece && Math.abs(have.length - want.length) > 1) continue;
+        const distance = piece ? 3 : Detect.levenshtein(Detect.ocrFold(item.str), folded);
+        if (!piece && distance > (want.length <= 4 ? 1 : 2)) continue;
         candidates.push({ page, item, distance });
       }
     }
@@ -9224,8 +9229,39 @@
         for (const item of page.ocrPlaced || page.ocrItems || []) {
           if (!item || !item.rect || !item.str) continue;
           if (!rule(item.str)) continue;
-          out.push({ pageIndex: page.index,
-            x: item.rect.x, y: item.rect.y, w: item.rect.w, h: item.rect.h });
+          // A place already marked is not a place to look again, and is left
+          // out before it can take one of the few places there are: on a page
+          // where the word was read right eight times, those eight used to
+          // fill the list and the one it got wrong was never reached.
+          const seed = { pageIndex: page.index,
+            x: item.rect.x, y: item.rect.y, w: item.rect.w, h: item.rect.h };
+          if (markedAt(page, seed)) continue;
+          out.push(seed);
+          if (out.length >= SEEDS_PER_PART) return out;
+        }
+      }
+    }
+    // Last, the places where the reader read only a piece of the word
+    // ("loway" for "Calloway"). Its box covers the piece, so it is widened
+    // over the letters that were lost.
+    if (Detect.ocrFragmentOf) {
+      // By widths as drawn rather than letters counted: a piece with narrow
+      // letters in it is not of average width, and a box widened by letter
+      // count came out 58 pixels for a word 67 wide.
+      const ruler = document.createElement('canvas').getContext('2d');
+      ruler.font = TextImage.fontFor(TextImage.SWEEP_FACES[0]);
+      const drawn = s => ruler.measureText(Detect.lettersOf(s)).width || 1;
+      for (const page of pages || []) {
+        for (const item of page.ocrPlaced || page.ocrItems || []) {
+          if (!item || !item.rect || !item.str) continue;
+          const end = Detect.ocrFragmentOf(item.str, part);
+          if (!end) continue;
+          const lost = item.rect.w * (drawn(part) / drawn(item.str) - 1);
+          const seed = { pageIndex: page.index,
+            x: end === 'suffix' ? item.rect.x - lost : item.rect.x,
+            y: item.rect.y, w: item.rect.w + lost, h: item.rect.h };
+          if (markedAt(page, seed)) continue;
+          out.push(seed);
           if (out.length >= SEEDS_PER_PART) return out;
         }
       }
@@ -9433,6 +9469,9 @@
   // alone treats "small inside large" and "large swallows small" the same;
   // coveredFraction(hit, host) is the nested fact we care about for mid-word.
   const HOST_COVERS_HIT = 0.45;
+  // How much of a shape match's width the reader's own words must span before
+  // they can refuse it (readerContradicts).
+  const READER_ACCOUNTS = 0.45;
 
   // Text-layer items use baseline y; match the box geometry boxes.js uses.
   function textItemRect(item) {
@@ -9537,11 +9576,21 @@
 
     const placed = page.ocrPlaced;
     if (placed && placed.length && page.ocrText) {
+      const read = [];
       for (const item of placed) {
         if (!item.rect || !hostOverlapsHit(item.rect, rect)) continue;
         if (!(typeof item.confidence === 'number' && item.confidence >= READER_SURE)) continue;
-        hosts.push({ text: page.ocrText.slice(item.start, item.end), rect: item.rect });
+        read.push({ text: page.ocrText.slice(item.start, item.end), rect: item.rect });
       }
+      // Only if what the reader read there accounts for the spot. Measured on
+      // a word in white on a green banner: the reader lost "Gaugu" and kept
+      // only "in", confidently, and that one crumb -- a fifth of the width of
+      // the match -- refused a shape that scored 0.78. A veto is a reading of
+      // the place, and a crumb is not one; "shared" under a match for "jared"
+      // covers all of it and still refuses.
+      const across = read.reduce((sum, host) => sum + Math.max(0,
+        Math.min(host.rect.x + host.rect.w, rect.x + rect.w) - Math.max(host.rect.x, rect.x)), 0);
+      if (across >= rect.w * READER_ACCOUNTS) hosts.push(...read);
       // Short acronyms: also try same-line merges (TEXAS split across tokens).
       if (Detect.lettersOf(term).length <= 4) {
         for (const text of mergedOcrLineHosts(page, rect)) hosts.push({ text, rect: null });
