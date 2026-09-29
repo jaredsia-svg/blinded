@@ -183,7 +183,7 @@ ${alsoLinks(page)}
     </ul>
   </section>
 
-  <p class="faqback"><a class="faqbackbtn" href="/">Open the tool</a></p>
+  <p class="faqback"><a class="faqbackbtn" href="/">Back home</a></p>
 
 
 </article>

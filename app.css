@@ -1747,6 +1747,12 @@ body.reviewing .exportbar { position: static; flex: none; margin: 14px 0 18px; }
 .faqlink a:hover, .faqback a:hover { text-decoration: underline; }
 .faqlink a { display: inline-flex; align-items: center; gap: 7px; }
 .faqback { margin-top: 28px; border-top: 1px solid var(--line); padding-top: 20px; }
+/* Back home: the same size whether it is a link (a page of its own) or a
+   button (the same page as a view inside the tool). */
+.faqback .faqbackbtn { display: inline-block; line-height: 16px; }
+/* A page that ends with it has the footer straight after, not a screen of
+   padding and then the footer. */
+.faqmain:has(> .faqback:last-child) { padding-bottom: 12px; }
 
 /* ---------- naming the file on the way out ---------- */
 /*

@@ -680,12 +680,13 @@
     const away = name !== 'review';
     const backOnly = holding && away;
     el('back-top').hidden = !backOnly;
-    // The same rule at the foot of the questions. With nothing open there is
-    // nothing to go back to, and a button offering to return somewhere nobody
-    // has been is a button that has to be pressed to find out it means the
-    // front page.
-    const bottom = el('faq-back-bottom');
-    if (bottom) bottom.closest('.faqback').hidden = !holding;
+    // At the foot of the questions and the license, the same way out as
+    // every other page has: home. With a document open, home is the
+    // document, and the button says so.
+    for (const id of ['faq-back-bottom', 'prem-back-bottom']) {
+      const bottom = el(id);
+      if (bottom) bottom.textContent = holding ? 'Back to the tool' : 'Back home';
+    }
 
     // The mark is the way to the front page, and on the front page it is not
     // a way to anywhere. It stays exactly as it looks -- it is the name of
@@ -841,6 +842,9 @@
         if (!article) throw new Error('license/: nothing in it');
         host.textContent = '';
         for (const one of [...article.children]) {
+          // Not its Back home: that is a link to "/", which would unload an
+          // open document. The view has its own button that does not.
+          if (one.classList.contains('faqback')) continue;
           host.append(document.importNode(one, true));
         }
         // Its heading is an h1 on its own page and must not be one here:
@@ -11354,6 +11358,7 @@
   pageButton('prem-open', 'premium');
   el('back-top').addEventListener('click', comeBack);
   el('faq-back-bottom').addEventListener('click', comeBack);
+  el('prem-back-bottom').addEventListener('click', comeBack);
   // The mark is the way to the front page. It was a Home button beside the
   // others, which is a header carrying two ways home and explaining neither.
   el('home-mark').addEventListener('click', () => {

@@ -3715,6 +3715,18 @@ check('no creation date is carried into the output', !meta.info.CreationDate);
       const html = readFileSync(join(root, lander.slug, 'index.html'), 'utf8');
       check(lander.slug + ': carries the standard footer', html.includes(footer(null)));
     }
+    // Every page but the front one ends with the way home, just above the
+    // footer, and none of them still says "Open the tool" there.
+    const home = '<p class="faqback"><a class="faqbackbtn" href="/">Back home</a></p>';
+    for (const file of ['faq.html', 'license/index.html',
+      ...['privacy', 'terms', 'refunds', 'verify'].map(slug => slug + '/index.html'),
+      ...landers.map(one => one.slug + '/index.html')]) {
+      const html = readFileSync(join(root, file), 'utf8');
+      const at = html.lastIndexOf(home);
+      check(file + ': ends with Back home, above the footer',
+        at > 0 && at < html.indexOf('<p class="foot"')
+        && !/faqbackbtn" href="\/">Open the tool/.test(html));
+    }
     const front = readFileSync(join(root, 'index.html'), 'utf8');
     check('the front page footer has the same links in the same order',
       hrefs(front) === hrefs(footer(null)), hrefs(front));
