@@ -1,33 +1,73 @@
 # What each page is for
 
-The searches worth answering have a job in them. "Redact PDF" is somebody
-shopping, and the answer they get is Adobe; "why is my redacted text still
-selectable" is somebody who has hit the problem and is looking for the way
-out. These pages answer the second kind.
+Two kinds of search. The broad ones people type most -- "how to redact a
+PDF", "redact an image", "AI redaction" -- each get a real guide. The ones
+with a job in them -- "why is my redacted text still selectable" -- come from
+somebody who has hit the problem and is looking for the way out.
 
 Edit `content/pages.mjs` and run `node tools/pages.mjs` to rewrite the
 pages, this list and the sitemap together.
 
-## [Redact a CIM without uploading it](https://blinded.dev/redact-cim/)
+## [How to redact a PDF properly](https://blinded.dev/how-to-redact-a-pdf/)
 
-`/redact-cim/` · 683 words · 4 questions
+`/how-to-redact-a-pdf/` · 875 words · 4 questions
+
+- how to redact a PDF
+- how to redact a PDF properly
+- permanently redact a PDF
+- black out text in a PDF
+- redact PDF quickly
+- fastest way to redact a PDF
+- redact the same name on every page
+
+## [Redact an image, photo or screenshot](https://blinded.dev/redact-image-photo-screenshot/)
+
+`/redact-image-photo-screenshot/` · 725 words · 4 questions
+
+- redact image
+- redact photo
+- redact screenshot
+- black out text in a picture
+- hide information in a screenshot
+- redact image without uploading
+- blur text in an image
+
+## [Redact a PDF on a Mac](https://blinded.dev/redact-pdf-mac/)
+
+`/redact-pdf-mac/` · 647 words · 4 questions
+
+- redact PDF on Mac
+- how to redact on Mac
+- redact in Preview
+- Preview redact tool
+- redact PDF macOS without Acrobat
+- black out text in a PDF on a Mac
+
+## [AI redaction without uploading your document](https://blinded.dev/ai-redaction/)
+
+`/ai-redaction/` · 690 words · 4 questions
+
+- AI redaction
+- AI redaction tool
+- AI PII redaction
+- automatic PII redaction
+- redact PII before AI
+- redact document before uploading to ChatGPT
+- PII redaction without uploading
+
+## [Redact a CIM or teaser without uploading it](https://blinded.dev/redact-cim/)
+
+`/redact-cim/` · 794 words · 4 questions
 
 - redact CIM
 - redact CIM without uploading
 - confidential information memorandum redaction
 - teaser redaction
+- no-name teaser
+- blind teaser
+- anonymous teaser M&A
 - redact a deal document
 - diligence pack redaction
-
-## [Redact logos in a pitch deck](https://blinded.dev/redact-logos-pitch-deck/)
-
-`/redact-logos-pitch-deck/` · 710 words · 4 questions
-
-- redact logos in a pitch deck
-- logo redaction without upload
-- remove logos from a presentation
-- customer logo wall redaction
-- anonymise a deck
 
 ## [FOIA redaction without sending the records anywhere](https://blinded.dev/foia-redaction/)
 
@@ -71,17 +111,6 @@ pages, this list and the sitemap together.
 - remove PII before uploading to AI
 - safe to paste into ChatGPT
 - redact before Claude
-
-## [Redact a data room index](https://blinded.dev/redact-data-room-index/)
-
-`/redact-data-room-index/` · 707 words · 4 questions
-
-- redact data room index
-- redact a file list
-- anonymise data room folder structure
-- VDR index redaction
-- redact folder names
-- diligence index redaction
 
 ## [Redact a board pack](https://blinded.dev/redact-board-pack/)
 
@@ -129,7 +158,7 @@ pages, this list and the sitemap together.
 
 ## [Remove a logo from every page of a PDF](https://blinded.dev/remove-logo-from-every-page-pdf/)
 
-`/remove-logo-from-every-page-pdf/` · 693 words · 4 questions
+`/remove-logo-from-every-page-pdf/` · 782 words · 4 questions
 
 - remove logo from every page of a PDF
 - redact logo PDF all pages
@@ -137,22 +166,15 @@ pages, this list and the sitemap together.
 - delete the same image on every page
 - redact image throughout PDF
 - remove company logo from PDF
+- redact logos in a pitch deck
+- customer logo wall redaction
 
-## [Make a no-name teaser from a deck](https://blinded.dev/no-name-teaser/)
+## [Redact a PDF without Adobe Acrobat Pro](https://blinded.dev/adobe-acrobat-redaction-vs-blinded/)
 
-`/no-name-teaser/` · 646 words · 3 questions
+`/adobe-acrobat-redaction-vs-blinded/` · 783 words · 3 questions
 
-- no-name teaser
-- blind teaser
-- anonymous teaser M&A
-- anonymise a company presentation
-- sanitise a deck for buyers
-- redact company name from a pitch deck
-
-## [Adobe Acrobat redaction vs Blinded](https://blinded.dev/adobe-acrobat-redaction-vs-blinded/)
-
-`/adobe-acrobat-redaction-vs-blinded/` · 707 words · 3 questions
-
+- redact PDF without Adobe Pro
+- redact without Acrobat Pro
 - Adobe Acrobat redaction alternative
 - Acrobat redact image all pages
 - Acrobat cannot find logo to redact
@@ -191,24 +213,9 @@ pages, this list and the sitemap together.
 - redact a scanned PDF without Acrobat
 - find personal data in a scan
 
-## [Redact a long PDF document quickly: secret hack](https://blinded.dev/redact-pdf-quickly/)
-
-`/redact-pdf-quickly/` · 662 words · 3 questions
-
-- redact PDF quickly
-- redact a long PDF quickly
-- fastest way to redact a PDF
-- redact PDF fast
-- quick PDF redaction trick
-- redact the same name on every page
-
 ## Still to write
 
 Kept here rather than in a head, so the next round starts from a list instead
 of from scratch.
 
-- redact a data room index
-- redact a board pack before it goes to the registrar
-- redact a résumé pile for blind screening
-- remove EXIF and names from photographs in a report
-- redact a bank statement for a loan application
+- nothing queued

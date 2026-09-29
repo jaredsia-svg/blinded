@@ -4,8 +4,8 @@
 // so that they can be loaded here without a bundler, the same way the page
 // loads them. tools/uitest.mjs covers the parts that need a real canvas.
 import { faqData, faqIsCurrent } from './faq.mjs';
-import { pages as landers, PITCH, GALLERY } from '../content/pages.mjs';
-import { renderPage, renderSitemap, renderKeywords } from './pages.mjs';
+import { pages as landers, moved, PITCH, GALLERY } from '../content/pages.mjs';
+import { renderPage, renderMoved, renderSitemap, renderKeywords } from './pages.mjs';
 
 // The same two answers tools/pages.mjs gives, asked here so a stale page
 // fails the suite rather than going out looking finished.
@@ -2844,6 +2844,17 @@ check('no creation date is carried into the output', !meta.info.CreationDate);
       landers.every(one => list.includes('/' + one.slug + '/')), 'KEYWORDS.md');
     check('and every page says what it is for',
       landers.every(one => one.keywords.length >= 3), 'a page with no keywords');
+    // A merged page's old address still answers, and sends the reader to a
+    // page that exists. It is not listed or linked as a page of its own.
+    for (const one of moved) {
+      const where = join(root, one.slug, 'index.html');
+      const page = existsSync(where) ? readFileSync(where, 'utf8') : '';
+      check(one.slug + ': the old address sends the reader on to /' + one.to + '/',
+        page === renderMoved(one) && landers.some(lander => lander.slug === one.to)
+        && !landers.some(lander => lander.slug === one.slug), 'run: node tools/pages.mjs');
+      check(one.slug + ': and is neither in the sitemap nor on the front page',
+        !map.includes('/' + one.slug + '/') && !home.includes('href="/' + one.slug + '/"'));
+    }
     // robots.txt keeps crawlers off the folders that are not pages, and the
     // source the pages are written from is one of them.
     check('the generator source is not offered as a page',

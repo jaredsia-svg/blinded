@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="
+  default-src 'self';
+  script-src 'self' 'wasm-unsafe-eval';
+  style-src 'self' 'unsafe-inline';
+  img-src 'self' data: blob:;
+  connect-src 'self' blob:;
+  worker-src 'self' blob:;
+  frame-src 'none';
+  object-src 'none';
+  base-uri 'none';
+  form-action 'none'">
+<title>How to redact a PDF properly – Blinded</title>
+<meta name="description" content="The black box that does not work, the checks that tell you it did, and the fast way: name each thing once and let every copy be found.">
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="icon" href="/icon-192.png" type="image/png" sizes="192x192">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="canonical" href="https://blinded.dev/how-to-redact-a-pdf/">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Blinded">
+<meta property="og:title" content="How to redact a PDF properly">
+<meta property="og:description" content="The black box that does not work, the checks that tell you it did, and the fast way: name each thing once and let every copy be found.">
+<meta property="og:url" content="https://blinded.dev/how-to-redact-a-pdf/">
+<meta property="og:image" content="https://blinded.dev/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="A slide before and after redaction: names and logos gone from the second copy.">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="stylesheet" href="/app.css">
+<script type="application/ld+json">
+[
+  {
+    "@context": "https://schema.org",
+    "@type": "Article",
+    "headline": "How to redact a PDF properly",
+    "description": "The black box that does not work, the checks that tell you it did, and the fast way: name each thing once and let every copy be found.",
+    "mainEntityOfPage": "https://blinded.dev/how-to-redact-a-pdf/",
+    "image": [
+      "https://blinded.dev/gallery/redact-brand-names-product-photos-after.webp",
+      "https://blinded.dev/gallery/redact-brand-names-product-photos-before.webp",
+      "https://blinded.dev/og.png"
+    ],
+    "about": {
+      "@type": "WebApplication",
+      "name": "Blinded",
+      "url": "https://blinded.dev/",
+      "applicationCategory": "SecurityApplication",
+      "operatingSystem": "Any browser"
+    }
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": [
+      {
+        "@type": "Question",
+        "name": "Can I just draw a black box over the text?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Not in an ordinary PDF viewer. A drawn box is an annotation on top of the page, and the text underneath can still be selected, copied and searched. The content has to be removed, not covered."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Does printing to PDF remove the covered text?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Often not. Printing to PDF usually keeps the text layer, so the words under the box can survive. Check the result by selecting and searching it."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "How long does it take?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Usually a few seconds a page, so a few minutes for a long document, with progress shown as it goes. Scanned pages take longer because they are read first. Most of the time left is your own check."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Is it free?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Documents up to 20 pages are free. Longer ones need a license to export the finished file."
+        }
+      }
+    ]
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    "itemListElement": [
+      {
+        "@type": "ListItem",
+        "position": 1,
+        "name": "Blinded",
+        "item": "https://blinded.dev/"
+      },
+      {
+        "@type": "ListItem",
+        "position": 2,
+        "name": "How to redact a PDF properly",
+        "item": "https://blinded.dev/how-to-redact-a-pdf/"
+      }
+    ]
+  }
+]
+</script>
+</head>
+<body class="plainpage">
+
+<header class="top">
+  <div class="wrap top-inner">
+    <a class="mark" href="/">
+      <svg class="markmark" viewBox="0 0 26 15" aria-hidden="true" focusable="false">
+        <g fill="currentColor">
+          <rect width="26" height="6.4" rx="2"/>
+          <rect y="8.6" width="14" height="6.4" rx="2"/>
+          <rect x="16.6" y="8.6" width="3.6" height="6.4" rx="1.5"/>
+          <rect x="22.2" y="8.6" width="2" height="6.4" rx="1"/>
+        </g>
+      </svg> Blinded</a>
+    <div class="top-actions">
+      <a class="top-link" href="/license/">License</a>
+      <a class="top-link" href="/faq.html">Q&amp;A</a>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+<article class="view faqmain lander">
+
+  <h1 class="faqtitle">How to redact a PDF properly</h1>
+  <p class="lede">Redacting a PDF means taking something out of it so that nobody who receives the file can get it back. Most failed redactions are not careless. They are a black box drawn in the right place with a tool that only covered the text, and the text was still there for anybody who selected it.</p>
+
+  <p class="landgo"><a class="landcta" href="/">Open the tool</a>
+    <span class="landfree">Free below twenty pages, in your browser. Nothing is uploaded.</span></p>
+
+  <figure class="landshot">
+    <div class="landpair">
+      <span><b>Before</b><img src="/gallery/redact-brand-names-product-photos-before.webp"
+        alt="A title slide: a row of consumer product packs under the words BUILDING A GLOBAL HEALTH &amp; WELLNESS LEADER, with both company logos beneath them." loading="lazy" width="1280" height="720"></span>
+      <span><b>After</b><img src="/gallery/redact-brand-names-product-photos-after.webp"
+        alt="A product line-up before and after: brand names printed on the packaging photographs are covered, as are the names beneath them." loading="lazy" width="1280" height="720"></span>
+    </div>
+    <figcaption>A product line-up before and after: brand names printed on the packaging photographs are covered, as are the names beneath them.</figcaption>
+  </figure>
+
+  <section class="faq">
+    <h2>The mistake almost everybody makes once</h2>
+    <p>A black rectangle, a black highlighter or a shape drawn in a PDF viewer is an annotation. It sits on top of the page; the words underneath are still in the file. Select across the bar and paste, and they come out. Search the file for the name, and it is found. Printing to PDF often keeps the text layer too, so it is not a reliable fix.</p>
+    <p>Proper redaction removes the content itself: the characters, the picture under the bar, and anything else that says what was there. That includes the parts of a PDF you do not see on the page: the document properties, the file name, earlier versions saved inside the file, and the invisible text layer a scanner adds so that a scan can be searched.</p>
+  </section>
+
+  <section class="faq">
+    <h2>The method, whatever tool you use</h2>
+    <p>First, list what has to go: the names, the account numbers, the logos, the signatures. Then find every copy of each, not only the ones you remember. Typed words can be searched for; pictures, logos and words inside scans or screenshots cannot, and that is where most leaks are.</p>
+    <p>Then apply the redactions so the content is removed, not covered, and save a new copy rather than overwriting the original. Keep the original somewhere safe: once the redaction is applied, it is meant to be impossible to undo.</p>
+  </section>
+
+  <section class="faq">
+    <h2>The fast way: say what, not where</h2>
+    <p>Redaction is slow because it is usually done one mention at a time: find the name, draw a box, scroll, find it again. A forty page document with one client name in it can take an hour, and the mention that gets missed is the one in a picture.</p>
+    <p>Blinded works the other way round. Type the name once and every mention is found on every page: in the text, in the lettering of screenshots and scans, and inside logos. Draw a box round a logo once and every other copy is found by what it looks like, at any size. Each word shows how many times it was found, which is also the quickest check: if a name should be on every page and the count says twelve of forty, you know where to look.</p>
+    <p>Turn on the detectors and email addresses, phone numbers, web addresses, street addresses and names in signature blocks are proposed without being typed. Turn on labels and each removed thing becomes a consistent code such as [P1], so the document still reads. Save a draft if you are interrupted, and nothing has to be redone.</p>
+  </section>
+
+  <section class="faq">
+    <h2>Check the result before you send it</h2>
+    <p>Open the redacted copy and try to get the content back. Select across a bar and paste somewhere. Search the file for each name you removed. Look at the file name and the document properties. If anything comes back, the redaction did not work.</p>
+    <p>Blinded rebuilds every page of the export from pixels, so there is nothing under a bar to select and no metadata carried over from the original, and it lets you rename the file as you save it. It is still worth doing the check: it takes a minute, and it is the only proof you have.</p>
+  </section>
+
+  <section class="faq">
+    <h2>Nothing is uploaded</h2>
+    <p>A redaction tool that uploads the file has sent the unredacted document somewhere before it has removed anything. Blinded runs in your browser tab: the PDF is opened, searched and rebuilt on your own machine, and the page is not permitted by the browser to send anything anywhere. Documents up to 20 pages are free.</p>
+  </section>
+
+  <section class="faq">
+    <h2>How to do it, in four steps</h2>
+    <ol class="landsteps">
+      <li>Open the PDF in Blinded. It stays on your machine.</li>
+      <li>Type each name once and pick each logo once, instead of marking every mention.</li>
+      <li>Check the counts and the list of marks, and add a box of your own for anything missed.</li>
+      <li>Redact and export under a new name, then try to select and search the result.</li>
+    </ol>
+  </section>
+
+  <section class="faq">
+    <h2>Who it is for</h2>
+    <p>Anyone who has to send a document with something taken out of it: paralegals and lawyers, HR teams, analysts, researchers, and anyone redacting for the first time.</p>
+    <p class="landgo"><a class="landcta" href="/">Open the tool</a></p>
+  </section>
+
+  <section class="faq">
+    <h2>Questions</h2>
+    <h3>Can I just draw a black box over the text?</h3>
+    <p>Not in an ordinary PDF viewer. A drawn box is an annotation on top of the page, and the text underneath can still be selected, copied and searched. The content has to be removed, not covered.</p>
+    <h3>Does printing to PDF remove the covered text?</h3>
+    <p>Often not. Printing to PDF usually keeps the text layer, so the words under the box can survive. Check the result by selecting and searching it.</p>
+    <h3>How long does it take?</h3>
+    <p>Usually a few seconds a page, so a few minutes for a long document, with progress shown as it goes. Scanned pages take longer because they are read first. Most of the time left is your own check.</p>
+    <h3>Is it free?</h3>
+    <p>Documents up to 20 pages are free. Longer ones need a license to export the finished file.</p>
+  </section>
+
+  <section class="faq">
+    <h2>Also</h2>
+    <ul class="landalso">
+        <li><a href="/redact-image-photo-screenshot/">Redact an image, photo or screenshot</a></li>
+        <li><a href="/redact-pdf-mac/">Redact a PDF on a Mac</a></li>
+        <li><a href="/ai-redaction/">AI redaction without uploading your document</a></li>
+        <li><a href="/redact-cim/">Redact a CIM or teaser without uploading it</a></li>
+        <li><a href="/foia-redaction/">FOIA redaction without sending the records anywhere</a></li>
+        <li><a href="/de-identify-scanned-records/">De-identify scanned records</a></li>
+        <li><a href="/redacted-text-still-extractable/">Your redacted text is still extractable. Here is why</a></li>
+        <li><a href="/redact-before-ai/">Redact a PDF before you paste it into ChatGPT or Claude</a></li>
+        <li><a href="/redact-board-pack/">Redact a board pack</a></li>
+        <li><a href="/blind-cv-screening/">Redact CVs for blind screening</a></li>
+        <li><a href="/remove-names-photos-reports/">Remove names and faces from photographs in a report</a></li>
+        <li><a href="/redact-bank-statement/">Redact a bank statement</a></li>
+        <li><a href="/remove-logo-from-every-page-pdf/">Remove a logo from every page of a PDF</a></li>
+        <li><a href="/adobe-acrobat-redaction-vs-blinded/">Redact a PDF without Adobe Acrobat Pro</a></li>
+        <li><a href="/remove-letterhead-stamp-signature/">Remove a letterhead or stamp from every page</a></li>
+        <li><a href="/redact-images-pdf-powerpoint/">Redact images in a PDF or PowerPoint deck</a></li>
+        <li><a href="/redact-scanned-documents-automatically/">Redact scanned documents automatically</a></li>
+    </ul>
+  </section>
+
+  <p class="faqback"><a class="faqbackbtn" href="/">Back home</a></p>
+
+
+</article>
+</main>
+<!-- The same footer on every page: the front page's two rows. -->
+<p class="foot">
+  <span class="foot-row">
+  <span class="foot-name">Blinded</span>
+  <span class="foot-dot" aria-hidden="true">&middot;</span>
+  <a class="footlink" href="/faq.html">FAQ</a>
+  <span class="foot-dot" aria-hidden="true">&middot;</span>
+  <a class="footlink" href="/license/">License</a>
+  <span class="foot-dot" aria-hidden="true">&middot;</span>
+  <a class="footlink" href="/verify/">Verify</a>
+  <span class="foot-dot" aria-hidden="true">&middot;</span>
+  <a class="footlink" href="mailto:support@blinded.dev" title="support@blinded.dev">Contact</a>
+  </span>
+  <span class="foot-row foot-fine">
+  <a class="footlink" href="/privacy/">Privacy</a>
+  <span class="foot-dot" aria-hidden="true">&middot;</span>
+  <a class="footlink" href="/terms/">Terms</a>
+  <span class="foot-dot" aria-hidden="true">&middot;</span>
+  <a class="footlink" href="/refunds/">Refunds</a>
+  <span class="foot-dot" aria-hidden="true">&middot;</span>
+  <a class="footlink" href="https://github.com/jaredsia-svg/blinded" rel="noopener">Source</a>
+  </span>
+</p>
+
+</body>
+</html>

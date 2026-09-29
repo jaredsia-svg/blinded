@@ -14,18 +14,18 @@
   object-src 'none';
   base-uri 'none';
   form-action 'none'">
-<title>Redact a board pack – Blinded</title>
-<meta name="description" content="Take the names, the photographs and the customer logos out of a board pack before it goes to a registrar, an auditor or a new director. Nothing is uploaded.">
+<title>AI redaction without uploading your document – Blinded</title>
+<meta name="description" content="Find personal data automatically and strip it out before a document goes near an AI chatbot. Runs in your browser; nothing is uploaded.">
 <link rel="icon" href="/favicon.ico" sizes="48x48">
 <link rel="icon" href="/icon.svg" type="image/svg+xml">
 <link rel="icon" href="/icon-192.png" type="image/png" sizes="192x192">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
-<link rel="canonical" href="https://blinded.dev/redact-board-pack/">
+<link rel="canonical" href="https://blinded.dev/ai-redaction/">
 <meta property="og:type" content="article">
 <meta property="og:site_name" content="Blinded">
-<meta property="og:title" content="Redact a board pack">
-<meta property="og:description" content="Take the names, the photographs and the customer logos out of a board pack before it goes to a registrar, an auditor or a new director. Nothing is uploaded.">
-<meta property="og:url" content="https://blinded.dev/redact-board-pack/">
+<meta property="og:title" content="AI redaction without uploading your document">
+<meta property="og:description" content="Find personal data automatically and strip it out before a document goes near an AI chatbot. Runs in your browser; nothing is uploaded.">
+<meta property="og:url" content="https://blinded.dev/ai-redaction/">
 <meta property="og:image" content="https://blinded.dev/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
@@ -37,9 +37,9 @@
   {
     "@context": "https://schema.org",
     "@type": "Article",
-    "headline": "Redact a board pack",
-    "description": "Take the names, the photographs and the customer logos out of a board pack before it goes to a registrar, an auditor or a new director. Nothing is uploaded.",
-    "mainEntityOfPage": "https://blinded.dev/redact-board-pack/",
+    "headline": "AI redaction without uploading your document",
+    "description": "Find personal data automatically and strip it out before a document goes near an AI chatbot. Runs in your browser; nothing is uploaded.",
+    "mainEntityOfPage": "https://blinded.dev/ai-redaction/",
     "image": [
       "https://blinded.dev/gallery/redact-names-headshots-presenters-after.webp",
       "https://blinded.dev/gallery/redact-names-headshots-presenters-before.webp",
@@ -59,34 +59,34 @@
     "mainEntity": [
       {
         "@type": "Question",
-        "name": "Is anything sent to a server?",
+        "name": "Does Blinded use AI?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "No. There is no server to send it to, and the page is forbidden by the browser from sending anything anywhere."
+          "text": "No AI model reads your document. Personal data is found by text recognition, rules and pattern matching, all running in your browser, and nothing is sent anywhere."
         }
       },
       {
         "@type": "Question",
-        "name": "Will it find a name inside a chart or a section divider?",
+        "name": "What does it find automatically?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "Yes. Words are searched for in the text, in the lettering of pictures, and by shape where the reading was defeated by an unusual typeface."
+          "text": "Email addresses, phone numbers, web addresses, street addresses, and names of people shown by their position, such as under a sign-off or beside a job title. Anything else you type once and it is found on every page."
         }
       },
       {
         "@type": "Question",
-        "name": "Can I redact the photographs?",
+        "name": "Will a chatbot still understand the redacted document?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "Yes. Draw a box round one and every other copy of it in the pack is found, at any size. A photograph that appears once is covered by drawing on it."
+          "text": "With labels on, yes. Each removed thing keeps a consistent code, so references between people and clauses survive even though the identities do not."
         }
       },
       {
         "@type": "Question",
-        "name": "Can I come back to it tomorrow?",
+        "name": "Can I redact text before pasting it into ChatGPT?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "Save a draft: your marks and the words you typed, as a file on your own machine. It holds the same sensitive material as the pack, so keep it as carefully."
+          "text": "Yes. Save it as a .txt file and open it here; the result is the same text with the personal data replaced, ready to paste."
         }
       }
     ]
@@ -104,8 +104,8 @@
       {
         "@type": "ListItem",
         "position": 2,
-        "name": "Redact a board pack",
-        "item": "https://blinded.dev/redact-board-pack/"
+        "name": "AI redaction without uploading your document",
+        "item": "https://blinded.dev/ai-redaction/"
       }
     ]
   }
@@ -135,8 +135,8 @@
 <main class="wrap">
 <article class="view faqmain lander">
 
-  <h1 class="faqtitle">Redact a board pack</h1>
-  <p class="lede">A board pack is two hundred pages assembled from eight teams, and the version that goes outside the room – to a registrar, an auditor, a prospective director, a regulator – is not the version that went in.</p>
+  <h1 class="faqtitle">AI redaction without uploading your document</h1>
+  <p class="lede">People searching for AI redaction usually want one of two things: a tool that finds the personal information for them, or a way to take it out before a document goes into ChatGPT, Claude or Gemini. Both come down to the same question: where does the unredacted file go while it is being redacted?</p>
 
   <p class="landgo"><a class="landcta" href="/">Open the tool</a>
     <span class="landfree">Free below twenty pages, in your browser. Nothing is uploaded.</span></p>
@@ -146,62 +146,60 @@
       <span><b>Before</b><img src="/gallery/redact-names-headshots-presenters-before.webp"
         alt="Four headshots arranged in a block, each with a name under it, then the company that person works for and their job title." loading="lazy" width="1280" height="720"></span>
       <span><b>After</b><img src="/gallery/redact-names-headshots-presenters-after.webp"
-        alt="A page of people before and after: the names and titles under each photograph are replaced with labelled bars." loading="lazy" width="1280" height="720"></span>
+        alt="A presenters slide before and after: the names under the headshots are replaced with consistent labels, and one headshot is covered." loading="lazy" width="1280" height="720"></span>
     </div>
-    <figcaption>A page of people before and after: the names and titles under each photograph are replaced with labelled bars.</figcaption>
+    <figcaption>A presenters slide before and after: the names under the headshots are replaced with consistent labels, and one headshot is covered.</figcaption>
   </figure>
 
   <section class="faq">
-    <h2>The problem is that it is eight documents</h2>
-    <p>A finance deck, a sales deck, an HR paper, the minutes, an appendix of contracts, the customer slide. Each was made by somebody else in a different program, and by the time they are one PDF the text layers are a mixture of real text, exported artwork and scanned signatures on the resolutions at the back.</p>
-    <p>So a search covers some of it and silently misses the rest, and what it misses is not random – it is precisely the artwork, the photographs and the signatures.</p>
+    <h2>Redaction that finds things for you</h2>
+    <p>Blinded proposes what to remove without being told. The detectors find email addresses, phone numbers, web addresses, street addresses, and the names of people where their position gives them away: under a sign-off, beside a job title, in a contact block. Type the names you know as well, and each is found on every page, in the text and in the lettering of pictures and scans.</p>
+    <p>It does this without an AI model. The reading is text recognition and the finding is rules and pattern matching, all running in your browser. That is a choice, not a gap: an AI redaction service almost always means sending the document to a server where a model reads it, which is the thing you were trying to avoid.</p>
   </section>
 
   <section class="faq">
-    <h2>One pass over all of it</h2>
-    <p>A name typed once is found in the minutes, in the lettering of a chart exported from a spreadsheet, and in the header art of the section divider. Directors’ photographs, customer logos and the signature on a resolution are each picked out once with a box and found everywhere else they appear.</p>
-    <p>The detectors catch what nobody thinks to type: the personal mobile numbers in the contact appendix, the home addresses on a director consent, the email addresses in a forwarded thread.</p>
+    <h2>What rules catch, and what they miss</h2>
+    <p>Rules are predictable: an email address written out in the text is found, and the same document gives the same result every time. What they do not do is understand the text. A sentence such as “our largest client in Singapore” can identify somebody without containing a name, and no detector will know. So every proposal is shown before anything is covered, with a count per page, and you add what only a reader would notice.</p>
   </section>
 
   <section class="faq">
-    <h2>A version you can file</h2>
-    <p>Each page is rebuilt from pixels on export, so what is covered is gone rather than hidden – no selecting, no copying, nothing to recover from the content stream. That is the property a filed document needs and the one a rectangle drawn over the text does not have.</p>
-    <p>Save a draft before you export. A pack goes round three times before anybody agrees what leaves, and a draft holds your marks so the second round is a review rather than a repeat.</p>
+    <h2>Redacting before you use an AI chatbot</h2>
+    <p>The safe order is to redact first, on your own machine, and give the chatbot only the redacted copy. Uploading the original and asking the model to ignore the names does not help: by then the document has been sent.</p>
+    <p>Turn on labels and each removed thing becomes a consistent code, [P1] for a person and [E1] for an email address, so the model can still follow who did what without knowing who anybody is. Export with searchable text on, and the chatbot receives text it can read rather than a stack of pictures.</p>
+    <p>It is not only PDFs. Plain text, Markdown, CSV and JSON files open too, and come back as text with the personal data replaced, ready to paste.</p>
   </section>
 
   <section class="faq">
-    <h2>What it will not decide for you</h2>
-    <p>It does not know what is privileged, what is market-sensitive, or what your registrar requires to be visible. Those are judgements about your company and your filing, and the tool takes no view: it finds and removes what you ask for, and shows you everything it proposes before a single thing is covered.</p>
-    <p>It does not read the minutes for meaning either. A decision described without naming anybody is a decision that stays in, however sensitive it is, because nothing here is guessing at sense. What it is good at is the failure that actually happens in a two-hundred-page pack: the fourth copy of a name, in the footer of an appendix somebody else wrote.</p>
-    <p>And it keeps nothing. Close the tab and there is no record of the pack, the names, or that a pack was opened at all.</p>
+    <h2>Nothing is uploaded, to a model or anywhere else</h2>
+    <p>Blinded has no server. The document is opened, read and rebuilt in your browser tab, and the page is not permitted by the browser to send anything anywhere, so it cannot pass your file to a model even by mistake. You can check it: watch the network panel, or turn off the internet once the page has loaded, and it keeps working.</p>
   </section>
 
   <section class="faq">
     <h2>How to do it, in four steps</h2>
     <ol class="landsteps">
-      <li>Open the assembled pack. Every page is rendered in the tab.</li>
-      <li>Type the names, and tick the detectors for phone numbers, addresses and email addresses.</li>
-      <li>Pick out the photographs, the customer logos and the signatures.</li>
-      <li>Review every mark, save a draft for the next round, then Redact and export.</li>
+      <li>Open the document here. Nothing is uploaded, to a model or anywhere else.</li>
+      <li>Turn on the detectors, and type any names you know.</li>
+      <li>Check every proposal, and add anything only a reader would spot.</li>
+      <li>Turn on labels, export, and give the chatbot the redacted copy.</li>
     </ol>
   </section>
 
   <section class="faq">
     <h2>Who it is for</h2>
-    <p>Company secretaries, general counsel, and anybody preparing the version of a board pack that leaves the boardroom.</p>
+    <p>Anyone who wants personal data found for them without handing the document to an AI service, and anyone who uses ChatGPT, Claude or Gemini on work documents and has to keep names and contact details out of them.</p>
     <p class="landgo"><a class="landcta" href="/">Open the tool</a></p>
   </section>
 
   <section class="faq">
     <h2>Questions</h2>
-    <h3>Is anything sent to a server?</h3>
-    <p>No. There is no server to send it to, and the page is forbidden by the browser from sending anything anywhere.</p>
-    <h3>Will it find a name inside a chart or a section divider?</h3>
-    <p>Yes. Words are searched for in the text, in the lettering of pictures, and by shape where the reading was defeated by an unusual typeface.</p>
-    <h3>Can I redact the photographs?</h3>
-    <p>Yes. Draw a box round one and every other copy of it in the pack is found, at any size. A photograph that appears once is covered by drawing on it.</p>
-    <h3>Can I come back to it tomorrow?</h3>
-    <p>Save a draft: your marks and the words you typed, as a file on your own machine. It holds the same sensitive material as the pack, so keep it as carefully.</p>
+    <h3>Does Blinded use AI?</h3>
+    <p>No AI model reads your document. Personal data is found by text recognition, rules and pattern matching, all running in your browser, and nothing is sent anywhere.</p>
+    <h3>What does it find automatically?</h3>
+    <p>Email addresses, phone numbers, web addresses, street addresses, and names of people shown by their position, such as under a sign-off or beside a job title. Anything else you type once and it is found on every page.</p>
+    <h3>Will a chatbot still understand the redacted document?</h3>
+    <p>With labels on, yes. Each removed thing keeps a consistent code, so references between people and clauses survive even though the identities do not.</p>
+    <h3>Can I redact text before pasting it into ChatGPT?</h3>
+    <p>Yes. Save it as a .txt file and open it here; the result is the same text with the personal data replaced, ready to paste.</p>
   </section>
 
   <section class="faq">
@@ -210,12 +208,12 @@
         <li><a href="/how-to-redact-a-pdf/">How to redact a PDF properly</a></li>
         <li><a href="/redact-image-photo-screenshot/">Redact an image, photo or screenshot</a></li>
         <li><a href="/redact-pdf-mac/">Redact a PDF on a Mac</a></li>
-        <li><a href="/ai-redaction/">AI redaction without uploading your document</a></li>
         <li><a href="/redact-cim/">Redact a CIM or teaser without uploading it</a></li>
         <li><a href="/foia-redaction/">FOIA redaction without sending the records anywhere</a></li>
         <li><a href="/de-identify-scanned-records/">De-identify scanned records</a></li>
         <li><a href="/redacted-text-still-extractable/">Your redacted text is still extractable. Here is why</a></li>
         <li><a href="/redact-before-ai/">Redact a PDF before you paste it into ChatGPT or Claude</a></li>
+        <li><a href="/redact-board-pack/">Redact a board pack</a></li>
         <li><a href="/blind-cv-screening/">Redact CVs for blind screening</a></li>
         <li><a href="/remove-names-photos-reports/">Remove names and faces from photographs in a report</a></li>
         <li><a href="/redact-bank-statement/">Redact a bank statement</a></li>

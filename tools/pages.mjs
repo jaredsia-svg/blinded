@@ -11,7 +11,7 @@
 import { mkdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { SITE, pages, GALLERY } from '../content/pages.mjs';
+import { SITE, pages, moved, GALLERY } from '../content/pages.mjs';
 import { pages as legal } from '../content/legal.mjs';
 import { footer } from './footer.mjs';
 
@@ -195,6 +195,40 @@ ${footer(null)}
 `;
 }
 
+// A page that has been merged into another. A page rather than a redirect
+// rule in render.yaml, for the reason given in premium/index.html: Render
+// skips a rule wherever a file exists, and applies render.yaml only to a
+// Blueprint. An instant refresh works either way and is read as a permanent
+// move. Not in the sitemap, and not indexed: the canonical says where it went.
+export function renderMoved(one) {
+  const target = pages.find(page => page.slug === one.to);
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- Written by tools/pages.mjs: this page was merged into /${one.to}/. -->
+<meta http-equiv="Content-Security-Policy" content="
+  default-src 'none';
+  style-src 'self';
+  img-src 'self';
+  base-uri 'none';
+  form-action 'none'">
+<meta http-equiv="refresh" content="0; url=/${one.to}/">
+<link rel="canonical" href="${SITE}/${one.to}/">
+<meta name="robots" content="noindex">
+<title>${esc(target.title)} – Blinded</title>
+<link rel="stylesheet" href="/app.css">
+</head>
+<body class="plainpage">
+<main class="wrap">
+  <p>This page is now part of <a href="/${one.to}/">${esc(target.h1)}</a>.</p>
+</main>
+</body>
+</html>
+`;
+}
+
 export function renderSitemap() {
   const rows = [
     { loc: SITE + '/', freq: 'weekly', pri: '1.0' },
@@ -227,10 +261,10 @@ ${rows.map(one => `  <url>
 export function renderKeywords() {
   return `# What each page is for
 
-The searches worth answering have a job in them. "Redact PDF" is somebody
-shopping, and the answer they get is Adobe; "why is my redacted text still
-selectable" is somebody who has hit the problem and is looking for the way
-out. These pages answer the second kind.
+Two kinds of search. The broad ones people type most -- "how to redact a
+PDF", "redact an image", "AI redaction" -- each get a real guide. The ones
+with a job in them -- "why is my redacted text still selectable" -- come from
+somebody who has hit the problem and is looking for the way out.
 
 Edit \`content/pages.mjs\` and run \`node tools/pages.mjs\` to rewrite the
 pages, this list and the sitemap together.
@@ -246,11 +280,7 @@ ${one.keywords.map(k => '- ' + k).join('\n')}`).join('\n\n')}
 Kept here rather than in a head, so the next round starts from a list instead
 of from scratch.
 
-- redact a data room index
-- redact a board pack before it goes to the registrar
-- redact a résumé pile for blind screening
-- remove EXIF and names from photographs in a report
-- redact a bank statement for a loan application
+- nothing queued
 `;
 }
 
@@ -260,6 +290,9 @@ if (run) {
   const want = new Map();
   for (const page of pages) {
     want.set(page.slug + '/index.html', renderPage(page));
+  }
+  for (const one of moved) {
+    want.set(one.slug + '/index.html', renderMoved(one));
   }
   want.set('sitemap.xml', renderSitemap());
   want.set('KEYWORDS.md', renderKeywords());

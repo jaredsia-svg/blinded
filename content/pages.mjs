@@ -1,10 +1,11 @@
 // The pages somebody lands on when they search for the thing this does.
 //
-// Not "redact PDF". Anybody typing that is shopping, and the answer they get
-// is Adobe. The searches worth answering are the ones with a job in them --
-// "redact a CIM without uploading it", "why is my redacted text still
-// selectable" -- because the person typing those has already hit the problem
-// and is looking for the specific way out.
+// Two kinds. The broad searches people actually type -- "how to redact a
+// PDF", "redact an image", "redact a PDF on a Mac", "AI redaction" -- each
+// answered as a real guide rather than a sales page. And the searches with a
+// job in them -- "redact a CIM without uploading it", "why is my redacted
+// text still selectable" -- because the person typing those has already hit
+// the problem and is looking for the specific way out.
 //
 // Content lives here rather than in six near-identical HTML files, so the
 // shell, the structured data and the cross-links cannot drift apart between
@@ -70,16 +71,404 @@ export const GALLERY = {
       + 'in the footer, over a Venn diagram of countries and sales figures.' },
 };
 
+// Pages that were merged into another, and where each one went. The old
+// address answers with a page that sends the reader on (tools/pages.mjs), so a
+// bookmark, a shared link or a search result that still lists it arrives
+// somewhere, and a search engine reads it as a permanent move.
+export const moved = [
+  { slug: 'redact-pdf-quickly', to: 'how-to-redact-a-pdf' },
+  { slug: 'redact-logos-pitch-deck', to: 'remove-logo-from-every-page-pdf' },
+  { slug: 'no-name-teaser', to: 'redact-cim' },
+  { slug: 'redact-data-room-index', to: 'redact-cim' },
+];
+
 export const pages = [
   {
+    slug: 'how-to-redact-a-pdf',
+    title: 'How to redact a PDF properly',
+    h1: 'How to redact a PDF properly',
+    description: 'The black box that does not work, the checks that tell you it '
+      + 'did, and the fast way: name each thing once and let every copy be found.',
+    keywords: ['how to redact a PDF', 'how to redact a PDF properly',
+      'permanently redact a PDF', 'black out text in a PDF',
+      'redact PDF quickly', 'fastest way to redact a PDF',
+      'redact the same name on every page'],
+    shot: { slide: 1, alt: 'A product line-up before and after: brand names '
+      + 'printed on the packaging photographs are covered, as are the names '
+      + 'beneath them.' },
+    lede: 'Redacting a PDF means taking something out of it so that nobody who '
+      + 'receives the file can get it back. Most failed redactions are not '
+      + 'careless. They are a black box drawn in the right place with a tool '
+      + 'that only covered the text, and the text was still there for anybody '
+      + 'who selected it.',
+    sections: [
+      { h: 'The mistake almost everybody makes once',
+        p: ['A black rectangle, a black highlighter or a shape drawn in a PDF '
+          + 'viewer is an annotation. It sits on top of the page; the words '
+          + 'underneath are still in the file. Select across the bar and paste, '
+          + 'and they come out. Search the file for the name, and it is found. '
+          + 'Printing to PDF often keeps the text layer too, so it is not a '
+          + 'reliable fix.',
+          'Proper redaction removes the content itself: the characters, the '
+          + 'picture under the bar, and anything else that says what was there. '
+          + 'That includes the parts of a PDF you do not see on the page: the '
+          + 'document properties, the file name, earlier versions saved inside '
+          + 'the file, and the invisible text layer a scanner adds so that a '
+          + 'scan can be searched.'] },
+      { h: 'The method, whatever tool you use',
+        p: ['First, list what has to go: the names, the account numbers, the '
+          + 'logos, the signatures. Then find every copy of each, not only the '
+          + 'ones you remember. Typed words can be searched for; pictures, '
+          + 'logos and words inside scans or screenshots cannot, and that is '
+          + 'where most leaks are.',
+          'Then apply the redactions so the content is removed, not covered, '
+          + 'and save a new copy rather than overwriting the original. Keep the '
+          + 'original somewhere safe: once the redaction is applied, it is '
+          + 'meant to be impossible to undo.'] },
+      { h: 'The fast way: say what, not where',
+        p: ['Redaction is slow because it is usually done one mention at a '
+          + 'time: find the name, draw a box, scroll, find it again. A forty '
+          + 'page document with one client name in it can take an hour, and '
+          + 'the mention that gets missed is the one in a picture.',
+          'Blinded works the other way round. Type the name once and every '
+          + 'mention is found on every page: in the text, in the lettering of '
+          + 'screenshots and scans, and inside logos. Draw a box round a logo '
+          + 'once and every other copy is found by what it looks like, at any '
+          + 'size. Each word shows how many times it was found, which is also '
+          + 'the quickest check: if a name should be on every page and the '
+          + 'count says twelve of forty, you know where to look.',
+          'Turn on the detectors and email addresses, phone numbers, web '
+          + 'addresses, street addresses and names in signature blocks are '
+          + 'proposed without being typed. Turn on labels and each removed '
+          + 'thing becomes a consistent code such as [P1], so the document '
+          + 'still reads. Save a draft if you are interrupted, and nothing has '
+          + 'to be redone.'] },
+      { h: 'Check the result before you send it',
+        p: ['Open the redacted copy and try to get the content back. Select '
+          + 'across a bar and paste somewhere. Search the file for each name '
+          + 'you removed. Look at the file name and the document properties. '
+          + 'If anything comes back, the redaction did not work.',
+          'Blinded rebuilds every page of the export from pixels, so there is '
+          + 'nothing under a bar to select and no metadata carried over from the '
+          + 'original, and it lets you rename the file as you save it. It is '
+          + 'still worth doing the check: it takes a minute, and it is the only '
+          + 'proof you have.'] },
+      { h: 'Nothing is uploaded',
+        p: ['A redaction tool that uploads the file has sent the unredacted '
+          + 'document somewhere before it has removed anything. Blinded runs '
+          + 'in your browser tab: the PDF is opened, searched and rebuilt on '
+          + 'your own machine, and the page is not permitted by the browser to '
+          + 'send anything anywhere. Documents up to 20 pages are free.'] },
+    ],
+    steps: [
+      'Open the PDF in Blinded. It stays on your machine.',
+      'Type each name once and pick each logo once, instead of marking every '
+        + 'mention.',
+      'Check the counts and the list of marks, and add a box of your own for '
+        + 'anything missed.',
+      'Redact and export under a new name, then try to select and search the '
+        + 'result.',
+    ],
+    who: 'Anyone who has to send a document with something taken out of it: '
+      + 'paralegals and lawyers, HR teams, analysts, researchers, and anyone '
+      + 'redacting for the first time.',
+    faq: [
+      { q: 'Can I just draw a black box over the text?',
+        a: 'Not in an ordinary PDF viewer. A drawn box is an annotation on top '
+          + 'of the page, and the text underneath can still be selected, copied '
+          + 'and searched. The content has to be removed, not covered.' },
+      { q: 'Does printing to PDF remove the covered text?',
+        a: 'Often not. Printing to PDF usually keeps the text layer, so the '
+          + 'words under the box can survive. Check the result by selecting '
+          + 'and searching it.' },
+      { q: 'How long does it take?',
+        a: 'Usually a few seconds a page, so a few minutes for a long document, '
+          + 'with progress shown as it goes. Scanned pages take longer because '
+          + 'they are read first. Most of the time left is your own check.' },
+      { q: 'Is it free?',
+        a: 'Documents up to 20 pages are free. Longer ones need a license to '
+          + 'export the finished file.' },
+    ],
+  },
+
+  {
+    slug: 'redact-image-photo-screenshot',
+    title: 'Redact an image, photo or screenshot',
+    h1: 'Redact an image, photo or screenshot',
+    description: 'Black out names, numbers and faces in a PNG or JPEG, and every '
+      + 'repeat of them. The picture is rebuilt, not covered. Nothing is uploaded.',
+    keywords: ['redact image', 'redact photo', 'redact screenshot',
+      'black out text in a picture', 'hide information in a screenshot',
+      'redact image without uploading', 'blur text in an image'],
+    shot: { slide: 2, alt: 'A presenters slide before and after: one headshot '
+      + 'is replaced with a labelled black box and every name beneath the '
+      + 'photographs is covered.' },
+    lede: 'A screenshot of a chat, a photo of a whiteboard, a picture of an ID '
+      + 'or an invoice: images carry as much private detail as documents do, and '
+      + 'most redaction tools only handle PDFs. The usual fallback is a phone '
+      + 'markup pen or a blur, and neither is as safe as it looks.',
+    sections: [
+      { h: 'Why a blur or a markup pen is not enough',
+        p: ['Pixelating or blurring text looks final, but it is not always. '
+          + 'Tools have been published that recover pixelated text by trying '
+          + 'candidate words until the blur matches, and a light blur over a '
+          + 'short number can often be read by eye. A solid black box is the '
+          + 'safe choice.',
+          'A markup pen has its own problem. Some editors save the drawing as a '
+          + 'separate layer, or keep the original next to the edited copy, so '
+          + 'the photo underneath can come back. And a photo carries data you '
+          + 'cannot see: where it was taken, when, and on what device.'] },
+      { h: 'What Blinded does with an image',
+        p: ['Open a PNG or JPEG and it is treated like a one-page document. Type '
+          + 'a name, an account number or an address, and the words in the '
+          + 'picture are read by text recognition in your browser, so each '
+          + 'occurrence is found and proposed for you to accept. Where the '
+          + 'reading fails, a second check looks for the word by its shape.',
+          'Draw a box round a face, a logo or a signature to cover it. If the '
+          + 'same logo or badge appears more than once in the picture, pick it '
+          + 'once and every other copy is found, at any size. Turn on the '
+          + 'detectors and email addresses, phone numbers and web addresses are '
+          + 'proposed without being typed.'] },
+      { h: 'Rebuilt, not covered',
+        p: ['The export is a new PNG drawn from the pixels on screen, with the '
+          + 'black bars as part of the picture. There is no layer to remove and '
+          + 'no original stored beside it. Because it is a new image, none of '
+          + 'the original’s hidden data comes with it: no location, no '
+          + 'camera, no date. You can also give it a new file name as you save '
+          + 'it, which matters when the old name was the thing you were '
+          + 'hiding.'] },
+      { h: 'Screenshots, phone photos and scans',
+        p: ['Screenshots are usually PNG already and open as they are. Photos '
+          + 'from an iPhone are often saved as HEIC, which needs converting to '
+          + 'JPEG first; sharing or exporting the photo as JPEG does it. A '
+          + 'photographed document or screen works too: the text recognition '
+          + 'reads photographed pages as well as clean ones, though a sharp, '
+          + 'straight photo is always read better than a blurred one.',
+          'It works in a phone browser as well as on a computer, so a '
+          + 'screenshot can be redacted on the device that took it, without '
+          + 'installing an app.'] },
+      { h: 'Nothing is uploaded',
+        p: ['The image never leaves your device. Everything runs in the browser '
+          + 'tab, and the page is not permitted by the browser to send anything '
+          + 'anywhere. That matters most for exactly the pictures people redact: '
+          + 'IDs, bank details, medical letters and private messages. A single '
+          + 'image is one page, so it is free.'] },
+    ],
+    steps: [
+      'Open the PNG or JPEG. It stays on your device.',
+      'Type the words to remove, and draw a box round any face, logo or '
+        + 'signature.',
+      'Check what was found; every mark is listed and any one can be turned '
+        + 'down.',
+      'Export the redacted PNG, under a new name if the old one says too much.',
+    ],
+    who: 'Anyone sharing a screenshot or photo that shows more than it should: '
+      + 'support teams sending a screenshot to a supplier, people posting a '
+      + 'receipt or a message, and anyone sending a photo of an ID or a letter.',
+    faq: [
+      { q: 'Which image formats does it open?',
+        a: 'PNG and JPEG. HEIC photos from an iPhone need converting to JPEG '
+          + 'first. The redacted result is saved as a PNG.' },
+      { q: 'Is blurring safe enough?',
+        a: 'Not always. Pixelated and blurred text can sometimes be '
+          + 'reconstructed, especially short numbers. A solid box, with the '
+          + 'image rebuilt underneath it, is the safe choice.' },
+      { q: 'Does it remove the photo’s location data?',
+        a: 'Yes. The export is a new image drawn from the pixels, so the '
+          + 'original’s hidden data, such as location and camera, is not '
+          + 'carried over.' },
+      { q: 'Is the image uploaded?',
+        a: 'No. It is opened, read and rebuilt in your browser, and the page is '
+          + 'not permitted to send anything anywhere.' },
+    ],
+  },
+
+  {
+    slug: 'redact-pdf-mac',
+    title: 'Redact a PDF on a Mac',
+    h1: 'Redact a PDF on a Mac',
+    description: 'What Preview’s Redact tool does, where it stops, and how '
+      + 'to find every copy of a name or logo on a Mac without uploading the file.',
+    keywords: ['redact PDF on Mac', 'how to redact on Mac', 'redact in Preview',
+      'Preview redact tool', 'redact PDF macOS without Acrobat',
+      'black out text in a PDF on a Mac'],
+    shot: { slide: 6, alt: 'A slide before and after: the two company logos in '
+      + 'the header and the two in the footer are each replaced with a labelled '
+      + 'black bar.' },
+    lede: 'On a Mac the first place to look is Preview, which comes with every '
+      + 'Mac and, in recent versions of macOS, has a real redaction tool. For a '
+      + 'short document with a few typed lines to remove it is enough. The '
+      + 'trouble starts with long documents, logos and scans.',
+    sections: [
+      { h: 'Redacting in Preview',
+        p: ['In recent versions of macOS, Preview has a Redact tool under the '
+          + 'Tools menu. Select text, or drag across an area of the page, and '
+          + 'it is marked; when the file is saved, the marked content is removed '
+          + 'rather than hidden. That is proper redaction, and it costs '
+          + 'nothing.',
+          'Do not confuse it with Markup. A black rectangle drawn with the '
+          + 'Markup toolbar, in Preview or Quick Look, is an annotation on top '
+          + 'of the page. The text underneath is still there to be selected and '
+          + 'copied.'] },
+      { h: 'Where Preview stops',
+        p: ['Preview redacts what you select, one passage at a time. It can '
+          + 'search for a word, but it does not mark every result for you, so a '
+          + 'name that appears sixty times is sixty selections. A logo has no '
+          + 'text to search for, so each copy of it is a box you draw by hand, '
+          + 'page by page, and the small one in a footer is the one that gets '
+          + 'missed. Words inside pictures and scans are the same: you have to '
+          + 'find them by eye.',
+          'None of that is wrong. It is a manual tool, and manual redaction on '
+          + 'a long document misses things.'] },
+      { h: 'Finding every copy instead',
+        p: ['Blinded runs in Safari, Chrome, Firefox or Edge on a Mac, with '
+          + 'nothing to install. Type a name once and every mention is found on '
+          + 'every page: in the text, in the lettering of screenshots and '
+          + 'scans, and inside logos. Draw a box round a logo once and every '
+          + 'other copy is found by what it looks like, at any size or colour. '
+          + 'Every find is listed by page before anything is covered.',
+          'The export rebuilds each page from pixels, so what was under a bar '
+          + 'is not in the file, and no metadata comes across from the original. '
+          + 'Turn on searchable text if the result needs to be searchable '
+          + 'again.'] },
+      { h: 'Keynote and Pages files',
+        p: ['Blinded opens PDFs and images, not Keynote or Pages files directly. '
+          + 'Export to PDF first: in Keynote or Pages, File, Export To, PDF. '
+          + 'That keeps every slide exactly as it looks, and the redacted PDF is '
+          + 'also the right thing to send, because a redacted Keynote file can '
+          + 'still hold the original pictures inside it.'] },
+      { h: 'Nothing is uploaded',
+        p: ['The file never leaves your Mac. It is opened and rebuilt in the '
+          + 'browser tab, and the page is not permitted to send anything '
+          + 'anywhere; turn off Wi-Fi after the page has loaded and it keeps '
+          + 'working. Documents up to 20 pages are free.'] },
+    ],
+    steps: [
+      'Open the PDF in Safari or any browser on your Mac. Nothing is installed '
+        + 'or uploaded.',
+      'Type each name once, and draw a box round each logo once.',
+      'Check the list of what was found, page by page.',
+      'Redact and export. The pages are rebuilt, so nothing is left underneath.',
+    ],
+    who: 'Mac users without Acrobat Pro who have outgrown selecting one passage '
+      + 'at a time in Preview, or who need logos, letterheads and scanned pages '
+      + 'redacted as well as typed text.',
+    faq: [
+      { q: 'Does Preview redact properly?',
+        a: 'Its Redact tool, in recent versions of macOS, removes the selected '
+          + 'content when you save. A black box drawn with Markup does not: it '
+          + 'only covers the text.' },
+      { q: 'Do I need to install anything?',
+        a: 'No. Blinded runs in Safari, Chrome, Firefox or Edge, and keeps '
+          + 'working offline once the page has loaded.' },
+      { q: 'Can it redact a Keynote deck?',
+        a: 'Export the deck to PDF first, from File, Export To, PDF. The '
+          + 'redacted result is a PDF.' },
+      { q: 'Is the file uploaded?',
+        a: 'No. Everything runs in your browser, and the page is not permitted '
+          + 'to send anything anywhere.' },
+    ],
+  },
+
+  {
+    slug: 'ai-redaction',
+    title: 'AI redaction without uploading your document',
+    h1: 'AI redaction without uploading your document',
+    description: 'Find personal data automatically and strip it out before a '
+      + 'document goes near an AI chatbot. Runs in your browser; nothing is '
+      + 'uploaded.',
+    keywords: ['AI redaction', 'AI redaction tool', 'AI PII redaction',
+      'automatic PII redaction', 'redact PII before AI',
+      'redact document before uploading to ChatGPT', 'PII redaction without uploading'],
+    shot: { slide: 2, alt: 'A presenters slide before and after: the names '
+      + 'under the headshots are replaced with consistent labels, and one '
+      + 'headshot is covered.' },
+    lede: 'People searching for AI redaction usually want one of two things: a '
+      + 'tool that finds the personal information for them, or a way to take it '
+      + 'out before a document goes into ChatGPT, Claude or Gemini. Both come '
+      + 'down to the same question: where does the unredacted file go while it '
+      + 'is being redacted?',
+    sections: [
+      { h: 'Redaction that finds things for you',
+        p: ['Blinded proposes what to remove without being told. The detectors '
+          + 'find email addresses, phone numbers, web addresses, street '
+          + 'addresses, and the names of people where their position gives them '
+          + 'away: under a sign-off, beside a job title, in a contact block. '
+          + 'Type the names you know as well, and each is found on every page, '
+          + 'in the text and in the lettering of pictures and scans.',
+          'It does this without an AI model. The reading is text recognition '
+          + 'and the finding is rules and pattern matching, all running in your '
+          + 'browser. That is a choice, not a gap: an AI redaction service '
+          + 'almost always means sending the document to a server where a model '
+          + 'reads it, which is the thing you were trying to avoid.'] },
+      { h: 'What rules catch, and what they miss',
+        p: ['Rules are predictable: an email address written out in the text '
+          + 'is found, and the same document gives the same result every time. What they do not '
+          + 'do is understand the text. A sentence such as “our largest '
+          + 'client in Singapore” can identify somebody without containing a '
+          + 'name, and no detector will know. So every proposal is shown before '
+          + 'anything is covered, with a count per page, and you add what only '
+          + 'a reader would notice.'] },
+      { h: 'Redacting before you use an AI chatbot',
+        p: ['The safe order is to redact first, on your own machine, and give '
+          + 'the chatbot only the redacted copy. Uploading the original and '
+          + 'asking the model to ignore the names does not help: by then the '
+          + 'document has been sent.',
+          'Turn on labels and each removed thing becomes a consistent code, '
+          + '[P1] for a person and [E1] for an email address, so the model can '
+          + 'still follow who did what without knowing who anybody is. Export '
+          + 'with searchable text on, and the chatbot receives text it can read '
+          + 'rather than a stack of pictures.',
+          'It is not only PDFs. Plain text, Markdown, CSV and JSON files open '
+          + 'too, and come back as text with the personal data replaced, ready to '
+          + 'paste.'] },
+      { h: 'Nothing is uploaded, to a model or anywhere else',
+        p: ['Blinded has no server. The document is opened, read and rebuilt in '
+          + 'your browser tab, and the page is not permitted by the browser to '
+          + 'send anything anywhere, so it cannot pass your file to a model even '
+          + 'by mistake. You can check it: watch the network panel, or turn off '
+          + 'the internet once the page has loaded, and it keeps working.'] },
+    ],
+    steps: [
+      'Open the document here. Nothing is uploaded, to a model or anywhere else.',
+      'Turn on the detectors, and type any names you know.',
+      'Check every proposal, and add anything only a reader would spot.',
+      'Turn on labels, export, and give the chatbot the redacted copy.',
+    ],
+    who: 'Anyone who wants personal data found for them without handing the '
+      + 'document to an AI service, and anyone who uses ChatGPT, Claude or '
+      + 'Gemini on work documents and has to keep names and contact details '
+      + 'out of them.',
+    faq: [
+      { q: 'Does Blinded use AI?',
+        a: 'No AI model reads your document. Personal data is found by text '
+          + 'recognition, rules and pattern matching, all running in your '
+          + 'browser, and nothing is sent anywhere.' },
+      { q: 'What does it find automatically?',
+        a: 'Email addresses, phone numbers, web addresses, street addresses, '
+          + 'and names of people shown by their position, such as under a '
+          + 'sign-off or beside a job title. Anything else you type once and it '
+          + 'is found on every page.' },
+      { q: 'Will a chatbot still understand the redacted document?',
+        a: 'With labels on, yes. Each removed thing keeps a consistent code, so '
+          + 'references between people and clauses survive even though the '
+          + 'identities do not.' },
+      { q: 'Can I redact text before pasting it into ChatGPT?',
+        a: 'Yes. Save it as a .txt file and open it here; the result is the '
+          + 'same text with the personal data replaced, ready to paste.' },
+    ],
+  },
+
+  {
     slug: 'redact-cim',
-    title: 'Redact a CIM without uploading it',
-    h1: 'Redact a CIM without uploading it',
+    title: 'Redact a CIM or teaser without uploading it',
+    h1: 'Redact a CIM or teaser without uploading it',
     description: 'Strip names, logos and signatures out of a confidential '
       + 'information memorandum in your browser. The file never leaves your '
       + 'machine.',
     keywords: ['redact CIM', 'redact CIM without uploading',
       'confidential information memorandum redaction', 'teaser redaction',
+      'no-name teaser', 'blind teaser', 'anonymous teaser M&A',
       'redact a deal document', 'diligence pack redaction'],
     shot: { slide: 4, alt: 'A deal slide before and after: the two company '
       + 'names in the headline and the logos beside them are gone.' },
@@ -119,6 +508,16 @@ export const pages = [
           + 'security policy the browser applies whatever the code asks for, '
           + 'and the line that matters says the page may not send anything '
           + 'anywhere.'] },
+      { h: 'Making the no-name teaser',
+        p: ['The teaser is the same job at its hardest: the first thing a '
+          + 'buyer sees has to say what the business is without saying who it '
+          + 'is, and the source is usually the company\u2019s own deck, with its '
+          + 'name in the headline, the footer, the product photographs and the '
+          + 'org chart. Type the company and brand names, pick the logo once, '
+          + 'and turn on labels: each name becomes a consistent placeholder, '
+          + '[T1] for the company and [T2] for the counterparty, so the teaser '
+          + 'still reads as a story. Rename the file as you export it, because '
+          + 'the file name is often the last place the name survives.'] },
     ],
     steps: [
       'Open the CIM. It is read in the tab; nothing is sent anywhere.',
@@ -153,97 +552,6 @@ export const pages = [
           + 'reports its progress along the foot while you read the document. '
           + 'The optional second check, which looks for words that exist only '
           + 'as pictures, states the wait before it starts so you can decide.' },
-    ],
-  },
-
-  {
-    slug: 'redact-logos-pitch-deck',
-    title: 'Redact logos in a pitch deck',
-    h1: 'Redact logos in a pitch deck',
-    description: 'Remove a customer logo wall, a sponsor mark or a partner '
-      + 'badge from every slide at once. Pick one; every other copy is found, '
-      + 'at any size.',
-    keywords: ['redact logos in a pitch deck', 'logo redaction without upload',
-      'remove logos from a presentation', 'customer logo wall redaction',
-      'anonymise a deck'],
-    shot: { slide: 5, alt: 'A logo wall before and after: two of the ten '
-      + 'brand marks are replaced with labelled black bars.' },
-    lede: 'The logo wall is the slide nobody can redact. It is one row of '
-      + 'twenty customer marks, each a different picture, none of them text, '
-      + 'and two of them belong to companies that have not agreed to be named '
-      + 'as customers.',
-    sections: [
-      { h: 'Why search cannot touch it',
-        p: ['A logo is a picture. It has no letters a search can find, no text '
-          + 'layer entry, and often no name anywhere near it on the slide. The '
-          + 'only handle on it is what it looks like -- and what it looks like '
-          + 'changes: the same mark is 40 pixels wide in the footer, 200 wide '
-          + 'on the customer slide, full colour on white and knocked back to '
-          + 'one flat grey on the dark section divider.',
-          'So the work is manual, and manual work on a forty-slide deck misses '
-          + 'the appendix.'] },
-      { h: 'Pick it once',
-        p: ['Draw a box round the mark on any slide. Every other copy in the '
-          + 'deck is found -- at any size, and whatever colour it has been '
-          + 'recast in, because the match is on shape rather than on pixels '
-          + 'being equal.',
-          'Each picked image gets its own sensitivity, offered as the two or '
-          + 'three settings the scores on your actual document point at, with '
-          + 'what each one would find. A clean wordmark and a scanned stamp do '
-          + 'not want the same number, and you should not have to guess either '
-          + 'of them.'] },
-      { h: 'What it will not do for you',
-        p: ['It proposes; you decide. Nothing is covered until you press '
-          + 'Redact, and every match is listed with the slide it is on so you '
-          + 'can walk the list rather than trust it. That is deliberate: a '
-          + 'shape match on a small, low-contrast mark is a judgement, and a '
-          + 'tool that made that judgement silently would be wrong on a deck '
-          + 'you had already sent.',
-          'It will not find a logo that appears only once, redrawn by hand, in '
-          + 'a style the original does not share -- that is a different '
-          + 'picture, not a copy. And it does not read the deck for meaning: '
-          + 'if a customer is named in the body text as well as shown in the '
-          + 'wall, the name is a word to type, separately from the mark you '
-          + 'picked.',
-          'What it is good at is the failure that actually happens, which is '
-          + 'not missing the logo on the customer slide. It is missing the '
-          + 'fourth copy of it, 40 pixels wide, in the footer of the '
-          + 'appendix.'] },
-      { h: 'Placeholders, when the slide stops making sense',
-        p: ['Take four logos out of a row of ten and the sentence under it '
-          + '-- "our customers include" -- is suddenly about nothing. Turn on '
-          + 'labels and each bar carries [L1], [L2], consistently, so the same '
-          + 'company is the same label everywhere in the deck. A reader, or a '
-          + 'model, can still follow which one is which without knowing who '
-          + 'they are.'] },
-    ],
-    steps: [
-      'Open the deck. Every page is rendered in the tab.',
-      'Press the pick button and draw a box round one copy of the logo.',
-      'Let it search. Every other copy is proposed, with a count per slide '
-        + 'and a way to say no to any one of them.',
-      'Repeat for each mark, then Redact and export a deck with the pages '
-        + 'rebuilt.',
-    ],
-    who: 'Founders sending a deck to an investor who competes with a customer, '
-      + 'agencies reusing a case study, and anybody who needs the numbers on '
-      + 'the slide without the names around them.',
-    faq: [
-      { q: 'Does it find the logo at a different size?',
-        a: 'Yes. The match is on shape and runs over a range of scales, so a '
-          + 'footer mark and a full-width one on the title slide are the same '
-          + 'find.' },
-      { q: 'What about a logo recoloured for a dark slide?',
-        a: 'Also found. Matching is done on the greyscale structure rather '
-          + 'than on colour, so a white knockout of a mark matches the full '
-          + 'colour original.' },
-      { q: 'Can I keep some of the logos and remove others?',
-        a: 'Yes. Every proposed match is shown before anything is covered, '
-          + 'with a page reference and an x to dismiss it. Nothing is redacted '
-          + 'until you press Redact.' },
-      { q: 'Are the logos really gone from the exported file?',
-        a: 'Yes. The page is rebuilt from pixels, so the original image is not '
-          + 'in the exported PDF underneath a black rectangle.' },
     ],
   },
 
@@ -616,95 +924,6 @@ export const pages = [
   },
 
   {
-    slug: 'redact-data-room-index',
-    title: 'Redact a data room index',
-    h1: 'Redact a data room index',
-    description: 'A file list gives away the deal before anyone opens a '
-      + 'document. Strip the names out of an index, a folder tree or a '
-      + 'screenshot of one, in your browser.',
-    keywords: ['redact data room index', 'redact a file list',
-      'anonymise data room folder structure', 'VDR index redaction',
-      'redact folder names', 'diligence index redaction'],
-    shot: { slide: 3, alt: 'A list page before and after: the repeated party '
-      + 'name is gone from every line.' },
-    lede: 'The index is the one document in a data room that nobody thinks to '
-      + 'redact, and the one that gives the most away. Four hundred filenames, '
-      + 'each beginning with the target’s name, and a folder tree that spells '
-      + 'out the structure of the deal before a single file is opened.',
-    sections: [
-      { h: 'A file list is four hundred copies of the same word',
-        p: ['Every line begins the same way: the company name, the subsidiary, '
-          + 'the counterparty on a contract, the law firm in a folder of '
-          + 'advice. Redacting that by hand is four hundred rectangles, and '
-          + 'the one you miss is on the page nobody scrolled to.',
-          'It is also rarely a clean PDF. An index is usually exported from '
-          + 'the room as a report, or screenshotted from the browser, which '
-          + 'means the text is a picture and a search finds nothing at all.'] },
-      { h: 'One word, every line, every page',
-        p: ['Type the name once. It is found in the text and in the lettering '
-          + 'of a screenshot, on every page of the list, and counted before '
-          + 'you commit – so you can see whether "Project Falcon" is on nine '
-          + 'lines or nine hundred.',
-          'Turn labels on and each removed name becomes a consistent code. An '
-          + 'index still works as an index: the reader can see that eleven '
-          + 'files belong to the same entity without being told which entity '
-          + 'it is.'] },
-      { h: 'The folder tree, which is a picture',
-        p: ['A screenshot of the room’s own navigation has no text in it '
-          + 'anywhere. It is read here, in the tab, so the names in it are '
-          + 'found the same way as the names in the list – and the room’s logo '
-          + 'in the corner of every screenshot is picked out once with a box '
-          + 'and removed from all of them.'] },
-      { h: 'Check it against the room before you send it',
-        p: ['An index is a promise about what is in the room, and a redacted '
-          + 'index that no longer matches the folders is worse than none: the '
-          + 'first thing anybody does is look for file 214 and find something '
-          + 'else. Export it, open it, and read it as the recipient will – the '
-          + 'line numbers, the dates and the counts should all still be there, '
-          + 'because only the names were asked for.',
-          'Then test it the way a recipient might. Select across a bar and '
-          + 'paste: nothing comes out, because the page was rebuilt rather '
-          + 'than covered. Search the file for one of the names you removed. '
-          + 'That is a two-minute check and it is worth doing on any tool, '
-          + 'including this one.',
-          'Save a draft first. An index goes round more than once – the room '
-          + 'grows, a party drops out, a new adviser is added – and a draft '
-          + 'means the second version is a re-export rather than the whole job '
-          + 'again.'] },
-    ],
-    steps: [
-      'Open the index, the folder listing, or the screenshots of them.',
-      'Type the names: the target, the sponsor, the counterparties, the '
-        + 'advisers.',
-      'Pick out the data room’s own logo or header if it appears on every '
-        + 'page.',
-      'Turn on labels if the list has to stay followable, then Redact and '
-        + 'export.',
-    ],
-    who: 'Bankers preparing a staple or a vendor process, lawyers producing a '
-      + 'privilege log, and anybody sending a contents page to a party who is '
-      + 'not yet allowed to know whose contents they are.',
-    faq: [
-      { q: 'Does the index get uploaded anywhere?',
-        a: 'No. There is no server, and the browser is not permitted to send '
-          + 'the file anywhere at all. It works with the network '
-          + 'disconnected.' },
-      { q: 'Will it find the name in a screenshot of the file tree?',
-        a: 'Yes. Pages are read in the tab, so a name typed once is found in '
-          + 'the lettering of a picture as well as in any real text.' },
-      { q: 'Can I keep the structure but lose the names?',
-        a: 'Yes. Turn on labels and each removed name carries a consistent '
-          + 'code, so the shape of the index survives while the identities do '
-          + 'not.' },
-      { q: 'What about the filenames of the documents themselves?',
-        a: 'Those are in the room rather than in this file. What this handles '
-          + 'is the index, the listing and any screenshot of them – and the '
-          + 'exported file can be renamed on the way out, since a filename is '
-          + 'often the last place a name survives.' },
-    ],
-  },
-
-  {
     slug: 'redact-board-pack',
     title: 'Redact a board pack',
     h1: 'Redact a board pack',
@@ -1059,7 +1278,8 @@ export const pages = [
       + 'sight, at any size, and removed for good. Nothing is uploaded.',
     keywords: ['remove logo from every page of a PDF', 'redact logo PDF all pages',
       'find all instances of an image in a PDF', 'delete the same image on every page',
-      'redact image throughout PDF', 'remove company logo from PDF'],
+      'redact image throughout PDF', 'remove company logo from PDF',
+      'redact logos in a pitch deck', 'customer logo wall redaction'],
     shot: { slide: 6, alt: 'A slide before and after: the two company logos in '
       + 'the header and the two in the footer are each replaced with a labelled '
       + 'black bar.' },
@@ -1107,6 +1327,14 @@ export const pages = [
           + 'policy from sending anything anywhere. Watch the network panel, or '
           + 'disconnect from the internet after the page loads: it keeps '
           + 'working.'] },
+      { h: 'The logo wall in a pitch deck',
+        p: ['The hardest slide is the row of twenty customer marks, each a '
+          + 'different picture, two of which belong to companies that have not '
+          + 'agreed to be named. Pick each of those two once and every copy in '
+          + 'the deck goes with it, including the one in the case study and '
+          + 'the small one in the appendix. Turn on labels and each bar carries '
+          + '[L1], [L2], consistently, so a sentence such as \u201cour customers '
+          + 'include\u201d still makes sense with the names taken out.'] },
     ],
     steps: [
       'Open the PDF. It is read in the tab; nothing is sent anywhere.',
@@ -1137,98 +1365,13 @@ export const pages = [
   },
 
   {
-    slug: 'no-name-teaser',
-    title: 'Make a no-name teaser from a deck',
-    h1: 'Make a no-name teaser from a deck',
-    description: 'Turn a company presentation into a blind teaser: every '
-      + 'mention of the name and every copy of the logo removed, in your '
-      + 'browser. Nothing is uploaded.',
-    keywords: ['no-name teaser', 'blind teaser', 'anonymous teaser M&A',
-      'anonymise a company presentation', 'sanitise a deck for buyers',
-      'redact company name from a pitch deck'],
-    shot: { slide: 4, alt: 'A deal slide before and after: both company names '
-      + 'in the headline, in the body and in the logos are replaced with '
-      + 'labelled bars, [L1] and [L2].' },
-    lede: 'The first thing a buyer sees has to say what the business is '
-      + 'without saying who it is. The source is usually the company’s own '
-      + 'deck, and the company’s own deck has its name and logo on every '
-      + 'page: in the headline, the footer, the product photographs and the '
-      + 'org chart.',
-    sections: [
-      { h: 'Where the name hides',
-        p: ['Deleting the typed name is the easy part. The name is also inside '
-          + 'the logo, set in the master slide, printed on packaging in a '
-          + 'product photograph, embedded in a chart exported as a picture, and '
-          + 'in the file name and the document properties. A teaser that '
-          + 'misses one of those identifies the company as surely as the '
-          + 'cover would have.',
-          'That is why blind teasers are usually rebuilt by hand, and why '
-          + 'they take a day to make and still go out with the logo in the '
-          + 'footer of page 11.'] },
-      { h: 'Type it once, pick it once',
-        p: ['Type the company name, the brand names and the people. Each is '
-          + 'found in the text, read out of pictures and scans, and matched by '
-          + 'shape where an unusual typeface defeats the reading. Then draw a '
-          + 'box round the logo once: every other copy is found by sight, in '
-          + 'any size or colour.',
-          'Turn on labels and each name becomes a consistent placeholder, '
-          + '[L1] for the company and [L2] for the counterparty, so the teaser '
-          + 'still reads as a story: "[L1] has grown revenue at 14% a year".'] },
-      { h: 'Nothing left underneath',
-        p: ['Each page of the export is rebuilt from pixels. The removed name '
-          + 'is not hidden under a box; it is not in the file. There is '
-          + 'nothing to select, copy or recover, and the exported file carries '
-          + 'no author, title or history from the original. You can also give '
-          + 'the export a new file name as you save it, and the old name is '
-          + 'removed from it too.'] },
-      { h: 'Checking it before it goes',
-        p: ['Every mark is listed by page before anything is covered, so the '
-          + 'check is a walk down a list rather than a hunt through the deck. '
-          + 'A search box shows how many times each name was found, which is '
-          + 'the quickest way to notice that the brand name appears forty times '
-          + 'and only thirty-eight were caught. Anything the search did not '
-          + 'find can be covered with a box of your own, and a second check '
-          + 'looks again, by shape, for names that exist only as lettering in '
-          + 'pictures. When the teaser is exported, open it and try to select '
-          + 'or search for the name: there is nothing there to find.'] },
-      { h: 'Without sending the deck anywhere',
-        p: ['A sell-side mandate usually comes with a confidentiality '
-          + 'agreement that does not allow the deck to be uploaded to a web '
-          + 'service. Nothing here is uploaded: the deck is opened and '
-          + 'rebuilt inside your browser, and the page is not permitted to '
-          + 'send anything anywhere.'] },
-    ],
-    steps: [
-      'Open the company’s deck. It stays in your browser.',
-      'Type the company and brand names, and draw a box round each logo once.',
-      'Review what was found, page by page, and add anything it missed with '
-        + 'a box of your own.',
-      'Redact and export the teaser under a new file name.',
-    ],
-    who: 'Sell-side bankers and M&A advisers, business brokers, and anyone '
-      + 'writing to buyers about a company that cannot yet be named.',
-    faq: [
-      { q: 'Does it catch the name inside product photographs?',
-        a: 'Often. Words in pictures are read by text recognition and, where '
-          + 'that fails, matched by shape. Lettering that is curved, tiny or '
-          + 'partly hidden can still be missed, so the result is listed page '
-          + 'by page for you to check.' },
-      { q: 'Can I keep the teaser readable?',
-        a: 'Yes. With labels on, each name is replaced by a consistent '
-          + 'placeholder such as [L1], so sentences still make sense.' },
-      { q: 'Is the deck uploaded anywhere?',
-        a: 'No. It is processed entirely in your browser, which is enforced by '
-          + 'the page’s security policy, not just promised.' },
-    ],
-  },
-
-  {
     slug: 'adobe-acrobat-redaction-vs-blinded',
-    title: 'Adobe Acrobat redaction vs Blinded',
-    h1: 'Adobe Acrobat redaction vs Blinded',
+    title: 'Redact a PDF without Acrobat Pro: Adobe vs Blinded',
+    h1: 'Redact a PDF without Adobe Acrobat Pro',
     description: 'Acrobat finds text to redact. Blinded also finds every copy '
       + 'of a logo or picture by sight, in your browser, with nothing uploaded.',
-    keywords: ['Adobe Acrobat redaction alternative', 'Acrobat redact image all pages',
+    keywords: ['redact PDF without Adobe Pro', 'redact without Acrobat Pro',
+      'Adobe Acrobat redaction alternative', 'Acrobat redact image all pages',
       'Acrobat cannot find logo to redact', 'Acrobat redact vs', 'free alternative to Acrobat redaction'],
     shot: { slide: 5, alt: 'A customer logo wall before and after: two of the '
       + 'ten brand marks are replaced with labelled black bars.' },
@@ -1276,12 +1419,20 @@ export const pages = [
           + '20 pages, with a one-off license for longer documents.',
           'They also work well together. If you already use Acrobat for text, '
           + 'Blinded is the step for the pictures.'] },
+      { h: 'Without an Acrobat Pro subscription',
+        p: ['The free Adobe Acrobat Reader cannot redact; the redaction tools '
+          + 'come with a paid Acrobat plan. A black box drawn in Reader, or in '
+          + 'any viewer\u2019s comment tools, is an annotation on top of the '
+          + 'page, and the text under it can still be selected and copied.',
+          'Blinded needs no subscription and no install. Documents up to 20 '
+          + 'pages are free, and a longer one needs a one-off license rather '
+          + 'than a monthly plan.'] },
       { h: 'What Blinded does not do',
         p: ['It is a redactor, not a PDF editor: it does not edit text, fill '
-          + 'forms or sign. And its export rebuilds each page as an image, which '
-          + 'is what makes the redaction permanent, but it means the exported '
-          + 'text is no longer selectable. For a document that goes to someone '
-          + 'outside, that is usually the point.'] },
+          + 'forms or sign. Its export rebuilds each page from pixels, which is '
+          + 'what makes the redaction permanent; turn on searchable text and '
+          + 'the redacted pages are read back, so the words that remain can '
+          + 'still be found and copied.'] },
     ],
     steps: [
       'Open the PDF in Blinded. Nothing is uploaded or installed.',
@@ -1559,90 +1710,4 @@ export const pages = [
     ],
   },
 
-  {
-    slug: 'redact-pdf-quickly',
-    title: 'Redact a long PDF document quickly: secret hack',
-    h1: 'Redact a long PDF document quickly: secret hack',
-    description: 'The slow way is a box per mention. The fast way is to name '
-      + 'each thing once and let every copy be found, even in pictures.',
-    keywords: ['redact PDF quickly', 'redact a long PDF quickly', 'fastest way to redact a PDF',
-      'redact PDF fast', 'quick PDF redaction trick',
-      'redact the same name on every page'],
-    shot: { slide: 1, alt: 'A product line-up before and after: brand names '
-      + 'printed on the packaging photographs are covered, as are the names '
-      + 'beneath them.' },
-    lede: 'Redaction is slow because people do it one mention at a time: find '
-      + 'the name, draw a box, scroll, find it again. A forty-page document '
-      + 'with one client name in it can take an hour, and the mention that '
-      + 'gets missed is the one in a picture.',
-    sections: [
-      { h: 'The trick: say what, not where',
-        p: ['Stop marking places and start naming things. Type the client '
-          + 'name once and every mention is found on every page: in the text, '
-          + 'in the lettering of screenshots and photographs, and inside logos. '
-          + 'Draw a box round a logo once and every other copy is found by '
-          + 'sight, at any size. A document with a hundred mentions takes the '
-          + 'same three entries as one with three.',
-          'Each word shows how many times it was found before you commit to '
-          + 'it, which is also the fastest check there is: if a name should be '
-          + 'on every page and the count says twelve of forty, you know where '
-          + 'to look.'] },
-      { h: 'Four more that save time',
-        p: ['Turn on the detectors, and email addresses, phone numbers, web '
-          + 'addresses, street addresses and names are proposed without being '
-          + 'typed at all.',
-          'Turn on labels, and each name becomes a consistent placeholder such '
-          + 'as [P1], so the redacted document still reads and nobody has to '
-          + 'rewrite the sentences around the bars.',
-          'Skip the separate clean-up. The export is rebuilt from pixels, so '
-          + 'there is no hidden text, metadata or original image to sanitise '
-          + 'afterwards, and you can rename the file as you save it.',
-          'Save a draft. If you are interrupted, the draft brings back every '
-          + 'word, pick and mark on the same document, so nothing is redone.'] },
-      { h: 'What it looks like in practice',
-        p: ['A thirty-page supplier deck has to go to a competitor-facing '
-          + 'partner with the client removed. The slow way is a search for the '
-          + 'client name, forty boxes, a scroll through every slide looking '
-          + 'for the logo, and a second pass for the product photographs with '
-          + 'the name on the packaging. The fast way is the client name typed '
-          + 'once, the logo picked once, labels on, and a look down the list '
-          + 'of what was found. Same document, same result, a fraction of the '
-          + 'time.'] },
-      { h: 'Where the time still goes',
-        p: ['The time that is left is checking, and it should not be skipped. '
-          + 'Every proposed mark is listed by page, so checking is walking a '
-          + 'list rather than rereading the document, and anything missed can '
-          + 'be covered with a box of your own. On scanned or photographed '
-          + 'pages an optional second check looks again for words that exist '
-          + 'only as pictures, and says how long it will take before it starts.'] },
-      { h: 'No upload, so no waiting on one',
-        p: ['Everything runs in the browser tab: nothing is uploaded, and the '
-          + 'page is not permitted to send anything anywhere. That is faster '
-          + 'as well as safer, with no file to transfer and no queue on a '
-          + 'server, and it keeps working if you lose the connection after the '
-          + 'page has loaded.'] },
-    ],
-    steps: [
-      'Open the PDF. It stays on your machine.',
-      'Type each name once and pick each logo once, instead of marking every '
-        + 'mention.',
-      'Switch on the detectors and labels, and check the counts.',
-      'Walk the list of marks, then redact and export under a new name.',
-    ],
-    who: 'Anyone who redacts more than occasionally and is tired of doing it '
-      + 'one box at a time: analysts, paralegals, HR teams and researchers.',
-    faq: [
-      { q: 'How long does it take?',
-        a: 'Usually a few seconds a page, so a few minutes for a long deck, '
-          + 'with progress shown as it goes; scanned pages take longer because '
-          + 'they are read first. Most of the time left is your own check.' },
-      { q: 'Is it free?',
-        a: 'Documents up to 20 pages are free. Longer ones need a license to '
-          + 'export the finished file.' },
-      { q: 'Will it find a name inside an image?',
-        a: 'Usually. Words in pictures are read by text recognition and, where '
-          + 'that fails, matched by their shape. Every result is listed for '
-          + 'you to check.' },
-    ],
-  },
 ]
