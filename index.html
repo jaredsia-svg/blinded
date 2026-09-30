@@ -111,7 +111,7 @@
   "duration": "PT59S"
 }
 </script>
-<link rel="stylesheet" href="app.css?v=c33807ff" integrity="sha384-y5eqO8cbf2tIVLVOqTfTV/WJjxYlk5dQYpdyP8Y/oMD12VLY59E5hW5GwrDXXMZW">
+<link rel="stylesheet" href="app.css?v=89d15fcf" integrity="sha384-ajD/SWG1dETFmV6/a/sZoLS0Iy5ARFecQX6DCcQHW84BYHdisIxYbn4vBCHFgaig">
 </head>
 <body>
 
@@ -948,22 +948,23 @@
         <input type="checkbox" id="plan1" checked disabled
           title="Always part of a search">
       </li>
-      <li class="planrow">
-        <label for="plan2">
-          <span class="plannum">2</span>
-          <span class="plantext">A second check for text that appears as images</span>
-        </label>
-        <input type="checkbox" id="plan2" checked>
-      </li>
-      <li class="planextras">
+      <li class="planrow planrow-more">
+        <div class="planhead">
+          <label for="plan2">
+            <span class="plannum">2</span>
+            <span class="plantext">A second check for text that appears as images</span>
+          </label>
+          <input type="checkbox" id="plan2" checked>
+        </div>
         <ul class="planextralist" aria-label="Closer looks in the second check">
-          <li><label><input type="checkbox" id="planx-turned" checked> Turned text: slanted, vertical or upside down</label></li>
-          <li><label><input type="checkbox" id="planx-hard" checked> Hard-to-read text: handwriting-style fonts, faint or garbled words</label></li>
+          <li><label><span>Turned text: slanted, vertical or upside down</span>
+            <input type="checkbox" id="planx-turned" checked></label></li>
+          <li><label><span>Hard-to-read text: handwriting-style fonts, faint or garbled words</span>
+            <input type="checkbox" id="planx-hard" checked></label></li>
         </ul>
-        <p class="planextrahint">Untick any you don't need to save time.</p>
       </li>
     </ol>
-    <p class="plantotal">Estimated time: <span id="plantotal"></span></p>
+    <p class="plantotal">Total est. time: <span id="plantotal"></span></p>
     <div class="confirmgo plango">
       <button type="button" id="searchplango" class="primary hunt confirm-action">Begin search</button>
     </div>
