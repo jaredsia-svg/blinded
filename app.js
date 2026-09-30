@@ -2734,6 +2734,14 @@
         await readTurnedLettering();
         for (const page of state.pages) {
           page.halfRead = nearMissInk(page);
+          // Where to try turning a slant level: any reading like a typed
+          // word, sure or not. The re-read itself must read the word
+          // confidently before anything is marked, so a wider net here costs
+          // a read or two and cannot mark anything wrongly on its own.
+          page.slantSeeds = nearMissInk(page, true);
+          for (const slanted of slantedInk(page)) {
+            if (!page.slantSeeds.some(seed => overlapShare(seed, slanted) >= 0.3)) page.slantSeeds.push(slanted);
+          }
           page.halfReadFrom = page.ocrItems;
         }
         matchOcr(done => leg('read', done));
@@ -3218,14 +3226,27 @@
   // with their neighbours they are the patch to read.
   const INK_CELL = 12;          // pixels of the working page
   const INK_VARIANCE = 400;     // a cell with less spread than this is blank
-  function unexplainedInk(page, shortest, all) {
+  // The page in grey at working size, kept with the page: the ink passes
+  // ask for it several times a search, and made afresh from a page of twelve
+  // million pixels it was most of their cost.
+  function inkWork(page) {
     const Prep = window.BlindedPagePrep;
-    if (!Prep || !page.source || !page.ocrItems) return [];
-    const w = page.source.width;
-    const h = page.source.height;
-    const full = Prep.canvasToGray(page.source);
-    const work = Prep.downsampleGray(full, w, h, Prep.WORK_LONG_EDGE);
-    const up = w / work.width;
+    if (!Prep || !page.source) return null;
+    if (page._inkWork && page._inkWork.source === page.source) return page._inkWork;
+    const w = page.source.width, h = page.source.height;
+    const work = Prep.downsampleGray(Prep.canvasToGray(page.source), w, h, Prep.WORK_LONG_EDGE);
+    page._inkWork = { source: page.source, work, up: w / work.width };
+    return page._inkWork;
+  }
+
+  function unexplainedInk(page, shortest, all) {
+    if (!window.BlindedPagePrep || !page.source || !page.ocrItems) return [];
+    // The same answer until the reading changes.
+    const asked = shortest + '|' + Boolean(all);
+    const was = page._inkAnswer;
+    if (was && was.source === page.source && was.items === page.ocrItems
+        && was.count === page.ocrItems.length && was.asked === asked) return was.out;
+    const { work, up } = inkWork(page);
     const cols = Math.floor(work.width / INK_CELL);
     const rows = Math.floor(work.height / INK_CELL);
     const ink = new Uint8Array(cols * rows);
@@ -3422,6 +3443,8 @@
     columns.sort((a, b) => b.h - a.h);
     out.push(...(all ? columns : columns.slice(0, INK_COLUMNS_PER_PAGE)));
     page.inkPatches = out;
+    page._inkAnswer = { source: page.source, items: page.ocrItems,
+      count: page.ocrItems.length, asked, out };
     return out;
   }
 
@@ -3435,7 +3458,7 @@
   // other places as well -- logos, photographs, unread lines -- because a
   // picture of a name and a picture of anything else look alike to a count
   // of ink. What the reader half-saw is what tells them apart.
-  function nearMissInk(page) {
+  function nearMissInk(page, anyConfidence) {
     const termOf = new Map();
     for (const term of state.terms) {
       for (const part of sweepPartsFor(term)) {
@@ -3475,7 +3498,7 @@
     const out = [];
     for (const area of unexplainedInk(page, shortest, true)) {
       const words = page.ocrItems.filter(it => it && it.rect && it.str && hit(it.rect, area));
-      const candidates = words.filter(it => unsure(it) && likeWhich(it.str));
+      const candidates = words.filter(it => (anyConfidence || unsure(it)) && likeWhich(it.str));
       if (!candidates.length) continue;
       // The closest one only, and what was read of the same word beside it
       // ("(rey" and "Frey"): several half-alike words along a line boxed
@@ -3537,16 +3560,20 @@
   // long axis of the ink: a word is a band of ink far longer than it is tall,
   // so the band's direction is the line's.
   function inkAngle(page, area) {
-    const x0 = Math.max(0, Math.floor(area.x)), y0 = Math.max(0, Math.floor(area.y));
-    const w = Math.min(page.source.width - x0, Math.ceil(area.w));
-    const h = Math.min(page.source.height - y0, Math.ceil(area.h));
-    if (w < 8 || h < 8) return null;
-    const d = page.source.getContext('2d').getImageData(x0, y0, w, h).data;
-    const v = new Uint8Array(w * h);
-    for (let i = 0; i < v.length; i++) v[i] = Math.min(d[i * 4], d[i * 4 + 1], d[i * 4 + 2]);
+    const at = inkWork(page);
+    if (!at) return null;
+    const { work, up } = at;
+    const x0 = Math.max(0, Math.floor(area.x / up)), y0 = Math.max(0, Math.floor(area.y / up));
+    const w = Math.min(work.width - x0, Math.ceil(area.w / up));
+    const h = Math.min(work.height - y0, Math.ceil(area.h / up));
+    if (w < 6 || h < 4) return null;
+    const v = new Float32Array(w * h);
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) v[y * w + x] = work.gray[(y0 + y) * work.width + x0 + x];
+    }
     // Ink is whatever is far from the ground, and the ground is what most of
     // the area is: dark lettering on a light ground or light on dark.
-    const sorted = Array.from(v).sort((a, b) => a - b);
+    const sorted = Array.from(v).sort((p, q) => p - q);
     const ground = sorted[sorted.length >> 1];
     let n = 0, sx = 0, sy = 0, sxx = 0, syy = 0, sxy = 0;
     for (let y = 0; y < h; y++) {
@@ -3555,7 +3582,7 @@
         n++; sx += x; sy += y; sxx += x * x; syy += y * y; sxy += x * y;
       }
     }
-    if (n < 30) return null;
+    if (n < 15) return null;
     const mx = sx / n, my = sy / n;
     const cxx = sxx / n - mx * mx, cyy = syy / n - my * my, cxy = sxy / n - mx * my;
     let angle = 0.5 * Math.atan2(2 * cxy, cxx - cyy) * 180 / Math.PI;
@@ -3574,22 +3601,49 @@
   // places nothing covers yet, and two reads each: a handful of reads on a
   // page that has any, none on a page that has none.
   const LEVEL_ENOUGH = 3;
+  // Lettering at a slant, found from the ink rather than from what the reader
+  // made of it. Where the reader half-read a slanted name ("Frey?") that is
+  // where to straighten; but on other machines' pixels it returned nothing
+  // like the name there ("crey®", "reve"), and with nothing half-read the
+  // name was never straightened. So each stretch of ink no confident reading
+  // explains is measured for slant as well, and the longest few that lean
+  // are straightened whatever the reader said.
+  const SLANT_MIN = 5, SLANT_MAX = 40, SLANTS_PER_PAGE = 4;
+  function slantedInk(page) {
+    const wants = rereadParts().map(plainWord).filter(w => w.length >= 3);
+    if (!wants.length || !page.ocrItems || page.ocrSkipped) return [];
+    const shortest = Math.min(...wants.map(w => w.length));
+    const out = [];
+    for (const a of unexplainedInk(page, shortest, true)) {
+      if (a.column || a.w < a.h) continue;
+      const slant = inkAngle(page, a);
+      if (slant === null || Math.abs(slant) < SLANT_MIN || Math.abs(slant) > SLANT_MAX) continue;
+      out.push({ ...a, slant });
+    }
+    out.sort((u, v) => v.w * v.h - u.w * u.h);
+    return out.slice(0, SLANTS_PER_PAGE);
+  }
+
   async function straightenHalfRead() {
     const hit = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
     let added = 0;
     for (const page of state.pages) {
       if (page.halfReadFrom !== page.ocrItems) continue;
-      for (const spot of page.halfRead || []) {
+      for (const spot of page.slantSeeds || page.halfRead || []) {
         if (state.paused) return added;
         const place = spot.place || spot;
         const covered = (page.hits || []).some(h => (h.rects || []).some(r => hit(r, place)))
           || (page.imageHits || []).some(m => m.rect && hit(m.rect, place));
         if (covered) continue;
-        const wants = sweepPartsFor(spot.term).map(plainWord).filter(w => w.length >= 3);
+        const wants = (spot.term ? sweepPartsFor(spot.term) : rereadParts())
+          .map(plainWord).filter(w => w.length >= 3);
         if (!wants.length) continue;
-        const angle = inkAngle(page, spot);
-        const turns = angle !== null && Math.abs(angle) >= LEVEL_ENOUGH
-          ? [-angle, 180 - angle] : [180];
+        const angle = spot.slant !== undefined ? spot.slant : inkAngle(page, spot);
+        // A slant found from the ink alone is read level only: upside down
+        // at a slant is rare, and every one of these places costs a read on
+        // every page that has leaning ink -- charts and photographs as well.
+        const turns = spot.slant !== undefined ? [-angle]
+          : angle !== null && Math.abs(angle) >= LEVEL_ENOUGH ? [-angle, 180 - angle] : [180];
         const pad = Math.min(Math.max(spot.w, spot.h) * 0.3, 80);
         const x0 = Math.max(0, Math.floor(spot.x - pad));
         const y0 = Math.max(0, Math.floor(spot.y - pad));
@@ -3602,11 +3656,12 @@
         let words = [];
         for (const turn of turns) {
           if (state.paused) return added;
-          const crop = readableCrop(page, x0, y0, x1, y1, TERM_REREAD_SCALE, mode, turn);
+          const scale = Math.min(TERM_REREAD_SCALE, TURNED_READ_LONG / Math.max(1, x1 - x0, y1 - y0));
+          const crop = readableCrop(page, x0, y0, x1, y1, scale, mode, turn);
           let read;
           try { read = await (Ocr.readCrop || Ocr.readPage)(crop); } catch { continue; }
           const typed = (read || []).map(word => ({ ...word,
-            rect: word.rect && cropRectToPage(word.rect, x0, y0, x1, y1, TERM_REREAD_SCALE, turn) }))
+            rect: word.rect && cropRectToPage(word.rect, x0, y0, x1, y1, scale, turn) }))
             .filter(word => word.rect && wants.includes(plainWord(bareWord(word.str)))
               && overlapShare(word.rect, spot) >= 0.3 && !known(word));
           // Sure of one part, the others spelt out letter for letter in the
@@ -3678,12 +3733,17 @@
     const crop = readableCrop(page, x0, y0, x1, y1, scale, mode, turn);
     let read;
     try { read = await (Ocr.readCrop || Ocr.readPage)(crop); } catch { return []; }
-    return (read || []).map(word => ({ ...word, how,
+    const typed = (read || []).map(word => ({ ...word, how,
       rect: word.rect && cropRectToPage(word.rect, x0, y0, x1, y1, scale, turn) }))
-      .filter(word => word.rect && wants.includes(plainWord(bareWord(word.str)))
-        && typeof word.confidence === 'number'
-        && word.confidence >= sureEnoughFor(plainWord(bareWord(word.str)))
-        && !known(word));
+      .filter(word => word.rect && wants.includes(plainWord(bareWord(word.str))) && !known(word));
+    // Sure of one part, the others spelt out letter for letter in the same
+    // read are taken at any confidence, as the slanted re-read takes them: a
+    // name set up the side of the page in script read "Yamamoto" surely and
+    // "Freya" just under the bar on one machine's pixels, and over it on
+    // another's.
+    const sure = typed.some(word => typeof word.confidence === 'number'
+      && word.confidence >= sureEnoughFor(plainWord(bareWord(word.str))));
+    return sure ? typed : [];
   }
 
   // Letters upside down, as the reader reads them, back to what they are.
@@ -3930,20 +3990,18 @@
         // the harmless error; leaving a letter showing is not.
         for (const item of page.ocrPlaced) {
           if (item.start >= span.end || item.end <= span.start) continue;
-          const id = 'ocr:' + span.term + ':' + page.index + ':'
-            + Math.round(item.rect.x) + ':' + Math.round(item.rect.y);
-          // A word the second check read, in a stretch the reader had
-          // skipped, is the check's find: amber, and kept as the check's
-          // marks are kept, so it is already here the next time round.
-          const byCheck = item.fromInk === 'unread';
-          if (byCheck && page.imageHits.some(m => m.id === id)) continue;
+          // Green, whichever pass read it. The colour says how sure the tool
+          // is, not when it looked: a word the second check read in a
+          // stretch the reader had skipped passed the same bar as any other
+          // reading, and drawn amber it was listed "as an image" when it was
+          // read letter for letter.
           page.imageHits.push({
-            id,
+            id: 'ocr:' + span.term + ':' + page.index + ':'
+              + Math.round(item.rect.x) + ':' + Math.round(item.rect.y),
             term: span.term,
             rect: { ...item.rect },
             score: 1,
             read: true,
-            ...(byCheck ? { bySweep: true } : {}),
           });
         }
       }
@@ -10713,9 +10771,8 @@
     // check covers (readSkippedStretches). Here rather than in the search:
     // it is the question this check asks -- was anything missed -- and in the
     // search it made every search slower by about a seventh, found or not.
-    // After the bar is up, so pressing the check is answered at once.
-    const amberBefore = state.pages.reduce((n, p) =>
-      n + (p.imageHits || []).filter(m => m.bySweep && m.read).length, 0);
+    // After the bar is up, so pressing the check is answered at once. What
+    // it reads is a reading, and green like any other.
     if (await readSkippedStretches(pages)) {
       matchOcr(() => {});
       detectOcr();
@@ -10723,8 +10780,6 @@
       renderTermCounts();
       redrawAll();
     }
-    const readByCheck = state.pages.reduce((n, p) =>
-      n + (p.imageHits || []).filter(m => m.bySweep && m.read).length, 0) - amberBefore;
 
     let results;
     try {
@@ -11007,7 +11062,7 @@
     // Words checked by an earlier run still count as checked.
     state.sweptTerms = (state.sweepStopped ? sweptBefore : asked)
       .filter(t => state.terms.includes(t));
-    state.sweepAdded = added + readByCheck;
+    state.sweepAdded = added;
     // What the reader threw out, and where each one was.
     state.sweepRefused = refused.length;
     state.sweepRefusedAt = refused;
