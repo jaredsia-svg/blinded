@@ -3466,16 +3466,47 @@
       const words = page.ocrItems.filter(it => it && it.rect && it.str && hit(it.rect, area));
       const want = words.map(it => likeWhich(it.str)).find(Boolean);
       if (!want) continue;
+      const term = termOf.get(want);
+      const halves = words.filter(it => likeWhich(it.str));
+      const place = halfReadPlace(halves, term, area);
       // One place once: a tall blob taken apart row by row gives a strip
-      // for each row, and each strip holds the same half-read word.
-      if (out.some(o => overlapShare(o, area) >= 0.3 || overlapShare(area, o) >= 0.3)) continue;
-      out.push({ ...area, term: termOf.get(want),
-        halves: words.filter(it => likeWhich(it.str)).map(it => ({ str: it.str,
+      // for each row, and two patches along one line hold the same word.
+      if (out.some(o => overlapShare(o.place, place) >= 0.3)) continue;
+      out.push({ ...area, term, place,
+        halves: halves.map(it => ({ str: it.str,
           confidence: it.confidence, rect: it.rect, want: likeWhich(it.str) })),
-        id: 'halfread:' + termOf.get(want) + ':' + page.index + ':' + Math.round(area.x) + ':' + Math.round(area.y),
-        words: words.filter(it => likeWhich(it.str)).map(it => it.str) });
+        id: 'halfread:' + term + ':' + page.index + ':' + Math.round(place.x) + ':' + Math.round(place.y),
+        words: halves.map(it => it.str) });
     }
     return out;
+  }
+
+  // Where a half-read word is, to show and to cover: the words the reader
+  // half-read, widened by the letters of the term it has not accounted for,
+  // and never past the unexplained ink round them.
+  //
+  // Not the ink itself. The ink is the evidence that something went unread,
+  // and it runs on through whatever touches it: on a slide it ran along a
+  // whole row of captions under a row of photographs, and the question about
+  // one name was asked with a box round all of them.
+  function halfReadPlace(halves, term, area) {
+    const left = Math.min(...halves.map(it => it.rect.x));
+    const top = Math.min(...halves.map(it => it.rect.y));
+    const right = Math.max(...halves.map(it => it.rect.x + it.rect.w));
+    const bottom = Math.max(...halves.map(it => it.rect.y + it.rect.h));
+    // The width of a letter, from the words themselves.
+    const letter = Math.max(...halves.map(it =>
+      it.rect.w / Math.max(1, String(it.str).replace(/\s/g, '').length)));
+    const read = halves.reduce((n, it) => n + plainWord(it.str).length, 0);
+    const missing = Math.max(0, String(term).replace(/\s/g, '').length - read);
+    // Which side the rest is on is not known, so either side.
+    const reach = (missing + 1) * letter;
+    const pad = (bottom - top) * 0.25;
+    const x0 = Math.max(area.x, left - reach), x1 = Math.min(area.x + area.w, right + reach);
+    const y0 = Math.max(area.y, top - pad), y1 = Math.min(area.y + area.h, bottom + pad);
+    // Clipping to the ink can only narrow it, never lose the words read.
+    const x = Math.min(x0, left), y = Math.min(y0, top);
+    return { x, y, w: Math.max(x1, right) - x, h: Math.max(y1, bottom) - y };
   }
 
   // The slant of the lettering in an area, in degrees as the page is drawn
@@ -3527,8 +3558,9 @@
       if (page.halfReadFrom !== page.ocrItems) continue;
       for (const spot of page.halfRead || []) {
         if (state.paused) return added;
-        const covered = (page.hits || []).some(h => (h.rects || []).some(r => hit(r, spot)))
-          || (page.imageHits || []).some(m => m.rect && hit(m.rect, spot));
+        const place = spot.place || spot;
+        const covered = (page.hits || []).some(h => (h.rects || []).some(r => hit(r, place)))
+          || (page.imageHits || []).some(m => m.rect && hit(m.rect, place));
         if (covered) continue;
         const wants = sweepPartsFor(spot.term).map(plainWord).filter(w => w.length >= 3);
         if (!wants.length) continue;
@@ -11475,6 +11507,14 @@
   // tells those apart. Gone as soon as anything covers the place.
   const HALF_READ_MAX = 3;
   function halfReadSpots() {
+    // Found by the first search, asked after the second check: the check's
+    // own questions are asked then, in the same amber, and the reviewer
+    // answers them all at once rather than some now and the rest later.
+    if (!state.searched || state.sweepRunning) return [];
+    const swept = state.sweptTerms.length
+      && state.sweptTerms.length === state.terms.length
+      && state.sweptTerms.every((t, i) => t === state.terms[i]);
+    if (!swept) return [];
     const seen = state.reviewed || (state.reviewed = new Set());
     const hit = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
     const out = [];
@@ -11484,12 +11524,13 @@
       if (page.halfReadFrom !== page.ocrItems) continue;
       for (const spot of page.halfRead || []) {
         if (seen.has(spot.id) || !state.terms.includes(spot.term)) continue;
+        const place = spot.place || spot;
         const covered = (page.hits || []).some(h => !page.dismissed.has(h.finding.id)
-            && (h.rects || []).some(r => hit(r, spot)))
-          || liveImageHits(page).some(m => m.rect && !page.dismissed.has(m.id) && hit(m.rect, spot));
+            && (h.rects || []).some(r => hit(r, place)))
+          || liveImageHits(page).some(m => m.rect && !page.dismissed.has(m.id) && hit(m.rect, place));
         if (covered) continue;
         out.push({ spot, page, term: spot.term,
-          at: { p: page.index, x: spot.x, y: spot.y, w: spot.w, h: spot.h } });
+          at: { p: page.index, x: place.x, y: place.y, w: place.w, h: place.h } });
       }
     }
     return out.slice(0, HALF_READ_MAX);
@@ -11502,7 +11543,7 @@
       onYes: () => {
         state.reviewed.add(one.spot.id);
         const mark = { id: one.spot.id, term: one.term, bySweep: true,
-          rect: { x: one.spot.x, y: one.spot.y, w: one.spot.w, h: one.spot.h } };
+          rect: { x: one.at.x, y: one.at.y, w: one.at.w, h: one.at.h } };
         one.page.imageHits = one.page.imageHits || [];
         one.page.imageHits.push(mark);
         pushUndo('the partly read place you accepted', () => {

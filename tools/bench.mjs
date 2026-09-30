@@ -626,7 +626,8 @@ for (const name of readdirSync(bench).sort()) {
         const out = [];
         for (const p of B.state.pages) {
           const mine = ((marks.find(m => m.page === p.index) || { marks: [] }).marks).flatMap(m => m.rects);
-          for (const a of (p.halfReadFrom === p.ocrItems && p.halfRead) || []) {
+          for (const spot of (p.halfReadFrom === p.ocrItems && p.halfRead) || []) {
+            const a = { ...spot.place, words: spot.words };
             if (mine.some(r => hit(r, a))) continue;
             // A picture of the spot and some of what is round it, for looking at.
             const pad = Math.max(40, a.h);

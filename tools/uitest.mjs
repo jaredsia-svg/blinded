@@ -4450,6 +4450,50 @@ try {
       veto.agrees === false, JSON.stringify(veto));
   });
 
+  await part("a half-read word is asked about after the second check, boxed at the word", async () => {
+    const half = await page.evaluate(() => {
+      const B = window.Blinded;
+      const p = B.state.pages[0];
+      const was = { terms: B.state.terms.slice(), swept: B.state.sweptTerms.slice(),
+        halfRead: p.halfRead, halfReadFrom: p.halfReadFrom, ocrItems: p.ocrItems,
+        best: B.state.sweepBest, reviewed: B.state.reviewed };
+      p.ocrItems = p.ocrItems || [];
+      const place = { x: 50, y: 300, w: 90, h: 14 };
+      p.halfRead = [{ x: 20, y: 290, w: 600, h: 36, place, term: 'Halfword',
+        id: 'halfread:Halfword:0:50:300', words: ['Halfwo'], halves: [] }];
+      p.halfReadFrom = p.ocrItems;
+      B.state.terms = ['Halfword'];
+      B.state.searched = true;
+      B.state.sweepBest = {};
+      B.state.reviewed = new Set();
+      const card = () => [...document.querySelectorAll('#termcounts .offer')]
+        .find(c => c.closest('li').previousElementSibling
+          && c.closest('li').previousElementSibling.querySelector('.t')
+          && c.closest('li').previousElementSibling.querySelector('.t').textContent === 'Halfword');
+      B.state.sweptTerms = [];
+      B.renderTermCounts();
+      const out = { beforeCheck: Boolean(card()) };
+      B.state.sweptTerms = ['Halfword'];
+      B.renderTermCounts();
+      out.afterCheck = Boolean(card());
+      if (card()) card().querySelector('.offeryes').click();
+      const mark = (p.imageHits || []).find(m => m.id === 'halfread:Halfword:0:50:300');
+      out.markAtWord = Boolean(mark) && mark.rect.w === place.w && mark.rect.x === place.x;
+      p.imageHits = (p.imageHits || []).filter(m => m !== mark);
+      B.state.terms = was.terms; B.state.sweptTerms = was.swept;
+      p.halfRead = was.halfRead; p.halfReadFrom = was.halfReadFrom; p.ocrItems = was.ocrItems;
+      B.state.sweepBest = was.best; B.state.reviewed = was.reviewed;
+      B.renderTermCounts();
+      return out;
+    });
+    check('not asked after the first search alone',
+      half.beforeCheck === false, JSON.stringify(half));
+    check('asked once the second check has run, with its own questions',
+      half.afterCheck === true, JSON.stringify(half));
+    check('and a yes covers the word, not the ink round it',
+      half.markAtWord === true, JSON.stringify(half));
+  });
+
   await part("the near miss, offered as a picture under its word", async () => {
     const offer = await page.evaluate(async () => {
       const B = window.Blinded;
