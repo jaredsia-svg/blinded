@@ -2731,6 +2731,7 @@
       try {
         await readPages(done => leg('read', done));
         await rereadForTerms();
+        await readTurnedLettering();
         for (const page of state.pages) {
           page.halfRead = nearMissInk(page);
           page.halfReadFrom = page.ocrItems;
@@ -3644,6 +3645,169 @@
     return added;
   }
 
+  // ---------- lettering the reader cannot read where it is ----------
+  //
+  // The reader reads level lines, the right way up. Measured on a test page of
+  // one name under fifty-odd conditions, what it returned for the rest was:
+  // for a name set up the side of the page, scattered symbols; for a name
+  // printed upside down, the letters as they stand ("ojowewe" -- "amamoto"
+  // turned over); for a name it skipped outright, nothing at all.
+
+  // Words read off a turned or cut-out crop, put on the page as one line in
+  // the order they were read, however they sit there.
+  function placeReadWords(page, words, along) {
+    let order = 0;
+    const lineY = along.y + along.h;
+    for (const found of words) {
+      page.ocrItems.push({ str: found.str, confidence: found.confidence, rect: found.rect,
+        x: along.x + (order++) * 0.01, y: found.rect.y + found.rect.h, w: found.rect.w,
+        h: found.rect.h / 0.82, lineY, fromInk: found.how });
+    }
+    if (Ocr.readingOrder) Ocr.readingOrder(page.ocrItems);
+    restitch(page);
+  }
+
+  // One read of an area for the typed words, confidently spelt, at a turn.
+  // A tall crop is read smaller rather than enlarged: a column the height of
+  // a page, doubled, was a crop of several thousand pixels and a read of six
+  // seconds.
+  const TURNED_READ_LONG = 1600;
+  async function readForWords(page, x0, y0, x1, y1, wants, turn, known, how) {
+    const scale = Math.min(TERM_REREAD_SCALE, TURNED_READ_LONG / Math.max(1, x1 - x0, y1 - y0));
+    const mode = inkModesFor(page, x0, y0, x1, y1)[0];
+    const crop = readableCrop(page, x0, y0, x1, y1, scale, mode, turn);
+    let read;
+    try { read = await (Ocr.readCrop || Ocr.readPage)(crop); } catch { return []; }
+    return (read || []).map(word => ({ ...word, how,
+      rect: word.rect && cropRectToPage(word.rect, x0, y0, x1, y1, scale, turn) }))
+      .filter(word => word.rect && wants.includes(plainWord(bareWord(word.str)))
+        && typeof word.confidence === 'number'
+        && word.confidence >= sureEnoughFor(plainWord(bareWord(word.str)))
+        && !known(word));
+  }
+
+  // Letters upside down, as the reader reads them, back to what they are.
+  const UPSIDE_DOWN = { a: 'ae', e: 'ea', o: 'o', w: 'm', m: 'w', u: 'n', n: 'u', d: 'p', p: 'd',
+    q: 'b', b: 'q', s: 's', l: 'li', i: 'il', j: 'tf', t: 'jf', f: 'jt', h: 'y', y: 'h', k: 'k',
+    x: 'x', z: 'z', r: 'j', c: 'c', v: 'a', g: 'b6', 6: 'g', 9: 'g' };
+  // How far a reading is from a word, read as that word printed upside down:
+  // the letters in reverse, each as it looks turned over.
+  function upsideDownDistance(str, want) {
+    const have = plainWord(str).split('').reverse();
+    const d = Array.from({ length: have.length + 1 }, (_, i) => [i]);
+    for (let j = 1; j <= want.length; j++) d[0][j] = j;
+    for (let i = 1; i <= have.length; i++) {
+      for (let j = 1; j <= want.length; j++) {
+        const same = (UPSIDE_DOWN[have[i - 1]] || have[i - 1]).includes(want[j - 1]);
+        d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (same ? 0 : 1));
+      }
+    }
+    return d[have.length][want.length];
+  }
+
+  // A name up the side of the page, and a name upside down.
+  //
+  // Up the side: tall narrow columns of ink (the ink detector's columns)
+  // read a quarter turn each way. Measured across the benchmark: all four
+  // vertical names on the test page, script ones included, for about ten
+  // seconds over the whole set and nothing wrongly found.
+  //
+  // Upside down: only where a reading already is a typed word printed upside
+  // down, so it costs a read where there is one and nothing elsewhere.
+  async function readTurnedLettering() {
+    const wants = rereadParts().map(plainWord).filter(w => w.length >= 3);
+    if (!wants.length) return 0;
+    const shortest = Math.min(...wants.map(w => w.length));
+    let added = 0;
+    for (const page of state.pages) {
+      if (state.paused) break;
+      if (!page.ocrItems || page.ocrSkipped || !page.source) continue;
+      const W = page.source.width, H = page.source.height;
+      const known = word => page.ocrItems.some(it => it && it.rect
+        && overlapShare(it.rect, word.rect) >= 0.5
+        && plainWord(bareWord(it.str)) === plainWord(bareWord(word.str)));
+      for (const column of unexplainedInk(page, shortest, true).filter(a => a.column)) {
+        if (state.paused) break;
+        const pad = Math.min(column.w * 0.6, 20);
+        const x0 = Math.max(0, Math.floor(column.x - pad)), y0 = Math.max(0, Math.floor(column.y - pad));
+        const x1 = Math.min(W, Math.ceil(column.x + column.w + pad));
+        const y1 = Math.min(H, Math.ceil(column.y + column.h + pad));
+        for (const turn of [90, -90]) {
+          const words = await readForWords(page, x0, y0, x1, y1, wants, turn, known, 'column');
+          if (!words.length) continue;
+          placeReadWords(page, words, column);
+          added += words.length;
+          break;
+        }
+      }
+      const upsideDown = page.ocrItems.filter(it => it && it.rect && it.str
+        && plainWord(it.str).length >= 3 && !wants.includes(plainWord(bareWord(it.str)))
+        && wants.some(w => upsideDownDistance(it.str, w) <= Math.max(1, Math.floor(w.length / 4))));
+      for (const it of upsideDown) {
+        if (state.paused) break;
+        const r = it.rect, pad = r.h * 6;
+        const x0 = Math.max(0, Math.floor(r.x - pad)), y0 = Math.max(0, Math.floor(r.y - r.h));
+        const x1 = Math.min(W, Math.ceil(r.x + r.w + pad)), y1 = Math.min(H, Math.ceil(r.y + r.h * 2));
+        const words = await readForWords(page, x0, y0, x1, y1, wants, 180, known, 'upside down');
+        if (!words.length) continue;
+        placeReadWords(page, words, r);
+        added += words.length;
+      }
+    }
+    return added;
+  }
+
+  // Stretches of a line the reader left unread -- no reading over them at
+  // all -- long enough to hold the shortest typed word, read on their own.
+  // Measured: three names the reader skipped outright, found, and nothing
+  // wrongly; but read everywhere it was a thousand reads across the
+  // benchmark, most of them on pages of photographs. So only the longest
+  // few on each page: three more names on the test page, nothing wrongly
+  // found anywhere, for about a fifth more time on the second check.
+  const GAPS_PER_PAGE = 12;
+  async function readSkippedStretches(pages) {
+    const wants = rereadParts().map(plainWord).filter(w => w.length >= 3);
+    if (!wants.length) return 0;
+    const shortest = Math.min(...wants.map(w => w.length));
+    const hit = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+    let added = 0;
+    // Run by the second check, so its Pause stops it too.
+    const stopped = () => state.paused || state.sweepStopped;
+    for (const page of pages) {
+      if (stopped()) break;
+      if (!page.ocrItems || page.ocrSkipped || !page.source) continue;
+      const W = page.source.width, H = page.source.height;
+      const known = word => page.ocrItems.some(it => it && it.rect
+        && overlapShare(it.rect, word.rect) >= 0.5
+        && plainWord(bareWord(it.str)) === plainWord(bareWord(word.str)));
+      const gaps = [];
+      for (const a of unexplainedInk(page, shortest, true)) {
+        if (a.column || a.w <= a.h) continue;
+        const spans = page.ocrItems.filter(it => it && it.rect && hit(it.rect, a))
+          .map(it => [it.rect.x, it.rect.x + it.rect.w]).sort((u, v) => u[0] - v[0]);
+        let at = a.x;
+        const open = [];
+        for (const [l, r] of spans) { if (l > at) open.push([at, l]); at = Math.max(at, r); }
+        if (a.x + a.w > at) open.push([at, a.x + a.w]);
+        for (const [l, r] of open) {
+          if (r - l >= a.h * 0.35 * shortest) gaps.push({ x: l, y: a.y, w: r - l, h: a.h });
+        }
+      }
+      gaps.sort((u, v) => v.w * v.h - u.w * u.h);
+      for (const g of gaps.slice(0, GAPS_PER_PAGE)) {
+        if (stopped()) break;
+        const padX = Math.min(g.h * 1.5, 40), padY = Math.min(g.h * 0.3, 12);
+        const x0 = Math.max(0, Math.floor(g.x - padX)), y0 = Math.max(0, Math.floor(g.y - padY));
+        const x1 = Math.min(W, Math.ceil(g.x + g.w + padX)), y1 = Math.min(H, Math.ceil(g.y + g.h + padY));
+        const words = await readForWords(page, x0, y0, x1, y1, wants, 0, known, 'unread');
+        if (!words.length) continue;
+        placeReadWords(page, words, g);
+        added += words.length;
+      }
+    }
+    return added;
+  }
+
   async function readUnexplainedInk() {
     const wants = rereadParts().map(plainWord);
     if (!wants.length) return 0;
@@ -3766,13 +3930,20 @@
         // the harmless error; leaving a letter showing is not.
         for (const item of page.ocrPlaced) {
           if (item.start >= span.end || item.end <= span.start) continue;
+          const id = 'ocr:' + span.term + ':' + page.index + ':'
+            + Math.round(item.rect.x) + ':' + Math.round(item.rect.y);
+          // A word the second check read, in a stretch the reader had
+          // skipped, is the check's find: amber, and kept as the check's
+          // marks are kept, so it is already here the next time round.
+          const byCheck = item.fromInk === 'unread';
+          if (byCheck && page.imageHits.some(m => m.id === id)) continue;
           page.imageHits.push({
-            id: 'ocr:' + span.term + ':' + page.index + ':'
-              + Math.round(item.rect.x) + ':' + Math.round(item.rect.y),
+            id,
             term: span.term,
             rect: { ...item.rect },
             score: 1,
             read: true,
+            ...(byCheck ? { bySweep: true } : {}),
           });
         }
       }
@@ -10538,6 +10709,23 @@
     // told the moment it starts and not only when it ends.
     refreshApply();
 
+    // First, the stretches of line the reader skipped, on the pages this
+    // check covers (readSkippedStretches). Here rather than in the search:
+    // it is the question this check asks -- was anything missed -- and in the
+    // search it made every search slower by about a seventh, found or not.
+    // After the bar is up, so pressing the check is answered at once.
+    const amberBefore = state.pages.reduce((n, p) =>
+      n + (p.imageHits || []).filter(m => m.bySweep && m.read).length, 0);
+    if (await readSkippedStretches(pages)) {
+      matchOcr(() => {});
+      detectOcr();
+      markDuplicates();
+      renderTermCounts();
+      redrawAll();
+    }
+    const readByCheck = state.pages.reduce((n, p) =>
+      n + (p.imageHits || []).filter(m => m.bySweep && m.read).length, 0) - amberBefore;
+
     let results;
     try {
       // The local check (window.Blinded.sweepLocal, for measuring): no pass
@@ -10819,7 +11007,7 @@
     // Words checked by an earlier run still count as checked.
     state.sweptTerms = (state.sweepStopped ? sweptBefore : asked)
       .filter(t => state.terms.includes(t));
-    state.sweepAdded = added;
+    state.sweepAdded = added + readByCheck;
     // What the reader threw out, and where each one was.
     state.sweepRefused = refused.length;
     state.sweepRefusedAt = refused;
