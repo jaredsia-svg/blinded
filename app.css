@@ -1658,7 +1658,26 @@ code {
 .offershot {
   display: block; width: 100%; height: auto;
   border: 1px solid var(--line); border-radius: 3px; background: #fff;
+  cursor: zoom-in;
 }
+.offershot:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+/* The cut-out enlarged, over everything. */
+.offerbig {
+  position: fixed; inset: 0; z-index: 95; padding: 24px;
+  background: rgba(20, 22, 26, .72);
+  display: grid; place-items: center; cursor: zoom-out;
+}
+.offerbigshot {
+  display: block; max-width: 100%; max-height: calc(100dvh - 48px);
+  width: auto; height: auto; background: #fff; border-radius: 4px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, .35);
+}
+.offerbigshut {
+  position: fixed; top: 14px; right: 16px; width: 36px; height: 36px;
+  background: #fff; border: 1px solid var(--line-strong); border-radius: 50%;
+  font: inherit; font-size: 20px; line-height: 1; cursor: pointer; color: var(--ink);
+}
+.offerbigshut:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 /* One row: where it is, then yes and no. */
 .offerrow { display: flex; align-items: center; gap: 6px; margin-top: 7px; }
 .offerwhere {

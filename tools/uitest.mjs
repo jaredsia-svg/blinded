@@ -4483,7 +4483,31 @@ try {
         where: card ? card.querySelector('.offerwhere').textContent : '',
       };
 
+      out.lead = card.querySelector('.offerlead').textContent;
+      // The cut-out opens large, and closes with Escape or a click.
+      card.querySelector('canvas.offershot').click();
+      const big = document.querySelector('.offerbig canvas');
+      out.enlarged = Boolean(big) && big.width > card.querySelector('canvas.offershot').width;
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      out.shutByEscape = !document.querySelector('.offerbig');
+      card.querySelector('canvas.offershot').click();
+      document.querySelector('.offerbig').click();
+      out.shutByClick = !document.querySelector('.offerbig');
+
+      // Pointing at the page lights the place on it, as a row under a word
+      // lights its mark; leaving puts it out.
+      const whereButton = card.querySelector('.offerwhere');
+      whereButton.dispatchEvent(new PointerEvent('pointerenter'));
+      const lit = B.state.spotlight;
+      out.litPlace = Boolean(lit && lit.pageIndex === 0 && lit.rect
+        && lit.rect.x === near.x && lit.rect.y === near.y && lit.rect.w === near.w);
+      whereButton.dispatchEvent(new PointerEvent('pointerleave'));
+      out.outAfterLeave = B.state.spotlight === null;
+      // And answering the card while pointing at it does not leave it lit.
+      whereButton.dispatchEvent(new PointerEvent('pointerenter'));
+
       card.querySelector('.offeryes').click();
+      out.outAfterAnswer = !B.state.spotlight || !B.state.spotlight.rect;
       out.marks = only();
       out.amber = (B.state.pages[0].imageHits || [])
         .filter(m => m.term === 'Ghostword').every(m => m.bySweep === true);
@@ -4522,6 +4546,18 @@ try {
     // and the score is the only number a reviewer can act on.
     check('with the page it is on and what it scored',
       /^Page 1 · 0\.61$/.test(offer.where.trim()), JSON.stringify(offer));
+    check('asked in the one wording every card uses',
+      offer.lead === 'Review low confidence searches:', JSON.stringify(offer));
+    check('clicking the cut-out shows it large',
+      offer.enlarged === true, JSON.stringify(offer));
+    check('and Escape or a click puts it away',
+      offer.shutByEscape === true && offer.shutByClick === true, JSON.stringify(offer));
+    check('pointing at the page lights the place on it',
+      offer.litPlace === true, JSON.stringify(offer));
+    check('and leaving puts it out',
+      offer.outAfterLeave === true, JSON.stringify(offer));
+    check('and so does answering the card',
+      offer.outAfterAnswer === true, JSON.stringify(offer));
     check('accepting it marks the page in amber',
       offer.marks === 1 && offer.amber === true, JSON.stringify(offer));
     check('and the offer goes once the word has a mark',

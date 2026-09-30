@@ -5196,7 +5196,8 @@
     // louder, and it has to be legible against a page that may already be
     // covered in green.
     if (state.spotlight && state.spotlight.pageIndex === page.index && !state.applied) {
-      const lit = rectsOfMark(page, state.spotlight.mark);
+      const lit = state.spotlight.rect ? [{ ...state.spotlight.rect, sweep: true }]
+        : rectsOfMark(page, state.spotlight.mark);
       if (lit.length) {
         ctx.save();
         const amber = lit.some(rect => rect.sweep);
@@ -7620,6 +7621,9 @@
 
   function renderTermCounts() {
     const host = el('termcounts');
+    // A card answered goes with the panel, and the pointer never leaves it:
+    // the place it lit would stay lit.
+    if (state.spotlight && state.spotlight.rect) spotlight(null, null);
     host.textContent = '';
     if (!state.terms.length) return;
 
@@ -7831,10 +7835,14 @@
   // Which mark, if any, is being pointed at from the panel. Held in the state
   // rather than on the element, because what draws it is the page's canvas
   // and the row that asked for it is somewhere else entirely.
-  function spotlight(pageIndex, mark) {
+  //
+  // Or a place with no mark on it yet -- a near miss or a half-read word the
+  // panel is asking about -- given as a rectangle, and lit in amber, the
+  // colour of the question.
+  function spotlight(pageIndex, mark, rect) {
     const was = state.spotlight;
-    if (was && was.pageIndex === pageIndex && was.mark === mark) return;
-    state.spotlight = mark ? { pageIndex, mark } : null;
+    if (was && was.pageIndex === pageIndex && was.mark === mark && was.rect === rect) return;
+    state.spotlight = mark || rect ? { pageIndex, mark, rect } : null;
     // Only the pages that changed: the one that was lit, and the one that is.
     for (const index of new Set([was && was.pageIndex, pageIndex])) {
       const page = typeof index === 'number' ? state.pages[index] : null;
@@ -11179,15 +11187,15 @@
   // point is legibility, not fidelity to the page.
   const OFFER_WIDTH = 250;
 
-  function offerCrop(at) {
+  function offerCrop(at, width = OFFER_WIDTH, around = 0.4) {
     const page = state.pages[at.p];
     if (!page || !page.source) return null;
     // The same framing the bench tool crops with: enough of the surroundings
     // to tell a word in a sentence from a word in a logo.
-    const pad = Math.max(16, Math.round(Math.max(at.w, at.h) * 0.4));
+    const pad = Math.max(16, Math.round(Math.max(at.w, at.h) * around));
     const sw = at.w + pad * 2;
     const sh = at.h + pad * 2;
-    const scale = Math.min(3, OFFER_WIDTH / sw);
+    const scale = Math.min(width > OFFER_WIDTH ? 6 : 3, width / sw);
     const cut = document.createElement('canvas');
     cut.width = Math.max(1, Math.round(sw * scale));
     cut.height = Math.max(1, Math.round(sh * scale));
@@ -11203,8 +11211,55 @@
     ctx.imageSmoothingEnabled = scale < 1;
     ctx.drawImage(page.source, at.x - pad, at.y - pad, sw, sh,
       0, 0, cut.width, cut.height);
+    // The place itself, outlined in amber. The cut-out shows enough round it
+    // to judge by, and a small word in a wide cut-out was nowhere in
+    // particular: the reviewer could not tell what they were being asked
+    // about.
+    ctx.strokeStyle = '#d98b1f';
+    ctx.lineWidth = Math.max(2, Math.round(cut.width / 160));
+    const inset = ctx.lineWidth / 2;
+    ctx.strokeRect(pad * scale - inset, pad * scale - inset,
+      at.w * scale + inset * 2, at.h * scale + inset * 2);
     cut.className = 'offershot';
     return cut;
+  }
+
+  // The cut-out, large, over everything: a card is the width of the panel,
+  // and small lettering in it was too small to judge. Closed by a click
+  // anywhere, the close button, or Escape.
+  function enlargeOffer(at) {
+    const width = Math.min(1100, Math.max(OFFER_WIDTH, window.innerWidth - 48));
+    const big = offerCrop(at, width, 1);
+    if (!big) return;
+    const back = document.createElement('div');
+    back.className = 'offerbig';
+    back.setAttribute('role', 'dialog');
+    back.setAttribute('aria-modal', 'true');
+    back.setAttribute('aria-label', 'The place, enlarged');
+    const shut = document.createElement('button');
+    shut.type = 'button';
+    shut.className = 'offerbigshut';
+    shut.textContent = '\u00d7';
+    shut.title = 'Close';
+    shut.setAttribute('aria-label', 'Close');
+    big.className = 'offerbigshot';
+    back.append(big, shut);
+    const was = document.activeElement;
+    const close = () => {
+      document.removeEventListener('keydown', onKey, true);
+      back.remove();
+      if (was && was.focus) was.focus();
+    };
+    const onKey = event => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      event.stopPropagation();
+      close();
+    };
+    back.addEventListener('click', close);
+    document.addEventListener('keydown', onKey, true);
+    document.body.append(back);
+    shut.focus();
   }
 
   // Which words the check placed nowhere, and the closest it came to each.
@@ -11287,7 +11342,18 @@
       lead.textContent = 'Nothing like it was found on any page.';
       return card;
     }
-    lead.textContent = offer.lead || 'Review low confidence matches:';
+    // One wording for every question the panel asks.
+    lead.textContent = 'Review low confidence searches:';
+    shot.tabIndex = 0;
+    shot.setAttribute('role', 'button');
+    shot.setAttribute('aria-label', 'Enlarge');
+    shot.title = 'Enlarge';
+    shot.addEventListener('click', () => enlargeOffer(offer.at));
+    shot.addEventListener('keydown', event => {
+      if (event.key !== 'Enter' && event.key !== ' ') return;
+      event.preventDefault();
+      enlargeOffer(offer.at);
+    });
     card.append(shot);
 
     // One row under the picture: where it is, and the two answers.
@@ -11305,6 +11371,15 @@
       + (typeof offer.score === 'number' ? ' · ' + offer.score.toFixed(2) : '');
     where.title = 'Show me on the page';
     where.addEventListener('click', () => goToPage(offer.at.p));
+    // Hovering the page lights up the place on it, as the rows under a word
+    // light up their marks.
+    const place = { x: offer.at.x, y: offer.at.y, w: offer.at.w, h: offer.at.h };
+    const lightUp = () => spotlight(offer.at.p, null, place);
+    const lightDown = () => spotlight(null, null);
+    where.addEventListener('pointerenter', lightUp);
+    where.addEventListener('focus', lightUp);
+    where.addEventListener('pointerleave', lightDown);
+    where.addEventListener('blur', lightDown);
 
     const take = document.createElement('button');
     take.type = 'button';
@@ -11422,7 +11497,6 @@
 
   function halfReadCard(one) {
     return offerCard({ term: one.term, at: one.at,
-      lead: 'Partly read here \u2013 is this it?',
       yesSays: 'Yes, redact this',
       noSays: 'No, leave it',
       onYes: () => {
