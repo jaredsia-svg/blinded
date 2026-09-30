@@ -1120,8 +1120,10 @@ check('and it is served from this origin, never a CDN',
       && /SIL OPEN FONT LICENSE/i.test(readFileSync(join(dir, f), 'utf8'))));
   check('every face names the bundled family first',
     TextImage.FACES.every(f => /^"Blinded (Arimo|Tinos)"/.test(f.family)));
-  check('the sweep faces are the bundled sans',
-    TextImage.SWEEP_FACES.length === 2 && TextImage.SWEEP_FACES.every(f => /Arimo/.test(f.family)));
+  check('the sweep faces are the bundled sans and the bundled script',
+    TextImage.SWEEP_FACES.length === 3
+      && TextImage.SWEEP_FACES.filter(f => /Arimo/.test(f.family)).length === 2
+      && TextImage.SWEEP_FACES.some(f => /Dancing Script/.test(f.family)));
 }
 check('a short word gets no relief at all', TextImage.shapeRelief('ZAG') === 0);
 check('nor does a four-letter acronym', TextImage.shapeRelief('QDTC') === 0);

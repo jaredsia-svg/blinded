@@ -70,6 +70,17 @@ const only = process.argv[2];
 const REVIEW = Boolean(process.env.REVIEW);
 const SAVE = Boolean(process.env.SAVE);
 const OFFLINE = Boolean(process.env.OFFLINE);
+// PERTURB=blur|gamma|jpeg|resample|contrast: alter every page image after it
+// opens and before the search, the way another computer's rendering differs
+// from this one's -- the same page, a few pixel values apart. Each keeps the
+// image's size, so the answer key still lines up. The reader is sensitive to
+// exactly these differences, and a run under each is how a change is held to
+// working everywhere rather than on this machine.
+const PERTURB = process.env.PERTURB || '';
+// CHECK=off: skip the second check, to see what reading alone finds.
+// CHECK=local: the second check only where the reading left a doubtful spot
+// (window.Blinded.sweepLocal), not over every page.
+const CHECK = process.env.CHECK || 'full';
 const baselinePath = join(bench, 'baseline.json');
 const baseline = existsSync(baselinePath)
   ? JSON.parse(readFileSync(baselinePath, 'utf8')) : null;
@@ -229,6 +240,51 @@ for (const name of readdirSync(bench).sort()) {
     window.__legWatch = setInterval(look, 40);
   });
 
+  if (PERTURB) {
+    const how = await page.evaluate(async kind => {
+      const B = window.Blinded;
+      for (const p of B.state.pages) {
+        const c = p.source;
+        if (!c || !c.getContext) continue;
+        const w = c.width, h = c.height;
+        const copy = document.createElement('canvas');
+        copy.width = w; copy.height = h;
+        copy.getContext('2d').drawImage(c, 0, 0);
+        const ctx = c.getContext('2d');
+        if (kind === 'blur') {
+          ctx.filter = 'blur(0.6px)'; ctx.drawImage(copy, 0, 0); ctx.filter = 'none';
+        } else if (kind === 'contrast') {
+          ctx.filter = 'contrast(0.88) brightness(1.04)'; ctx.drawImage(copy, 0, 0); ctx.filter = 'none';
+        } else if (kind === 'resample') {
+          const small = document.createElement('canvas');
+          small.width = Math.round(w * 0.7); small.height = Math.round(h * 0.7);
+          const s = small.getContext('2d'); s.imageSmoothingQuality = 'high';
+          s.drawImage(copy, 0, 0, small.width, small.height);
+          ctx.imageSmoothingQuality = 'high'; ctx.drawImage(small, 0, 0, w, h);
+        } else if (kind === 'jpeg') {
+          const url = copy.toDataURL('image/jpeg', 0.7);
+          const img = new Image();
+          await new Promise(done => { img.onload = done; img.src = url; });
+          ctx.drawImage(img, 0, 0);
+        } else if (kind === 'gamma') {
+          const data = ctx.getImageData(0, 0, w, h);
+          const lut = new Uint8ClampedArray(256);
+          for (let v = 0; v < 256; v++) lut[v] = Math.round(255 * Math.pow(v / 255, 0.85));
+          const d = data.data;
+          for (let i = 0; i < d.length; i += 4) { d[i] = lut[d[i]]; d[i + 1] = lut[d[i + 1]]; d[i + 2] = lut[d[i + 2]]; }
+          ctx.putImageData(data, 0, 0);
+        } else {
+          return 'unknown perturbation ' + kind;
+        }
+      }
+      return kind;
+    }, PERTURB);
+    console.log('   perturbed: ' + how);
+  }
+
+  if (process.env.INK || process.env.PLAINREREAD) await page.evaluate(([a, b]) => {
+    window.Blinded.inkPass = a; window.Blinded.plainReread = b;
+  }, [Boolean(process.env.INK), Boolean(process.env.PLAINREREAD)]);
   const started = Date.now();
   // A restored draft comes back already searched, and its picked images come
   // back already answered, so the search is asked for directly rather than
@@ -288,7 +344,10 @@ for (const name of readdirSync(bench).sort()) {
     return B.sweepEstimate ? B.sweepEstimate() : null;
   });
   const swept = Date.now();
-  const sweepAdded = await page.evaluate(() => window.Blinded.runSweep());
+  const sweepAdded = CHECK === 'off' ? 0 : await page.evaluate(local => {
+    window.Blinded.sweepLocal = local;
+    return window.Blinded.runSweep();
+  }, CHECK === 'local');
   await page.waitForFunction(() => document.getElementById('busy').hidden,
     undefined, { timeout: 1800000 });
   const sweepTook = (Date.now() - swept) / 1000;
@@ -559,6 +618,43 @@ for (const name of readdirSync(bench).sort()) {
     for (const a of got.alarms) {
       console.log('      false alarm ' + JSON.stringify(a.what) + ' (' + a.how + ') p' + (a.page + 1)
         + ' at ' + [a.rect.x, a.rect.y, a.rect.w, a.rect.h].join(','));
+    }
+    if (process.env.FLAGS) {
+      const flagged = await page.evaluate(marks => {
+        const B = window.Blinded;
+        const hit = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+        const out = [];
+        for (const p of B.state.pages) {
+          const mine = ((marks.find(m => m.page === p.index) || { marks: [] }).marks).flatMap(m => m.rects);
+          for (const a of (p.halfReadFrom === p.ocrItems && p.halfRead) || []) {
+            if (mine.some(r => hit(r, a))) continue;
+            // A picture of the spot and some of what is round it, for looking at.
+            const pad = Math.max(40, a.h);
+            const x0 = Math.max(0, a.x - pad), y0 = Math.max(0, a.y - pad);
+            const x1 = Math.min(p.source.width, a.x + a.w + pad), y1 = Math.min(p.source.height, a.y + a.h + pad);
+            const c = document.createElement('canvas'); c.width = x1 - x0; c.height = y1 - y0;
+            const x = c.getContext('2d'); x.drawImage(p.source, x0, y0, c.width, c.height, 0, 0, c.width, c.height);
+            x.strokeStyle = '#f59e0b'; x.lineWidth = 3; x.strokeRect(a.x - x0, a.y - y0, a.w, a.h);
+            out.push({ page: p.index, x: a.x, y: a.y, w: a.w, h: a.h, words: a.words, shot: c.toDataURL('image/png') });
+          }
+        }
+        return out;
+      }, marks);
+      const near = (f, r) => overlap(f, r) >= 0.2 * Math.min(area(f), area(r));
+      const useful = got.missed.filter(i => flagged.some(f => f.page === truth.items[i].page && near(f, truth.items[i].rect)));
+      const noise = flagged.filter(f => !truth.items.some(it => it.page === f.page && near(f, it.rect)));
+      console.log('   FLAGS: ' + flagged.length + ' flags · on missed ' + useful.length + ' of ' + got.missed.length
+        + ' · on nothing ' + noise.length);
+      for (const i of useful) console.log('      flag on #' + (i + 1) + ' (' + truth.items[i].note + ')');
+      if (process.env.FLAGSHOTS) {
+        const { mkdirSync } = await import('node:fs');
+        mkdirSync(process.env.FLAGSHOTS, { recursive: true });
+        noise.forEach((f, k) => {
+          const file = join(process.env.FLAGSHOTS, name.replace(/[^A-Za-z0-9]+/g, '_') + '-p' + (f.page + 1) + '-' + k + '.png');
+          writeFileSync(file, Buffer.from(f.shot.split(',')[1], 'base64'));
+          console.log('      noise ' + file.split('/').pop() + ' words ' + JSON.stringify(f.words));
+        });
+      }
     }
     const before = baseline && baseline[name];
     if (before && before.found) {

@@ -2731,8 +2731,16 @@
       try {
         await readPages(done => leg('read', done));
         await rereadForTerms();
+        for (const page of state.pages) {
+          page.halfRead = nearMissInk(page);
+          page.halfReadFrom = page.ocrItems;
+        }
         matchOcr(done => leg('read', done));
         detectOcr();
+        if (await straightenHalfRead()) {
+          matchOcr(() => {});
+          detectOcr();
+        }
         markDuplicates();
         renderTermCounts();
         renderSectionNotes();
@@ -2970,7 +2978,7 @@
       for (const item of page.ocrItems || []) {
         if (!item || !item.rect || !item.str || item[tried]) continue;
         if (typeof item.confidence !== 'number') continue;
-        const have = plainWord(item.str);
+        const have = plainWord(bareWord(item.str));
         if (!have || have === want) continue;
         // Or a piece of it: a brand name set in red mid-sentence came back as
         // its last four letters at 59, the first letters lost. No edit
@@ -2998,6 +3006,129 @@
     return candidates.slice(0, TERM_REREAD_PER_WORD);
   }
 
+  // One area of a page, cut out and made ready to read in one of three ways.
+  //
+  // 'colour' is the page as it is. 'dark' keeps each pixel's darkest channel,
+  // which turns coloured lettering on a light ground black -- red, blue and
+  // green text all have one channel near zero, and white paper has none. 'lit'
+  // is that inverted, for light lettering on a coloured ground: white on
+  // purple has a darkest channel of 255 on 0, and inverted is black on white.
+  // The reader was trained on black on white; these are the two ways a page
+  // most often is not that.
+  function readableCrop(page, x0, y0, x1, y1, scale, mode, turn) {
+    const crop = document.createElement('canvas');
+    const w = Math.max(1, Math.round((x1 - x0) * scale));
+    const h = Math.max(1, Math.round((y1 - y0) * scale));
+    // A quarter turn either way swaps the sides: text set up or down the
+    // page comes out lying along the crop, which is the only way the reader
+    // reads anything.
+    // Any other angle -- lettering set at a slant -- turns it level in a crop
+    // big enough to hold it turned.
+    const rad = (turn || 0) * Math.PI / 180;
+    const cos = Math.abs(Math.cos(rad)), sin = Math.abs(Math.sin(rad));
+    crop.width = Math.max(1, Math.round(w * cos + h * sin));
+    crop.height = Math.max(1, Math.round(w * sin + h * cos));
+    const ctx = crop.getContext('2d', { alpha: false, willReadFrequently: mode !== 'colour' });
+    ctx.imageSmoothingQuality = 'high';
+    // The corners a slant uncovers, in the colour of the page round it rather
+    // than black: black corners are ink to the reader.
+    if (turn && turn % 90 !== 0) {
+      ctx.drawImage(page.source, x0, y0, 1, 1, 0, 0, crop.width, crop.height);
+    }
+    if (turn) {
+      ctx.translate(crop.width / 2, crop.height / 2);
+      ctx.rotate(turn * Math.PI / 180);
+      ctx.drawImage(page.source, x0, y0, x1 - x0, y1 - y0, -w / 2, -h / 2, w, h);
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+    } else {
+      ctx.drawImage(page.source, x0, y0, x1 - x0, y1 - y0, 0, 0, crop.width, crop.height);
+    }
+    if (mode === 'colour') return crop;
+    const data = ctx.getImageData(0, 0, crop.width, crop.height);
+    const d = data.data;
+    for (let i = 0; i < d.length; i += 4) {
+      let v = Math.min(d[i], d[i + 1], d[i + 2]);
+      if (mode === 'lit') v = 255 - v;
+      d[i] = d[i + 1] = d[i + 2] = v;
+    }
+    ctx.putImageData(data, 0, 0);
+    return crop;
+  }
+
+  // Read one area in each of the ways above, stopping at the first that says
+  // one of `wants` (plain words) confidently. Returns the word, placed on the
+  // page, or null.
+  // A box read off a crop, put back on the page: undo the enlargement and,
+  // for a turned crop, the turn.
+  function cropRectToPage(r, x0, y0, x1, y1, scale, turn) {
+    if (!turn) return { x: x0 + r.x / scale, y: y0 + r.y / scale, w: r.w / scale, h: r.h / scale };
+    const W = (x1 - x0) * scale, H = (y1 - y0) * scale;
+    const a = -turn * Math.PI / 180;
+    const cos = Math.abs(Math.cos(a)), sin = Math.abs(Math.sin(a));
+    const cw = Math.round(W * cos + H * sin), ch = Math.round(W * sin + H * cos);
+    const xs = [], ys = [];
+    for (const [px, py] of [[r.x, r.y], [r.x + r.w, r.y], [r.x, r.y + r.h], [r.x + r.w, r.y + r.h]]) {
+      const dx = px - cw / 2, dy = py - ch / 2;
+      xs.push((dx * Math.cos(a) - dy * Math.sin(a) + W / 2) / scale + x0);
+      ys.push((dx * Math.sin(a) + dy * Math.cos(a) + H / 2) / scale + y0);
+    }
+    const left = Math.min(...xs), top = Math.min(...ys);
+    return { x: left, y: top, w: Math.max(...xs) - left, h: Math.max(...ys) - top };
+  }
+
+  async function readAreaFor(page, x0, y0, x1, y1, scale, modes, wants, near, all, isNew, turns) {
+    for (const turn of turns || [0]) for (const mode of modes) {
+      if (state.paused) return all ? [] : null;
+      const crop = readableCrop(page, x0, y0, x1, y1, scale, mode, turn);
+      let read;
+      try { read = await (Ocr.readCrop || Ocr.readPage)(crop); } catch { continue; }
+      const found = (read || []).map(word => ({ ...word,
+        rect: word.rect && cropRectToPage(word.rect, x0, y0, x1, y1, scale, turn) }))
+        .filter(word => word.rect && wants.includes(plainWord(bareWord(word.str)))
+          && typeof word.confidence === 'number'
+          && word.confidence >= sureEnoughFor(plainWord(bareWord(word.str)))
+          && (!near || overlapShare(word.rect, near) >= 0.3)
+          // A word the page already has is not an answer: the next way of
+          // reading is tried, where the one still missing may be.
+          && (!isNew || isNew(word)))
+        .map(word => ({ ...word, mode, turn }));
+      if (found.length) return all ? found : found[0];
+    }
+    return all ? [] : null;
+  }
+
+  // A word without a possessive on it: "Freya's" is Freya.
+  function bareWord(str) {
+    return String(str || '').replace(/['\u2019]s$/i, '');
+  }
+
+  // How sure a re-read must be of a word, by how long the word is.
+  //
+  // The first reading takes an exact reading of a typed word at any
+  // confidence, and a re-read asked for 80 -- stricter than the reading it was
+  // correcting. What makes an exact reading evidence is the spelling: a
+  // reader that spells out a seven-letter name letter for letter by accident
+  // is very rare, and one that spells out a three-letter one is not. So the
+  // longer the word, the less the reader's own confidence has to add.
+  // Measured: a subheading word came back spelt right at 57, a word in a
+  // small box at 79 and 83.
+  function sureEnoughFor(want) {
+    const n = String(want || '').length;
+    if (n >= 6) return 40;
+    if (n === 5) return 60;
+    return TERM_REREAD_SURE;
+  }
+
+  // The three ways, in the order worth trying: as it is first, since that is
+  // right most often and the colour-separated reads are for where it was not.
+  const REREAD_MODES = ['colour', 'dark', 'lit'];
+
+  function restitch(page) {
+    const stitched = Ocr.stitch(page.ocrItems);
+    page.ocrText = stitched.text;
+    page.ocrPlaced = stitched.items;
+  }
+
   async function rereadForTerms() {
     if (!Ocr || !Ocr.readPage || !Detect.ocrFold || !Detect.levenshtein) return 0;
     let changed = 0;
@@ -3019,33 +3150,504 @@
         const x1 = Math.min(page.source.width, Math.ceil(r.x + r.w + padX));
         const y1 = Math.min(page.source.height, Math.ceil(r.y + r.h + padY));
         if (x1 - x0 < 4 || y1 - y0 < 4) continue;
-        const crop = document.createElement('canvas');
-        crop.width = (x1 - x0) * TERM_REREAD_SCALE;
-        crop.height = (y1 - y0) * TERM_REREAD_SCALE;
-        const ctx = crop.getContext('2d', { alpha: false });
-        ctx.imageSmoothingQuality = 'high';
-        ctx.drawImage(page.source, x0, y0, x1 - x0, y1 - y0, 0, 0, crop.width, crop.height);
-        let read;
-        try { read = await Ocr.readPage(crop); } catch { continue; }
-        const back = v => v / TERM_REREAD_SCALE;
-        const found = (read || []).map(word => ({ ...word,
-          rect: word.rect && { x: x0 + back(word.rect.x), y: y0 + back(word.rect.y),
-            w: back(word.rect.w), h: back(word.rect.h) } }))
-          .find(word => word.rect && plainWord(word.str) === want
-            && typeof word.confidence === 'number' && word.confidence >= TERM_REREAD_SURE
-            && overlapShare(word.rect, r) >= 0.3);
+        const found = await readAreaFor(page, x0, y0, x1, y1, TERM_REREAD_SCALE,
+          window.Blinded && window.Blinded.plainReread ? ['colour'] : REREAD_MODES, [want], r);
         if (!found) continue;
         const at = page.ocrItems.indexOf(item);
         page.ocrItems[at] = { ...item, str: found.str, confidence: found.confidence,
           rect: found.rect, x: found.rect.x, y: found.rect.y, w: found.rect.w, h: found.rect.h,
-          lineY: item.lineY ?? item.y, fromTermReread: true };
-        const stitched = Ocr.stitch(page.ocrItems);
-        page.ocrText = stitched.text;
-        page.ocrPlaced = stitched.items;
+          lineY: item.lineY ?? item.y, fromTermReread: found.mode };
+        restitch(page);
         changed++;
       }
     }
+    // Switches for measuring each part's cost (tools/bench.mjs).
+    if (window.Blinded && window.Blinded.inkPass) changed += await readUnexplainedInk();
     return changed;
+  }
+
+  // ---------- ink the reader did not account for ----------
+  //
+  // The re-read above starts from a word the reader boxed. Some words it never
+  // boxes: a subheading it skipped, a word in white on a coloured banner that
+  // came back as the crumb "in". What is left of them is ink with no
+  // confident reading over it. So on each page that was read, the areas that
+  // look like text and carry almost no confident words are read again, in the
+  // colour-separated ways -- the plain way is how the reader already read
+  // them. Only a typed word read confidently is taken from them, so a stray
+  // reading of a logo or a chart cannot add anything.
+  const INK_AREAS_PER_PAGE = 12;
+  const INK_COLUMNS_PER_PAGE = 4;
+  const INK_ACCOUNTED = 0.25;
+  const INK_MODES = ['dark', 'lit'];
+
+  // Which way to read a patch, from its own colours, so that each patch is
+  // read once rather than every way. Light lettering on a dark ground wants
+  // 'lit'; coloured lettering on a light ground wants 'dark'; black on white
+  // is read as it is.
+  function inkModesFor(page, x0, y0, x1, y1) {
+    const w = Math.max(1, x1 - x0), h = Math.max(1, y1 - y0);
+    const c = document.createElement('canvas');
+    const step = Math.max(1, Math.round(Math.max(w, h) / 64));
+    c.width = Math.max(1, Math.round(w / step)); c.height = Math.max(1, Math.round(h / step));
+    const ctx = c.getContext('2d', { willReadFrequently: true });
+    ctx.drawImage(page.source, x0, y0, w, h, 0, 0, c.width, c.height);
+    const d = ctx.getImageData(0, 0, c.width, c.height).data;
+    const grays = [];
+    let colourful = 0, dark = 0;
+    for (let i = 0; i < d.length; i += 4) {
+      const g = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+      grays.push(g);
+      const spread = Math.max(d[i], d[i + 1], d[i + 2]) - Math.min(d[i], d[i + 1], d[i + 2]);
+      if (g < 170) { dark++; if (spread > 60) colourful++; }
+    }
+    grays.sort((a, b) => a - b);
+    const ground = grays[Math.floor(grays.length / 2)];
+    if (ground < 110) return ['lit', 'colour'];
+    if (dark && colourful / dark > 0.3) return ['dark', 'colour'];
+    return ['colour', 'dark'];
+  }
+
+  // Small patches of ink that no confident word covers.
+  //
+  // Judged cell by cell rather than area by area: a word the reader skipped
+  // usually sits in a line whose other words it read, so the line as a whole
+  // looks accounted for. On a grid of small cells, the cells with ink in them
+  // and no confident word over them are the gap where the word was; joined
+  // with their neighbours they are the patch to read.
+  const INK_CELL = 12;          // pixels of the working page
+  const INK_VARIANCE = 400;     // a cell with less spread than this is blank
+  function unexplainedInk(page, shortest, all) {
+    const Prep = window.BlindedPagePrep;
+    if (!Prep || !page.source || !page.ocrItems) return [];
+    const w = page.source.width;
+    const h = page.source.height;
+    const full = Prep.canvasToGray(page.source);
+    const work = Prep.downsampleGray(full, w, h, Prep.WORK_LONG_EDGE);
+    const up = w / work.width;
+    const cols = Math.floor(work.width / INK_CELL);
+    const rows = Math.floor(work.height / INK_CELL);
+    const ink = new Uint8Array(cols * rows);
+    const g = work.gray;
+    for (let cy = 0; cy < rows; cy++) {
+      for (let cx = 0; cx < cols; cx++) {
+        let sum = 0, sq = 0;
+        for (let y = cy * INK_CELL; y < (cy + 1) * INK_CELL; y++) {
+          for (let x = cx * INK_CELL; x < (cx + 1) * INK_CELL; x++) {
+            const v = g[y * work.width + x]; sum += v; sq += v * v;
+          }
+        }
+        const n = INK_CELL * INK_CELL;
+        if (sq / n - (sum / n) * (sum / n) > INK_VARIANCE) ink[cy * cols + cx] = 1;
+      }
+    }
+    // All the ink, before anything is taken away, for growing patches below.
+    const inkAll = ink.slice();
+    // Take away every cell a confident word, or the page's own text, covers.
+    const cover = r => {
+      const x0 = Math.floor(r.x / up / INK_CELL), x1 = Math.floor((r.x + r.w) / up / INK_CELL);
+      const y0 = Math.floor(r.y / up / INK_CELL), y1 = Math.floor((r.y + r.h) / up / INK_CELL);
+      for (let cy = Math.max(0, y0); cy <= Math.min(rows - 1, y1); cy++) {
+        for (let cx = Math.max(0, x0); cx <= Math.min(cols - 1, x1); cx++) ink[cy * cols + cx] = 0;
+      }
+    };
+    // A confident reading of a stray mark is not a reading of the ink round
+    // it: across a name set vertically the reader returned "3" at 93 and ">"
+    // at 87, and counted those covered the name. A word has two letters.
+    const aWord = it => /[A-Za-z0-9].*[A-Za-z0-9]/.test(String(it.str || ''));
+    for (const it of page.ocrItems) {
+      if (it && it.rect && typeof it.confidence === 'number' && it.confidence >= READER_SURE
+        && aWord(it)) cover(it.rect);
+    }
+    // Not the page's own text layer: a text layer can say what the pixels do
+    // not. A PDF can carry invisible text over a picture of different words
+    // -- measured on a test page, a hidden "CONFIDENTIAL" lay over a pictured
+    // name, and counted as accounting for that ink it hid the name from this
+    // pass entirely. What the reader confidently saw is what is on the page.
+    // Join what is left into patches, along lines more than across them.
+    const seen = new Uint8Array(cols * rows);
+    const patches = [];
+    for (let i = 0; i < ink.length; i++) {
+      if (!ink[i] || seen[i]) continue;
+      let minX = cols, minY = rows, maxX = 0, maxY = 0, count = 0;
+      const stack = [i];
+      seen[i] = 1;
+      while (stack.length) {
+        const at = stack.pop();
+        const cx = at % cols, cy = (at - cx) / cols;
+        count++;
+        if (cx < minX) minX = cx; if (cx > maxX) maxX = cx;
+        if (cy < minY) minY = cy; if (cy > maxY) maxY = cy;
+        for (const [dx, dy] of [[1, 0], [-1, 0], [2, 0], [-2, 0], [0, 1], [0, -1]]) {
+          const nx = cx + dx, ny = cy + dy;
+          if (nx < 0 || ny < 0 || nx >= cols || ny >= rows) continue;
+          const j = ny * cols + nx;
+          if (ink[j] && !seen[j]) { seen[j] = 1; stack.push(j); }
+        }
+      }
+      const pw = maxX - minX + 1, ph = maxY - minY + 1;
+      // Word-shaped: a line or two tall, a few cells wide.
+      if (ph <= 5) {
+        if (pw < 2 || count < 3 || pw > 60) continue;
+        patches.push({ x: minX * INK_CELL * up, y: minY * INK_CELL * up,
+          w: pw * INK_CELL * up, h: ph * INK_CELL * up, count });
+        continue;
+      }
+      // Taller than a line: a box, a banner, a photograph. A word lost inside
+      // a coloured banner joins up with the banner's own edges into one tall
+      // patch, and thrown away as not word-shaped it was never read. So a tall
+      // patch is taken apart into its rows, and each row's runs of ink are
+      // what could be a word.
+      for (let cy = minY; cy <= maxY; cy++) {
+        let run = null;
+        const close = () => {
+          // A border or a rule is one cell thick; a line of type fills the
+          // row above or below as well. A run with almost nothing over or
+          // under it is the edge of the box, not a word in it.
+          const beside = dy => {
+            if (!run || cy + dy < 0 || cy + dy >= rows) return 0;
+            let n = 0;
+            for (let x = run.x0; x <= run.x1; x++) if (ink[(cy + dy) * cols + x]) n++;
+            return n / (run.x1 - run.x0 + 1);
+          };
+          if (run && Math.max(beside(-1), beside(1)) < 0.3) run = null;
+          if (run && run.n >= 3 && run.x1 - run.x0 + 1 >= 2 && run.x1 - run.x0 + 1 <= 60) {
+            patches.push({ x: run.x0 * INK_CELL * up, y: Math.max(0, cy - 0.5) * INK_CELL * up,
+              w: (run.x1 - run.x0 + 1) * INK_CELL * up, h: 2 * INK_CELL * up, count: run.n, row: true });
+          }
+          run = null;
+        };
+        for (let cx = minX; cx <= maxX + 3; cx++) {
+          const on = cx <= maxX && seen[cy * cols + cx] && ink[cy * cols + cx];
+          if (on) {
+            if (!run) run = { x0: cx, x1: cx, n: 0, gap: 0 };
+            run.x1 = cx; run.n++; run.gap = 0;
+          } else if (run && ++run.gap > 2) close();
+        }
+        close();
+      }
+    }
+    // The biggest first, since a lost word is more ink than a stray mark --
+    // and a patch in a line of words the reader did read counts double: that
+    // is where a skipped word usually is, and a patch alone is as often a
+    // logo in a corner. Alone is not ruled out: a whole line the reader never
+    // read has no read words beside it at all.
+    const sure = page.ocrItems.filter(it => it && it.rect && it.confidence >= READER_SURE);
+    for (const p of patches) {
+      p.inLine = sure.some(it => it.rect.y < p.y + p.h && p.y < it.rect.y + it.rect.h
+        && Math.abs((it.rect.x + it.rect.w / 2) - (p.x + p.w / 2)) < p.w / 2 + it.rect.w / 2 + p.h * 3);
+    }
+    // Each patch grown along its ink, whatever the reader claimed there. A
+    // name set vertically came back as scattered nonsense, a few pieces of
+    // it confident enough to count as read, and what was left unexplained
+    // was a sixth of the column -- read on its own, not a word. Grown
+    // through the ink either way until two empty cells, the patch is the
+    // whole column, and the whole column reads.
+    const grow = p => {
+      let x0 = Math.floor(p.x / up / INK_CELL), x1 = Math.ceil((p.x + p.w) / up / INK_CELL) - 1;
+      let y0 = Math.floor(p.y / up / INK_CELL), y1 = Math.ceil((p.y + p.h) / up / INK_CELL) - 1;
+      const inkIn = (ax, bx, ay, by) => {
+        for (let cy = Math.max(0, ay); cy <= Math.min(rows - 1, by); cy++) {
+          for (let cx = Math.max(0, ax); cx <= Math.min(cols - 1, bx); cx++) if (inkAll[cy * cols + cx]) return true;
+        }
+        return false;
+      };
+      // Along its length only -- a column up and down, a line left and
+      // right, a square patch either way -- and only through touching ink.
+      const tallish = p.h >= p.w, wideish = p.w >= p.h;
+      for (let step = 0; tallish && step < 80; step++) {
+        let moved = false;
+        if (y0 > 0 && inkIn(x0, x1, y0 - 1, y0 - 1)) { y0--; moved = true; }
+        if (y1 < rows - 1 && inkIn(x0, x1, y1 + 1, y1 + 1)) { y1++; moved = true; }
+        if (!moved) break;
+      }
+      for (let step = 0; wideish && step < 80; step++) {
+        let moved = false;
+        if (x0 > 0 && inkIn(x0 - 1, x0 - 1, y0, y1)) { x0--; moved = true; }
+        if (x1 < cols - 1 && inkIn(x1 + 1, x1 + 1, y0, y1)) { x1++; moved = true; }
+        if (!moved) break;
+      }
+      return { ...p, x: x0 * INK_CELL * up, y: y0 * INK_CELL * up,
+        w: (x1 - x0 + 1) * INK_CELL * up, h: (y1 - y0 + 1) * INK_CELL * up };
+    };
+    const weight = p => p.count * (p.inLine ? 2 : 1);
+    patches.sort((a, b) => weight(b) - weight(a));
+    // Grown, then kept only if still word-sized in one direction -- growth
+    // that ran off across a table or a photograph is not a word -- and not
+    // one already covered by a bigger patch.
+    const out = [];
+    for (const p of patches) {
+      const g = grow(p);
+      const thin = Math.min(g.w, g.h) / up / INK_CELL;
+      if (thin > 6) continue;
+      // Too short to hold the shortest word looked for: letters are at least
+      // about a third of their height wide, so a word of n letters is at
+      // least a third of n heights long.
+      const across = Math.min(g.w, g.h), along = Math.max(g.w, g.h);
+      if (shortest && along < across * 0.35 * shortest) continue;
+      if (out.some(o => o.x <= g.x && o.y <= g.y && o.x + o.w >= g.x + g.w && o.y + o.h >= g.y + g.h)) continue;
+      out.push(g);
+      if (!all && out.length >= INK_AREAS_PER_PAGE) break;
+    }
+    // Columns: text set up or down the page. Upright, the reader makes
+    // nonsense of them, and some of that nonsense is confident enough to
+    // count as read, so they are found in all the ink rather than in what is
+    // left unexplained -- and given their own few places, since on a busy
+    // page the patches above can take all of theirs first.
+    const columns = [];
+    const seenAll = new Uint8Array(cols * rows);
+    for (let i = 0; i < inkAll.length; i++) {
+      if (!inkAll[i] || seenAll[i]) continue;
+      let minX = cols, minY = rows, maxX = 0, maxY = 0;
+      const stack = [i];
+      seenAll[i] = 1;
+      while (stack.length) {
+        const at = stack.pop();
+        const cx = at % cols, cy = (at - cx) / cols;
+        if (cx < minX) minX = cx; if (cx > maxX) maxX = cx;
+        if (cy < minY) minY = cy; if (cy > maxY) maxY = cy;
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1], [0, 2], [0, -2]]) {
+          const nx = cx + dx, ny = cy + dy;
+          if (nx < 0 || ny < 0 || nx >= cols || ny >= rows) continue;
+          const j = ny * cols + nx;
+          if (inkAll[j] && !seenAll[j]) { seenAll[j] = 1; stack.push(j); }
+        }
+      }
+      const cw = maxX - minX + 1, ch = maxY - minY + 1;
+      if (cw > 4 || ch < 5 || ch < cw * 3) continue;
+      columns.push({ x: minX * INK_CELL * up, y: minY * INK_CELL * up,
+        w: cw * INK_CELL * up, h: ch * INK_CELL * up, count: ch, column: true });
+    }
+    columns.sort((a, b) => b.h - a.h);
+    out.push(...(all ? columns : columns.slice(0, INK_COLUMNS_PER_PAGE)));
+    page.inkPatches = out;
+    return out;
+  }
+
+  // Ink the reader half-read as a word looked for: a spot no confident word
+  // explains, where what the reader did return starts like one of the typed
+  // words or is within two letters in five of it ("Frey!", "Yamamele" for
+  // "Freya Yamamoto"). Not a find -- a place for the reviewer to look.
+  //
+  // Unexplained ink alone is not enough to show anyone: measured across the
+  // benchmark it lay on most of what was missed and on some fourteen hundred
+  // other places as well -- logos, photographs, unread lines -- because a
+  // picture of a name and a picture of anything else look alike to a count
+  // of ink. What the reader half-saw is what tells them apart.
+  function nearMissInk(page) {
+    const termOf = new Map();
+    for (const term of state.terms) {
+      for (const part of sweepPartsFor(term)) {
+        const want = plainWord(part);
+        if (want.length >= 3 && !/\s/.test(part) && !termOf.has(want)) termOf.set(want, term);
+      }
+    }
+    const wants = [...termOf.keys()];
+    if (!wants.length || !page.ocrItems || page.ocrSkipped) return [];
+    const shortest = Math.min(...wants.map(w => w.length));
+    const likeWhich = str => {
+      const have = plainWord(bareWord(str));
+      if (have.length < 3) return null;
+      // The start of the word ("Frey" for "Freya"), or the word misread at
+      // about its own length. Not merely the same first letters: a word
+      // that shares its start with the one looked for and goes on to be
+      // something else (a longer place name, a neighbouring company's code) is a
+      // different word read correctly, and flagged it was most of the noise.
+      // Misread only for words of five letters or more, as the reader's own
+      // fuzzy match allows: one letter off a three-letter code is another
+      // code on the same chart.
+      return wants.find(want => want !== have && (want.startsWith(have)
+        || (want.length >= 5 && Math.abs(have.length - want.length) <= 2
+          && Detect.levenshtein(have, want) <= Math.max(1, Math.floor(want.length * 0.4))))) || null;
+    };
+    const hit = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+    const out = [];
+    for (const area of unexplainedInk(page, shortest, true)) {
+      const words = page.ocrItems.filter(it => it && it.rect && it.str && hit(it.rect, area));
+      const want = words.map(it => likeWhich(it.str)).find(Boolean);
+      if (!want) continue;
+      // One place once: a tall blob taken apart row by row gives a strip
+      // for each row, and each strip holds the same half-read word.
+      if (out.some(o => overlapShare(o, area) >= 0.3 || overlapShare(area, o) >= 0.3)) continue;
+      out.push({ ...area, term: termOf.get(want),
+        halves: words.filter(it => likeWhich(it.str)).map(it => ({ str: it.str,
+          confidence: it.confidence, rect: it.rect, want: likeWhich(it.str) })),
+        id: 'halfread:' + termOf.get(want) + ':' + page.index + ':' + Math.round(area.x) + ':' + Math.round(area.y),
+        words: words.filter(it => likeWhich(it.str)).map(it => it.str) });
+    }
+    return out;
+  }
+
+  // The slant of the lettering in an area, in degrees as the page is drawn
+  // (clockwise positive), or null when there is too little ink to say. The
+  // long axis of the ink: a word is a band of ink far longer than it is tall,
+  // so the band's direction is the line's.
+  function inkAngle(page, area) {
+    const x0 = Math.max(0, Math.floor(area.x)), y0 = Math.max(0, Math.floor(area.y));
+    const w = Math.min(page.source.width - x0, Math.ceil(area.w));
+    const h = Math.min(page.source.height - y0, Math.ceil(area.h));
+    if (w < 8 || h < 8) return null;
+    const d = page.source.getContext('2d').getImageData(x0, y0, w, h).data;
+    const v = new Uint8Array(w * h);
+    for (let i = 0; i < v.length; i++) v[i] = Math.min(d[i * 4], d[i * 4 + 1], d[i * 4 + 2]);
+    // Ink is whatever is far from the ground, and the ground is what most of
+    // the area is: dark lettering on a light ground or light on dark.
+    const sorted = Array.from(v).sort((a, b) => a - b);
+    const ground = sorted[sorted.length >> 1];
+    let n = 0, sx = 0, sy = 0, sxx = 0, syy = 0, sxy = 0;
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        if (Math.abs(v[y * w + x] - ground) < 60) continue;
+        n++; sx += x; sy += y; sxx += x * x; syy += y * y; sxy += x * y;
+      }
+    }
+    if (n < 30) return null;
+    const mx = sx / n, my = sy / n;
+    const cxx = sxx / n - mx * mx, cyy = syy / n - my * my, cxy = sxy / n - mx * my;
+    let angle = 0.5 * Math.atan2(2 * cxy, cxx - cyy) * 180 / Math.PI;
+    // A line of type, not a column: within a quarter turn of level.
+    if (angle > 45) angle -= 90;
+    if (angle < -45) angle += 90;
+    return angle;
+  }
+
+  // The places the reader half-read as a word looked for, read again turned
+  // level. Lettering set at a slant came back as "Frey" and a crumb: the
+  // reader reads along level lines and gives up partway along a sloping one.
+  // Turned by the slant of its own ink, and once more upside down (the same
+  // slant from the other side, or a word printed the wrong way up), a place
+  // is read as the word or left as the question it already is. Only the
+  // places nothing covers yet, and two reads each: a handful of reads on a
+  // page that has any, none on a page that has none.
+  const LEVEL_ENOUGH = 3;
+  async function straightenHalfRead() {
+    const hit = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+    let added = 0;
+    for (const page of state.pages) {
+      if (page.halfReadFrom !== page.ocrItems) continue;
+      for (const spot of page.halfRead || []) {
+        if (state.paused) return added;
+        const covered = (page.hits || []).some(h => (h.rects || []).some(r => hit(r, spot)))
+          || (page.imageHits || []).some(m => m.rect && hit(m.rect, spot));
+        if (covered) continue;
+        const wants = sweepPartsFor(spot.term).map(plainWord).filter(w => w.length >= 3);
+        if (!wants.length) continue;
+        const angle = inkAngle(page, spot);
+        const turns = angle !== null && Math.abs(angle) >= LEVEL_ENOUGH
+          ? [-angle, 180 - angle] : [180];
+        const pad = Math.min(Math.max(spot.w, spot.h) * 0.3, 80);
+        const x0 = Math.max(0, Math.floor(spot.x - pad));
+        const y0 = Math.max(0, Math.floor(spot.y - pad));
+        const x1 = Math.min(page.source.width, Math.ceil(spot.x + spot.w + pad));
+        const y1 = Math.min(page.source.height, Math.ceil(spot.y + spot.h + pad));
+        const known = word => page.ocrItems.some(it => it && it.rect
+          && overlapShare(it.rect, word.rect) >= 0.5
+          && plainWord(bareWord(it.str)) === plainWord(bareWord(word.str)));
+        const mode = inkModesFor(page, x0, y0, x1, y1)[0];
+        let words = [];
+        for (const turn of turns) {
+          if (state.paused) return added;
+          const crop = readableCrop(page, x0, y0, x1, y1, TERM_REREAD_SCALE, mode, turn);
+          let read;
+          try { read = await (Ocr.readCrop || Ocr.readPage)(crop); } catch { continue; }
+          const typed = (read || []).map(word => ({ ...word,
+            rect: word.rect && cropRectToPage(word.rect, x0, y0, x1, y1, TERM_REREAD_SCALE, turn) }))
+            .filter(word => word.rect && wants.includes(plainWord(bareWord(word.str)))
+              && overlapShare(word.rect, spot) >= 0.3 && !known(word));
+          // Sure of one part, the others spelt out letter for letter in the
+          // same read are taken at any confidence -- as the first reading
+          // takes a typed word spelt exactly. Measured: a slanted script name
+          // turned level read "Freya" at 91 and "Yamamoto" at 13.
+          if (typed.some(word => typeof word.confidence === 'number'
+              && word.confidence >= sureEnoughFor(plainWord(bareWord(word.str))))) {
+            words = typed;
+            break;
+          }
+        }
+        if (!words.length) continue;
+        // A part still missing is filled by what the reader half-read of it
+        // here to begin with, and the phrase match judges the whole as it
+        // judges any reading with a letter wrong: turned level, a slanted
+        // name read "Yamamoto" at 96 and nothing of the "Frey?" before it.
+        const line = wants.map(want => words.find(word => plainWord(bareWord(word.str)) === want)
+          || (spot.halves || []).find(half => half.want === want)).filter(Boolean);
+        let order = 0;
+        for (const found of line) {
+          // One line in the order of the typed words, as a turned read's are.
+          page.ocrItems.push({ str: found.str, confidence: found.confidence, rect: found.rect,
+            x: spot.x + (order++) * 0.01, y: found.rect.y + found.rect.h, w: found.rect.w,
+            h: found.rect.h / 0.82, lineY: spot.y + spot.h, fromInk: 'level' });
+          added++;
+        }
+        if (line.length) {
+          if (Ocr.readingOrder) Ocr.readingOrder(page.ocrItems);
+          restitch(page);
+          // Still the reading the places were found in.
+          page.halfReadFrom = page.ocrItems;
+        }
+      }
+    }
+    return added;
+  }
+
+  async function readUnexplainedInk() {
+    const wants = rereadParts().map(plainWord);
+    if (!wants.length) return 0;
+    const key = wants.slice().sort().join('|');
+    let added = 0;
+    for (const page of state.pages) {
+      if (state.paused) break;
+      if (!page.ocrItems || page.ocrSkipped || page.inkReadFor === key) continue;
+      page.inkReadFor = key;
+      const shortest = Math.min(...wants.map(w => w.length));
+      for (const area of unexplainedInk(page, shortest)) {
+        if (state.paused) break;
+        // With some of the line either side, as the re-read takes: the
+        // reader leans on the words around a word.
+        // A little of the line either side, not much: the patch already holds
+        // the lost word, and a crop reaching into the next cell or line read
+        // white-on-black lettering worse than the patch alone did.
+        const padX = Math.min(area.h * 1.5, 40);
+        const padY = Math.min(area.h * 0.3, 12);
+        const x0 = Math.max(0, Math.floor(area.x - padX));
+        const y0 = Math.max(0, Math.floor(area.y - padY));
+        const x1 = Math.min(page.source.width, Math.ceil(area.x + area.w + padX));
+        const y1 = Math.min(page.source.height, Math.ceil(area.y + area.h + padY));
+        // Every typed word the read gives, not only the first: the patch
+        // round a lost "Yamamoto" also holds the "Freya" already read beside
+        // it, and stopping at that one left the other where it was.
+        const known = word => page.ocrItems.some(it => it && it.rect
+          && overlapShare(it.rect, word.rect) >= 0.5
+          && plainWord(bareWord(it.str)) === plainWord(bareWord(word.str)));
+        // A patch clearly taller than it is wide is read turned as well, a
+        // quarter each way: a name set up the side of a page is a column of
+        // ink the reader cannot read upright.
+        const tall = area.column || area.h > area.w * 1.5;
+        const words = await readAreaFor(page, x0, y0, x1, y1, TERM_REREAD_SCALE,
+          inkModesFor(page, x0, y0, x1, y1), wants, area, true, word => !known(word),
+          tall ? [90, -90] : [0]);
+        let order = 0;
+        for (const found of words) {
+        if (known(found)) continue;
+        // Words from a turned read are one line in the order they were read,
+        // however they sit on the page: a name up the side of a page has its
+        // two words one above the other, and placed there they fell on two
+        // lines and never read as the name.
+        const along = found.turn ? { lineY: area.y + area.h, x: area.x + (order++) * 0.01 } : null;
+        // Placed the way the reader places its own words: a baseline and a
+        // font height, with the box inside them (lib/ocr.js ASCENT).
+        page.ocrItems.push({ str: found.str, confidence: found.confidence, rect: found.rect,
+          x: along ? along.x : found.rect.x, y: found.rect.y + found.rect.h, w: found.rect.w,
+          h: found.rect.h / 0.82, lineY: along ? along.lineY : found.rect.y + found.rect.h,
+          fromInk: found.mode });
+        if (Ocr.readingOrder) Ocr.readingOrder(page.ocrItems);
+        else page.ocrItems.sort((a, b) => (a.lineY ?? a.y) - (b.lineY ?? b.y) || a.x - b.x);
+        restitch(page);
+        added++;
+        }
+      }
+    }
+    return added;
   }
 
   // How many closer reads the next search will make. Pages already read are
@@ -7029,6 +7631,11 @@
       if (!lowByTerm.has(one.term)) lowByTerm.set(one.term, []);
       lowByTerm.get(one.term).push(one);
     }
+    const halfByTerm = new Map();
+    for (const one of halfReadSpots()) {
+      if (!halfByTerm.has(one.term)) halfByTerm.set(one.term, []);
+      halfByTerm.get(one.term).push(one);
+    }
 
     for (const term of state.terms) {
       const where = occurrencesFor(term);
@@ -7132,6 +7739,7 @@
       if (lowByTerm.has(term)) {
         for (const one of lowByTerm.get(term)) asks.push(lowConfidenceCard(one));
       }
+      for (const one of halfByTerm.get(term) || []) asks.push(halfReadCard(one));
       for (const ask of asks) {
         const holder = document.createElement('li');
         holder.className = 'tally offerhost';
@@ -9507,6 +10115,7 @@
 
   // Text-layer items use baseline y; match the box geometry boxes.js uses.
   function textItemRect(item) {
+    if (Boxes.turned && Boxes.turned(item)) return Boxes.itemBox(item);
     const ASCENT = 0.82;
     const DESCENT = 0.22;
     return {
@@ -9850,7 +10459,11 @@
 
     let results;
     try {
-      results = await ImageSearch.searchAllParallel(pages, entries,
+      // The local check (window.Blinded.sweepLocal, for measuring): no pass
+      // over every page, only the seeded rounds below, at the places the
+      // reading left in doubt.
+      results = window.Blinded && window.Blinded.sweepLocal ? new Map()
+        : await ImageSearch.searchAllParallel(pages, entries,
         { stop: () => state.sweepStopped,
           maxCandidates: SWEEP_CANDIDATES,
           perScale: SWEEP_PER_SCALE,
@@ -10025,8 +10638,18 @@
       const anchors = [];
       for (const entry of entries) {
         if (!state.terms.includes(entry.term)) continue;
-        const seeds = readerSeedsFor(entry.part, pagesNeedingSweep(entry.term))
+        let seeds = readerSeedsFor(entry.part, pagesNeedingSweep(entry.term))
           .filter(seed => !markedAt(state.pages[seed.pageIndex], seed));
+        // In the local check the unexplained ink is a place to look as well:
+        // it is where a word the reader never saw would be.
+        if (window.Blinded && window.Blinded.sweepLocal) {
+          for (const page of pagesNeedingSweep(entry.term)) {
+            for (const patch of (page.inkPatches || []).slice(0, SEEDS_PER_PART)) {
+              const seed = { pageIndex: page.index, x: patch.x, y: patch.y, w: patch.w, h: patch.h };
+              if (!markedAt(page, seed)) seeds.push(seed);
+            }
+          }
+        }
         if (!seeds.length) continue;
         anchors.push({ ...entry,
           key: 'seed:' + entry.key,
@@ -10664,7 +11287,7 @@
       lead.textContent = 'Nothing like it was found on any page.';
       return card;
     }
-    lead.textContent = 'Review low confidence matches:';
+    lead.textContent = offer.lead || 'Review low confidence matches:';
     card.append(shot);
 
     // One row under the picture: where it is, and the two answers.
@@ -10678,7 +11301,8 @@
     const where = document.createElement('button');
     where.type = 'button';
     where.className = 'offerwhere';
-    where.textContent = 'Page ' + (offer.at.p + 1) + ' · ' + offer.score.toFixed(2);
+    where.textContent = 'Page ' + (offer.at.p + 1)
+      + (typeof offer.score === 'number' ? ' · ' + offer.score.toFixed(2) : '');
     where.title = 'Show me on the page';
     where.addEventListener('click', () => goToPage(offer.at.p));
 
@@ -10764,6 +11388,66 @@
       onNo: () => {
         state.reviewed.add(one.mark.id);
         dropMark(one.page.index, one.mark.group || one.mark.id);
+        renderTermCounts();
+        renderSweep();
+      } });
+  }
+
+  // Places the reader half-read as a word looked for (nearMissInk), still
+  // uncovered and not yet answered. Asked, never marked on their own: on the
+  // benchmark they were three real misses -- a name set at a slant, which
+  // nothing else finds -- and two labels beside a name, and only looking
+  // tells those apart. Gone as soon as anything covers the place.
+  const HALF_READ_MAX = 3;
+  function halfReadSpots() {
+    const seen = state.reviewed || (state.reviewed = new Set());
+    const hit = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+    const out = [];
+    for (const page of state.pages) {
+      // Only against the reading it came from: a page turned or read again
+      // since has its words somewhere else.
+      if (page.halfReadFrom !== page.ocrItems) continue;
+      for (const spot of page.halfRead || []) {
+        if (seen.has(spot.id) || !state.terms.includes(spot.term)) continue;
+        const covered = (page.hits || []).some(h => !page.dismissed.has(h.finding.id)
+            && (h.rects || []).some(r => hit(r, spot)))
+          || liveImageHits(page).some(m => m.rect && !page.dismissed.has(m.id) && hit(m.rect, spot));
+        if (covered) continue;
+        out.push({ spot, page, term: spot.term,
+          at: { p: page.index, x: spot.x, y: spot.y, w: spot.w, h: spot.h } });
+      }
+    }
+    return out.slice(0, HALF_READ_MAX);
+  }
+
+  function halfReadCard(one) {
+    return offerCard({ term: one.term, at: one.at,
+      lead: 'Partly read here \u2013 is this it?',
+      yesSays: 'Yes, redact this',
+      noSays: 'No, leave it',
+      onYes: () => {
+        state.reviewed.add(one.spot.id);
+        const mark = { id: one.spot.id, term: one.term, bySweep: true,
+          rect: { x: one.spot.x, y: one.spot.y, w: one.spot.w, h: one.spot.h } };
+        one.page.imageHits = one.page.imageHits || [];
+        one.page.imageHits.push(mark);
+        pushUndo('the partly read place you accepted', () => {
+          one.page.imageHits = (one.page.imageHits || []).filter(m => m !== mark);
+          state.reviewed.delete(one.spot.id);
+          markDuplicates();
+          renderTermCounts();
+          renderSweep();
+          refreshApply();
+        });
+        markPending();
+        markDuplicates();
+        renderTermCounts();
+        renderSweep();
+        redrawAll();
+        refreshApply();
+      },
+      onNo: () => {
+        state.reviewed.add(one.spot.id);
         renderTermCounts();
         renderSweep();
       } });

@@ -59,6 +59,7 @@ const CORE = [
   '/vendor/fonts/tinos-latin-400-italic.woff2',
   '/vendor/fonts/tinos-latin-700-normal.woff2',
   '/vendor/fonts/tinos-latin-700-italic.woff2',
+  '/vendor/fonts/dancing-script-latin-400-normal.woff2',
   '/faq.html',
   '/license/',
   '/icon.svg',

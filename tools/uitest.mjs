@@ -8036,20 +8036,22 @@ try {
         used: TI.SWEEP_FACES.map(f => f.name),
         everyOneSmall: entries.every(e => e.smallText === true) };
     });
-    // Two, not eight: eight was four times the cost for a second opinion on
-    // work the reading has already done well.
-    check('the sweep draws two typefaces per word, not all eight',
-      faces.count === 2 && faces.all === 8, JSON.stringify(faces));
+    // Three, not eight: eight was four times the cost for a second opinion
+    // on work the reading has already done well. Two sans and one script.
+    check('the sweep draws three typefaces per word, not all eight',
+      faces.count === 3 && faces.all === 8, JSON.stringify(faces));
+    const sans = faces.used.filter(n => n !== 'script');
     // One upright and one slanted, because a single upright face misses
     // italic captions outright.
-    check('one upright and one slanted',
-      faces.used.length === 2
-        && faces.used.filter(n => /italic/.test(n)).length === 1,
+    check('one upright and one slanted sans',
+      sans.length === 2 && sans.filter(n => /italic/.test(n)).length === 1,
       JSON.stringify(faces.used));
     // Bold, which was measured: on rendered PDF text the regular-weight pair
     // scored 0.56 and 0.33 against a threshold of 0.636 and found nothing.
     check('and both are the heavier weight, which is what matches rendered ink',
-      faces.used.every(n => /bold/.test(n)), JSON.stringify(faces.used));
+      sans.every(n => /bold/.test(n)), JSON.stringify(faces.used));
+    // And a script, which neither the reader nor a sans template sees.
+    check('and one script face', faces.used.includes('script'), JSON.stringify(faces.used));
     check('and treats them all as small text, which is where reading fails',
       faces.everyOneSmall === true, JSON.stringify(faces));
 
