@@ -2739,9 +2739,6 @@
           // confidently before anything is marked, so a wider net here costs
           // a read or two and cannot mark anything wrongly on its own.
           page.slantSeeds = nearMissInk(page, true);
-          for (const slanted of slantedInk(page)) {
-            if (!page.slantSeeds.some(seed => overlapShare(seed, slanted) >= 0.3)) page.slantSeeds.push(slanted);
-          }
           page.halfReadFrom = page.ocrItems;
         }
         matchOcr(done => leg('read', done));
@@ -3614,8 +3611,14 @@
     if (!wants.length || !page.ocrItems || page.ocrSkipped) return [];
     const shortest = Math.min(...wants.map(w => w.length));
     const out = [];
+    const hit = (u, v) => u.x < v.x + v.w && v.x < u.x + u.w && u.y < v.y + v.h && v.y < u.y + u.h;
     for (const a of unexplainedInk(page, shortest, true)) {
       if (a.column || a.w < a.h) continue;
+      // Not a place already covered: those would take the few places there
+      // are, and on a page of several slanted copies of a name the smallest
+      // one, the one the reader lost, was left without one.
+      if ((page.hits || []).some(h => (h.rects || []).some(r => hit(r, a)))
+        || (page.imageHits || []).some(m => m.rect && hit(m.rect, a))) continue;
       const slant = inkAngle(page, a);
       if (slant === null || Math.abs(slant) < SLANT_MIN || Math.abs(slant) > SLANT_MAX) continue;
       out.push({ ...a, slant });
@@ -3629,7 +3632,13 @@
     let added = 0;
     for (const page of state.pages) {
       if (page.halfReadFrom !== page.ocrItems) continue;
-      for (const spot of page.slantSeeds || page.halfRead || []) {
+      // And the leaning ink, chosen now that what was read is marked, so the
+      // few places go to what is still uncovered (slantedInk).
+      const seeds = (page.slantSeeds || page.halfRead || []).slice();
+      for (const slanted of slantedInk(page)) {
+        if (!seeds.some(seed => overlapShare(seed, slanted) >= 0.3)) seeds.push(slanted);
+      }
+      for (const spot of seeds) {
         if (state.paused) return added;
         const place = spot.place || spot;
         const covered = (page.hits || []).some(h => (h.rects || []).some(r => hit(r, place)))
@@ -3825,6 +3834,7 @@
   // few on each page: three more names on the test page, nothing wrongly
   // found anywhere, for about a fifth more time on the second check.
   const GAPS_PER_PAGE = 12;
+  const JUNK_BELOW = 40, JUNK_PER_PAGE = 30;
   async function readSkippedStretches(pages) {
     const wants = rereadParts().map(plainWord).filter(w => w.length >= 3);
     if (!wants.length) return 0;
@@ -3854,6 +3864,42 @@
         }
       }
       gaps.sort((u, v) => v.w * v.h - u.w * u.h);
+      // And each junk reading, read again on its own. Measured: over a title
+      // in white on a photograph the reader returned "BARE" at 22, over a
+      // small scanned caption "srw" at 0, over a small name on a texture "a"
+      // at 0 -- and cut out on their own the same three read the title at 91,
+      // the caption's name at 72 and 96, and the small name at 96. What failed
+      // was reading them among everything else on the page. Widened along the
+      // line to the length of the longest typed word, since the junk is often
+      // a piece of it; the least sure first, a few a page.
+      const longest = Math.max(...wants.map(w => w.length));
+      const junk = page.ocrItems.filter(it => it && it.rect && it.str
+        && /[A-Za-z0-9]/.test(it.str) && typeof it.confidence === 'number'
+        && it.confidence < JUNK_BELOW && it.rect.h >= 6)
+        .sort((u, v) => u.confidence - v.confidence);
+      const places = [];
+      for (const it of junk) {
+        // Wide enough for the longest word at the junk's own letter width,
+        // and no wider: a junk box over a photograph can be a thousand
+        // pixels across already.
+        const r = it.rect;
+        const letter = Math.min(r.w / Math.max(1, it.str.replace(/[^A-Za-z0-9]/g, '').length), r.h * 0.8);
+        const reach = Math.max(letter, (letter * longest - r.w) / 2);
+        const place = { x: r.x - reach, y: r.y - r.h * 0.3, w: r.w + reach * 2, h: r.h * 1.6 };
+        if (places.some(p => overlapShare(p, place) >= 0.5)) continue;
+        places.push(place);
+        if (places.length >= JUNK_PER_PAGE) break;
+      }
+      for (const place of places) {
+        if (stopped()) break;
+        const x0 = Math.max(0, Math.floor(place.x)), y0 = Math.max(0, Math.floor(place.y));
+        const x1 = Math.min(W, Math.ceil(place.x + place.w)), y1 = Math.min(H, Math.ceil(place.y + place.h));
+        if (x1 - x0 < 8 || y1 - y0 < 6) continue;
+        const words = await readForWords(page, x0, y0, x1, y1, wants, 0, known, 'unread');
+        if (!words.length) continue;
+        placeReadWords(page, words, place);
+        added += words.length;
+      }
       for (const g of gaps.slice(0, GAPS_PER_PAGE)) {
         if (stopped()) break;
         const padX = Math.min(g.h * 1.5, 40), padY = Math.min(g.h * 0.3, 12);
