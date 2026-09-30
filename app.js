@@ -3456,18 +3456,40 @@
       // Misread only for words of five letters or more, as the reader's own
       // fuzzy match allows: one letter off a three-letter code is another
       // code on the same chart.
+      //
+      // About one letter in four, not two in five: two letters off a
+      // five-letter word is a different word ("gross" for "group"), and
+      // that asked about common words all through a long document. The
+      // real misreadings measured were one letter off, or two in eight.
       return wants.find(want => want !== have && (want.startsWith(have)
         || (want.length >= 5 && Math.abs(have.length - want.length) <= 2
-          && Detect.levenshtein(have, want) <= Math.max(1, Math.floor(want.length * 0.4))))) || null;
+          && Detect.levenshtein(have, want) <= Math.max(1, Math.floor(want.length / 4))))) || null;
     };
+    // Half-read is an unsure reading. A word the reader was sure of is a
+    // word it read, and if it is not the one looked for it is some other
+    // word: "Gross" read at full confidence is gross. Every real case
+    // measured was read at 51 or less.
+    const unsure = it => typeof it.confidence === 'number' && it.confidence < READER_SURE;
     const hit = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
     const out = [];
     for (const area of unexplainedInk(page, shortest, true)) {
       const words = page.ocrItems.filter(it => it && it.rect && it.str && hit(it.rect, area));
-      const want = words.map(it => likeWhich(it.str)).find(Boolean);
-      if (!want) continue;
+      const candidates = words.filter(it => unsure(it) && likeWhich(it.str));
+      if (!candidates.length) continue;
+      // The closest one only, and what was read of the same word beside it
+      // ("(rey" and "Frey"): several half-alike words along a line boxed
+      // the whole line.
+      const closeness = it => {
+        const have = plainWord(bareWord(it.str));
+        const want = likeWhich(it.str);
+        return want.startsWith(have) ? want.length - have.length : Detect.levenshtein(have, want);
+      };
+      const best = candidates.slice().sort((a, b) => closeness(a) - closeness(b))[0];
+      const want = likeWhich(best.str);
       const term = termOf.get(want);
-      const halves = words.filter(it => likeWhich(it.str));
+      const near = it => Math.abs(it.rect.x - best.rect.x) < best.rect.h * 3
+        || Math.abs((it.rect.x + it.rect.w) - (best.rect.x + best.rect.w)) < best.rect.h * 3;
+      const halves = candidates.filter(it => it === best || (likeWhich(it.str) === want && near(it)));
       const place = halfReadPlace(halves, term, area);
       // One place once: a tall blob taken apart row by row gives a strip
       // for each row, and two patches along one line hold the same word.
@@ -4480,13 +4502,24 @@
   // Marked rather than deleted, and recomputed whenever the findings change,
   // so that removing the term brings the picture match back rather than
   // leaving a hole where a mark used to be.
+  // A text-layer mark and a reader's mark on one word: across, the text
+  // layer's letters lie within the reader's word; down, they share the line.
+  function sameWord(text, read) {
+    const across = Math.min(text.x + text.w, read.x + read.w) - Math.max(text.x, read.x);
+    const down = Math.min(text.y + text.h, read.y + read.h) - Math.max(text.y, read.y);
+    return across > 0 && down > 0 && across / Math.max(1, text.w) >= 0.8
+      && down / Math.max(1, Math.min(text.h, read.h)) >= 0.5;
+  }
+
   function markDuplicates() {
     for (const page of state.pages) {
-      const textRects = [];
+      const textMarks = [];
       // Dismissed findings count here too. A reviewer who clicked a mark off
       // decided that occurrence should stay; a duplicate quietly covering it
       // anyway would overrule them.
-      for (const hit of page.hits) for (const rect of hit.rects) textRects.push(rect);
+      for (const hit of page.hits) {
+        for (const rect of hit.rects) textMarks.push({ rect, term: hit.finding.term });
+      }
 
       // Superseded means "already covered", and that is a question about this
       // match's own area — how much of it lies inside something else — not
@@ -4510,8 +4543,16 @@
         .concat(page.imageHits.filter(m => m.bySweep));
       const kept = [];
       for (const match of byWeight) {
-        const overText = textRects.some(
-          rect => Match.coveredFraction(match.rect, rect) > SAME_MARK);
+        // Or the same word read off the page. The text layer boxes "KAG"
+        // letter by letter and a line high; the reader boxes the whole word it
+        // read, "KAG's", and only as high as the ink. Neither box lies inside
+        // the other -- one is wider, the other taller -- so both were kept,
+        // and the word had two outlines and counted twice. Same word, same
+        // line, the text layer's letters within the reader's word: one mark,
+        // and the text layer's is kept, since it knows where each letter is.
+        const overText = textMarks.some(({ rect, term }) =>
+          Match.coveredFraction(match.rect, rect) > SAME_MARK
+          || (match.read && term && term === match.term && sameWord(rect, match.rect)));
         const overImage = kept.some(
           other => Match.coveredFraction(match.rect, other.rect) > SAME_MARK);
         match.superseded = overText || overImage;
