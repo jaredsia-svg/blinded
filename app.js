@@ -2731,7 +2731,6 @@
       try {
         await readPages(done => leg('read', done));
         await rereadForTerms();
-        await readTurnedLettering();
         for (const page of state.pages) {
           page.halfRead = nearMissInk(page);
           // Where to try turning a slant level: any reading like a typed
@@ -2743,10 +2742,6 @@
         }
         matchOcr(done => leg('read', done));
         detectOcr();
-        if (await straightenHalfRead()) {
-          matchOcr(() => {});
-          detectOcr();
-        }
         markDuplicates();
         renderTermCounts();
         renderSectionNotes();
@@ -3639,7 +3634,7 @@
         if (!seeds.some(seed => overlapShare(seed, slanted) >= 0.3)) seeds.push(slanted);
       }
       for (const spot of seeds) {
-        if (state.paused) return added;
+        if (state.paused || state.sweepStopped) return added;
         const place = spot.place || spot;
         const covered = (page.hits || []).some(h => (h.rects || []).some(r => hit(r, place)))
           || (page.imageHits || []).some(m => m.rect && hit(m.rect, place));
@@ -3664,7 +3659,7 @@
         const mode = inkModesFor(page, x0, y0, x1, y1)[0];
         let words = [];
         for (const turn of turns) {
-          if (state.paused) return added;
+          if (state.paused || state.sweepStopped) return added;
           const scale = Math.min(TERM_REREAD_SCALE, TURNED_READ_LONG / Math.max(1, x1 - x0, y1 - y0));
           const crop = readableCrop(page, x0, y0, x1, y1, scale, mode, turn);
           let read;
@@ -3783,20 +3778,20 @@
   //
   // Upside down: only where a reading already is a typed word printed upside
   // down, so it costs a read where there is one and nothing elsewhere.
-  async function readTurnedLettering() {
+  async function readTurnedLettering(which = { vertical: true, upsideDown: true }) {
     const wants = rereadParts().map(plainWord).filter(w => w.length >= 3);
     if (!wants.length) return 0;
     const shortest = Math.min(...wants.map(w => w.length));
     let added = 0;
     for (const page of state.pages) {
-      if (state.paused) break;
+      if (state.paused || state.sweepStopped) break;
       if (!page.ocrItems || page.ocrSkipped || !page.source) continue;
       const W = page.source.width, H = page.source.height;
       const known = word => page.ocrItems.some(it => it && it.rect
         && overlapShare(it.rect, word.rect) >= 0.5
         && plainWord(bareWord(it.str)) === plainWord(bareWord(word.str)));
-      for (const column of unexplainedInk(page, shortest, true).filter(a => a.column)) {
-        if (state.paused) break;
+      for (const column of which.vertical ? unexplainedInk(page, shortest, true).filter(a => a.column) : []) {
+        if (state.paused || state.sweepStopped) break;
         const pad = Math.min(column.w * 0.6, 20);
         const x0 = Math.max(0, Math.floor(column.x - pad)), y0 = Math.max(0, Math.floor(column.y - pad));
         const x1 = Math.min(W, Math.ceil(column.x + column.w + pad));
@@ -3809,11 +3804,11 @@
           break;
         }
       }
-      const upsideDown = page.ocrItems.filter(it => it && it.rect && it.str
+      const upsideDown = !which.upsideDown ? [] : page.ocrItems.filter(it => it && it.rect && it.str
         && plainWord(it.str).length >= 3 && !wants.includes(plainWord(bareWord(it.str)))
         && wants.some(w => upsideDownDistance(it.str, w) <= Math.max(1, Math.floor(w.length / 4))));
       for (const it of upsideDown) {
-        if (state.paused) break;
+        if (state.paused || state.sweepStopped) break;
         const r = it.rect, pad = r.h * 6;
         const x0 = Math.max(0, Math.floor(r.x - pad)), y0 = Math.max(0, Math.floor(r.y - r.h));
         const x1 = Math.min(W, Math.ceil(r.x + r.w + pad)), y1 = Math.min(H, Math.ceil(r.y + r.h * 2));
@@ -3834,7 +3829,9 @@
   // few on each page: three more names on the test page, nothing wrongly
   // found anywhere, for about a fifth more time on the second check.
   const GAPS_PER_PAGE = 12;
-  const JUNK_BELOW = 40, JUNK_PER_PAGE = 30;
+  // Ten junk readings a page. Measured across the benchmark, thirty cost
+  // about 38 seconds and found one name more than ten, which cost 18.
+  const JUNK_BELOW = 40, JUNK_PER_PAGE = 10;
   async function readSkippedStretches(pages) {
     const wants = rereadParts().map(plainWord).filter(w => w.length >= 3);
     if (!wants.length) return 0;
@@ -3871,7 +3868,7 @@
       // the caption's name at 72 and 96, and the small name at 96. What failed
       // was reading them among everything else on the page. Widened along the
       // line to the length of the longest typed word, since the junk is often
-      // a piece of it; the least sure first, a few a page.
+      // a piece of it; the least sure first, ten a page.
       const longest = Math.max(...wants.map(w => w.length));
       const junk = page.ocrItems.filter(it => it && it.rect && it.str
         && /[A-Za-z0-9]/.test(it.str) && typeof it.confidence === 'number'
@@ -3912,6 +3909,45 @@
       }
     }
     return added;
+  }
+
+  // ---------- the second check's closer reads ----------
+  //
+  // Lettering the page reader cannot read where it is -- at a slant, up the
+  // side of the page, upside down -- and words it skipped or garbled, read
+  // again on their own. Each is a pass of its own and each costs time on
+  // every page it runs over, so the reviewer can leave any of them out when
+  // the search starts (the plan dialog). They are part of the second check
+  // rather than the first search: the first search's marks are ready sooner,
+  // and these follow.
+  const CHECK_EXTRAS = ['slanted', 'vertical', 'upsideDown', 'script', 'skipped'];
+  // Offered as two ticks, not five: which of the two each closer read belongs to.
+  const EXTRA_GROUPS = { turned: ['slanted', 'vertical', 'upsideDown'], hard: ['script', 'skipped'] };
+  function checkExtras() {
+    const chosen = state.checkExtras || {};
+    const out = {};
+    for (const key of CHECK_EXTRAS) out[key] = chosen[key] !== false;
+    return out;
+  }
+
+  // Every page that was read, not only the ones the shape check still has
+  // work on: a page whose text layer has the word can still have it again
+  // as a picture set up its side. The skipped stretches keep to the check's
+  // own pages, as they were measured.
+  async function runCheckExtras(checkPages) {
+    const extras = checkExtras();
+    let changed = 0;
+    if (extras.vertical || extras.upsideDown) changed += await readTurnedLettering(extras);
+    if (extras.slanted) changed += await straightenHalfRead();
+    if (extras.skipped) changed += await readSkippedStretches(checkPages);
+    if (changed) {
+      matchOcr(() => {});
+      detectOcr();
+      markDuplicates();
+      renderTermCounts();
+      redrawAll();
+    }
+    return changed;
   }
 
   async function readUnexplainedInk() {
@@ -10333,6 +10369,13 @@
     return text.charAt(0).toUpperCase() + text.slice(1);
   }
 
+  // The script face only while the reviewer wants handwriting-style fonts
+  // looked for (checkExtras): it is a third of the shape check's work.
+  function sweepFaces() {
+    return checkExtras().script ? TextImage.SWEEP_FACES
+      : TextImage.SWEEP_FACES.filter(face => face.name !== 'script');
+  }
+
   function sweepTemplates() {
     const entries = [];
     for (const term of state.terms) {
@@ -10343,7 +10386,7 @@
       const parts = sweepPartsFor(term);
       const draw = isPhrase ? parts : [term.trim()];
       draw.forEach((part, partIndex) => {
-        TextImage.templatesFor(sweepCaseOf(part), TextImage.SWEEP_FACES).forEach((template, i) => {
+        TextImage.templatesFor(sweepCaseOf(part), sweepFaces()).forEach((template, i) => {
           entries.push({
             key: 'sweep:' + term + ':' + part + ':' + i,
             template,
@@ -10751,6 +10794,12 @@
     const entries = sweepTemplates();
     if (!entries.length) {
       // Everything the reading already settled — nothing left to correlate.
+      // The closer reads still have their pages: a word found in the text
+      // can be on the same page again as a picture.
+      state.sweepRunning = true;
+      renderSweep();
+      refreshApply();
+      try { await runCheckExtras([]); } finally { state.sweepRunning = false; }
       state.sweptTerms = state.terms.slice();
       state.sweepAdded = 0;
       state.sweepRefused = 0;
@@ -10813,19 +10862,10 @@
     // told the moment it starts and not only when it ends.
     refreshApply();
 
-    // First, the stretches of line the reader skipped, on the pages this
-    // check covers (readSkippedStretches). Here rather than in the search:
-    // it is the question this check asks -- was anything missed -- and in the
-    // search it made every search slower by about a seventh, found or not.
+    // First, the closer reads the reviewer left ticked (runCheckExtras).
     // After the bar is up, so pressing the check is answered at once. What
-    // it reads is a reading, and green like any other.
-    if (await readSkippedStretches(pages)) {
-      matchOcr(() => {});
-      detectOcr();
-      markDuplicates();
-      renderTermCounts();
-      redrawAll();
-    }
+    // they read is a reading, and green like any other.
+    await runCheckExtras(pages);
 
     let results;
     try {
@@ -11441,8 +11481,10 @@
   function checkPossible() {
     if (state.kind === 'text' || !state.terms.length) return false;
     if (!state.pages.some(page => page.couldHideText !== false)) return false;
+    // Pages the shape check has work on, or pages the closer reads can look
+    // at: they read every page that could hold lettering as a picture.
     const work = sweepWorkload();
-    return Boolean(work.pages && work.terms);
+    return Boolean(work.pages && work.terms) || state.useOcr !== false;
   }
 
   // Asks, and answers with what to run: null to run nothing, or whether to
@@ -11453,12 +11495,40 @@
     if (!checkPossible()) return Promise.resolve({ check: false });
     const box = el('searchplan');
     if (!box) return Promise.resolve({ check: true });
-    el('plantime1').textContent = describeWait(searchEstimate().seconds);
-    el('plantime2').textContent = describeWait(sweepEstimate().seconds);
     el('plan2').checked = true;
+    for (const group of Object.keys(EXTRA_GROUPS)) {
+      const tick = el('planx-' + group);
+      if (tick) { tick.checked = true; tick.disabled = false; }
+    }
+    showPlanTotal();
     box.hidden = false;
     el('searchplango').focus();
     return new Promise(done => { planAnswer = done; });
+  }
+
+  // One wait for the whole search as it is ticked, said again whenever a tick
+  // changes. Two waits, one a row, asked the reviewer to add them up, and did
+  // not move when a closer look was left out.
+  //
+  // What each closer look adds to the second check, as a share of the check
+  // without them. Measured across the benchmark: turned text about a sixth,
+  // hard-to-read text about three fifths.
+  const EXTRA_SHARE = { turned: 0.17, hard: 0.6 };
+  function planSeconds() {
+    let seconds = searchEstimate().seconds;
+    if (el('plan2') && el('plan2').checked) {
+      let share = 1;
+      for (const group of Object.keys(EXTRA_GROUPS)) {
+        const tick = el('planx-' + group);
+        if (!tick || tick.checked) share += EXTRA_SHARE[group] || 0;
+      }
+      seconds += sweepEstimate().seconds * share;
+    }
+    return seconds;
+  }
+  function showPlanTotal() {
+    const total = el('plantotal');
+    if (total) total.textContent = describeWait(planSeconds());
   }
 
   function answerSearchPlan(answer) {
@@ -11475,8 +11545,28 @@
     box.dataset.bound = '1';
     const cancel = () => answerSearchPlan(null);
     el('searchplanx').addEventListener('click', cancel);
-    el('searchplango').addEventListener('click',
-      () => answerSearchPlan({ check: el('plan2').checked }));
+    el('searchplango').addEventListener('click', () => {
+      const extras = {};
+      for (const [group, keys] of Object.entries(EXTRA_GROUPS)) {
+        const tick = el('planx-' + group);
+        for (const key of keys) extras[key] = !tick || tick.checked;
+      }
+      state.checkExtras = extras;
+      answerSearchPlan({ check: el('plan2').checked, extras });
+    });
+    // The closer reads are part of the second check: without it there is
+    // nothing for them to be part of.
+    el('plan2').addEventListener('change', () => {
+      for (const group of Object.keys(EXTRA_GROUPS)) {
+        const tick = el('planx-' + group);
+        if (tick) tick.disabled = !el('plan2').checked;
+      }
+      showPlanTotal();
+    });
+    for (const group of Object.keys(EXTRA_GROUPS)) {
+      const tick = el('planx-' + group);
+      if (tick) tick.addEventListener('change', showPlanTotal);
+    }
     box.addEventListener('pointerdown', event => {
       if (event.target === box) cancel();
     });
@@ -12737,7 +12827,7 @@
 
   window.Blinded = { state, rescan, loadFile, exportFile, setMode, addTemplate, offlineReady,
     undoLast, undoStack, applyLabels, labelItems, downloadKey,
-    sensFor, barFromScores, settleBar, barSteps, moveBarTo, answeredAlready,
+    sensFor, barFromScores, settleBar, barSteps, moveBarTo, answeredAlready, planSeconds,
     liveImageHits,
     AUTO_FLOOR, REAL_GAP,
     anchorOn, returnTo, stepPage, refreshPaging,

@@ -282,6 +282,14 @@ for (const name of readdirSync(bench).sort()) {
     console.log('   perturbed: ' + how);
   }
 
+  // EXTRAS_OFF=turned,hard: the second check's closer reads left out, as the
+  // reviewer can leave them out in the search dialog.
+  if (process.env.EXTRAS_OFF) await page.evaluate(off => {
+    const groups = { turned: ['slanted', 'vertical', 'upsideDown'], hard: ['script', 'skipped'] };
+    const extras = {};
+    for (const [group, keys] of Object.entries(groups)) for (const key of keys) extras[key] = !off.includes(group);
+    window.Blinded.state.checkExtras = extras;
+  }, process.env.EXTRAS_OFF.split(','));
   if (process.env.INK || process.env.PLAINREREAD) await page.evaluate(([a, b]) => {
     window.Blinded.inkPass = a; window.Blinded.plainReread = b;
   }, [Boolean(process.env.INK), Boolean(process.env.PLAINREREAD)]);

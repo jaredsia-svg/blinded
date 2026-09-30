@@ -10475,7 +10475,31 @@ try {
       });
       const inner = box.querySelector('.busy-inner').getBoundingClientRect();
       const button = go.getBoundingClientRect();
-      return { rows, one: { on: one.checked, locked: one.disabled },
+      // The second check's two closer looks, ticked, and put out of reach
+      // with the check itself.
+      const extras = () => ['turned', 'hard'].map(k => {
+        const t = document.getElementById('planx-' + k);
+        return t ? { on: t.checked, off: t.disabled, text: t.closest('label').textContent.trim() } : null;
+      });
+      const extrasShown = extras();
+      // One wait for the whole search, said again as the ticks change.
+      const B = window.Blinded;
+      const total = () => document.getElementById('plantotal').textContent;
+      const secs = { all: B.planSeconds() };
+      const hard = document.getElementById('planx-hard');
+      hard.click();
+      secs.noHard = B.planSeconds();
+      const turned = document.getElementById('planx-turned');
+      turned.click();
+      secs.neither = B.planSeconds();
+      turned.click(); hard.click();
+      const totalShown = total();
+      two.click();
+      const extrasWithout = extras();
+      secs.noCheck = B.planSeconds();
+      two.click();
+      const extrasBack = extras();
+      return { rows, secs, totalShown, extrasShown, extrasWithout, extrasBack, one: { on: one.checked, locked: one.disabled },
                two: { on: two.checked, locked: two.disabled },
                go: go.textContent.trim(), paint: getComputedStyle(go).backgroundColor,
                right: inner.right - button.right < 40,
@@ -10483,16 +10507,29 @@ try {
     });
     check('Search puts up the plan before anything runs',
       plan.searched === false && plan.rows.length === 2, JSON.stringify(plan));
-    check('the first phase is the text and image inputs, with its wait',
-      /Text and image inputs.*(minute)/.test(plan.rows[0].text), JSON.stringify(plan.rows));
-    check('the second is the check for text that appears as images, with its wait',
-      /second check for text that appears as images.*(minute)/i.test(plan.rows[1].text),
+    check('the first phase is the text and image inputs',
+      /Text and image inputs/.test(plan.rows[0].text) && !/minute/.test(plan.rows[0].text),
       JSON.stringify(plan.rows));
+    check('the second is the check for text that appears as images',
+      /second check for text that appears as images/i.test(plan.rows[1].text)
+        && !/minute/.test(plan.rows[1].text), JSON.stringify(plan.rows));
+    check('one estimated time for the whole search, above the button',
+      /minute/.test(plan.totalShown), JSON.stringify(plan.totalShown));
+    check('and it comes down as closer looks and the check are left out',
+      plan.secs.all > plan.secs.noHard && plan.secs.noHard > plan.secs.neither
+        && plan.secs.neither > plan.secs.noCheck, JSON.stringify(plan.secs));
     check('each with its tick on the right',
       plan.rows.every(row => row.tickRight), JSON.stringify(plan.rows));
     check('both ticked, and the first cannot be unticked',
       plan.one.on && plan.one.locked && plan.two.on && !plan.two.locked,
       JSON.stringify(plan));
+    check('under the second phase, two closer looks, both ticked',
+      plan.extrasShown.length === 2 && plan.extrasShown.every(x => x && x.on && !x.off)
+        && /Turned text/.test(plan.extrasShown[0].text) && /Hard-to-read text/.test(plan.extrasShown[1].text),
+      JSON.stringify(plan.extrasShown));
+    check('greyed out while the second check is unticked, and back with it',
+      plan.extrasWithout.every(x => x.off) && plan.extrasBack.every(x => !x.off),
+      JSON.stringify([plan.extrasWithout, plan.extrasBack]));
     check('under a red Begin search on the right',
       plan.go === 'Begin search' && plan.paint === 'rgb(217, 45, 32)' && plan.right,
       JSON.stringify(plan));
@@ -10509,6 +10546,10 @@ try {
     // Both phases: the search, then the check straight on from it, with the
     // search's line still up and the check's bar under it.
     await clickSearch(page, { check: true });
+    const extrasChosen = await page.evaluate(() => window.Blinded.state.checkExtras);
+    check('and both ticked asks the second check for every closer look',
+      extrasChosen && ['slanted', 'vertical', 'upsideDown', 'script', 'skipped'].every(k => extrasChosen[k] === true),
+      JSON.stringify(extrasChosen));
     await page.waitForFunction(() => window.Blinded.state.sweepRunning === true
       || (window.Blinded.state.searched && window.Blinded.state.sweptTerms.length > 0),
       undefined, { timeout: 240000 });

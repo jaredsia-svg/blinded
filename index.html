@@ -111,7 +111,7 @@
   "duration": "PT59S"
 }
 </script>
-<link rel="stylesheet" href="app.css?v=4ac17645" integrity="sha384-Ch9/QXiT18WXxKtw+5qxKfQfvOdEywZ/Q1V8jW+tTBAyfJ28T0cI1REcGS9DzINe">
+<link rel="stylesheet" href="app.css?v=c33807ff" integrity="sha384-y5eqO8cbf2tIVLVOqTfTV/WJjxYlk5dQYpdyP8Y/oMD12VLY59E5hW5GwrDXXMZW">
 </head>
 <body>
 
@@ -943,8 +943,7 @@
       <li class="planrow">
         <label for="plan1">
           <span class="plannum">1</span>
-          <span class="plantext">Text and image inputs
-            <span class="plantime" id="plantime1"></span></span>
+          <span class="plantext">Text and image inputs</span>
         </label>
         <input type="checkbox" id="plan1" checked disabled
           title="Always part of a search">
@@ -952,12 +951,19 @@
       <li class="planrow">
         <label for="plan2">
           <span class="plannum">2</span>
-          <span class="plantext">A second check for text that appears as images
-            <span class="plantime" id="plantime2"></span></span>
+          <span class="plantext">A second check for text that appears as images</span>
         </label>
         <input type="checkbox" id="plan2" checked>
       </li>
+      <li class="planextras">
+        <ul class="planextralist" aria-label="Closer looks in the second check">
+          <li><label><input type="checkbox" id="planx-turned" checked> Turned text: slanted, vertical or upside down</label></li>
+          <li><label><input type="checkbox" id="planx-hard" checked> Hard-to-read text: handwriting-style fonts, faint or garbled words</label></li>
+        </ul>
+        <p class="planextrahint">Untick any you don't need to save time.</p>
+      </li>
     </ol>
+    <p class="plantotal">Estimated time: <span id="plantotal"></span></p>
     <div class="confirmgo plango">
       <button type="button" id="searchplango" class="primary hunt confirm-action">Begin search</button>
     </div>
@@ -1209,7 +1215,7 @@
 <script src="lib/pass.js?v=fa8e95c9" integrity="sha384-vdiGIUAtPsWUwbV/9iFB3JwVBPa1iWWzPkpwZOb2O6VlxQpGrlUP9RGGlQaNl17N"></script>
 <script src="lib/pay.js?v=6f94d998" integrity="sha384-1bByT5YqR1yybQrDsj8bxhmARIphzp5gXG9YVdSfl6J9KWFMMAqdEFPO5nmQDcnr"></script>
 <script src="lib/render.js?v=65c3fe76" integrity="sha384-hC2pL0Iz3qZPhOkr8LTwrOtpoDzQ/Yq+qnhe6ySQZDtipsMW1eMqd8M9ZeZmqODr"></script>
-<script src="app.js?v=36ad7954" integrity="sha384-Iigca6tM0LY1ooZtRQdwtAMIf+ZdmJs2ivpkPNz1in7gzqmdoD74bKaLfhh+fLeF"></script>
+<script src="app.js?v=3dc27213" integrity="sha384-wTZaVxD/odR0Zy90SQMWYbFgKX4UrNrTKQN8NMdK9OnI8Exrp/1UvbBnTcrHgCeY"></script>
 <script type="module" src="lib/boot.mjs?v=8b98ed8f" integrity="sha384-/dJ3R23NfbIp89TMbKmNgtoFjuy8b5Kji1HBXxf7q7kKtAM2wTj9DeXCivsebPvb"></script>
 </body>
 </html>
