@@ -3622,10 +3622,11 @@
     return out.slice(0, SLANTS_PER_PAGE);
   }
 
-  async function straightenHalfRead() {
+  async function straightenHalfRead(tick) {
     const hit = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
     let added = 0;
     for (const page of state.pages) {
+      if (tick) tick();
       if (page.halfReadFrom !== page.ocrItems) continue;
       // And the leaning ink, chosen now that what was read is marked, so the
       // few places go to what is still uncovered (slantedInk).
@@ -3778,13 +3779,14 @@
   //
   // Upside down: only where a reading already is a typed word printed upside
   // down, so it costs a read where there is one and nothing elsewhere.
-  async function readTurnedLettering(which = { vertical: true, upsideDown: true }) {
+  async function readTurnedLettering(which = { vertical: true, upsideDown: true }, tick) {
     const wants = rereadParts().map(plainWord).filter(w => w.length >= 3);
     if (!wants.length) return 0;
     const shortest = Math.min(...wants.map(w => w.length));
     let added = 0;
     for (const page of state.pages) {
       if (state.paused || state.sweepStopped) break;
+      if (tick) tick();
       if (!page.ocrItems || page.ocrSkipped || !page.source) continue;
       const W = page.source.width, H = page.source.height;
       const known = word => page.ocrItems.some(it => it && it.rect
@@ -3832,7 +3834,7 @@
   // Ten junk readings a page. Measured across the benchmark, thirty cost
   // about 38 seconds and found one name more than ten, which cost 18.
   const JUNK_BELOW = 40, JUNK_PER_PAGE = 10;
-  async function readSkippedStretches(pages) {
+  async function readSkippedStretches(pages, tick) {
     const wants = rereadParts().map(plainWord).filter(w => w.length >= 3);
     if (!wants.length) return 0;
     const shortest = Math.min(...wants.map(w => w.length));
@@ -3842,6 +3844,7 @@
     const stopped = () => state.paused || state.sweepStopped;
     for (const page of pages) {
       if (stopped()) break;
+      if (tick) tick();
       if (!page.ocrItems || page.ocrSkipped || !page.source) continue;
       const W = page.source.width, H = page.source.height;
       const known = word => page.ocrItems.some(it => it && it.rect
@@ -3934,12 +3937,21 @@
   // work on: a page whose text layer has the word can still have it again
   // as a picture set up its side. The skipped stretches keep to the check's
   // own pages, as they were measured.
-  async function runCheckExtras(checkPages) {
+  async function runCheckExtras(checkPages, onProgress) {
     const extras = checkExtras();
     let changed = 0;
-    if (extras.vertical || extras.upsideDown) changed += await readTurnedLettering(extras);
-    if (extras.slanted) changed += await straightenHalfRead();
-    if (extras.skipped) changed += await readSkippedStretches(checkPages);
+    // Page by page, so the bar they are shown on moves as they go: across a
+    // long document they are minutes of work, and a bar that sits still that
+    // long reads as a tool that has stopped.
+    const all = state.pages.length;
+    const units = (extras.vertical || extras.upsideDown ? all : 0)
+      + (extras.slanted ? all : 0) + (extras.skipped ? checkPages.length : 0);
+    let done = 0;
+    const tick = () => { done++; if (onProgress) onProgress(done, units); };
+    if (onProgress) onProgress(0, units);
+    if (extras.vertical || extras.upsideDown) changed += await readTurnedLettering(extras, tick);
+    if (extras.slanted) changed += await straightenHalfRead(tick);
+    if (extras.skipped) changed += await readSkippedStretches(checkPages, tick);
     if (changed) {
       matchOcr(() => {});
       detectOcr();
@@ -10049,7 +10061,10 @@
   // how fast it actually went, and the next estimate on this device uses it.
   const SWEEP_SECONDS_PER_MP = 0.8;
   const SWEEP_STARTUP_SECONDS = 3;
-  const SWEEP_PACE_KEY = 'blinded.checkPace';
+  // A new name when what is stored changes meaning: the pace kept under the
+  // old one included the second check's closer reads, which are now estimated
+  // apart, and carried over it would count them twice.
+  const SWEEP_PACE_KEY = 'blinded.checkPace2';
 
   // Page area stops mattering past about four megapixels: the matcher caps
   // its own working resolution, so a twelve-megapixel photograph costs what a
@@ -10862,10 +10877,6 @@
     // told the moment it starts and not only when it ends.
     refreshApply();
 
-    // First, the closer reads the reviewer left ticked (runCheckExtras).
-    // After the bar is up, so pressing the check is answered at once. What
-    // they read is a reading, and green like any other.
-    await runCheckExtras(pages);
 
     let results;
     try {
@@ -11135,9 +11146,23 @@
       }
     }
 
+    // Last, the closer reads the reviewer left ticked (runCheckExtras), on the
+    // final checks' bar. Last rather than first: across a long document they
+    // are minutes of work, and run first they held the check's own bar on
+    // its first page all that while, with the check's marks waiting behind
+    // them. What they read is a reading, and green like any other.
+    const extrasFrom = performance.now();
+    if (!state.sweepStopped) {
+      await runCheckExtras(pages,
+        (done, units) => sweepProgress(pages.length, pages.length, done, units));
+    }
+    // The pace learned is the shape check's own: the closer reads are
+    // estimated apart, by the page (planSeconds).
+    const extrasTook = performance.now() - extrasFrom;
+
     state.sweepRunning = false;
     freeRun();
-    if (!state.sweepStopped) learnPace((performance.now() - startedAt) / 1000, quoted);
+    if (!state.sweepStopped) learnPace((performance.now() - startedAt - extrasTook) / 1000, quoted);
     state.sweepBest = state.sweepBest || {};
     for (const term of checking) delete state.sweepBest[term];
     recordBest(entries, results);
@@ -11510,19 +11535,26 @@
   // changes. Two waits, one a row, asked the reviewer to add them up, and did
   // not move when a closer look was left out.
   //
-  // What each closer look adds to the second check, as a share of the check
-  // without them. Measured across the benchmark: turned text about a sixth,
-  // hard-to-read text about three fifths.
-  const EXTRA_SHARE = { turned: 0.17, hard: 0.6 };
+  // What each closer look costs, by the page it reads: they do much the same
+  // on every page whatever the shape check has left to do there. Measured on
+  // the benchmark's decks: turned text about 0.2 to 0.6 seconds a page,
+  // hard-to-read text 1.3 to 2.7. Taken as a share of the shape check they
+  // were off by minutes on a hundred-page document.
+  const EXTRA_SECONDS_PER_PAGE = { turned: 0.4, hard: 1.8 };
   function planSeconds() {
     let seconds = searchEstimate().seconds;
     if (el('plan2') && el('plan2').checked) {
-      let share = 1;
+      seconds += sweepEstimate().seconds;
+      const readable = state.pages.filter(page => page.couldHideText !== false).length;
+      // At this device's pace: the costs above are the benchmark machine's,
+      // and the shape check's learned pace against its default says how much
+      // faster or slower this one is.
+      const learned = learnedPace();
+      const device = learned ? Math.max(0.3, Math.min(3, learned / SWEEP_SECONDS_PER_MP)) : 1;
       for (const group of Object.keys(EXTRA_GROUPS)) {
         const tick = el('planx-' + group);
-        if (!tick || tick.checked) share += EXTRA_SHARE[group] || 0;
+        if (!tick || tick.checked) seconds += (EXTRA_SECONDS_PER_PAGE[group] || 0) * readable * device;
       }
-      seconds += sweepEstimate().seconds * share;
     }
     return seconds;
   }

@@ -10413,7 +10413,7 @@ try {
       const out = { small: at(1), big: at(90) };
       // A device that has run a check before is quoted at its own pace.
       B.state.pages = grow(90);
-      const key = 'blinded.checkPace';
+      const key = 'blinded.checkPace2';
       const had = localStorage.getItem(key);
       localStorage.setItem(key, '0.4');
       const slow = B.sweepEstimate();
@@ -11713,20 +11713,25 @@ try {
     check('before a run the word can be taken back out', free === false,
       String(free));
 
+    // Watched from inside the page rather than sampled from out here: a short
+    // run can be over between two samples, and a test that misses the state
+    // it is about is a test that passes for the wrong reason. Once the
+    // closer reads moved out of the search it was, one run in two.
+    await held.evaluate(() => {
+      window.__during = null;
+      const watch = setInterval(() => {
+        if (!window.Blinded.state.redacting) return;
+        window.__during = { running: true,
+          drops: [...document.querySelectorAll('.termdrop')]
+            .map(b => ({ word: b.getAttribute('aria-label'), off: b.disabled })) };
+        clearInterval(watch);
+      }, 2);
+      setTimeout(() => clearInterval(watch), 60000);
+    });
     await clickSearch(held);
-    // Sampled rather than waited for: a short run can be over before a fixed
-    // pause ends, and a test that misses the state it is about is a test that
-    // passes for the wrong reason.
-    let during = null;
-    for (let i = 0; i < 80; i++) {
-      const now = await held.evaluate(() => ({
-        running: window.Blinded.state.redacting,
-        drops: [...document.querySelectorAll('.termdrop')]
-          .map(b => ({ word: b.getAttribute('aria-label'), off: b.disabled })),
-      }));
-      if (now.running) { during = now; break; }
-      await held.waitForTimeout(20);
-    }
+    await held.waitForFunction(() => window.__during || !window.Blinded.state.redacting
+      && window.Blinded.state.searched, undefined, { timeout: 60000 }).catch(() => {});
+    const during = await held.evaluate(() => window.__during);
     check('the run was caught while it was going', Boolean(during),
       'never saw state.redacting true');
     if (during) {
