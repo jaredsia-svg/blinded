@@ -290,7 +290,7 @@ async function noDetectors(page) {
 // sections are about the first phase, and a second check running on behind
 // them would be minutes of work they did not ask for, so the second is
 // unticked unless the section wants it.
-async function clickSearch(page, { check = false } = {}) {
+async function clickSearch(page, { check = false, extras = false } = {}) {
   await page.click('#search');
   // The plan goes up in the same moment as the press, so there is nothing to
   // wait for: waiting would only let a short search finish unwatched.
@@ -299,10 +299,11 @@ async function clickSearch(page, { check = false } = {}) {
     return Boolean(box && !box.hidden);
   });
   if (!asked) return false;
-  await page.evaluate(want => {
+  await page.evaluate(([want, more]) => {
     document.getElementById('plan2').checked = want;
+    for (const k of ['turned', 'hard']) document.getElementById('planx-' + k).checked = more;
     document.getElementById('searchplango').click();
-  }, check);
+  }, [check, extras]);
   return true;
 }
 
@@ -8111,8 +8112,13 @@ try {
       const TI = window.BlindedTextImage;
       const B = window.Blinded;
       B.state.terms = ['ZNW'];
+      // The script face is drawn only when handwriting-style text is asked for.
+      const kept = B.state.checkExtras;
+      const plain = B.sweepTemplates().length;
+      B.state.checkExtras = { script: true };
       const entries = B.sweepTemplates();
-      return { count: entries.length, all: TI.FACES.length,
+      B.state.checkExtras = kept;
+      return { plain, count: entries.length, all: TI.FACES.length,
         used: TI.SWEEP_FACES.map(f => f.name),
         everyOneSmall: entries.every(e => e.smallText === true) };
     });
@@ -8120,6 +8126,8 @@ try {
     // on work the reading has already done well. Two sans and one script.
     check('the sweep draws three typefaces per word, not all eight',
       faces.count === 3 && faces.all === 8, JSON.stringify(faces));
+    check('and two, without the script face, unless handwriting-style text is asked for',
+      faces.plain === 2, JSON.stringify(faces));
     const sans = faces.used.filter(n => n !== 'script');
     // One upright and one slanted, because a single upright face misses
     // italic captions outright.
@@ -10475,7 +10483,7 @@ try {
       });
       const inner = box.querySelector('.busy-inner').getBoundingClientRect();
       const button = go.getBoundingClientRect();
-      // The second check's two closer looks, ticked, and put out of reach
+      // The second check's two closer looks, unticked, and put out of reach
       // with the check itself.
       const extras = () => ['turned', 'hard'].map(k => {
         const t = document.getElementById('planx-' + k);
@@ -10485,13 +10493,13 @@ try {
       // One wait for the whole search, said again as the ticks change.
       const B = window.Blinded;
       const total = () => document.getElementById('plantotal').textContent;
-      const secs = { all: B.planSeconds() };
+      const secs = { neither: B.planSeconds() };
       const hard = document.getElementById('planx-hard');
       hard.click();
-      secs.noHard = B.planSeconds();
+      secs.withHard = B.planSeconds();
       const turned = document.getElementById('planx-turned');
       turned.click();
-      secs.neither = B.planSeconds();
+      secs.all = B.planSeconds();
       turned.click(); hard.click();
       const totalShown = total();
       two.click();
@@ -10511,21 +10519,22 @@ try {
       /Text and image inputs/.test(plan.rows[0].text) && !/minute/.test(plan.rows[0].text),
       JSON.stringify(plan.rows));
     check('the second is the check for text that appears as images',
-      /second check for text that appears as images/i.test(plan.rows[1].text)
+      /second check for text that appears as images \(recommended\)/i.test(plan.rows[1].text)
         && !/minute/.test(plan.rows[1].text), JSON.stringify(plan.rows));
     check('one estimated time for the whole search, above the button',
       /minute/.test(plan.totalShown), JSON.stringify(plan.totalShown));
-    check('and it comes down as closer looks and the check are left out',
-      plan.secs.all > plan.secs.noHard && plan.secs.noHard > plan.secs.neither
+    check('and it goes up as closer looks are asked for, down as the check is left out',
+      plan.secs.all > plan.secs.withHard && plan.secs.withHard > plan.secs.neither
         && plan.secs.neither > plan.secs.noCheck, JSON.stringify(plan.secs));
     check('each with its tick on the right',
       plan.rows.every(row => row.tickRight), JSON.stringify(plan.rows));
     check('both ticked, and the first cannot be unticked',
       plan.one.on && plan.one.locked && plan.two.on && !plan.two.locked,
       JSON.stringify(plan));
-    check('under the second phase, two closer looks, both ticked',
-      plan.extrasShown.length === 2 && plan.extrasShown.every(x => x && x.on && !x.off)
-        && /Turned text/.test(plan.extrasShown[0].text) && /Hard-to-read text/.test(plan.extrasShown[1].text),
+    check('under the second phase, two closer looks asked as questions, both unticked',
+      plan.extrasShown.length === 2 && plan.extrasShown.every(x => x && !x.on && !x.off)
+        && /^Include rotated text\?.*\(optional\)$/.test(plan.extrasShown[0].text)
+        && /^Include handwriting-style text\?.*\(optional\)$/.test(plan.extrasShown[1].text),
       JSON.stringify(plan.extrasShown));
     check('greyed out while the second check is unticked, and back with it',
       plan.extrasWithout.every(x => x.off) && plan.extrasBack.every(x => !x.off),
@@ -10547,8 +10556,8 @@ try {
     // search's line still up and the check's bar under it.
     await clickSearch(page, { check: true });
     const extrasChosen = await page.evaluate(() => window.Blinded.state.checkExtras);
-    check('and both ticked asks the second check for every closer look',
-      extrasChosen && ['slanted', 'vertical', 'upsideDown', 'script', 'skipped'].every(k => extrasChosen[k] === true),
+    check('and left as they are, the second check runs without the closer looks',
+      extrasChosen && ['slanted', 'vertical', 'upsideDown', 'script'].every(k => extrasChosen[k] === false),
       JSON.stringify(extrasChosen));
     await page.waitForFunction(() => window.Blinded.state.sweepRunning === true
       || (window.Blinded.state.searched && window.Blinded.state.sweptTerms.length > 0),

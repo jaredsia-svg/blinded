@@ -2731,8 +2731,28 @@
       try {
         await readPages(done => leg('read', done));
         await rereadForTerms();
+        matchOcr(done => leg('read', done));
+        detectOcr();
+        markDuplicates();
+        // The stretches the reader skipped, read on their own, on the pages
+        // the second check would look at: those where a typed word may still
+        // be. Here rather than in the second check, so that a word read
+        // surely there is green with the rest of the reading, and on every
+        // engine at once rather than one.
+        const skippedOn = new Set(sweepTemplates().flatMap(entry => [...(entry.pageIndexes || [])]));
+        const lanes = Ocr.engineCount ? Ocr.engineCount(skippedOn.size) : 1;
+        if (await readSkippedStretches(state.pages.filter(page => skippedOn.has(page.index)), null, lanes)) {
+          matchOcr(() => {});
+          detectOcr();
+          markDuplicates();
+        }
         for (const page of state.pages) {
-          page.halfRead = nearMissInk(page);
+          // With what the skipped stretches read unsurely: a typed word,
+          // spelt out, under the bar for its length. Asked about after the
+          // second check with the other half-read words.
+          const near = nearMissInk(page);
+          page.halfRead = near.concat((page.skippedUnsure || [])
+            .filter(spot => !near.some(o => overlapShare(o.place, spot.place) >= 0.3)));
           // Where to try turning a slant level: any reading like a typed
           // word, sure or not. The re-read itself must read the word
           // confidently before anything is marked, so a wider net here costs
@@ -2740,9 +2760,6 @@
           page.slantSeeds = nearMissInk(page, true);
           page.halfReadFrom = page.ocrItems;
         }
-        matchOcr(done => leg('read', done));
-        detectOcr();
-        markDuplicates();
         renderTermCounts();
         renderSectionNotes();
       } catch (error) {
@@ -2917,10 +2934,18 @@
     progress(0, outstanding.length);
     allowPause();
 
-    const read = await Ocr.readPages(
-      outstanding.map(page => page.source),
-      done => progress(done, outstanding.length),
-      () => state.paused);
+    // The reader's closer look at what it could not read is told the typed
+    // words, so it can take one read exactly off a crop of its own.
+    if (Ocr.setWants) Ocr.setWants(rereadParts());
+    let read;
+    try {
+      read = await Ocr.readPages(
+        outstanding.map(page => page.source),
+        done => progress(done, outstanding.length),
+        () => state.paused);
+    } finally {
+      if (Ocr.setWants) Ocr.setWants([]);
+    }
 
     outstanding.forEach((page, i) => {
       if (!read[i]) return;                 // not reached before the pause
@@ -3732,7 +3757,7 @@
   // a page, doubled, was a crop of several thousand pixels and a read of six
   // seconds.
   const TURNED_READ_LONG = 1600;
-  async function readForWords(page, x0, y0, x1, y1, wants, turn, known, how) {
+  async function readForWords(page, x0, y0, x1, y1, wants, turn, known, how, onUnsure) {
     const scale = Math.min(TERM_REREAD_SCALE, TURNED_READ_LONG / Math.max(1, x1 - x0, y1 - y0));
     const mode = inkModesFor(page, x0, y0, x1, y1)[0];
     const crop = readableCrop(page, x0, y0, x1, y1, scale, mode, turn);
@@ -3748,6 +3773,7 @@
     // another's.
     const sure = typed.some(word => typeof word.confidence === 'number'
       && word.confidence >= sureEnoughFor(plainWord(bareWord(word.str))));
+    if (!sure && typed.length && onUnsure) onUnsure(typed);
     return sure ? typed : [];
   }
 
@@ -3829,23 +3855,30 @@
   // wrongly; but read everywhere it was a thousand reads across the
   // benchmark, most of them on pages of photographs. So only the longest
   // few on each page: three more names on the test page, nothing wrongly
-  // found anywhere, for about a fifth more time on the second check.
-  const GAPS_PER_PAGE = 12;
-  // Ten junk readings a page. Measured across the benchmark, thirty cost
-  // about 38 seconds and found one name more than ten, which cost 18.
-  const JUNK_BELOW = 40, JUNK_PER_PAGE = 10;
-  async function readSkippedStretches(pages, tick) {
+  // found anywhere. Six, not twelve: across the benchmark every stretch that
+  // read a word was among the six largest on its page, and six cost about
+  // 40% less. Read in the first search (runSearch).
+  const GAPS_PER_PAGE = 6;
+  // Several pages at once, one to each of the reader's engines (lanes).
+  async function readSkippedStretches(pages, tick, lanes = 1) {
     const wants = rereadParts().map(plainWord).filter(w => w.length >= 3);
     if (!wants.length) return 0;
+    const key = wants.slice().sort().join('|');
     const shortest = Math.min(...wants.map(w => w.length));
     const hit = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+    const termFor = want => state.terms.find(term => sweepPartsFor(term).some(part => plainWord(part) === want));
     let added = 0;
-    // Run by the second check, so its Pause stops it too.
     const stopped = () => state.paused || state.sweepStopped;
-    for (const page of pages) {
+    const queue = pages.slice();
+    const lane = async () => { for (let page; (page = queue.shift());) {
       if (stopped()) break;
       if (tick) tick();
       if (!page.ocrItems || page.ocrSkipped || !page.source) continue;
+      // Once for the same typed words: a search run again for an added word
+      // reads the page again, one run again unchanged does not.
+      if (page.skippedReadFor === key) continue;
+      page.skippedReadFor = key;
+      page.skippedUnsure = [];
       const W = page.source.width, H = page.source.height;
       const known = word => page.ocrItems.some(it => it && it.rect
         && overlapShare(it.rect, word.rect) >= 0.5
@@ -3864,72 +3897,50 @@
         }
       }
       gaps.sort((u, v) => v.w * v.h - u.w * u.h);
-      // And each junk reading, read again on its own. Measured: over a title
-      // in white on a photograph the reader returned "BARE" at 22, over a
-      // small scanned caption "srw" at 0, over a small name on a texture "a"
-      // at 0 -- and cut out on their own the same three read the title at 91,
-      // the caption's name at 72 and 96, and the small name at 96. What failed
-      // was reading them among everything else on the page. Widened along the
-      // line to the length of the longest typed word, since the junk is often
-      // a piece of it; the least sure first, ten a page.
-      const longest = Math.max(...wants.map(w => w.length));
-      const junk = page.ocrItems.filter(it => it && it.rect && it.str
-        && /[A-Za-z0-9]/.test(it.str) && typeof it.confidence === 'number'
-        && it.confidence < JUNK_BELOW && it.rect.h >= 6)
-        .sort((u, v) => u.confidence - v.confidence);
-      const places = [];
-      for (const it of junk) {
-        // Wide enough for the longest word at the junk's own letter width,
-        // and no wider: a junk box over a photograph can be a thousand
-        // pixels across already.
-        const r = it.rect;
-        const letter = Math.min(r.w / Math.max(1, it.str.replace(/[^A-Za-z0-9]/g, '').length), r.h * 0.8);
-        const reach = Math.max(letter, (letter * longest - r.w) / 2);
-        const place = { x: r.x - reach, y: r.y - r.h * 0.3, w: r.w + reach * 2, h: r.h * 1.6 };
-        if (places.some(p => overlapShare(p, place) >= 0.5)) continue;
-        places.push(place);
-        if (places.length >= JUNK_PER_PAGE) break;
-      }
-      for (const place of places) {
-        if (stopped()) break;
-        const x0 = Math.max(0, Math.floor(place.x)), y0 = Math.max(0, Math.floor(place.y));
-        const x1 = Math.min(W, Math.ceil(place.x + place.w)), y1 = Math.min(H, Math.ceil(place.y + place.h));
-        if (x1 - x0 < 8 || y1 - y0 < 6) continue;
-        const words = await readForWords(page, x0, y0, x1, y1, wants, 0, known, 'unread');
-        if (!words.length) continue;
-        placeReadWords(page, words, place);
-        added += words.length;
-      }
       for (const g of gaps.slice(0, GAPS_PER_PAGE)) {
         if (stopped()) break;
         const padX = Math.min(g.h * 1.5, 40), padY = Math.min(g.h * 0.3, 12);
         const x0 = Math.max(0, Math.floor(g.x - padX)), y0 = Math.max(0, Math.floor(g.y - padY));
         const x1 = Math.min(W, Math.ceil(g.x + g.w + padX)), y1 = Math.min(H, Math.ceil(g.y + g.h + padY));
-        const words = await readForWords(page, x0, y0, x1, y1, wants, 0, known, 'unread');
+        const words = await readForWords(page, x0, y0, x1, y1, wants, 0, known, 'unread', unsure => {
+          // Read, but not surely: kept to ask about once the second check
+          // is done, not marked.
+          const term = termFor(plainWord(bareWord(unsure[0].str)));
+          if (!term) return;
+          const place = halfReadPlace(unsure, term, g);
+          page.skippedUnsure.push({ ...g, term, place,
+            halves: unsure.map(it => ({ str: it.str, confidence: it.confidence, rect: it.rect,
+              want: plainWord(bareWord(it.str)) })),
+            id: 'halfread:' + term + ':' + page.index + ':' + Math.round(place.x) + ':' + Math.round(place.y),
+            words: unsure.map(it => it.str) });
+        });
         if (!words.length) continue;
         placeReadWords(page, words, g);
         added += words.length;
       }
-    }
+    } };
+    await Promise.all(Array.from({ length: lanes }, lane));
     return added;
   }
 
   // ---------- the second check's closer reads ----------
   //
   // Lettering the page reader cannot read where it is -- at a slant, up the
-  // side of the page, upside down -- and words it skipped or garbled, read
-  // again on their own. Each is a pass of its own and each costs time on
-  // every page it runs over, so the reviewer can leave any of them out when
-  // the search starts (the plan dialog). They are part of the second check
+  // side of the page, upside down -- read again on their own, and words set
+  // in a handwriting-style font looked for by their shape. Each is a pass of its own and each costs time on
+  // every page it runs over, so the reviewer asks for them when the search
+  // starts (the plan dialog), and they are left out unless asked for: across
+  // the benchmark the two cost about a third of the second check, for names
+  // set in ways most documents never use. They are part of the second check
   // rather than the first search: the first search's marks are ready sooner,
   // and these follow.
-  const CHECK_EXTRAS = ['slanted', 'vertical', 'upsideDown', 'script', 'skipped'];
-  // Offered as two ticks, not five: which of the two each closer read belongs to.
-  const EXTRA_GROUPS = { turned: ['slanted', 'vertical', 'upsideDown'], hard: ['script', 'skipped'] };
+  const CHECK_EXTRAS = ['slanted', 'vertical', 'upsideDown', 'script'];
+  // Offered as two ticks, not four: which of the two each closer look belongs to.
+  const EXTRA_GROUPS = { turned: ['slanted', 'vertical', 'upsideDown'], hard: ['script'] };
   function checkExtras() {
     const chosen = state.checkExtras || {};
     const out = {};
-    for (const key of CHECK_EXTRAS) out[key] = chosen[key] !== false;
+    for (const key of CHECK_EXTRAS) out[key] = chosen[key] === true;
     return out;
   }
 
@@ -3944,14 +3955,12 @@
     // long document they are minutes of work, and a bar that sits still that
     // long reads as a tool that has stopped.
     const all = state.pages.length;
-    const units = (extras.vertical || extras.upsideDown ? all : 0)
-      + (extras.slanted ? all : 0) + (extras.skipped ? checkPages.length : 0);
+    const units = (extras.vertical || extras.upsideDown ? all : 0) + (extras.slanted ? all : 0);
     let done = 0;
     const tick = () => { done++; if (onProgress) onProgress(done, units); };
     if (onProgress) onProgress(0, units);
     if (extras.vertical || extras.upsideDown) changed += await readTurnedLettering(extras, tick);
     if (extras.slanted) changed += await straightenHalfRead(tick);
-    if (extras.skipped) changed += await readSkippedStretches(checkPages, tick);
     if (changed) {
       matchOcr(() => {});
       detectOcr();
@@ -11468,6 +11477,8 @@
   const SEARCH_STARTUP_SECONDS = 2;
 
   // What the first phase will cost.
+  // Measured across the benchmark: about twelve seconds over thirty pages.
+  const SKIPPED_SECONDS_PER_PAGE = 0.4;
   function searchEstimate() {
     const first = state.pages[0];
     const megapixels = first ? (first.source.width * first.source.height) / 1e6 : 2;
@@ -11484,7 +11495,10 @@
     // And the closer reads of near misses for the typed words, one at a time.
     const rereads = ocrPending() ? rereadsExpected() : 0;
     const closer = rereads * TERM_REREAD_SECONDS;
-    return { seconds: SEARCH_STARTUP_SECONDS + read + match + closer, toRead, pictures, rereads };
+    // And the stretches each page's reading skipped, read on their own.
+    const skipped = ocrPending() && rereadParts().length
+      ? state.pages.filter(page => page.couldHideText !== false).length * SKIPPED_SECONDS_PER_PAGE : 0;
+    return { seconds: SEARCH_STARTUP_SECONDS + read + match + closer + skipped, toRead, pictures, rereads };
   }
 
   // A wait as a range, because it is an estimate and saying one number is
@@ -11523,7 +11537,7 @@
     el('plan2').checked = true;
     for (const group of Object.keys(EXTRA_GROUPS)) {
       const tick = el('planx-' + group);
-      if (tick) { tick.checked = true; tick.disabled = false; }
+      if (tick) { tick.checked = false; tick.disabled = false; }
     }
     showPlanTotal();
     box.hidden = false;
@@ -11538,9 +11552,9 @@
   // What each closer look costs, by the page it reads: they do much the same
   // on every page whatever the shape check has left to do there. Measured on
   // the benchmark's decks: turned text about 0.2 to 0.6 seconds a page,
-  // hard-to-read text 1.3 to 2.7. Taken as a share of the shape check they
-  // were off by minutes on a hundred-page document.
-  const EXTRA_SECONDS_PER_PAGE = { turned: 0.4, hard: 1.8 };
+  // the handwriting-style face about 1. Taken as a share of the shape check
+  // they were off by minutes on a hundred-page document.
+  const EXTRA_SECONDS_PER_PAGE = { turned: 0.4, hard: 1.0 };
   function planSeconds() {
     let seconds = searchEstimate().seconds;
     if (el('plan2') && el('plan2').checked) {
