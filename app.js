@@ -2788,8 +2788,11 @@
       ? Math.max(10, 100 * plan.match / Math.max(1, plan.seconds - plan.match)) : 0;
     legs([{ key: 'read', phase: '1', total: 100, percent: true,
       label: !willRead ? 'Searching images' : unread ? 'Searching text' : 'Matching words' }]);
+    // Pages read before a word was typed get the closer look again for it.
+    const behind = willRead ? closerBehind().pages.filter(page => page.ocrItems).length : 0;
     const textAt = stepLeg('read', [
       ...(willRead && unread ? [{ id: 'read', label: 'Searching text', share: 75 }] : []),
+      ...(behind ? [{ id: 'closer', label: 'Looking closer for new words', share: 16 }] : []),
       ...(willRead ? [
         { id: 'reread', label: 'Checking close matches', share: 12 },
         { id: 'skipped', label: 'Reading skipped words', share: 11 },
@@ -2807,6 +2810,7 @@
     if (ocrPending()) {
       try {
         await readPages(done => textAt('read', done, unread));
+        await lookCloserForNew((done, total) => textAt('closer', done, total));
         await rereadForTerms((done, total) => textAt('reread', done, total));
         matchOcr(() => {});
         detectOcr();
@@ -3030,15 +3034,44 @@
       if (Ocr.setWants) Ocr.setWants([]);
     }
 
+    const toldOf = rereadParts().map(plainWord);
     outstanding.forEach((page, i) => {
       if (!read[i]) return;                 // not reached before the pause
       page.ocrItems = read[i];
+      // The words its closer look was told of (Ocr.setWants above).
+      page.closerFor = new Set(toldOf);
       const stitched = Ocr.stitch(page.ocrItems);
       page.ocrText = stitched.text;
       page.ocrPlaced = stitched.items;
     });
     state.ocrLoaded = true;
     state.ocrRead = state.pages.every(page => page.ocrItems);
+  }
+
+  // Pages already read whose closer look was not told of every word typed
+  // now, and the words they were not told of.
+  function closerBehind() {
+    const parts = rereadParts().map(plainWord);
+    const pages = state.pages.filter(page => page.ocrItems && !page.ocrSkipped && page.source
+      && parts.some(want => !(page.closerFor && page.closerFor.has(want))));
+    const words = parts.filter(want => pages.some(page => !(page.closerFor && page.closerFor.has(want))));
+    return { pages, words };
+  }
+
+  // The closer look again, for words typed after a page was read: a word
+  // added later goes through the same reading as one typed first.
+  async function lookCloserForNew(onProgress) {
+    const { pages, words } = closerBehind();
+    if (!pages.length || !Ocr.lookCloser) return 0;
+    const out = await Ocr.lookCloser(pages.map(page => ({ canvas: page.source, items: page.ocrItems })),
+      words, onProgress, () => state.paused);
+    let changed = 0;
+    pages.forEach((page, i) => {
+      if (out[i] === undefined) return;     // not reached before the pause
+      if (out[i]) { page.ocrItems = out[i]; restitch(page); changed++; }
+      page.closerFor = new Set([...(page.closerFor || []), ...words]);
+    });
+    return changed;
   }
 
   // ---------- reading a typed word again, closer ----------
@@ -3997,6 +4030,8 @@
           const term = termFor(plainWord(bareWord(unsure[0].str)));
           if (!term) return;
           const place = halfReadPlace(unsure, term, g);
+          // Two stretches over one word read it twice; asked about once.
+          if (page.skippedUnsure.some(o => overlapShare(o.place, place) >= 0.3)) return;
           page.skippedUnsure.push({ ...g, term, place,
             halves: unsure.map(it => ({ str: it.str, confidence: it.confidence, rect: it.rect,
               want: plainWord(bareWord(it.str)) })),
@@ -10771,6 +10806,10 @@
       for (const item of placed) {
         if (!item.rect || !hostOverlapsHit(item.rect, rect)) continue;
         if (!(typeof item.confidence === 'number' && item.confidence >= READER_SURE)) continue;
+        // Not a reading of a dark band turned light: that is the reader's
+        // fallback for lettering it could not read where it is, and a guess
+        // at white script on black refused the shape that matched it.
+        if (item.fromInvert) continue;
         const text = page.ocrText.slice(item.start, item.end);
         // A long word read one letter off is the reader agreeing, badly
         // spelt, unless it was very sure of the other spelling. Measured on a
@@ -11590,6 +11629,8 @@
   // What the first phase will cost.
   // Measured across the benchmark: about twelve seconds over thirty pages.
   const SKIPPED_SECONDS_PER_PAGE = 0.4;
+  // The reader's closer look, about a fifth of reading a page.
+  const CLOSER_SECONDS_PER_PAGE = 0.3;
   function searchEstimate() {
     const first = state.pages[0];
     const megapixels = first ? (first.source.width * first.source.height) / 1e6 : 2;
@@ -11606,10 +11647,12 @@
     // And the closer reads of near misses for the typed words, one at a time.
     const rereads = ocrPending() ? rereadsExpected() : 0;
     const closer = rereads * TERM_REREAD_SECONDS;
+    // And the closer look again on pages read before a word was typed.
+    const behind = ocrPending() ? closerBehind().pages.length * CLOSER_SECONDS_PER_PAGE : 0;
     // And the stretches each page's reading skipped, read on their own.
     const skipped = ocrPending() && rereadParts().length
       ? state.pages.filter(page => page.couldHideText !== false).length * SKIPPED_SECONDS_PER_PAGE : 0;
-    return { seconds: SEARCH_STARTUP_SECONDS + read + match + closer + skipped, match, toRead, pictures, rereads };
+    return { seconds: SEARCH_STARTUP_SECONDS + read + match + closer + skipped + behind, match, toRead, pictures, rereads };
   }
 
   // A wait as a range, because it is an estimate and saying one number is
@@ -12110,6 +12153,8 @@
             && (h.rects || []).some(r => hit(r, place)))
           || liveImageHits(page).some(m => m.rect && !page.dismissed.has(m.id) && hit(m.rect, place));
         if (covered) continue;
+        // One card a place, whichever way it came to be asked about.
+        if (out.some(o => o.page === page && overlapShare(o.spot.place || o.spot, place) >= 0.3)) continue;
         out.push({ spot, page, term: spot.term,
           at: { p: page.index, x: place.x, y: place.y, w: place.w, h: place.h } });
       }
