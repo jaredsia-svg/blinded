@@ -2838,8 +2838,10 @@
           // spelt out, under the bar for its length. Asked about after the
           // second check with the other half-read words.
           const near = nearMissInk(page);
-          page.halfRead = near.concat((page.skippedUnsure || [])
+          const asked = near.concat((page.skippedUnsure || [])
             .filter(spot => !near.some(o => overlapShare(o.place, spot.place) >= 0.3)));
+          page.halfRead = asked.concat(heldSpots(page)
+            .filter(spot => !asked.some(o => overlapShare(o.place, spot.place) >= 0.3)));
           // Where to try turning a slant level: any reading like a typed
           // word, sure or not. The re-read itself must read the word
           // confidently before anything is marked, so a wider net here costs
@@ -3046,6 +3048,27 @@
     });
     state.ocrLoaded = true;
     state.ocrRead = state.pages.every(page => page.ocrItems);
+  }
+
+  // Typed words the reader's line check read exactly but not surely, held
+  // aside from the page's text (lib/ocr.js): asked about after the second
+  // check, with the other half-read words, rather than marked or lost.
+  function heldSpots(page) {
+    const out = [];
+    for (const it of page.ocrItems || []) {
+      if (!it || !it.held || !it.rect) continue;
+      const want = plainWord(bareWord(it.str));
+      const term = state.terms.find(t => sweepPartsFor(t).some(part => plainWord(part) === want));
+      if (!term) continue;
+      const r = it.rect;
+      const place = halfReadPlace([it], term, { x: r.x - r.w, y: r.y - r.h, w: r.w * 3, h: r.h * 3 });
+      if (out.some(o => overlapShare(o.place, place) >= 0.3)) continue;
+      out.push({ ...r, term, place,
+        halves: [{ str: it.str, confidence: it.confidence, rect: r, want }],
+        id: 'halfread:' + term + ':' + page.index + ':' + Math.round(place.x) + ':' + Math.round(place.y),
+        words: [it.str] });
+    }
+    return out;
   }
 
   // Pages already read whose closer look was not told of every word typed
@@ -13041,7 +13064,7 @@
     // Close file already returned to the front page in onConfirm.
   });
 
-  window.Blinded = { state, rescan, loadFile, exportFile, setMode, addTemplate, closeDocument, insideLarger, offlineReady,
+  window.Blinded = { state, rescan, loadFile, exportFile, setMode, addTemplate, closeDocument, insideLarger, halfReadSpots, offlineReady,
     undoLast, undoStack, applyLabels, labelItems, downloadKey,
     sensFor, barFromScores, settleBar, barSteps, moveBarTo, answeredAlready, planSeconds,
     liveImageHits,
