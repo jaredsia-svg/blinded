@@ -509,12 +509,18 @@
       label.className = 'leg-label';
       const what = document.createElement('span');
       what.textContent = leg.label;
+      // Which of the search dialog's two phases this bar belongs to, numbered
+      // as the dialog numbers them, whatever step of it is running. Drawn by
+      // the stylesheet, so the name stays the name.
+      if (leg.phase) what.dataset.phase = leg.phase;
       const count = document.createElement('span');
       count.className = 'leg-count';
       count.dataset.count = leg.key;
       // Said the same way `leg` says it, or the first update rewords the row
       // under the reviewer: a leg that has not started is on its first page.
-      count.textContent = 'Page 1 of ' + leg.total;
+      // A leg that runs after another says it is waiting for its turn, then
+      // that it is starting, until its first page is counted.
+      count.textContent = leg.warmup ? 'Waiting…' : 'Page 1 of ' + leg.total;
       label.append(what, count);
 
       const bar = document.createElement('div');
@@ -522,7 +528,7 @@
       bar.setAttribute('role', 'progressbar');
       bar.setAttribute('aria-valuemin', '0');
       bar.setAttribute('aria-valuemax', String(leg.total));
-      bar.setAttribute('aria-label', leg.label);
+      bar.setAttribute('aria-label', (leg.phase ? 'Phase ' + leg.phase + ': ' : '') + leg.label);
       const fill = document.createElement('i');
       fill.dataset.fill = leg.key;
       // Started explicitly at nothing rather than left unset: a leg that has
@@ -533,6 +539,7 @@
       row.append(label, bar);
       host.append(row);
       row.dataset.total = String(leg.total);
+      if (leg.warmup) row.dataset.warmup = '1';
     }
     host.hidden = !host.children.length;
     drawRunControl(host);
@@ -600,9 +607,45 @@
     // The page being worked on, not the number finished. "0 of 5" is what a
     // run that has not started looks like, and every one of these counts
     // pages, so the word belongs in front of it.
-    row.querySelector('[data-count]').textContent =
-      'Page ' + Math.min(total, at + 1) + ' of ' + total;
+    // A leg that has to get ready before its first page can be counted
+    // says so, rather than sitting on "Page 1" through the start-up.
+    row.querySelector('[data-count]').textContent = at === 0 && row.dataset.warmup
+      ? 'Starting…' : 'Page ' + Math.min(total, at + 1) + ' of ' + total;
     row.querySelector('.bar').setAttribute('aria-valuenow', String(at));
+  }
+
+  // One leg that does several things in turn, one bar from start to end.
+  //
+  // The text search reads every page, and then goes over the whole document
+  // again three times: the likeliest misreadings read closer, the stretches
+  // each page's reading skipped, and the half-read words put aside. Counted
+  // as pages read, the bar said "Page 101 of 101" for the whole of that, a
+  // minute on a long deck, and looked stuck. Each step names itself and counts
+  // its own work, and the bar goes on filling across them -- each step its
+  // share of it, from what each took across the benchmark -- so it never runs
+  // backwards.
+  function stepLeg(key, steps, into) {
+    const sum = steps.reduce((n, step) => n + step.share, 0) || 1;
+    let from = 0;
+    const start = new Map();
+    for (const step of steps) { start.set(step.id, from / sum); from += step.share; }
+    return (id, done, total) => {
+      const row = (into || legsHost()).querySelector('[data-leg="' + key + '"]');
+      const step = steps.find(one => one.id === id);
+      if (!row || !step) return;
+      const part = total ? Math.max(0, Math.min(1, done / total)) : 0;
+      const at = start.get(id) + (step.share / sum) * part;
+      row.querySelector('[data-fill]').style.width = (at * 100).toFixed(1) + '%';
+      const name = row.querySelector('.leg-label > span:first-child');
+      if (name) name.textContent = step.label;
+      const counted = Math.min(total, Math.max(0, done) + 1);
+      row.querySelector('[data-count]').textContent = !total ? (step.note || '')
+        : (step.pages ? 'Page ' + counted : counted) + ' of ' + total;
+      const bar = row.querySelector('.bar');
+      bar.setAttribute('aria-valuemax', '100');
+      bar.setAttribute('aria-valuenow', String(Math.round(at * 100)));
+      bar.setAttribute('aria-label', (name && name.dataset.phase ? 'Phase ' + name.dataset.phase + ': ' : '') + step.label);
+    };
   }
 
   // Pausing.
@@ -1195,6 +1238,20 @@
     rescan();
     refreshApply();
     refreshPaging();
+    // A new document opens at its first page, not wherever the last one was
+    // scrolled to; and with the word box ready, so the first word can be
+    // typed straight away. Not on a touch screen, where focusing it would
+    // put the keyboard up over the document just opened.
+    const top = () => {
+      const stage = document.querySelector('.stage');
+      if (stage) { stage.scrollTop = 0; stage.scrollLeft = 0; }
+      window.scrollTo(0, 0);
+    };
+    top();
+    requestAnimationFrame(top);
+    if (window.matchMedia && matchMedia('(pointer: fine)').matches) {
+      el('termbox').focus({ preventScroll: true });
+    }
   }
 
   // ---------- organising the pages ----------
@@ -2716,9 +2773,19 @@
     legs([
       // Named by what it is doing for the reviewer rather than by how. It
       // reads the pages, but what the reviewer asked for is the text found.
-      { key: 'read', label: unread ? 'Searching text' : 'Matching words',
+      { key: 'read', phase: '1', label: unread ? 'Searching text' : 'Matching words',
         total: willRead },
-      { key: 'search', label: 'Searching images', total: willSearch },
+      { key: 'search', phase: '1', label: 'Searching images', total: willSearch, warmup: true },
+    ]);
+    // The text leg's steps, each with its share of the bar: what each took
+    // across the benchmark, reading the pages about three quarters of it.
+    const textAt = stepLeg('read', [
+      ...(unread ? [{ id: 'read', label: 'Searching text', share: 75, pages: true }] : []),
+      { id: 'reread', label: 'Checking close matches', share: 12 },
+      { id: 'skipped', label: 'Reading skipped words', share: 11, pages: true },
+      { id: 'finish', label: 'Finishing up', share: 2 },
+      // Full, and saying so, while the images are still searched below it.
+      { id: 'done', label: 'Searching text', share: 0, note: 'Done' },
     ]);
     // And a frame to actually draw it in. Everything below this line runs in
     // one go until it hits its own awaits, and the overlay that was just made
@@ -2729,9 +2796,9 @@
     // cannot be decided until it is known whether the reader worked.
     if (ocrPending()) {
       try {
-        await readPages(done => leg('read', done));
-        await rereadForTerms();
-        matchOcr(done => leg('read', done));
+        await readPages(done => textAt('read', done, unread));
+        await rereadForTerms((done, total) => textAt('reread', done, total));
+        matchOcr(() => {});
         detectOcr();
         markDuplicates();
         // The stretches the reader skipped, read on their own, on the pages
@@ -2741,11 +2808,17 @@
         // engine at once rather than one.
         const skippedOn = new Set(sweepTemplates().flatMap(entry => [...(entry.pageIndexes || [])]));
         const lanes = Ocr.engineCount ? Ocr.engineCount(skippedOn.size) : 1;
-        if (await readSkippedStretches(state.pages.filter(page => skippedOn.has(page.index)), null, lanes)) {
+        let skippedAt = 0;
+        const skippedPages = state.pages.filter(page => skippedOn.has(page.index));
+        textAt('skipped', 0, skippedPages.length);
+        if (await readSkippedStretches(skippedPages,
+          () => textAt('skipped', skippedAt++, skippedPages.length), lanes)) {
           matchOcr(() => {});
           detectOcr();
           markDuplicates();
         }
+        textAt('finish', 0, 0);
+        await nextPaint();
         for (const page of state.pages) {
           // With what the skipped stretches read unsurely: a typed word,
           // spelt out, under the bar for its length. Asked about after the
@@ -2760,6 +2833,7 @@
           page.slantSeeds = nearMissInk(page, true);
           page.halfReadFrom = page.ocrItems;
         }
+        textAt('done', 0, 0);
         renderTermCounts();
         renderSectionNotes();
       } catch (error) {
@@ -3155,15 +3229,21 @@
     page.ocrPlaced = stitched.items;
   }
 
-  async function rereadForTerms() {
+  async function rereadForTerms(onProgress) {
     if (!Ocr || !Ocr.readPage || !Detect.ocrFold || !Detect.levenshtein) return 0;
     let changed = 0;
+    // How many there are to read, for the bar: counted before any is read,
+    // so it stays put while they are.
+    const total = rereadParts().reduce((n, part) => n + rereadCandidates(part).length, 0);
+    let done = 0;
+    if (onProgress) onProgress(0, total);
     for (const part of rereadParts()) {
       if (state.paused) break;
       const want = plainWord(part);
       const tried = 'reread:' + want;
       for (const { page, item } of rereadCandidates(part)) {
         if (state.paused) break;
+        if (onProgress) onProgress(done++, total);
         item[tried] = true;
         const r = item.rect;
         // A strip of the line, not the word alone: measured, "ran" cut out
@@ -3955,12 +4035,14 @@
     // long document they are minutes of work, and a bar that sits still that
     // long reads as a tool that has stopped.
     const all = state.pages.length;
-    const units = (extras.vertical || extras.upsideDown ? all : 0) + (extras.slanted ? all : 0);
-    let done = 0;
-    const tick = () => { done++; if (onProgress) onProgress(done, units); };
-    if (onProgress) onProgress(0, units);
-    if (extras.vertical || extras.upsideDown) changed += await readTurnedLettering(extras, tick);
-    if (extras.slanted) changed += await straightenHalfRead(tick);
+    // Each step counts the pages it goes over, from the first (stepLeg).
+    const ticker = step => {
+      let done = 0;
+      if (onProgress) onProgress(step, 0, all);
+      return () => { if (onProgress) onProgress(step, done++, all); };
+    };
+    if (extras.vertical || extras.upsideDown) changed += await readTurnedLettering(extras, ticker('turned'));
+    if (extras.slanted) changed += await straightenHalfRead(ticker('slanted'));
     if (changed) {
       matchOcr(() => {});
       detectOcr();
@@ -7574,9 +7656,10 @@
   }
 
   // Cuts the picked region out of the page and searches every page for it.
+  // Picking stays on afterwards: a document with several logos is several
+  // picks, and the reviewer leaves it with Cancel or a click on the dimming.
   async function addTemplate(page, rect) {
     const cut = ImageSearch.templateFrom(page.source, rect);
-    setMode('box');
     if (!cut) {
       alert('That pick was too small to match on. Draw a box around the whole logo.');
       drawPage(page);
@@ -10070,6 +10153,11 @@
   // how fast it actually went, and the next estimate on this device uses it.
   const SWEEP_SECONDS_PER_MP = 0.8;
   const SWEEP_STARTUP_SECONDS = 3;
+  // Those paces, default and learned, are for the word drawn in three faces,
+  // as every check drew it until the script face became the reviewer's to
+  // ask for. A check drawing two takes about two thirds of the time, and
+  // estimated as three it was quoted at ten minutes and took six and a half.
+  const PACE_FACES = 3;
   // A new name when what is stored changes meaning: the pace kept under the
   // old one included the second check's closer reads, which are now estimated
   // apart, and carried over it would count them twice.
@@ -10102,8 +10190,8 @@
   function learnPace(took, cost) {
     // A short run is mostly start-up, and says little about the pace.
     if (!(took >= 20) || !(cost.pageWords > 0) || !(cost.megapixels > 0)) return;
-    const pace = Math.max(0.05, Math.min(5,
-      (took - SWEEP_STARTUP_SECONDS) * cost.speedup / (cost.pageWords * cost.megapixels)));
+    const pace = Math.max(0.05, Math.min(5, (took - SWEEP_STARTUP_SECONDS) * cost.speedup
+      / (cost.pageWords * cost.megapixels * (cost.faces || PACE_FACES) / PACE_FACES)));
     const before = learnedPace();
     try {
       localStorage.setItem(SWEEP_PACE_KEY,
@@ -10114,7 +10202,7 @@
   }
 
   // What the check in front of us will cost.
-  function sweepEstimate() {
+  function sweepEstimate(faces = sweepFaces().length) {
     const work = sweepWorkload();
     const first = state.pages[0];
     const megapixels = first
@@ -10122,9 +10210,10 @@
     const speedup = sweepSpeedup(work.pages);
     const pace = learnedPace() || SWEEP_SECONDS_PER_MP;
     const seconds = work.pageWords
-      ? SWEEP_STARTUP_SECONDS + work.pageWords * megapixels * pace / speedup : 0;
+      ? SWEEP_STARTUP_SECONDS + work.pageWords * megapixels * pace * (faces / PACE_FACES) / speedup : 0;
     return {
       seconds,
+      faces,
       perPage: work.pages ? seconds / work.pages : 0,
       pages: work.pages,
       terms: work.terms,
@@ -10880,6 +10969,7 @@
     // while a check runs).
     offerRunControl({ id: 'sweepstop', label: 'Pause',
       onPress: stopTheCheck });
+    checkSteps();
     sweepProgress(0, pages.length);
     renderSweep();
     // The Search button greys out for as long as this runs, so it has to be
@@ -11093,11 +11183,11 @@
         const seedOpts = { stop: () => state.sweepStopped, seedsOnly: true };
         const over = indexes => pages.filter(page => indexes.has(page.index));
         try {
-          sweepProgress(pages.length, pages.length, 0, pages.length);
-          const found = await ImageSearch.searchAllParallel(
-            over(new Set(anchors.flatMap(e => [...e.pageIndexes]))), anchors,
+          const seedPages = over(new Set(anchors.flatMap(e => [...e.pageIndexes])));
+          sweepProgress(pages.length, pages.length, 'seeded', 0, seedPages.length);
+          const found = await ImageSearch.searchAllParallel(seedPages, anchors,
             seedOpts,
-            done => sweepProgress(pages.length, pages.length, done, pages.length));
+            done => sweepProgress(pages.length, pages.length, 'seeded', done, seedPages.length));
 
           // Round two: the other half of a phrase, measured off the half just
           // matched rather than off a box the reader drew round the wrong
@@ -11163,7 +11253,7 @@
     const extrasFrom = performance.now();
     if (!state.sweepStopped) {
       await runCheckExtras(pages,
-        (done, units) => sweepProgress(pages.length, pages.length, done, units));
+        (step, done, of) => sweepProgress(pages.length, pages.length, step, done, of));
     }
     // The pace learned is the shape check's own: the closer reads are
     // estimated apart, by the page (planSeconds).
@@ -11198,54 +11288,37 @@
     return added;
   }
 
-  // `seeded` and `seededOf` describe the last look, which runs over a few
-  // pages after the first pass and would otherwise make the bar sit at the
-  // end while the check was plainly still working.
-  function sweepProgress(done, total, seeded, seededOf) {
+  // The second check is one bar, whatever it is doing: the sweep over every
+  // page, then the steps after it, each over the document again. A bar of
+  // their own made three lines in the foot under the search's sentence, and
+  // counted together as pages two passes over a 101-page deck came to "Page
+  // 102 of 202". Each step names itself and counts its own pages; the bar
+  // fills once across them (stepLeg), each step its share from what it took
+  // across the benchmark -- the sweep about seventy seconds a face.
+  let checkAt = null;
+  function checkSteps() {
+    const asked = checkExtras();
+    checkAt = stepLeg('sweep', [
+      { id: 'sweep', label: 'Second check', share: 70 * sweepFaces().length, pages: true },
+      { id: 'seeded', label: 'Checking likely spots', share: 9, pages: true },
+      ...(asked.vertical || asked.upsideDown
+        ? [{ id: 'turned', label: 'Reading rotated text', share: 6, pages: true }] : []),
+      ...(asked.slanted ? [{ id: 'slanted', label: 'Reading slanted text', share: 10, pages: true }] : []),
+    ], el('sweeprun-legs'));
+  }
+  function sweepProgress(done, total, step, stepDone, stepOf) {
     state.sweepDone = done;
     state.sweepTotal = total;
     const host = el('sweeprun-legs');
     if (!host) return;
-    // The same bars a search draws, in the same place, because it is the same
-    // question: how much longer. The check used to have a bar of its own and a
-    // sentence beside it saying which page it was on and that the reviewer
-    // could carry on reading — which is true of every run reported down here,
-    // and so is not worth a sentence.
-    // One bar, not three.
-    //
-    // The check makes up to three passes -- the sweep, a deeper look where it
-    // found nothing, and the places the page reader can point to -- and each
-    // used to raise a bar of its own, naming itself. That is the tool
-    // explaining its own internals to somebody waiting for an answer. They
-    // are one run and they get one bar; the later passes are short and the
-    // first one is nearly all of it.
-    // The later passes get a bar of their own, under one neutral name. One
-    // bar for the whole run left it sitting full while the check was plainly
-    // still working -- a finished bar over unfinished work is the bar lying
-    // -- and naming each pass ("looking again where nothing was found") was
-    // the tool explaining its own internals to somebody waiting for an
-    // answer. "Running final checks" says the only thing the reviewer needs:
-    // it is nearly over.
-    const finalTotal = seededOf || 0;
-    const finalDone = seededOf ? seeded : 0;
-    const want = [{ key: 'sweep', label: 'Second check', total }];
-    if (finalTotal) want.push({ key: 'final', label: 'Running final checks',
-                                total: finalTotal });
-    // Only rebuilt when the row is not already there: redrawing it on every
-    // page would restart its transition and make a filling bar stutter.
-    // Keyed by name and length both: the two final passes share one bar, and
-    // the second is a different number of pages from the first, so the row
-    // has to be rebuilt when the length changes or the bar would be measuring
-    // against the wrong total.
-    const have = [...host.querySelectorAll('.leg')]
-      .map(row => row.dataset.leg + ':' + row.dataset.total);
-    const now = want.map(one => one.key + ':' + one.total);
-    if (have.join() !== now.join()) legs(want, host);
-    // The first bar holds at the end rather than winding it back: the run is
-    // not over until the later passes are, and a bar that empties and refills
-    // reads as a second run nobody asked for.
-    leg('sweep', finalTotal ? total : done, host);
-    if (finalTotal) leg('final', finalDone, host);
+    // Drawn once: redrawing it on every page would restart its transition
+    // and make a filling bar stutter.
+    if (!host.querySelector('[data-leg="sweep"]')) {
+      legs([{ key: 'sweep', phase: '2', label: 'Second check', total: 100 }], host);
+    }
+    if (!checkAt) checkSteps();
+    if (step) checkAt(step, stepDone, stepOf);
+    else checkAt('sweep', done, total);
   }
 
   // The button, and what it says afterwards.
@@ -11552,13 +11625,17 @@
   // What each closer look costs, by the page it reads: they do much the same
   // on every page whatever the shape check has left to do there. Measured on
   // the benchmark's decks: turned text about 0.2 to 0.6 seconds a page,
-  // the handwriting-style face about 1. Taken as a share of the shape check
-  // they were off by minutes on a hundred-page document.
-  const EXTRA_SECONDS_PER_PAGE = { turned: 0.4, hard: 1.0 };
+  // the handwriting-style face nothing here: it is a face of the shape check,
+  // and counted with the shape check's own (sweepEstimate). Taken as a share
+  // of the shape check they were off by minutes on a hundred-page document.
+  const EXTRA_SECONDS_PER_PAGE = { turned: 0.4, hard: 0 };
   function planSeconds() {
     let seconds = searchEstimate().seconds;
     if (el('plan2') && el('plan2').checked) {
-      seconds += sweepEstimate().seconds;
+      // The script face is drawn only with handwriting-style text ticked.
+      const hard = el('planx-hard');
+      const faces = TextImage.SWEEP_FACES.length - (hard && !hard.checked ? 1 : 0);
+      seconds += sweepEstimate(faces).seconds;
       const readable = state.pages.filter(page => page.couldHideText !== false).length;
       // At this device's pace: the costs above are the benchmark machine's,
       // and the shape check's learned pace against its default says how much
@@ -12620,6 +12697,16 @@
   }
 
   el('pickstop').addEventListener('click', () => setMode('box'));
+  // The dimming is drawn on the page body (body.picking::before), so a click
+  // on it lands on the body itself; everything still usable is raised above.
+  document.body.addEventListener('click', event => {
+    if (state.mode === 'pick' && event.target === document.body) setMode('box');
+  });
+  // And Escape, unless a box is open on top that Escape closes first.
+  document.addEventListener('keydown', event => {
+    if (event.key === 'Escape' && state.mode === 'pick' && !event.defaultPrevented
+      && !document.querySelector('.busy:not([hidden]) .busy-inner, #cropbox:not([hidden])')) setMode('box');
+  });
   el('imageclose').addEventListener('click', () => { el('imagebox').hidden = true; });
   el('draftpick').addEventListener('click', () => el('file').click());
   el('draftcancel').addEventListener('click', () => {
@@ -12871,7 +12958,7 @@
     // Close file already returned to the front page in onConfirm.
   });
 
-  window.Blinded = { state, rescan, loadFile, exportFile, setMode, addTemplate, offlineReady,
+  window.Blinded = { state, rescan, loadFile, exportFile, setMode, addTemplate, closeDocument, offlineReady,
     undoLast, undoStack, applyLabels, labelItems, downloadKey,
     sensFor, barFromScores, settleBar, barSteps, moveBarTo, answeredAlready, planSeconds,
     liveImageHits,

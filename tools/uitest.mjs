@@ -291,6 +291,9 @@ async function noDetectors(page) {
 // them would be minutes of work they did not ask for, so the second is
 // unticked unless the section wants it.
 async function clickSearch(page, { check = false, extras = false } = {}) {
+  // Picking a logo stays on until the reviewer leaves it, as a person would
+  // before searching.
+  if (await page.evaluate(() => document.body.classList.contains('picking'))) await page.click('#pick');
   await page.click('#search');
   // The plan goes up in the same moment as the press, so there is nothing to
   // wait for: waiting would only let a short search finish unwatched.
@@ -4286,7 +4289,8 @@ try {
                swept, workTerms: work.terms, drawn };
     });
     check('the check runs one pass for it, not a second harder one',
-      !run.names.includes('Running final checks'), JSON.stringify(run));
+      !run.names.some(name => ['Running final checks', 'Checking likely spots',
+        'Reading rotated text', 'Reading slanted text'].includes(name)), JSON.stringify(run));
     check('and keeps no record of a pass that no longer exists',
       run.left === false, JSON.stringify(run));
     check('a word added after a check is the only one the next check looks for',
@@ -4694,13 +4698,12 @@ try {
       && /Second check (complete|stopped)/.test(run.after),
       JSON.stringify(run));
     // The later passes get a bar. One bar for the whole run sat full while
-    // the check was plainly still working, which is the bar lying -- and the
-    // run can be minutes, so "full but not finished" is a long time to look
-    // at. What they do not get is a bar each, naming itself: "looking again
-    // where nothing was found" is the tool explaining its own internals to
-    // somebody waiting for an answer.
-    check('a later pass, when there is one, runs under one name',
-      run.later.every(name => name === 'Running final checks'),
+    // the check was plainly still working, which is the bar lying. One bar,
+    // not a bar each; it names the step it is on, since counted together as
+    // pages two passes over a 101-page deck came to "Page 102 of 202".
+    check('a later pass, when there is one, runs on one bar that names its step',
+      run.later.every(name => ['Running final checks', 'Checking likely spots',
+        'Reading rotated text', 'Reading slanted text'].includes(name)) && run.deep >= 0,
       JSON.stringify(run));
     check('and nothing of it is left on the page once the check is over',
       run.leftovers === 0 && run.stillSaysChecking === false,
@@ -8646,8 +8649,10 @@ try {
     // "4 of 5" left the reviewer to work out what was being counted. Every
     // one of these legs counts pages, and the count names the page being
     // worked on rather than the number already behind it.
+    // Or says it is starting, until its first page is done: the workers get
+    // ready before any page can be counted.
     check('and counts them the way every other leg does',
-      seen.texts.every(t => /^Page \d+ of \d+$/.test(t)), JSON.stringify(seen.texts));
+      seen.texts.every(t => /^Page \d+ of \d+$/.test(t) || t === 'Starting…' || t === 'Waiting…'), JSON.stringify(seen.texts));
     check('the bar only ever moves forward',
       seen.widths.every((w, i) => i === 0 || w >= seen.widths[i - 1]),
       JSON.stringify(seen.widths));
@@ -11736,6 +11741,15 @@ try {
         clearInterval(watch);
       }, 2);
       setTimeout(() => clearInterval(watch), 60000);
+      // And the text bar through the whole run: what it names, and how full.
+      window.__legs = [];
+      const bar = setInterval(() => {
+        const row = document.querySelector('[data-leg="read"]');
+        if (row) window.__legs.push({ name: row.querySelector('.leg-label > span').textContent,
+          count: row.querySelector('[data-count]').textContent,
+          width: parseFloat(row.querySelector('[data-fill]').style.width) || 0 });
+      }, 5);
+      setTimeout(() => clearInterval(bar), 60000);
     });
     await clickSearch(held);
     await held.waitForFunction(() => window.__during || !window.Blinded.state.redacting
@@ -11767,6 +11781,23 @@ try {
     await held.waitForFunction(() => !window.Blinded.state.redacting,
       undefined, { timeout: 120000 });
     await held.waitForTimeout(300);
+    // The text search goes over the document again after the last page is
+    // read. Counted as pages read, the bar sat on the last page for all of
+    // that and looked stuck; each step says what it is instead, in order, and
+    // the one bar never runs backwards across them.
+    const seenLegs = await held.evaluate(() => window.__legs);
+    const ORDER = ['Searching text', 'Matching words', 'Checking close matches',
+      'Reading skipped words', 'Finishing up'];
+    // Ending on the leg's own name, full, saying it is done.
+    const names = seenLegs.filter(one => one.count !== 'Done').map(one => one.name)
+      .filter((n, i, all) => i === 0 || n !== all[i - 1]);
+    check('the text bar names each step of the text search, in order',
+      names.length > 0 && names.every(n => ORDER.includes(n))
+        && names.every((n, i) => i === 0 || ORDER.indexOf(n) > ORDER.indexOf(names[i - 1])),
+      JSON.stringify(names));
+    check('and only ever fills forward across them',
+      seenLegs.every((one, i) => i === 0 || one.width >= seenLegs[i - 1].width - 0.05),
+      JSON.stringify(seenLegs.map(one => one.width).filter((w, i, all) => i === 0 || w !== all[i - 1])));
     const after = await held.evaluate(() =>
       [...document.querySelectorAll('.termdrop')].map(b => b.disabled));
     check('and the hold is let go of when the run finishes',
@@ -11781,6 +11812,61 @@ try {
   // With nothing found, nothing left to search and nothing running, that is
   // waiting for something that will not happen -- and the reviewer is left
   // holding a document they cannot get out of the tool.
+  // ---------- opening, picking, and the dialog's choices ----------
+  await part("a document opens ready to type into, at its first page", async () => {
+    const fresh = await context.newPage();
+    await fresh.goto(base);
+    await fresh.setInputFiles('#file', manyPath);
+    await fresh.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
+    await fresh.waitForTimeout(300);
+    check('the word box has the cursor once a document opens',
+      await fresh.evaluate(() => document.activeElement && document.activeElement.id === 'termbox'));
+
+    // Scrolled down, closed, and another opened: it opens at its first page.
+    await fresh.evaluate(() => { const s = document.querySelector('.stage'); s.scrollTop = s.scrollHeight; });
+    await fresh.evaluate(() => window.Blinded.closeDocument ? window.Blinded.closeDocument() : null);
+    const closed = await fresh.evaluate(() => !document.getElementById('view-review') || document.getElementById('view-review').hidden);
+    if (closed) {
+      await fresh.setInputFiles('#file', manyPath);
+      await fresh.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
+      await fresh.waitForTimeout(300);
+      const at = await fresh.evaluate(() => document.querySelector('.stage').scrollTop);
+      check('a document opened after another starts at its first page', at === 0, String(at));
+    }
+
+    // Picking stays on after a pick, until Cancel, Escape or the dimming.
+    await fresh.evaluate(async () => {
+      const B = window.Blinded;
+      B.setMode('pick');
+      await B.addTemplate(B.state.pages[0], { x: 40, y: 40, w: 120, h: 120 });
+    });
+    check('picking stays on after a logo is picked, for the next one',
+      await fresh.evaluate(() => document.body.classList.contains('picking')));
+    await fresh.mouse.click(5, 300);
+    check('and a click on the dimming leaves it',
+      await fresh.evaluate(() => !document.body.classList.contains('picking')));
+    await fresh.evaluate(() => window.Blinded.setMode('pick'));
+    await fresh.keyboard.press('Escape');
+    check('as does Escape',
+      await fresh.evaluate(() => !document.body.classList.contains('picking')));
+
+    // The dialog's two optional choices are smaller than the check they are under.
+    const sizes = await fresh.evaluate(() => {
+      const box = document.getElementById('searchplan');
+      box.hidden = false;
+      const size = e => e.getBoundingClientRect().width;
+      const font = e => parseFloat(getComputedStyle(e).fontSize);
+      const out = { check: size(document.getElementById('plan2')), extra: size(document.getElementById('planx-turned')),
+        checkFont: font(document.querySelector('.planrow-more .plantext')),
+        extraFont: font(document.querySelector('.planextralist label')) };
+      box.hidden = true;
+      return out;
+    });
+    check('the optional choices are in smaller type, with smaller ticks, than the second check',
+      sizes.extra < sizes.check && sizes.extraFont < sizes.checkFont, JSON.stringify(sizes));
+    await fresh.close();
+  });
+
   await part("nothing to cover still lets the file out", async () => {
     const bare = join(tmpdir(), 'blinded-nothing.txt');
     writeFileSync(bare, 'Nothing in here worth covering at all.\n');
