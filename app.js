@@ -398,6 +398,8 @@
       row.className = 'ranline';
       const dot = document.createElement('span');
       dot.className = 'randot ' + colour;
+      // Numbered as the phase it reports, in the search dialog's colours.
+      dot.dataset.phase = colour === 'green' ? '1' : '2';
       const words = document.createElement('span');
       words.textContent = text;
       row.append(dot, words);
@@ -520,7 +522,7 @@
       // under the reviewer: a leg that has not started is on its first page.
       // A leg that runs after another says it is waiting for its turn, then
       // that it is starting, until its first page is counted.
-      count.textContent = leg.warmup ? 'Waiting…' : 'Page 1 of ' + leg.total;
+      count.textContent = leg.percent ? '0%' : leg.warmup ? 'Waiting…' : 'Page 1 of ' + leg.total;
       label.append(what, count);
 
       const bar = document.createElement('div');
@@ -542,6 +544,12 @@
       if (leg.warmup) row.dataset.warmup = '1';
     }
     host.hidden = !host.children.length;
+    // While the search's bar is up, a line under it says the panel is still
+    // the reviewer's to use.
+    if (host === el('runfoot-legs')) {
+      const note = el('runfoot-note');
+      if (note) note.hidden = !host.children.length;
+    }
     drawRunControl(host);
     // Once the bars are up they say what is running and how far it has got,
     // which is the whole of "Working…". Leaving that word beside them put a
@@ -638,9 +646,9 @@
       row.querySelector('[data-fill]').style.width = (at * 100).toFixed(1) + '%';
       const name = row.querySelector('.leg-label > span:first-child');
       if (name) name.textContent = step.label;
-      const counted = Math.min(total, Math.max(0, done) + 1);
-      row.querySelector('[data-count]').textContent = !total ? (step.note || '')
-        : (step.pages ? 'Page ' + counted : counted) + ' of ' + total;
+      // How far the whole bar is, not the step: one number from 0 to 100
+      // across every step, as the bar itself goes.
+      row.querySelector('[data-count]').textContent = Math.floor(at * 100) + '%';
       const bar = row.querySelector('.bar');
       bar.setAttribute('aria-valuemax', '100');
       bar.setAttribute('aria-valuenow', String(Math.round(at * 100)));
@@ -2770,22 +2778,24 @@
     // a new word as well reads as the tool ignoring half of what was asked.
     const willRead = ocrPending() ? (unread || pages) : 0;
     const willSearch = pendingTemplates().length ? pages : 0;
-    legs([
-      // Named by what it is doing for the reviewer rather than by how. It
-      // reads the pages, but what the reviewer asked for is the text found.
-      { key: 'read', phase: '1', label: unread ? 'Searching text' : 'Matching words',
-        total: willRead },
-      { key: 'search', phase: '1', label: 'Searching images', total: willSearch, warmup: true },
-    ]);
-    // The text leg's steps, each with its share of the bar: what each took
-    // across the benchmark, reading the pages about three quarters of it.
+    // One bar for the whole first phase, text and images both: each step
+    // names itself, and the bar fills once across them (stepLeg). The text
+    // steps' shares are what each took across the benchmark, reading the
+    // pages about three quarters of the text; the images' share is the
+    // estimate's own split between the two.
+    const plan = searchEstimate();
+    const imageShare = willSearch
+      ? Math.max(10, 100 * plan.match / Math.max(1, plan.seconds - plan.match)) : 0;
+    legs([{ key: 'read', phase: '1', total: 100, percent: true,
+      label: !willRead ? 'Searching images' : unread ? 'Searching text' : 'Matching words' }]);
     const textAt = stepLeg('read', [
-      ...(unread ? [{ id: 'read', label: 'Searching text', share: 75, pages: true }] : []),
-      { id: 'reread', label: 'Checking close matches', share: 12 },
-      { id: 'skipped', label: 'Reading skipped words', share: 11, pages: true },
-      { id: 'finish', label: 'Finishing up', share: 2 },
-      // Full, and saying so, while the images are still searched below it.
-      { id: 'done', label: 'Searching text', share: 0, note: 'Done' },
+      ...(willRead && unread ? [{ id: 'read', label: 'Searching text', share: 75 }] : []),
+      ...(willRead ? [
+        { id: 'reread', label: 'Checking close matches', share: 12 },
+        { id: 'skipped', label: 'Reading skipped words', share: 11 },
+        { id: 'finish', label: 'Finishing up', share: 2 },
+      ] : []),
+      ...(willSearch ? [{ id: 'images', label: 'Searching images', share: imageShare }] : []),
     ]);
     // And a frame to actually draw it in. Everything below this line runs in
     // one go until it hits its own awaits, and the overlay that was just made
@@ -2833,7 +2843,6 @@
           page.slantSeeds = nearMissInk(page, true);
           page.halfReadFrom = page.ocrItems;
         }
-        textAt('done', 0, 0);
         renderTermCounts();
         renderSectionNotes();
       } catch (error) {
@@ -2868,7 +2877,7 @@
 
     const entries = pendingTemplates();
     try {
-      if (entries.length) await runSearches(entries, done => leg('search', done));
+      if (entries.length) await runSearches(entries, (done, total) => textAt('images', done, total));
     } catch (error) {
       state.redacting = false;
       freeRun();
@@ -5583,7 +5592,30 @@
     for (const box of page.manual) {
       boxes.push({ ...box, label: state.labels.byId[box.id] });
     }
+    // A bar inside a larger one keeps no label of its own: the word read in a
+    // logo's lettering, inside the bar over the logo, wrote a second label
+    // over the first. The larger bar's label is the one that shows, on the
+    // page and in the file, as its outline is the one drawn while reviewing.
+    for (const box of boxes) {
+      if (box.label && insideLarger({ ...box, sweep: false }, boxes.map(one => ({ ...one, sweep: false })))) {
+        box.label = undefined;
+      }
+    }
     return boxes;
+  }
+
+  // A mark that lies within a larger one of the same colour is not drawn
+  // over it: the word read in a logo's lettering inside the mark for the
+  // logo itself was two outlines, one in the other, and a darker fill where
+  // they overlapped. The larger is what gets covered, so it is the one shown.
+  // A mark of the other colour is still drawn, since amber asks for a look.
+  function insideLarger(box, boxes) {
+    const area = box.w * box.h;
+    if (!(area > 0)) return false;
+    return boxes.some(other => other !== box && Boolean(other.sweep) === Boolean(box.sweep)
+      && other.w * other.h > area
+      && Math.max(0, Math.min(box.x + box.w, other.x + other.w) - Math.max(box.x, other.x))
+        * Math.max(0, Math.min(box.y + box.h, other.y + other.h) - Math.max(box.y, other.y)) >= area * 0.8);
   }
 
   function drawPage(page, preview, drawing) {
@@ -5628,6 +5660,7 @@
       ctx.save();
       ctx.lineWidth = stroke(Math.max(2, page.source.width / 600));
       for (const box of boxes) {
+        if (insideLarger(box, boxes)) continue;
         // Amber for what the thorough check added, green for everything else.
         // Both will be covered when Redact is pressed — the colour says where
         // the mark came from, not whether it counts. A reviewer who has just
@@ -7334,10 +7367,15 @@
     button.classList.toggle('on', picking);
     // Only the words inside the row, or the plus beside them would be written
     // over along with the label.
-    el('picklabel').textContent = picking ? 'Cancel' : 'Select an image to redact';
+    el('picklabel').textContent = picking ? 'Back' : 'Select an image to redact';
     button.title = picking
-      ? 'Stop picking'
+      ? 'Stop picking and go back'
       : 'Draw a box around a logo, stamp, signature or face';
+    // A plus to start picking, an arrow back out of it: picking stays on
+    // through several picks, so the way out is a way back rather than a
+    // cancel of something half done.
+    const icon = button.querySelector('.pickgo path');
+    if (icon) icon.setAttribute('d', picking ? 'M19 12H5M11 6l-6 6 6 6' : 'M12 5v14M5 12h14');
     // Keep Images open on Cancel: collapsing it would hide the only in-panel
     // way out of a pick. The heading is locked until picking ends.
     const images = el('imagesect');
@@ -11314,7 +11352,7 @@
     // Drawn once: redrawing it on every page would restart its transition
     // and make a filling bar stutter.
     if (!host.querySelector('[data-leg="sweep"]')) {
-      legs([{ key: 'sweep', phase: '2', label: 'Second check', total: 100 }], host);
+      legs([{ key: 'sweep', phase: '2', label: 'Second check', total: 100, percent: true }], host);
     }
     if (!checkAt) checkSteps();
     if (step) checkAt(step, stepDone, stepOf);
@@ -11571,7 +11609,7 @@
     // And the stretches each page's reading skipped, read on their own.
     const skipped = ocrPending() && rereadParts().length
       ? state.pages.filter(page => page.couldHideText !== false).length * SKIPPED_SECONDS_PER_PAGE : 0;
-    return { seconds: SEARCH_STARTUP_SECONDS + read + match + closer + skipped, toRead, pictures, rereads };
+    return { seconds: SEARCH_STARTUP_SECONDS + read + match + closer + skipped, match, toRead, pictures, rereads };
   }
 
   // A wait as a range, because it is an estimate and saying one number is
@@ -12958,7 +12996,7 @@
     // Close file already returned to the front page in onConfirm.
   });
 
-  window.Blinded = { state, rescan, loadFile, exportFile, setMode, addTemplate, closeDocument, offlineReady,
+  window.Blinded = { state, rescan, loadFile, exportFile, setMode, addTemplate, closeDocument, insideLarger, offlineReady,
     undoLast, undoStack, applyLabels, labelItems, downloadKey,
     sensFor, barFromScores, settleBar, barSteps, moveBarTo, answeredAlready, planSeconds,
     liveImageHits,

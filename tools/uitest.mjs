@@ -1729,7 +1729,7 @@ try {
   // Entering pick mode changes what a drag means, and says so.
   await page.click('#pick');
   check('pick mode is announced on the button',
-    (await page.textContent('#picklabel')).trim() === 'Cancel',
+    (await page.textContent('#picklabel')).trim() === 'Back',
     await page.textContent('#picklabel'));
 
   // Picking happens on the document, not in the panel, and the dimming says
@@ -8619,7 +8619,7 @@ try {
       // that was never caught moving is not a bar that failed to move. The run
       // is timed so that case can be told apart from a bar that is stuck.
       const watch = setInterval(() => {
-        const row = document.querySelector('[data-leg="search"], [data-leg="only"]');
+        const row = document.querySelector('[data-leg="read"], [data-leg="only"]');
         if (row) {
           widths.push(parseFloat(row.querySelector('[data-fill]').style.width) || 0);
           texts.push(row.querySelector('[data-count]').textContent);
@@ -8646,13 +8646,10 @@ try {
       new Set(seen.widths).size > 1 || new Set(seen.texts).size > 1 || seen.took < 300,
       JSON.stringify({ texts: seen.texts, took: seen.took,
         widths: [...new Set(seen.widths)] }));
-    // "4 of 5" left the reviewer to work out what was being counted. Every
-    // one of these legs counts pages, and the count names the page being
-    // worked on rather than the number already behind it.
-    // Or says it is starting, until its first page is done: the workers get
-    // ready before any page can be counted.
-    check('and counts them the way every other leg does',
-      seen.texts.every(t => /^Page \d+ of \d+$/.test(t) || t === 'Starting…' || t === 'Waiting…'), JSON.stringify(seen.texts));
+    // How far through, as a share of the whole run: the search's one bar
+    // covers several steps, and a count of pages restarted with each.
+    check('and says how far through it is as a percentage',
+      seen.texts.length > 0 && seen.texts.every(t => /^\d{1,3}%$/.test(t)), JSON.stringify(seen.texts));
     check('the bar only ever moves forward',
       seen.widths.every((w, i) => i === 0 || w >= seen.widths[i - 1]),
       JSON.stringify(seen.widths));
@@ -8937,11 +8934,9 @@ try {
       // exactly the moment a pause is meant to come before.
       await new Promise(done => {
         const watch = setInterval(() => {
-          const row = document.querySelector('[data-leg="read"] [data-count]');
-          // "Page 3 of 100" names the page being worked on, so the first page
-          // is back once it says page two.
-          const said = row && /^Page (\d+) of/.exec(row.textContent.trim());
-          if (!said || Number(said[1]) < 2) return;
+          const row = document.querySelector('[data-leg="read"] [data-fill]');
+          // The bar has moved once the first page is back.
+          if (!row || !(parseFloat(row.style.width) > 0)) return;
           clearInterval(watch);
           B.requestPause();
           done();
@@ -10813,8 +10808,9 @@ try {
         if (nowUp && !up) spells++;
         if (nowUp) seen++;
         up = nowUp;
-        const leg = document.querySelector('[data-leg="search"] [data-count]');
-        const moving = leg && !/^0 of/.test(leg.textContent || '');
+        const row = document.querySelector('[data-leg="read"]');
+        const name = row && row.querySelector('.leg-label > span').textContent;
+        const moving = name === 'Searching images';
         if (moving) { if (nowUp) searchingSeen++; else searchingHidden++; }
         if (!document.getElementById('busy').hidden) dialog++;
       };
@@ -11813,6 +11809,22 @@ try {
   // waiting for something that will not happen -- and the reviewer is left
   // holding a document they cannot get out of the tool.
   // ---------- opening, picking, and the dialog's choices ----------
+  await part("a mark inside a larger one of its colour is not drawn twice", async () => {
+    const nest = await page.evaluate(() => {
+      const inside = window.Blinded.insideLarger;
+      const logo = { x: 100, y: 100, w: 300, h: 40 };
+      const word = { x: 130, y: 108, w: 200, h: 24 };
+      const amber = { x: 130, y: 108, w: 200, h: 24, sweep: true };
+      const beside = { x: 380, y: 108, w: 200, h: 24 };
+      return { word: inside(word, [logo, word]), logo: inside(logo, [logo, word]),
+        amber: inside(amber, [logo, amber]), beside: inside(beside, [logo, beside]) };
+    });
+    check('a word mark inside a logo mark of the same colour is not drawn over it',
+      nest.word === true && nest.logo === false, JSON.stringify(nest));
+    check('but an amber one inside a green one still is, and one only partly over it',
+      nest.amber === false && nest.beside === false, JSON.stringify(nest));
+  });
+
   await part("a document opens ready to type into, at its first page", async () => {
     const fresh = await context.newPage();
     await fresh.goto(base);

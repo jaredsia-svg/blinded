@@ -267,7 +267,7 @@ a.mark { color: inherit; text-decoration: none; }
    sideways each time a run moves on to a step with a longer one. */
 @media (min-width: 641px) {
   .runlegs .leg-label > span:first-child { min-width: 13em; }
-  .runlegs .leg-count { min-width: 7.5em; }
+  .runlegs .leg-count { min-width: 3em; text-align: right; }
 }
 .runlegs .leg .bar { grid-area: 1 / 2; min-width: 60px; }
 .runlegs .leg-count { grid-area: 1 / 3; margin-left: 0; }
@@ -757,16 +757,19 @@ textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; border-
    needs: nowrap was right for "Reading 4 of 12" and wrong for a sentence,
    which was being pushed into the middle and then run under the buttons. */
 .runbar .hint { margin: 0; margin-right: auto; }
+/* Under the search's bar, on a line of its own. */
+#runfoot { flex-wrap: wrap; }
+#runfoot .runnote { flex: 1 1 100%; order: 10; font-weight: 400; }
 /* What a run says when it is over: one line per run, each with the colour its
    marks wear on the page, so the sentence and the outlines match. */
 .ranline { display: flex; align-items: baseline; gap: 7px; }
 .ranline + .ranline { margin-top: 3px; }
+.randot::before { content: attr(data-phase); }
 .randot {
-  flex: none; width: 8px; height: 8px; border-radius: 50%;
-  position: relative; top: -1px;
+  flex: none; width: 16px; height: 16px; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 10px; font-weight: 700; line-height: 1; align-self: center;
 }
-.randot.green { background: #1a7f37; }
-.randot.amber { background: #d98b1f; }
 /* A run's own control, beside the name of what is running. Quieter than the
    buttons it shares the bar with: stopping a run is a way out, not the thing
    the reviewer came here to press. */
@@ -913,7 +916,6 @@ body.picking .pickfield { color: var(--ink); font-weight: 600; }
    black it read as another button in the row rather than the way out. */
 body.picking .pickgo { background: var(--danger); border-color: var(--danger); }
 body.picking .pickrow:hover .pickgo { background: #8f1d17; border-color: #8f1d17; }
-body.picking .pickgo svg { transform: rotate(45deg); }
 /* Cancel lives in this section. The heading must not collapse it. */
 #imagesect.pick-locked > summary { cursor: default; }
 #imagesect.pick-locked > summary:hover { background: var(--band); }
@@ -1902,8 +1904,16 @@ body.reviewing .exportbar { position: static; flex: none; margin: 14px 0 18px; }
   content: attr(data-phase);
   display: inline-flex; align-items: center; justify-content: center;
   width: 16px; height: 16px; margin-right: 6px; border-radius: 50%;
-  background: #fff; border: 1px solid var(--line-strong);
-  font-size: 10px; font-weight: 700; color: var(--ink); vertical-align: 1px;
+  font-size: 10px; font-weight: 700; vertical-align: 1px;
+}
+/* The two phases in their marks' colours, everywhere they are numbered: the
+   search dialog, the bars while they run, and the line each leaves when it
+   is done. Green for the first search's marks, amber for the second check's. */
+.plannum.phase1, .leg-label > span[data-phase="1"]::before, .randot.green {
+  background: #1a7f37; border-color: #1a7f37; color: #fff;
+}
+.plannum.phase2, .leg-label > span[data-phase="2"]::before, .randot.amber {
+  background: #d98b1f; border-color: #d98b1f; color: #fff;
 }
 .plannum {
   flex: none; width: 22px; height: 22px; border-radius: 50%;
