@@ -11809,6 +11809,32 @@ try {
   // waiting for something that will not happen -- and the reviewer is left
   // holding a document they cannot get out of the tool.
   // ---------- opening, picking, and the dialog's choices ----------
+  // ---------- the device capture, for measuring ----------
+  await part("a device capture saves the pages as drawn, only when asked for", async () => {
+    const plain = await context.newPage();
+    await plain.goto(base);
+    check('no capture button in ordinary use',
+      (await plain.evaluate(() => !document.getElementById('savecapture'))) === true);
+    await plain.close();
+    const cap = await context.newPage();
+    await cap.goto(base + '?capture');
+    await cap.setInputFiles('#file', manyPath);
+    await cap.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
+    const file = await cap.evaluate(() => {
+      const f = window.Blinded.captureFile();
+      return { kind: f.blindedCapture, pages: f.pages.length, want: window.Blinded.state.pages.length,
+        png: f.pages.every(p => /^data:image\/png;base64,/.test(p.png || '')),
+        sized: f.pages.every((p, i) => p.width === window.Blinded.state.pages[i].source.width),
+        device: Boolean(f.device && f.device.agent),
+        shown: Boolean(document.getElementById('savecapture')) };
+    });
+    check('with ?capture there is a button to save one',
+      file.shown, JSON.stringify(file));
+    check('and it holds every page as a picture at the size the reader was given',
+      file.kind === 1 && file.pages === file.want && file.png && file.sized && file.device, JSON.stringify(file));
+    await cap.close();
+  });
+
   await part("a mark inside a larger one of its colour is not drawn twice", async () => {
     const nest = await page.evaluate(() => {
       const inside = window.Blinded.insideLarger;

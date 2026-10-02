@@ -2785,3 +2785,10 @@ a.payprice { text-decoration: none; color: var(--ink); }
 .premfoot a { color: var(--ink-soft); }
 .premfoot a:hover { color: var(--accent); }
 .premrefund { color: var(--ink-soft); }
+
+/* The measuring capture's button, only with ?capture in the address. */
+.capturebutton {
+  position: fixed; left: 12px; bottom: 12px; z-index: 60;
+  padding: 6px 12px; border-radius: 8px; border: 1px solid var(--line-strong);
+  background: var(--card); color: var(--ink); font: inherit; font-size: 12px; cursor: pointer;
+}

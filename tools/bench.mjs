@@ -70,13 +70,11 @@ const only = process.argv[2];
 const REVIEW = Boolean(process.env.REVIEW);
 const SAVE = Boolean(process.env.SAVE);
 const OFFLINE = Boolean(process.env.OFFLINE);
-// PERTURB=blur|gamma|jpeg|resample|contrast: alter every page image after it
-// opens and before the search, the way another computer's rendering differs
-// from this one's -- the same page, a few pixel values apart. Each keeps the
-// image's size, so the answer key still lines up. The reader is sensitive to
-// exactly these differences, and a run under each is how a change is held to
-// working everywhere rather than on this machine.
-const PERTURB = process.env.PERTURB || '';
+// A device capture (a *.capture.json beside the document, saved with the
+// tool's ?capture button) is read in place of this machine's rendering: each
+// page as that device drew it. Two devices do not draw a page to the same
+// pixels, and the reader is sensitive to the difference; this is how a change
+// is held to a real laptop's or phone's pixels rather than this machine's.
 // CHECK=off: skip the second check, to see what reading alone finds.
 // CHECK=local: the second check only where the reading left a doubtful spot
 // (window.Blinded.sweepLocal), not over every page.
@@ -165,7 +163,12 @@ for (const name of readdirSync(bench).sort()) {
   try { files = readdirSync(folder); } catch { continue; }
   if (only && !name.toLowerCase().includes(only.toLowerCase())) continue;
 
-  const draft = files.find(f => f.endsWith('.json'));
+  // The draft is the saved work; the key, the last run's scores and a device
+  // capture sit beside it and are not drafts.
+  const notDraft = f => /^(truth|scores|baseline)\.json$/.test(f) || f.endsWith('.capture.json');
+  const draft = files.find(f => f.endsWith('.blinded.json'))
+    || files.find(f => f.endsWith('.json') && !notDraft(f));
+  const capture = files.find(f => f.endsWith('.capture.json'));
   // Whatever the draft was saved against, not the redacted output beside it.
   const doc = files.find(f => /\.(pdf|jpe?g|png)$/i.test(f) && !/redact/i.test(f));
   if (!doc) { console.log('--', name, '(no document)'); continue; }
@@ -240,46 +243,28 @@ for (const name of readdirSync(bench).sort()) {
     window.__legWatch = setInterval(look, 40);
   });
 
-  if (PERTURB) {
-    const how = await page.evaluate(async kind => {
+  if (capture) {
+    const captured = JSON.parse(readFileSync(join(folder, capture), 'utf8'));
+    const how = await page.evaluate(async pages => {
       const B = window.Blinded;
-      for (const p of B.state.pages) {
-        const c = p.source;
-        if (!c || !c.getContext) continue;
-        const w = c.width, h = c.height;
-        const copy = document.createElement('canvas');
-        copy.width = w; copy.height = h;
-        copy.getContext('2d').drawImage(c, 0, 0);
-        const ctx = c.getContext('2d');
-        if (kind === 'blur') {
-          ctx.filter = 'blur(0.6px)'; ctx.drawImage(copy, 0, 0); ctx.filter = 'none';
-        } else if (kind === 'contrast') {
-          ctx.filter = 'contrast(0.88) brightness(1.04)'; ctx.drawImage(copy, 0, 0); ctx.filter = 'none';
-        } else if (kind === 'resample') {
-          const small = document.createElement('canvas');
-          small.width = Math.round(w * 0.7); small.height = Math.round(h * 0.7);
-          const s = small.getContext('2d'); s.imageSmoothingQuality = 'high';
-          s.drawImage(copy, 0, 0, small.width, small.height);
-          ctx.imageSmoothingQuality = 'high'; ctx.drawImage(small, 0, 0, w, h);
-        } else if (kind === 'jpeg') {
-          const url = copy.toDataURL('image/jpeg', 0.7);
-          const img = new Image();
-          await new Promise(done => { img.onload = done; img.src = url; });
-          ctx.drawImage(img, 0, 0);
-        } else if (kind === 'gamma') {
-          const data = ctx.getImageData(0, 0, w, h);
-          const lut = new Uint8ClampedArray(256);
-          for (let v = 0; v < 256; v++) lut[v] = Math.round(255 * Math.pow(v / 255, 0.85));
-          const d = data.data;
-          for (let i = 0; i < d.length; i += 4) { d[i] = lut[d[i]]; d[i + 1] = lut[d[i + 1]]; d[i + 2] = lut[d[i + 2]]; }
-          ctx.putImageData(data, 0, 0);
-        } else {
-          return 'unknown perturbation ' + kind;
-        }
+      let swapped = 0;
+      for (const one of pages) {
+        const p = B.state.pages[one.index];
+        if (!p || !one.png) continue;
+        const img = new Image();
+        await new Promise((done, fail) => { img.onload = done; img.onerror = fail; img.src = one.png; });
+        const c = document.createElement('canvas');
+        c.width = img.naturalWidth; c.height = img.naturalHeight;
+        c.getContext('2d').drawImage(img, 0, 0);
+        if (c.width !== p.source.width || c.height !== p.source.height) return 'page ' + (one.index + 1) + ' is a different size';
+        p.source = c;
+        delete p.ocrItems;
+        swapped++;
       }
-      return kind;
-    }, PERTURB);
-    console.log('   perturbed: ' + how);
+      B.state.ocrRead = false;
+      return swapped + ' pages';
+    }, captured.pages);
+    console.log('   device capture (' + ((captured.device && captured.device.platform) || '?') + '): ' + how);
   }
 
   // The second check's closer reads, both asked for unless EXTRAS_OFF=turned,hard

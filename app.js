@@ -13064,7 +13064,66 @@
     // Close file already returned to the front page in onConfirm.
   });
 
-  window.Blinded = { state, rescan, loadFile, exportFile, setMode, addTemplate, closeDocument, insideLarger, halfReadSpots, offlineReady,
+  // ---------- device capture, for measuring ----------
+  //
+  // Two devices do not draw the same page to the same pixels: each system
+  // smooths the letters its own way, and the reader is sensitive to exactly
+  // that. A name read on one laptop was missed on another and found on a
+  // phone, and no alteration of this machine's pixels reproduced it. So the
+  // pixels themselves are asked for: with ?capture in the address, a button
+  // saves each page exactly as the reader was given it, with what it read and
+  // what was marked, as one file on this device -- nothing is sent anywhere.
+  // The benchmark (tools/bench.mjs) reads such a file in place of its own
+  // rendering, to measure a change on that device's pixels.
+  //
+  // The file holds the pages themselves, so it is as private as the document.
+  function captureFile() {
+    const round = r => r && { x: Math.round(r.x * 10) / 10, y: Math.round(r.y * 10) / 10,
+      w: Math.round(r.w * 10) / 10, h: Math.round(r.h * 10) / 10 };
+    return {
+      blindedCapture: 1,
+      savedAt: new Date().toISOString(),
+      source: { name: state.name, digest: state.sourceDigest, pages: state.pages.length },
+      device: { agent: navigator.userAgent, platform: navigator.platform || '',
+        pixelRatio: window.devicePixelRatio || 1, cores: navigator.hardwareConcurrency || 0,
+        reader: Ocr.corePath ? Ocr.corePath().split('/').pop() : '' },
+      terms: state.terms.slice(),
+      pages: state.pages.map(page => ({
+        index: page.index,
+        width: page.source ? page.source.width : 0,
+        height: page.source ? page.source.height : 0,
+        png: page.source && page.source.toDataURL ? page.source.toDataURL('image/png') : null,
+        read: (page.ocrItems || []).filter(it => it && it.rect).map(it => ({ str: it.str,
+          confidence: typeof it.confidence === 'number' ? Math.round(it.confidence) : null, rect: round(it.rect) })),
+        marks: liveImageHits(page).filter(m => m.rect).map(m => ({ term: m.term || null,
+          rect: round(m.rect), check: Boolean(m.bySweep) })),
+      })),
+    };
+  }
+  function saveCapture() {
+    if (!state.pages.length) { alert('Open a document first.'); return; }
+    const blob = new Blob([JSON.stringify(captureFile())], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = (state.name.replace(/\.[^.]+$/, '') || 'document') + '.capture.json';
+    document.body.append(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+  if (/[?&]capture\b/.test(location.search)) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.id = 'savecapture';
+    button.className = 'capturebutton';
+    button.textContent = 'Save capture';
+    button.title = 'Save each page as this device drew it, with what was read, to send for testing';
+    button.addEventListener('click', saveCapture);
+    document.body.append(button);
+  }
+
+  window.Blinded = { state, rescan, loadFile, exportFile, setMode, addTemplate, closeDocument, insideLarger, halfReadSpots, captureFile, offlineReady,
     undoLast, undoStack, applyLabels, labelItems, downloadKey,
     sensFor, barFromScores, settleBar, barSteps, moveBarTo, answeredAlready, planSeconds,
     liveImageHits,
