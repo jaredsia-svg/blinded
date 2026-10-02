@@ -13096,7 +13096,11 @@
         read: (page.ocrItems || []).filter(it => it && it.rect).map(it => ({ str: it.str,
           confidence: typeof it.confidence === 'number' ? Math.round(it.confidence) : null, rect: round(it.rect) })),
         marks: liveImageHits(page).filter(m => m.rect).map(m => ({ term: m.term || null,
-          rect: round(m.rect), check: Boolean(m.bySweep) })),
+          rect: round(m.rect), check: Boolean(m.bySweep) }))
+          // And what the document's own text was found to hold.
+          .concat((page.hits || []).filter(h => !page.dismissed.has(h.finding.id))
+            .flatMap(h => (h.rects || []).map(r => ({ term: h.finding.term || h.finding.kind || null,
+              rect: round(r), text: true })))),
       })),
     };
   }
