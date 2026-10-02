@@ -3919,7 +3919,25 @@
     const sure = typed.some(word => typeof word.confidence === 'number'
       && word.confidence >= sureEnoughFor(plainWord(bareWord(word.str))));
     if (!sure && typed.length && onUnsure) onUnsure(typed);
-    return sure ? typed : [];
+    if (!sure) return [];
+    // Beside a part read surely, the other part of the same name may come
+    // back a letter off (in a script name turned over): taken,
+    // as the part it is, when it stands on the same line next to it. Alone
+    // it would not be.
+    const near = (read || []).map(word => ({ ...word, how,
+      rect: word.rect && cropRectToPage(word.rect, x0, y0, x1, y1, scale, turn) }))
+      .filter(word => word.rect && !typed.some(t => t.rect && t.rect.x === word.rect.x && t.rect.y === word.rect.y))
+      .map(word => {
+        const have = plainWord(bareWord(word.str));
+        const part = have.length >= 5 && wants.find(w => w !== have && !typed.some(t => plainWord(bareWord(t.str)) === w)
+          && Math.abs(w.length - have.length) <= 1 && Detect.levenshtein(have, w) <= Math.max(1, Math.floor(w.length / 6)));
+        return part ? { ...word, str: rereadParts().find(p => plainWord(p) === part) || word.str } : null;
+      })
+      .filter(word => word && typed.some(t => t.rect
+        && Math.abs((t.rect.y + t.rect.h / 2) - (word.rect.y + word.rect.h / 2)) < Math.max(t.rect.h, word.rect.h) * 0.6
+        && Math.max(t.rect.x - (word.rect.x + word.rect.w), word.rect.x - (t.rect.x + t.rect.w)) < Math.max(t.rect.h, word.rect.h) * 3)
+        && !known(word));
+    return typed.concat(near);
   }
 
   // Letters upside down, as the reader reads them, back to what they are.
@@ -3950,6 +3968,7 @@
   //
   // Upside down: only where a reading already is a typed word printed upside
   // down, so it costs a read where there is one and nothing elsewhere.
+  const UPSIDE_NONSENSE_PER_PAGE = 6;
   async function readTurnedLettering(which = { vertical: true, upsideDown: true }, tick) {
     const wants = rereadParts().map(plainWord).filter(w => w.length >= 3);
     if (!wants.length) return 0;
@@ -3977,9 +3996,24 @@
           break;
         }
       }
-      const upsideDown = !which.upsideDown ? [] : page.ocrItems.filter(it => it && it.rect && it.str
+      const lookAlike = !which.upsideDown ? [] : page.ocrItems.filter(it => it && it.rect && it.str
         && plainWord(it.str).length >= 3 && !wants.includes(plainWord(bareWord(it.str)))
         && wants.some(w => upsideDownDistance(it.str, w) <= Math.max(1, Math.floor(w.length / 4))));
+      // And lettering the reader could make nothing of at all, a word long:
+      // upside down, script in particular reads as no word in any order
+      // (a name turned over read as one nonsense word at 0), so it never looked like
+      // the name turned over. The surest few nonsense readings a page.
+      const fewest = Math.min(...wants.map(w => w.length));
+      const nonsense = !which.upsideDown ? [] : page.ocrItems.filter(it => it && it.rect && it.str
+        && !lookAlike.includes(it) && typeof it.confidence === 'number' && it.confidence < 20
+        && plainWord(it.str).length >= Math.max(4, fewest) && it.rect.w >= it.rect.h * fewest * 0.35
+        && !page.ocrItems.some(o => o !== it && o.rect && typeof o.confidence === 'number' && o.confidence >= READER_SURE
+          && overlapShare(o.rect, it.rect) >= 0.3))
+        // Closest first to the size a typed word would be at that height:
+        // a letter about half as wide as it is tall.
+        .map(it => ({ it, off: Math.min(...wants.map(w => Math.abs(Math.log(it.rect.w / (it.rect.h * 0.55 * w.length))))) }))
+        .sort((a, b) => a.off - b.off).map(one => one.it).slice(0, UPSIDE_NONSENSE_PER_PAGE);
+      const upsideDown = lookAlike.concat(nonsense);
       for (const it of upsideDown) {
         if (state.paused || state.sweepStopped) break;
         const r = it.rect, pad = r.h * 6;
