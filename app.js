@@ -3827,6 +3827,11 @@
         const known = word => page.ocrItems.some(it => it && it.rect
           && overlapShare(it.rect, word.rect) >= 0.5
           && plainWord(bareWord(it.str)) === plainWord(bareWord(word.str)));
+        // On the place, or within a line's height of it: the leaning ink found
+        // from the cells can take in only part of the name.
+        const reach = Math.min(spot.h, 40);
+        const grown = { x: spot.x - reach, y: spot.y - reach, w: spot.w + reach * 2, h: spot.h + reach * 2 };
+        const near = r => overlapShare(r, grown) >= 0.5;
         const mode = inkModesFor(page, x0, y0, x1, y1)[0];
         let words = [];
         for (const turn of turns) {
@@ -3838,14 +3843,17 @@
           const typed = (read || []).map(word => ({ ...word,
             rect: word.rect && cropRectToPage(word.rect, x0, y0, x1, y1, scale, turn) }))
             .filter(word => word.rect && wants.includes(plainWord(bareWord(word.str)))
-              && overlapShare(word.rect, spot) >= 0.3 && !known(word));
+              && near(word.rect) && !known(word));
           // Sure of one part, the others spelt out letter for letter in the
           // same read are taken at any confidence -- as the first reading
           // takes a typed word spelt exactly. Measured: a slanted script name
           // turned level read "Freya" at 91 and "Yamamoto" at 13.
           if (typed.some(word => typeof word.confidence === 'number'
               && word.confidence >= sureEnoughFor(plainWord(bareWord(word.str))))) {
-            words = typed;
+            const all = (read || []).map(word => ({ ...word,
+              rect: word.rect && cropRectToPage(word.rect, x0, y0, x1, y1, scale, turn) }))
+              .filter(word => word.rect && near(word.rect));
+            words = typed.concat(nearParts(all, typed, wants));
             break;
           }
         }
@@ -3854,7 +3862,10 @@
         // here to begin with, and the phrase match judges the whole as it
         // judges any reading with a letter wrong: turned level, a slanted
         // name read "Yamamoto" at 96 and nothing of the "Frey?" before it.
+        const sureOf = new Set(words.map(word => plainWord(bareWord(word.str))));
         const line = wants.map(want => words.find(word => plainWord(bareWord(word.str)) === want)
+          || words.find(word => !sureOf.has(want) && !wants.includes(plainWord(bareWord(word.str)))
+            && Detect.levenshtein(plainWord(bareWord(word.str)), want) <= Math.floor(want.length / 4))
           || (spot.halves || []).find(half => half.want === want)).filter(Boolean);
         let order = 0;
         for (const found of line) {
@@ -3885,13 +3896,30 @@
 
   // Words read off a turned or cut-out crop, put on the page as one line in
   // the order they were read, however they sit there.
-  function placeReadWords(page, words, along) {
+  function placeReadWords(page, words, along, turned = false) {
+    // Read turned, what the reader made of the same ink the right way up is
+    // nonsense by definition ("ojowewep" for a surname upside down), and left
+    // in place it sat between the two words of the name and the page's text
+    // no longer read as one.
+    // In place: the half-read places were found from this very list, and the
+    // slanted read keeps to a page whose list is still the one they came from.
+    if (turned) {
+      const wants = rereadParts().map(plainWord);
+      for (let i = page.ocrItems.length - 1; i >= 0; i--) {
+        const it = page.ocrItems[i];
+        if (it && it.rect && !wants.includes(plainWord(bareWord(it.str)))
+          && words.some(found => overlapShare(found.rect, it.rect) >= 0.5)) page.ocrItems.splice(i, 1);
+      }
+    }
     let order = 0;
     const lineY = along.y + along.h;
+    // One read is one line: the same height for every word in it, or the
+    // taller of two (a capital F in script) joined the line above on its own.
+    const h = Math.max(...words.map(found => found.rect.h)) / 0.82;
     for (const found of words) {
       page.ocrItems.push({ str: found.str, confidence: found.confidence, rect: found.rect,
         x: along.x + (order++) * 0.01, y: found.rect.y + found.rect.h, w: found.rect.w,
-        h: found.rect.h / 0.82, lineY, fromInk: found.how });
+        h, lineY, fromInk: found.how });
     }
     if (Ocr.readingOrder) Ocr.readingOrder(page.ocrItems);
     restitch(page);
@@ -3920,6 +3948,41 @@
       && word.confidence >= sureEnoughFor(plainWord(bareWord(word.str))));
     if (!sure && typed.length && onUnsure) onUnsure(typed);
     return sure ? typed : [];
+  }
+
+  // Straightened, beside a part read surely, the other part of the same name
+  // may come back a letter or two off, or in two pieces: kept as read, on the
+  // same line next to it, for the phrase match to judge as it judges any
+  // reading with a letter wrong. A slanted script name read its first name at
+  // 88 and the surname in two pieces. Alone, neither would be taken.
+  function nearParts(all, typed, wants) {
+    const missing = wants.filter(w => !typed.some(t => plainWord(bareWord(t.str)) === w));
+    if (!missing.length || !typed.length) return [];
+    const close = have => have.length >= 4 && missing.some(w => Math.abs(w.length - have.length) <= 1
+      && Detect.levenshtein(have, w) <= Math.floor(w.length / 4));
+    const besideSure = word => typed.some(t => {
+      const h = Math.max(t.rect.h, word.rect.h);
+      return Math.abs((t.rect.y + t.rect.h / 2) - (word.rect.y + word.rect.h / 2)) < h * 0.6
+        && Math.max(t.rect.x - (word.rect.x + word.rect.w), word.rect.x - (t.rect.x + t.rect.w)) < h * 3;
+    });
+    const rest = all.filter(word => !typed.some(t => overlapShare(t.rect, word.rect) >= 0.5))
+      .sort((u, v) => u.rect.x - v.rect.x);
+    const out = [];
+    for (let i = 0; i < rest.length; i++) {
+      const one = rest[i], next = rest[i + 1];
+      if (close(plainWord(bareWord(one.str)))) { out.push(one); continue; }
+      // Two pieces side by side, read as one word.
+      if (!next || Math.abs((one.rect.y + one.rect.h / 2) - (next.rect.y + next.rect.h / 2)) >= Math.max(one.rect.h, next.rect.h) * 0.6
+        || next.rect.x - (one.rect.x + one.rect.w) > Math.max(one.rect.h, next.rect.h)) continue;
+      const str = bareWord(one.str) + bareWord(next.str);
+      if (!close(plainWord(str))) continue;
+      const x = Math.min(one.rect.x, next.rect.x), y = Math.min(one.rect.y, next.rect.y);
+      out.push({ ...one, str, confidence: Math.min(one.confidence, next.confidence),
+        rect: { x, y, w: Math.max(one.rect.x + one.rect.w, next.rect.x + next.rect.w) - x,
+          h: Math.max(one.rect.y + one.rect.h, next.rect.y + next.rect.h) - y } });
+      i++;
+    }
+    return out.filter(besideSure);
   }
 
   // Letters upside down, as the reader reads them, back to what they are.
@@ -3987,7 +4050,7 @@
         const x1 = Math.min(W, Math.ceil(r.x + r.w + pad)), y1 = Math.min(H, Math.ceil(r.y + r.h * 2));
         const words = await readForWords(page, x0, y0, x1, y1, wants, 180, known, 'upside down');
         if (!words.length) continue;
-        placeReadWords(page, words, r);
+        placeReadWords(page, words, r, true);
         added += words.length;
       }
     }
