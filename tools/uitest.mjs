@@ -269,8 +269,9 @@ async function useDetectors(page) {
 }
 
 // And the other way: every detector off, the state a document opens in. The
-// choice is kept across documents in a session, so a test that has ticked
-// them has to put them back before asserting anything about a quiet panel.
+// choice is kept when another document is opened over this one (closing one
+// clears it), so a test that has ticked them has to put them back before
+// asserting anything about a quiet panel.
 async function noDetectors(page) {
   await page.evaluate(() => {
     const B = window.Blinded;
@@ -321,6 +322,9 @@ const settled = () => `!window.Blinded || (document.getElementById('busy').hidde
   && !window.Blinded.state.redacting && !window.Blinded.state.sweepRunning)`;
 
 async function redact(page) {
+  // The foot's buttons wait while an image is being picked, so a reviewer
+  // leaves picking (Back) before searching, and so does this.
+  if (await page.evaluate(() => document.body.classList.contains('picking'))) await page.click('#pick');
   // Search and Redact are two buttons, and only the one whose turn it is is
   // on screen. Search when there is something left to search for -- which is
   // exactly when that button is the one showing.
@@ -477,6 +481,8 @@ try {
     await page.waitForSelector('#view-drop:not([hidden])', { timeout: 15000 });
     await page.setInputFiles('#file', textPath);
     await page.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
+    // The address detector, which closing the last file unticked.
+    await useDetectors(page);
     await setTerms(page, ['Amphitheatre']);
 
     const seen = await page.evaluate(() => {
@@ -1123,7 +1129,7 @@ try {
       heights: buttons.map(b => Math.round(b.getBoundingClientRect().height)),
     };
   });
-  check('the toolbar is seven buttons', bar.count === 7, JSON.stringify(bar.count));
+  check('the toolbar is eight buttons', bar.count === 8, JSON.stringify(bar.count));
 
   // The header is pinned, and the sentence explaining what dragging does sits
   // with the buttons that change it rather than at the foot of the panel.
@@ -1540,6 +1546,14 @@ try {
     await page.setInputFiles('#file', fixturePath);
     await page.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
 
+    // A detector ticked for this file, to see it go with the file.
+    await page.evaluate(() => {
+      const box = document.querySelector('input[type=checkbox][data-kind="email"]');
+      if (box && !box.checked) box.click();
+    });
+    const tickedBefore = await page.evaluate(() => window.Blinded.state.enabled.has('email'));
+    const enabledBefore = await page.evaluate(() => [...window.Blinded.state.enabled]);
+
     // And confirming actually does it.
     await page.click('#tool-close');
     await page.waitForSelector('#confirmbox:not([hidden])', { timeout: 15000 });
@@ -1558,6 +1572,26 @@ try {
     // Put a document back for the tests that follow.
     await page.setInputFiles('#file', fixturePath);
     await page.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
+
+    // The detectors ticked for the closed file went with it, as its words
+    // did: the next file asked to search for five things nobody had typed.
+    const after = await page.evaluate(() => ({
+      enabled: [...window.Blinded.state.enabled],
+      ticked: [...document.querySelectorAll('input[type=checkbox][data-kind]')]
+        .filter(box => box.checked && box.dataset.kind !== 'term').length,
+      note: document.getElementById('exportnote').textContent,
+    }));
+    check('closing a file unticks the detectors ticked for it',
+      tickedBefore && after.enabled.join() === 'term' && after.ticked === 0
+        && !/inputs? to search for/.test(after.note), JSON.stringify(after));
+    // Ticked again, as a reviewer would, for the tests that follow.
+    await page.evaluate(kinds => {
+      const B = window.Blinded;
+      for (const kind of kinds) B.state.enabled.add(kind);
+      B.renderKinds();
+      B.rescan({ settled: true });
+      B.refreshApply();
+    }, enabledBefore);
   });
 
   // ---------- naming the file on the way out ----------
@@ -3417,6 +3451,116 @@ try {
     await page.evaluate(() => window.Blinded.state.pages[0].manual.length) === 0);
   check('undo disables itself when the history runs out',
     await page.isDisabled('#undo'));
+
+  // Redo puts back what was undone, and a new change by hand clears it.
+  check('redo is offered once something has been undone',
+    !(await page.isDisabled('#redo')), await page.getAttribute('#redo', 'title'));
+  await page.click('#redo');
+  check('redo puts the box back',
+    await page.evaluate(() => window.Blinded.state.pages[0].manual.length) === 1);
+  await page.click('#undo');
+  check('undo after redo takes it away again',
+    await page.evaluate(() => window.Blinded.state.pages[0].manual.length) === 0);
+  await drawBox(23, 100, 900, 400, 980);
+  check('a new change clears what was there to redo', await page.isDisabled('#redo'));
+  await page.click('#undo');
+
+  // The toolbar is one bar: every tool the same width, touching, rounded only
+  // at its two ends, with Redo beside Undo.
+  const toolbar = await page.evaluate(() => {
+    const tools = [...document.querySelectorAll('.panel-head .tools .tool')];
+    const r = tools.map(t => t.getBoundingClientRect());
+    return {
+      ids: tools.map(t => t.id),
+      widths: r.map(b => Math.round(b.width)),
+      gaps: r.slice(1).map((b, i) => Math.round(b.left - r[i].right)),
+      radii: tools.map(t => getComputedStyle(t).borderTopLeftRadius + '/' + getComputedStyle(t).borderTopRightRadius),
+    };
+  });
+  check('the toolbar tools are all the same width',
+    Math.max(...toolbar.widths) - Math.min(...toolbar.widths) <= 1, JSON.stringify(toolbar.widths));
+  check('with no gaps between them', toolbar.gaps.every(g => Math.abs(g) <= 1), JSON.stringify(toolbar.gaps));
+  check('rounded only at the two ends',
+    toolbar.radii.slice(1, -1).every(r => r === '0px/0px')
+      && !toolbar.radii[0].startsWith('0px') && !toolbar.radii[toolbar.radii.length - 1].endsWith('/0px'),
+    JSON.stringify(toolbar.radii));
+  check('and Redo sits beside Undo',
+    toolbar.ids.indexOf('redo') === toolbar.ids.indexOf('undo') + 1, JSON.stringify(toolbar.ids));
+
+  // A word added, spelt again in place, and taken off are each a step that
+  // undo takes back and redo puts back.
+  await setTerms(page, []);
+  await page.click('#termbox');
+  await page.keyboard.type('Heronwood');
+  await page.keyboard.press('Enter');
+  const terms = () => page.evaluate(() => window.Blinded.state.terms.slice());
+  check('adding a word can be undone',
+    (await page.getAttribute('#undo', 'title')).includes('Heronwood'), await page.getAttribute('#undo', 'title'));
+  await page.click('#termcounts .tedit');
+  const editing = await page.evaluate(() => {
+    const box = document.querySelector('#termcounts input.termedit');
+    return { box: !!box, value: box && box.value, focused: document.activeElement === box };
+  });
+  check('pressing a word turns it into a box holding it, ready to type',
+    editing.box && editing.value === 'Heronwood' && editing.focused, JSON.stringify(editing));
+  await page.keyboard.press('End');
+  await page.keyboard.press('Backspace');
+  await page.keyboard.press('Backspace');
+  await page.keyboard.press('Enter');
+  check('and Enter keeps the new spelling, in the same place', JSON.stringify(await terms()) === '["Heronwo"]',
+    JSON.stringify(await terms()));
+  await page.click('#termcounts .tedit');
+  await page.keyboard.type('zzz');
+  await page.keyboard.press('Escape');
+  check('Escape leaves it as it was', JSON.stringify(await terms()) === '["Heronwo"]', JSON.stringify(await terms()));
+  await page.click('#undo');
+  check('undo puts the old spelling back', JSON.stringify(await terms()) === '["Heronwood"]', JSON.stringify(await terms()));
+  await page.click('#undo');
+  check('and undo again takes the added word away', JSON.stringify(await terms()) === '[]', JSON.stringify(await terms()));
+  await page.click('#redo');
+  await page.click('#redo');
+  check('redo puts both back, in order', JSON.stringify(await terms()) === '["Heronwo"]', JSON.stringify(await terms()));
+  await page.click('#termcounts .termdrop');
+  check('taking a word off empties the list', JSON.stringify(await terms()) === '[]');
+  await page.click('#undo');
+  check('and undo puts it back', JSON.stringify(await terms()) === '["Heronwo"]', JSON.stringify(await terms()));
+  await setTerms(page, []);
+
+  // While an image is being picked, the foot is lit with the page, says what
+  // to do, and its buttons wait; after Back it says what is waiting.
+  await page.click('#pick');
+  const pickingFoot = await page.evaluate(() => {
+    const bar = document.querySelector('.exportbar').getBoundingClientRect();
+    const at = document.elementFromPoint(bar.left + 20, bar.top + bar.height / 2);
+    return {
+      note: document.getElementById('exportnote').textContent,
+      lit: !!at && !!at.closest('.exportbar'),
+      search: document.getElementById('search').disabled,
+      exp: document.getElementById('export').disabled,
+      undo: document.getElementById('undo').disabled,
+    };
+  });
+  check('picking says what to do in the foot',
+    pickingFoot.note === 'Mark out the image you would like to redact. Press Back once done.', pickingFoot.note);
+  check('and the foot is above the dimming, not under it', pickingFoot.lit, JSON.stringify(pickingFoot));
+  check('with its buttons greyed while picking', pickingFoot.search && pickingFoot.exp, JSON.stringify(pickingFoot));
+  await page.evaluate(async () => {
+    const B = window.Blinded;
+    await B.addTemplate(B.state.pages[0], { x: 100, y: 100, w: 200, h: 60 });
+  });
+  await page.click('#pick');
+  const afterPick = await page.evaluate(() => ({
+    note: document.getElementById('exportnote').textContent,
+    templates: window.Blinded.state.templates.length,
+  }));
+  check('after Back it says what is waiting to be searched for',
+    /0 text and 1 image input to search for\. Press Search\./.test(afterPick.note), afterPick.note);
+  await page.click('#undo');
+  check('a picked image can be undone',
+    await page.evaluate(() => window.Blinded.state.templates.length) === 0);
+  await page.click('#redo');
+  check('and redone', await page.evaluate(() => window.Blinded.state.templates.length) === 1);
+  await page.click('#undo');
 
   // Dismissing a detection is a reviewer decision too, so it must be undoable.
   //
@@ -5775,6 +5919,8 @@ try {
     await page.waitForSelector('#view-drop:not([hidden])', { timeout: 15000 });
     await page.setInputFiles('#file', fixturePath);
     await page.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
+    // Every detector, which closing the last file unticked.
+    await useDetectors(page);
     await setTerms(page, ['Amphitheatre']);
     await redact(page);
 
@@ -6644,6 +6790,8 @@ try {
     await page.waitForSelector('#view-drop:not([hidden])', { timeout: 15000 });
     await page.setInputFiles('#file', readablePath);
     await page.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
+    // Every detector, which closing the last file unticked.
+    await useDetectors(page);
 
     const armed = await page.evaluate(() => ({
       terms: window.Blinded.state.terms.length,
@@ -9264,7 +9412,7 @@ try {
     check('the toolbar is lifted out of the panel',
       start.headOutside === true, JSON.stringify(start));
     check('and all of its buttons are there',
-      start.toolCount === 7 && start.tools.shown === true, JSON.stringify(start));
+      start.toolCount === 8 && start.tools.shown === true, JSON.stringify(start));
 
     // Tapping the strip trades places.
     await phone.click('#peek-doc');
@@ -9276,7 +9424,7 @@ try {
     check('and the controls become the strip',
       opened.panel.shown === true && opened.panel.w < 60, JSON.stringify(opened));
     check('the toolbar is still there with the document open',
-      opened.tools.shown === true && opened.toolCount === 7, JSON.stringify(opened));
+      opened.tools.shown === true && opened.toolCount === 8, JSON.stringify(opened));
     check('and the export bar is still fully on screen',
       opened.bar.bottom <= opened.viewport, JSON.stringify(opened));
     check('the pages are drawn again when the document comes forward',

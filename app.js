@@ -994,31 +994,74 @@
   //
   // Undo covers what the reviewer did, not what the detectors found: rescans
   // are derived state and rebuild themselves from the settings.
+  //
+  // And redo: an undone step that knows how to do itself again (its redo) can
+  // be put back. A new change by hand clears them, as everywhere else: what
+  // was undone belonged to a line of work the reviewer has since left. While
+  // a step is being undone or redone, what it calls does not record itself.
   const undoStack = [];
+  const redoStack = [];
   const UNDO_LIMIT = 100;
+  let replaying = false;
 
-  function pushUndo(label, undo) {
-    undoStack.push({ label, undo });
+  function pushUndo(label, undo, redo) {
+    if (replaying) return;
+    undoStack.push({ label, undo, redo });
     if (undoStack.length > UNDO_LIMIT) undoStack.shift();
+    redoStack.length = 0;
     refreshUndo();
   }
 
-  function refreshUndo() {
-    const button = el('undo');
-    const last = undoStack[undoStack.length - 1];
-    button.disabled = !last;
-    button.title = last ? 'Undo ' + last.label : 'Nothing to undo';
+  // Not while a run is going: it is counting the words and images the list
+  // holds, and a step undone under it would take one away mid-count -- the
+  // same reason a word cannot be removed while it is being searched for.
+  function undoBlocked() {
+    return Boolean(state.redacting || state.sweepRunning || state.mode === 'pick');
   }
 
-  function undoLast() {
-    const action = undoStack.pop();
-    if (!action) return;
-    action.undo();
+  function refreshUndo() {
+    const blocked = undoBlocked();
+    const last = undoStack[undoStack.length - 1];
+    const button = el('undo');
+    button.disabled = !last || blocked;
+    button.title = !last ? 'Nothing to undo'
+      : blocked ? 'Undo when the search finishes' : 'Undo ' + last.label;
+    const next = redoStack[redoStack.length - 1];
+    const again = el('redo');
+    again.disabled = !next || blocked;
+    again.title = !next ? 'Nothing to redo'
+      : blocked ? 'Redo when the search finishes' : 'Redo ' + next.label;
+  }
+
+  function afterReplay() {
     markPending();
     for (const page of state.pages) if (page.canvas) drawPage(page);
     if (state.kind === 'text') drawTextView();
     renderTemplates();
+    renderTermCounts();
+    refreshApply();
     refreshUndo();
+  }
+
+  function undoLast() {
+    if (undoBlocked()) return;
+    const action = undoStack.pop();
+    if (!action) return;
+    replaying = true;
+    try { action.undo(); } finally { replaying = false; }
+    if (action.redo) redoStack.push(action);
+    else redoStack.length = 0;
+    afterReplay();
+  }
+
+  function redoLast() {
+    if (undoBlocked()) return;
+    const action = redoStack.pop();
+    if (!action) return;
+    replaying = true;
+    try { action.redo(); } finally { replaying = false; }
+    undoStack.push(action);
+    afterReplay();
   }
 
   // ---------- loading ----------
@@ -1390,17 +1433,20 @@
 
     restamp();
     if (label) {
-      pushUndo(label, () => {
-        state.pages = was;
+      const back = (pages, picked, k) => {
+        state.pages = pages;
         state.pages.forEach((page, i) => { page.index = i; });
-        state.picked = wasPicked;
-        state.searched = knew.searched;
-        state.sweptTerms = knew.swept;
-        state.ocrRead = knew.read;
-        state.footRan = knew.footRan;
+        state.picked = picked;
+        state.searched = k.searched;
+        state.sweptTerms = k.swept;
+        state.ocrRead = k.read;
+        state.footRan = k.footRan;
         restamp();
         rebuildAfterOrder();
-      });
+      };
+      const now = { pages: state.pages, picked: state.picked, knew: { searched: state.searched,
+        swept: state.sweptTerms.slice(), read: state.ocrRead, footRan: state.footRan } };
+      pushUndo(label, () => back(was, wasPicked, knew), () => back(now.pages, now.picked, now.knew));
     }
     rebuildAfterOrder();
   }
@@ -2127,15 +2173,19 @@
     // check still describe the page: turning changes which way up it is, not
     // what it says.
 
+    const after = turning.map(page => ({ page, kept: pageSnapshot(page) }));
+    const templatesAfter = state.templates.map(t => ({ template: t, rect: t.rect }));
+    const knewAfter = { searched: state.searched, swept: state.sweptTerms.slice(), read: state.ocrRead };
+    const back = (pages, rects, k) => {
+      for (const { page, kept } of pages) Object.assign(page, kept);
+      for (const { template, rect } of rects) template.rect = rect;
+      state.searched = k.searched;
+      state.sweptTerms = k.swept;
+      state.ocrRead = k.read;
+      rebuildAfterOrder();
+    };
     pushUndo(turning.length === 1 ? 'turning a page' : 'turning ' + turning.length + ' pages',
-      () => {
-        for (const { page, kept } of before) Object.assign(page, kept);
-        for (const { template, rect } of templates) template.rect = rect;
-        state.searched = knew.searched;
-        state.sweptTerms = knew.swept;
-        state.ocrRead = knew.read;
-        rebuildAfterOrder();
-      });
+      () => back(before, templates, knew), () => back(after, templatesAfter, knewAfter));
     rebuildAfterOrder();
   }
 
@@ -2564,6 +2614,8 @@
   }
 
   function refreshApply() {
+    // Undo and redo follow the run too: closed while one is going.
+    refreshUndo();
     const button = el('apply');
     const marks = plannedCount();
     const unsearched = state.templates.filter(t => !t.searched).length
@@ -2601,8 +2653,12 @@
     // Red belongs on Search, which is the button that answers a red question
     // mark. Red with nothing outstanding is an alarm about nothing, and a
     // button that cannot be pressed is not asking anything.
-    find.classList.toggle('hunt', searching && unanswered > 0 && !state.redacting);
-    find.disabled = state.redacting || state.sweepRunning || !searching
+    // While an image is being picked the foot is lit with the page but its
+    // buttons wait: the pick is not finished, and Search pressed mid-pick
+    // would search for an image list that is still changing.
+    const picking = state.mode === 'pick';
+    find.classList.toggle('hunt', searching && unanswered > 0 && !state.redacting && !picking);
+    find.disabled = state.redacting || state.sweepRunning || !searching || picking
       || (state.kind !== 'text' && !state.pages.length);
     find.hidden = !searching;
     button.hidden = searching;
@@ -2617,7 +2673,7 @@
     // there, live, next to its own progress bar.
     // Redact waits for something to cover. Not for the search to be finished
     // with: a reviewer who has what they need can cover it and go.
-    button.disabled = state.sweepRunning || state.redacting
+    button.disabled = state.sweepRunning || state.redacting || picking
       || (!state.applied && marks === 0);
     if (state.sweepRunning) {
       find.title = button.title = 'The second check is running  - let it finish, '
@@ -2637,7 +2693,7 @@
     // anything that matters.
     const nothingToCover = !searching && !state.applied && marks === 0
       && !state.redacting && !state.sweepRunning;
-    el('export').disabled = (!state.applied || marks === 0) && !nothingToCover;
+    el('export').disabled = picking || ((!state.applied || marks === 0) && !nothingToCover);
 
     // The thorough sweep is offered on the back of a finished redaction, so
     // whether it shows at all follows the same state this button reflects.
@@ -2648,7 +2704,9 @@
     // While something is running, the line beside the bar is the status, and
     // this one would be a second opinion about a question already being
     // answered — "press Search to find them" said next to Search running.
-    if (state.redacting) {
+    if (picking) {
+      note.textContent = 'Mark out the image you would like to redact. Press Back once done.';
+    } else if (state.redacting) {
       note.textContent = '';
     } else if (state.sweepRunning) {
       note.textContent = '';
@@ -6092,8 +6150,10 @@
         const at = page.manual.length;
         // An id, so a hand-drawn box can carry a label and keep it across a
         // rescan.
-        page.manual.push({ ...rect, id: 'man' + (nextManualId++) });
-        pushUndo('the box you drew', () => page.manual.splice(at, 1));
+        const drawn = { ...rect, id: 'man' + (nextManualId++) };
+        page.manual.push(drawn);
+        pushUndo('the box you drew', () => page.manual.splice(at, 1),
+          () => page.manual.splice(at, 0, drawn));
         markPending();
       }
 
@@ -6109,7 +6169,8 @@
     const manualHit = Boxes.rectAt(page.manual, x, y);
     if (manualHit !== -1) {
       const [removed] = page.manual.splice(manualHit, 1);
-      pushUndo('removing that box', () => page.manual.splice(manualHit, 0, removed));
+      pushUndo('removing that box', () => page.manual.splice(manualHit, 0, removed),
+        () => page.manual.splice(manualHit, 1));
       return;
     }
 
@@ -6120,7 +6181,8 @@
       if (page.dismissed.has(hit.finding.id) || !findingAnswered(hit.finding)) continue;
       if (Boxes.rectAt(hit.rects, x, y) !== -1) {
         page.dismissed.add(hit.finding.id);
-        pushUndo('keeping that match', () => page.dismissed.delete(hit.finding.id));
+        pushUndo('keeping that match', () => page.dismissed.delete(hit.finding.id),
+          () => page.dismissed.add(hit.finding.id));
         return;
       }
     }
@@ -6128,7 +6190,8 @@
       if (page.dismissed.has(m.id) || !imageHitAnswered(m)) continue;
       if (Boxes.rectAt([m.rect], x, y) !== -1) {
         page.dismissed.add(m.id);
-        pushUndo('keeping that image', () => page.dismissed.delete(m.id));
+        pushUndo('keeping that image', () => page.dismissed.delete(m.id),
+          () => page.dismissed.add(m.id));
         return;
       }
     }
@@ -6136,7 +6199,8 @@
       if (!page.dismissed.has(hit.finding.id) || !findingAnswered(hit.finding)) continue;
       if (Boxes.rectAt(hit.rects, x, y) !== -1) {
         page.dismissed.delete(hit.finding.id);
-        pushUndo('covering that match again', () => page.dismissed.add(hit.finding.id));
+        pushUndo('covering that match again', () => page.dismissed.add(hit.finding.id),
+          () => page.dismissed.delete(hit.finding.id));
         return;
       }
     }
@@ -6144,7 +6208,8 @@
       if (!page.dismissed.has(m.id) || !imageHitAnswered(m)) continue;
       if (Boxes.rectAt([m.rect], x, y) !== -1) {
         page.dismissed.delete(m.id);
-        pushUndo('covering that image again', () => page.dismissed.add(m.id));
+        pushUndo('covering that image again', () => page.dismissed.add(m.id),
+          () => page.dismissed.delete(m.id));
         return;
       }
     }
@@ -6205,13 +6270,20 @@
   // cannot be wrong about which of them changed.
   function noteUndo(page, label) {
     const before = notesOf(page).map(note => ({ ...note }));
-    pushUndo(label, () => {
-      page.texts = before;
+    // What it came to, taken when it is undone: the change is still being
+    // made when this is recorded.
+    let after = null;
+    const show = list => {
+      page.texts = list;
       state.textSel = null;
       state.textEdit = null;
       renderNotes(page);
       drawPage(page);
-    });
+    };
+    pushUndo(label, () => {
+      after = notesOf(page).map(note => ({ ...note }));
+      show(before.map(note => ({ ...note })));
+    }, () => show(after.map(note => ({ ...note }))));
   }
 
   function startPlacingText() {
@@ -6608,13 +6680,19 @@
   // width and a run of points, and an undo that puts the list back cannot be
   // wrong about which of them changed.
   function inkUndo(page, label) {
-    const before = inksOf(page).map(ink => ({ ...ink, points: ink.points.map(p => ({ ...p })) }));
-    pushUndo(label, () => {
-      page.inks = before;
+    const copy = list => list.map(ink => ({ ...ink, points: ink.points.map(p => ({ ...p })) }));
+    const before = copy(inksOf(page));
+    let after = null;
+    const show = list => {
+      page.inks = list;
       state.inkSel = null;
       renderNotes(page);
       drawPage(page);
-    });
+    };
+    pushUndo(label, () => {
+      after = copy(inksOf(page));
+      show(copy(before));
+    }, () => show(copy(after)));
   }
 
   function startInking() {
@@ -7523,13 +7601,16 @@
     // quiet rather than becoming traps.
     // Paging stays live with zooming: both are ways of getting to the mark
     // being picked, and neither takes the reviewer anywhere else.
-    for (const id of ['tool-pan', 'tool-mark', 'undo', 'savedraft', 'tool-close']) {
+    for (const id of ['tool-pan', 'tool-mark', 'undo', 'redo', 'savedraft', 'tool-close']) {
       const button = el(id);
       if (!button) continue;
       if (picking) { button.disabled = true; }
-      else if (id === 'undo') { refreshUndo(); }
+      else if (id === 'undo' || id === 'redo') { refreshUndo(); }
       else { button.disabled = false; }
     }
+    // The foot says what to do while picking, and greys its buttons; and
+    // when picking ends, what is waiting to be searched for.
+    refreshApply();
 
     // On a phone the panel and the document take turns, and the box has to be
     // drawn on the document — so picking moves there, and finishing or
@@ -7844,14 +7925,17 @@
       searched: false,
     };
     state.templates.push(template);
-    // Not an undo step.
-    //
-    // Picking an image is an instruction, not an edit: it says what to look
-    // for, the way typing a word does, and typing a word has never been
-    // undoable either. The row that appears carries its own x, which is
-    // nearer, plainer and does only this -- where Undo, pressed twice by
-    // somebody who meant to take back a box they drew, would silently take
-    // the picked image with it.
+    // An undo step, as adding a word is: a pick from the wrong place is taken
+    // back the way any other slip is. What it found by the time it is undone
+    // comes back with it on redo, rather than asking to be searched again.
+    let saved = null;
+    pushUndo('picking that image', () => {
+      saved = state.pages.map(p => (p.imageHits || []).filter(m => m.templateId === template.id));
+      dropTemplate(template.id);
+    }, () => {
+      if (!state.templates.includes(template)) state.templates.push(template);
+      if (saved) state.pages.forEach((p, i) => { p.imageHits = (p.imageHits || []).concat(saved[i]); });
+    });
     renderTemplates();
     renderSectionNotes();
     needsSearch();
@@ -7876,10 +7960,10 @@
     const saved = state.pages.map(p => p.imageHits.filter(m => m.templateId === id));
 
     dropTemplate(id);
-    pushUndo('removing that logo', () => {
+    pushUndo('removing that image', () => {
       if (template) state.templates.splice(at, 0, template);
       state.pages.forEach((p, i) => { p.imageHits = p.imageHits.concat(saved[i]); });
-    });
+    }, () => dropTemplate(id));
 
     renderTemplates();
     renderSectionNotes();
@@ -8298,9 +8382,36 @@
       row.className = 'word'
         + (state.countedTerms.includes(term) && total === 0 ? ' none' : '');
 
-      const label = document.createElement('span');
-      label.className = 't';
-      label.textContent = term;
+      const heldNow = termIsHeld(term);
+      // The word itself is where to change its spelling: pressed, it becomes
+      // a box holding it. Not while a run is counting it, as with its x.
+      let label;
+      if (state.termEditing && state.termEditing.term === term && !heldNow) {
+        label = termEditor(term);
+      } else {
+        label = document.createElement('span');
+        label.className = 't';
+        label.textContent = term;
+        if (heldNow) {
+          // A run started while it was being spelt again: the box goes, and
+          // does not come back by itself when the run ends.
+          if (state.termEditing && state.termEditing.term === term) state.termEditing = null;
+          label.title = 'Being searched for  - it can be changed when the run finishes';
+        } else {
+          label.classList.add('tedit');
+          label.tabIndex = 0;
+          label.setAttribute('role', 'button');
+          label.title = 'Change the spelling';
+          const edit = () => {
+            state.termEditing = { term, draft: term, fresh: true };
+            renderTermCounts();
+          };
+          label.addEventListener('click', edit);
+          label.addEventListener('keydown', event => {
+            if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); edit(); }
+          });
+        }
+      }
 
       const drop = document.createElement('button');
       drop.type = 'button';
@@ -8309,7 +8420,6 @@
       // Not while the run that is counting it is still going. Removing it
       // mid-pass leaves a tally describing a word that is no longer in the
       // list and marks on the page belonging to nothing.
-      const heldNow = termIsHeld(term);
       drop.disabled = heldNow;
       drop.title = heldNow
         ? 'Being searched for  - it can be removed when the run finishes'
@@ -8398,6 +8508,45 @@
         host.append(holder);
       }
     }
+    // A word being spelt again keeps the cursor through the redraw.
+    const editor = host.querySelector('input.termedit');
+    if (editor && state.termEditing) {
+      editor.focus();
+      if (state.termEditing.fresh) { editor.select(); state.termEditing.fresh = false; }
+      else editor.setSelectionRange(editor.value.length, editor.value.length);
+    }
+  }
+
+  // The box a word is spelt again in. Kept across redraws of the list (they
+  // come often while anything runs), with what has been typed so far.
+  function termEditor(term) {
+    const editing = state.termEditing;
+    const box = document.createElement('input');
+    box.type = 'text';
+    box.className = 't termedit';
+    box.value = editing.draft;
+    box.setAttribute('aria-label', 'Change "' + term + '"');
+    box.spellcheck = false;
+    let done = false;
+    const finish = keep => {
+      if (done) return;
+      done = true;
+      const typed = box.value;
+      state.termEditing = null;
+      if (!(keep && renameTerm(term, typed))) renderTermCounts();
+    };
+    box.addEventListener('input', () => { editing.draft = box.value; });
+    box.addEventListener('keydown', event => {
+      if (event.key === 'Enter') { event.preventDefault(); finish(true); }
+      else if (event.key === 'Escape') { event.preventDefault(); finish(false); }
+    });
+    // Leaving the box keeps what was typed, as the box above keeps nothing
+    // until asked: a spelling changed and clicked away from is a spelling
+    // changed. Not when the list is only being redrawn under it.
+    box.addEventListener('blur', () => {
+      if (box.isConnected) finish(true);
+    });
+    return box;
   }
 
   function tallyList(term, where) {
@@ -8531,7 +8680,8 @@
     if (!going.length) return;
     for (const id of going) page.dismissed.add(id);
     pushUndo(going.length === 1 ? 'keeping that match' : 'keeping those matches',
-      () => { for (const id of going) page.dismissed.delete(id); });
+      () => { for (const id of going) page.dismissed.delete(id); },
+      () => { for (const id of going) page.dismissed.add(id); });
     spotlight(null, null);
     markPending();
     drawPage(page);
@@ -8565,7 +8715,8 @@
         const wasOff = dismissedText.has(f.id);
         if (wasOff) dismissedText.delete(f.id); else dismissedText.add(f.id);
         pushUndo(wasOff ? 'covering that again' : 'keeping that match',
-          () => { if (wasOff) dismissedText.add(f.id); else dismissedText.delete(f.id); });
+          () => { if (wasOff) dismissedText.add(f.id); else dismissedText.delete(f.id); },
+          () => { if (wasOff) dismissedText.delete(f.id); else dismissedText.add(f.id); });
         markPending();
         drawTextView();
       });
@@ -9861,11 +10012,75 @@
     el('termbox').value = '';
     renderTermCounts();
     rescan();
+    // Taken when it is undone, so a word searched for since comes back with
+    // its marks rather than asking again.
+    let kept = null;
+    pushUndo('adding "' + word + '"', () => { kept = termKept(word); dropTerm(word); },
+      () => putTerm(kept || termKept(word, state.terms.length)));
+    return true;
+  }
+
+  // A word as it stands in the list, with what has been found for it: what
+  // undoing its removal puts back, so the marks return without searching
+  // again. A word only just added has nothing yet, and comes back asking.
+  function termKept(word, at = state.terms.indexOf(word)) {
+    return {
+      word, at,
+      searched: state.searchedTerms.includes(word),
+      swept: state.sweptTerms.includes(word),
+      counted: state.countedTerms.includes(word),
+      hits: state.pages.map(page => (page.imageHits || []).filter(m => m.term === word)),
+    };
+  }
+
+  function putTerm(kept) {
+    if (state.terms.includes(kept.word)) return;
+    const terms = state.terms.slice();
+    terms.splice(Math.min(Math.max(0, kept.at), terms.length), 0, kept.word);
+    state.terms = terms;
+    if (kept.searched) state.searchedTerms = state.searchedTerms.concat([kept.word]);
+    if (kept.swept) state.sweptTerms = state.sweptTerms.concat([kept.word]);
+    if (kept.counted) state.countedTerms = state.countedTerms.concat([kept.word]);
+    state.pages.forEach((page, i) => {
+      page.imageHits = (page.imageHits || []).concat(kept.hits[i] || []);
+    });
+    renderTermCounts();
+    rescan({ settled: true });
+  }
+
+  // A word spelt again, in its place in the list: the old spelling goes with
+  // everything found for it, and the new one waits to be searched for.
+  function renameTerm(from, raw) {
+    const word = String(raw || '').trim();
+    if (!word || word === from || !state.terms.includes(from) || termIsHeld(from)) return false;
+    if (state.terms.includes(word)) { dropTerm(from); return true; }
+    const kept = termKept(from);
+    // The old spelling out and the new one in its place, without the removal
+    // recording a step of its own: the change is one step.
+    const swap = () => {
+      const at = Math.max(0, state.terms.indexOf(from));
+      const was = replaying;
+      replaying = true;
+      try { dropTerm(from); } finally { replaying = was; }
+      const terms = state.terms.slice();
+      terms.splice(Math.min(at, terms.length), 0, word);
+      state.terms = terms;
+      renderTermCounts();
+      rescan();
+    };
+    swap();
+    pushUndo('changing "' + from + '" to "' + word + '"', () => {
+      const i = state.terms.indexOf(word);
+      dropTerm(word);
+      putTerm({ ...kept, at: i === -1 ? kept.at : i });
+    }, swap);
     return true;
   }
 
   function dropTerm(word) {
     if (!state.terms.includes(word)) return;
+    const kept = termKept(word);
+    pushUndo('removing "' + word + '"', () => putTerm(kept), () => dropTerm(word));
     // Everything found for a word the reviewer has just taken off the list
     // goes with it, whichever pass found it.
     state.terms = state.terms.filter(t => t !== word);
@@ -12049,6 +12264,10 @@
       renderTermCounts();
       renderSweep();
       refreshApply();
+    }, () => {
+      page.imageHits = (page.imageHits || []).concat([mark]);
+      markDuplicates();
+      renderSweep();
     });
     markPending();
     markDuplicates();
@@ -12265,6 +12484,11 @@
           renderTermCounts();
           renderSweep();
           refreshApply();
+        }, () => {
+          one.page.imageHits = (one.page.imageHits || []).concat([mark]);
+          state.reviewed.add(one.spot.id);
+          markDuplicates();
+          renderSweep();
         });
         markPending();
         markDuplicates();
@@ -12466,6 +12690,7 @@
   });
   el('downloadkey').addEventListener('click', downloadKey);
   el('undo').addEventListener('click', undoLast);
+  el('redo').addEventListener('click', redoLast);
   el('search').addEventListener('click', searchButton);
   el('apply').addEventListener('click', applyButton);
   window.addEventListener('keydown', event => {
@@ -12999,6 +13224,10 @@
     state.findings = [];
     el('termbox').value = '';
     state.terms = [];
+    // The detectors ticked go too, as the words do: left ticked, the next
+    // file opened to "5 text inputs to search for" with nothing typed.
+    state.enabled = new Set(['term']);
+    state.termEditing = null;
     state.templates = [];
     state.labelOverrides = {};
     state.labels = { byId: {}, entries: [] };
@@ -13018,6 +13247,7 @@
     state.openTally = null;
     state.picked = new Set();
     undoStack.length = 0;
+    redoStack.length = 0;
     refreshUndo();
     setMode('box');
     renderTemplates();
@@ -13046,6 +13276,10 @@
     dismissedText.clear();
     el('termbox').value = '';
     state.terms = [];
+    // The detectors ticked go too, as the words do: left ticked, the next
+    // file opened to "5 text inputs to search for" with nothing typed.
+    state.enabled = new Set(['term']);
+    state.termEditing = null;
     state.templates = [];
     state.labelOverrides = {};
     state.labels = { byId: {}, entries: [] };
@@ -13068,6 +13302,7 @@
     state.ocrRead = false;
     state.ocrFailed = false;
     undoStack.length = 0;
+    redoStack.length = 0;
     refreshUndo();
     setMode('box');
     renderTemplates();
@@ -13191,7 +13426,7 @@
   }
 
   window.Blinded = { state, rescan, loadFile, exportFile, setMode, addTemplate, closeDocument, insideLarger, halfReadSpots, captureFile, offlineReady,
-    undoLast, undoStack, applyLabels, labelItems, downloadKey,
+    undoLast, redoLast, undoStack, redoStack, applyLabels, labelItems, downloadKey,
     sensFor, barFromScores, settleBar, barSteps, moveBarTo, answeredAlready, planSeconds,
     liveImageHits,
     AUTO_FLOOR, REAL_GAP,

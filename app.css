@@ -342,17 +342,13 @@ a.mark { color: inherit; text-decoration: none; }
   cursor: pointer;
 }
 .tool:last-child { border-right-width: 1px; }
-/* The row that holds the close control spans the panel, so that control can
-   sit at the far end of it rather than against the tool beside it. The other
-   toolbars still shrink to their contents. */
+/* The main row is one bar across the panel: every tool the same width, side
+   by side with nothing between them, rounded only at the two ends. Separate
+   pills with a gap before Close read as several toolbars of odd sizes. */
 .toolsmain { width: 100%; }
-/* Away from the ones pressed by the dozen. It is the only control here that
-   can lose the document, so it does not want to be next to Undo -- and it
-   carries its own left edge, having nothing to share one with. */
-.toolclose {
-  margin-left: auto; border-left-width: 1px; border-right-width: 1px;
-  border-radius: 0 var(--radius) var(--radius) 0;
-}
+.toolsmain > .tool { flex: 1 1 0; width: auto; min-width: 0; border-radius: 0; }
+.toolsmain > .tool:first-child { border-radius: var(--radius) 0 0 var(--radius); }
+.toolsmain > .tool:last-child { border-radius: 0 var(--radius) var(--radius) 0; }
 .toolclose:hover:not(:disabled) { background: #fdecea; color: var(--danger); }
 .tool:first-child { border-radius: var(--radius) 0 0 var(--radius); }
 .tool:last-child { border-radius: 0 var(--radius) var(--radius) 0; }
@@ -942,6 +938,10 @@ body.picking #imagesect { background: var(--card); border-radius: var(--radius);
    context — so raising the toolbar inside it got the toolbar no further than
    the top of the head. The head is what has to come up. */
 body.picking .panel-head { z-index: 41; }
+/* The foot comes up too: it says what picking is for and how to finish, and
+   a sentence under the dimming is a sentence nobody reads. Its buttons are
+   greyed by the script, not by the sheet. */
+body.picking .exportbar { z-index: 41; }
 body.picking .tools {
   position: relative;
   background: var(--card); border-radius: var(--radius);
@@ -1377,6 +1377,18 @@ body.picking #imagesect { position: static; z-index: auto; background: none; }
   padding: 6px 6px 6px 11px; margin-bottom: 6px; gap: 8px;
 }
 .termcounts li.word .t { font-weight: 550; }
+/* The word is where its spelling is changed: a text cursor over it says so,
+   and pressing it turns it into a box holding the same word in the same
+   place, so nothing on the row moves. */
+.termcounts li.word .tedit { cursor: text; border-radius: 4px; }
+.termcounts li.word .tedit:hover { background: #e9edf4; }
+.termcounts li.word .tedit:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.termcounts li.word .termedit {
+  min-width: 0; margin: -3px 0 -3px -5px; padding: 2px 4px;
+  font: inherit; font-weight: 550; color: var(--ink);
+  background: #fff; border: 1px solid var(--accent); border-radius: 4px;
+  outline: none; text-overflow: clip;
+}
 .termdrop {
   flex: none; width: 24px; height: 24px; padding: 0; border: 0; background: none;
   color: var(--ink-soft); cursor: pointer; border-radius: 6px; font-size: 16px;

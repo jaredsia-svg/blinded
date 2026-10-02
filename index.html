@@ -111,7 +111,7 @@
   "duration": "PT59S"
 }
 </script>
-<link rel="stylesheet" href="app.css?v=0053fc7e" integrity="sha384-QQf+c8AXT/Xkm5b7GUcto3WEYwZfUC+i5b3rF1wT5gp5djVuAEQwpNENTYQd6QwT">
+<link rel="stylesheet" href="app.css?v=9334302f" integrity="sha384-jZ2UWZ4lXOsgtmPo2Q0MEURbl8sFJa2HSmS9c12RsibhZyv/aTQ5emTpiUOFcH42">
 </head>
 <body>
 
@@ -597,15 +597,19 @@
                 <path d="M4 9h11a5 5 0 0 1 0 10h-6M4 9l4-4M4 9l4 4"/>
               </svg><span class="sr-only">Undo</span>
             </button>
+            <button type="button" id="redo" class="tool" disabled title="Nothing to redo">
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="M20 9H9a5 5 0 0 0 0 10h6M20 9l-4-4M20 9l-4 4"/>
+              </svg><span class="sr-only">Redo</span>
+            </button>
             <button type="button" id="savedraft" class="tool" title="Save a draft – your marks, to carry on later">
               <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
                 <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
                 <path d="M8 21v-7h8v7M8 3v5h6"/>
               </svg><span class="sr-only">Save a draft</span>
             </button>
-            <!-- Last, and pushed to the far end: the only control here that
-                 can lose the document, kept away from the ones pressed by the
-                 dozen. It asks before it does anything. -->
+            <!-- Last: the only control here that can lose the document. It
+                 asks before it does anything. -->
             <button type="button" id="tool-close" class="tool toolclose" title="Reset or close this file">
               <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
                 <path d="M6 6l12 12M18 6L6 18"/>
@@ -1217,7 +1221,7 @@
 <script src="lib/pass.js?v=fa8e95c9" integrity="sha384-vdiGIUAtPsWUwbV/9iFB3JwVBPa1iWWzPkpwZOb2O6VlxQpGrlUP9RGGlQaNl17N"></script>
 <script src="lib/pay.js?v=6f94d998" integrity="sha384-1bByT5YqR1yybQrDsj8bxhmARIphzp5gXG9YVdSfl6J9KWFMMAqdEFPO5nmQDcnr"></script>
 <script src="lib/render.js?v=65c3fe76" integrity="sha384-hC2pL0Iz3qZPhOkr8LTwrOtpoDzQ/Yq+qnhe6ySQZDtipsMW1eMqd8M9ZeZmqODr"></script>
-<script src="app.js?v=e466cf56" integrity="sha384-qoQAhv+rdPZy10keBASXfWTWLEdH/xXcG5VVqtGgCxsKriEDVWdQakNtZcyAhOh/"></script>
+<script src="app.js?v=d3817b41" integrity="sha384-A1yauoV2NY/so7KV4XfmXFh/LYfj3n1eSUFnB52GoZOjN9PNs3ypotIXe6P80/6D"></script>
 <script type="module" src="lib/boot.mjs?v=8b98ed8f" integrity="sha384-/dJ3R23NfbIp89TMbKmNgtoFjuy8b5Kji1HBXxf7q7kKtAM2wTj9DeXCivsebPvb"></script>
 </body>
 </html>
