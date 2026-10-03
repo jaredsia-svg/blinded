@@ -4664,13 +4664,16 @@
       // them, attributed to nothing.
       entry.logo.report = {
         scores: found.matches.map(m => m.score),
-        near: (found.near || []).map(hit => hit.score),
+        // One score per spot, as kept: a near miss round a match is that
+        // match again, and offered as a setting it promised a find that was
+        // not there.
+        near: entry.logo.verified.filter(hit => hit.score < sensFor(entry.logo))
+          .map(hit => hit.score),
         best: found.best,
         bar: sensFor(entry.logo),
         autoBar: autoBar === undefined ? null : autoBar,
         barWas: autoBar === null ? null : entry.logo.barWas,
-        steps: barSteps(found.matches.map(hit => hit.score)
-          .concat((found.near || []).map(hit => hit.score)), 3),
+        steps: barSteps(entry.logo.verified.map(hit => hit.score), 3),
       };
       // The line under the pick button described whichever image searched
       // last. It says nothing now: every sentence it carried belongs to one
@@ -4952,20 +4955,13 @@
       if (!kept) return all.filter(score => score >= level).length;
       let live = 0;
       for (const page of state.pages) {
-        const others = [];
-        for (const hit of page.hits || []) {
-          for (const rect of hit.rects) others.push(rect);
-        }
-        for (const mark of page.imageHits || []) {
-          if (mark.templateId !== template.id && mark.rect) others.push(mark.rect);
-        }
-        for (const hit of kept) {
-          if (hit.pageIndex !== page.index) continue;
-          const rect = { x: hit.x, y: hit.y, w: hit.w, h: hit.h };
-          if (others.some(other => Match.coveredFraction(rect, other) > SAME_MARK)) continue;
-          others.push(rect);
-          live++;
-        }
+        const mine = kept.filter(hit => hit.pageIndex === page.index)
+          .map(hit => ({ templateId: template.id, rect: coverOf(hit), score: hit.score }));
+        if (!mine.length) continue;
+        const marks = page.imageHits.filter(m => m.bySweep || m.templateId !== template.id)
+          .concat(mine);
+        const covered = supersededIn(page, marks);
+        live += mine.filter(m => !covered.has(m)).length;
       }
       return live;
     };
@@ -5261,52 +5257,77 @@
 
   function markDuplicates() {
     for (const page of state.pages) {
-      const textMarks = [];
-      // Dismissed findings count here too. A reviewer who clicked a mark off
-      // decided that occurrence should stay; a duplicate quietly covering it
-      // anyway would overrule them.
-      for (const hit of page.hits) {
-        for (const rect of hit.rects) textMarks.push({ rect, term: hit.finding.term });
-      }
-
-      // Superseded means "already covered", and that is a question about this
-      // match's own area — how much of it lies inside something else — not
-      // about the overlap as a fraction of whichever box is smaller.
-      //
-      // The difference is the whole bug. Redacting the word "VinaCapital" and
-      // the VinaCapital logo, the word's mark sat inside the logo's: measured
-      // against the smaller box that is a perfect overlap, so all four logo
-      // matches were dropped as duplicates of it. The panel said "4 matches"
-      // and the tally said 0, and on the page the wordmark was covered while
-      // the red triangle beside it was left showing.
-      // What the reader read comes before what the check matched by shape,
-      // whatever order they were found in. They are usually found in that
-      // order anyway; a reopened draft is the exception. Its check marks come
-      // back first, and the reading that a new search makes of the same
-      // words, better now than when the draft was saved, was then dropped as
-      // a duplicate of them: the panel said amber and 0 read, and where the
-      // old mark covered only "East" of "Middle East", that is all that was
-      // covered.
-      const byWeight = page.imageHits.filter(m => !m.bySweep)
-        .concat(page.imageHits.filter(m => m.bySweep));
-      const kept = [];
-      for (const match of byWeight) {
-        // Or the same word read off the page. The text layer boxes "KAG"
-        // letter by letter and a line high; the reader boxes the whole word it
-        // read, "KAG's", and only as high as the ink. Neither box lies inside
-        // the other -- one is wider, the other taller -- so both were kept,
-        // and the word had two outlines and counted twice. Same word, same
-        // line, the text layer's letters within the reader's word: one mark,
-        // and the text layer's is kept, since it knows where each letter is.
-        const overText = textMarks.some(({ rect, term }) =>
-          Match.coveredFraction(match.rect, rect) > SAME_MARK
-          || (match.read && term && term === match.term && sameWord(rect, match.rect)));
-        const overImage = kept.some(
-          other => Match.coveredFraction(match.rect, other.rect) > SAME_MARK);
-        match.superseded = overText || overImage;
-        if (!match.superseded) kept.push(match);
-      }
+      const covered = supersededIn(page, page.imageHits);
+      for (const match of page.imageHits) match.superseded = covered.has(match);
     }
+  }
+
+  // Which of a page's image matches are already covered by something else.
+  //
+  // Its own function, so the circles beside a picked image can ask what a
+  // bar would leave on the page by the same rule the page is drawn by: two
+  // rules a centimetre apart said 30 at one bar and 4 at a lower one.
+  //
+  // Picked images in the order they were picked, not the order their marks
+  // happen to be stored in. Searching one again, or moving its bar, puts its
+  // marks at the end of the list, and which of two overlapping images
+  // counted a mark then changed with every press.
+  function supersededIn(page, imageHits) {
+    // Dismissed findings count here too. A reviewer who clicked a mark off
+    // decided that occurrence should stay; a duplicate quietly covering it
+    // anyway would overrule them.
+    const textMarks = [];
+    for (const hit of page.hits) {
+      for (const rect of hit.rects) textMarks.push({ rect, term: hit.finding.term });
+    }
+
+    // Superseded means "already covered", and that is a question about this
+    // match's own area — how much of it lies inside something else — not
+    // about the overlap as a fraction of whichever box is smaller.
+    //
+    // The difference is the whole bug. Redacting the word "VinaCapital" and
+    // the VinaCapital logo, the word's mark sat inside the logo's: measured
+    // against the smaller box that is a perfect overlap, so all four logo
+    // matches were dropped as duplicates of it. The panel said "4 matches"
+    // and the tally said 0, and on the page the wordmark was covered while
+    // the red triangle beside it was left showing.
+    // What the reader read comes before what the check matched by shape,
+    // whatever order they were found in. They are usually found in that
+    // order anyway; a reopened draft is the exception. Its check marks come
+    // back first, and the reading that a new search makes of the same
+    // words, better now than when the draft was saved, was then dropped as
+    // a duplicate of them: the panel said amber and 0 read, and where the
+    // old mark covered only "East" of "Middle East", that is all that was
+    // covered.
+    const pickedAt = id => {
+      const at = state.templates.findIndex(t => t.id === id);
+      return at < 0 ? state.templates.length : at;
+    };
+    const read = imageHits.filter(m => !m.bySweep && !m.templateId);
+    const picked = imageHits.filter(m => !m.bySweep && m.templateId)
+      .map((m, i) => ({ m, i }))
+      .sort((a, b) => (pickedAt(a.m.templateId) - pickedAt(b.m.templateId)) || (a.i - b.i))
+      .map(one => one.m);
+    const byWeight = read.concat(picked, imageHits.filter(m => m.bySweep));
+    const out = new Set();
+    const kept = [];
+    for (const match of byWeight) {
+      // Or the same word read off the page. The text layer boxes "KAG"
+      // letter by letter and a line high; the reader boxes the whole word it
+      // read, "KAG's", and only as high as the ink. Neither box lies inside
+      // the other -- one is wider, the other taller -- so both were kept,
+      // and the word had two outlines and counted twice. Same word, same
+      // line, the text layer's letters within the reader's word: one mark,
+      // and the text layer's is kept, since it knows where each letter is.
+      const overText = textMarks.some(({ rect, term }) =>
+        Match.coveredFraction(match.rect, rect) > SAME_MARK
+        || (match.read && term && term === match.term && sameWord(rect, match.rect)));
+      const overImage = kept.some(
+        other => Match.coveredFraction(match.rect, other.rect) > SAME_MARK);
+      if (overText || overImage) out.add(match);
+      else kept.push(match);
+    }
+    return out;
   }
 
   // The image matches that actually count: everything not already covered by

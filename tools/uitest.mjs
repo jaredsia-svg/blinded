@@ -2304,6 +2304,17 @@ try {
     JSON.stringify(spots.fromDraft) === JSON.stringify(['a', 'c']), JSON.stringify(spots));
   check('and its cover reaches a little past the mark\'s edge', spots.covers, JSON.stringify(spots));
 
+  // A lower bar can only take in more: the circles are counted by the rule
+  // the page is drawn by, so none promises fewer than a stricter one.
+  const wheels = await page.evaluate(() => [...document.querySelectorAll('#templates .barwheel')]
+    .map(wheel => [...wheel.querySelectorAll('.barpip')].map(pip => ({
+      bar: parseFloat(pip.querySelector('b').textContent),
+      count: parseInt(pip.querySelector('i').textContent, 10) }))));
+  check('no setting promises fewer matches than a stricter one',
+    wheels.length > 0 && wheels.every(pips => pips.every((pip, i) =>
+      i === 0 || pips[i - 1].bar >= pip.bar || pips[i - 1].count >= pip.count)),
+    JSON.stringify(wheels));
+
   check('and does not repeat it in words',
     !/found \d+ times/.test(await page.textContent('#templates')),
     await page.textContent('#templates'));
