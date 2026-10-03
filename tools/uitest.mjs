@@ -1366,7 +1366,7 @@ try {
       const near = (r0, g0, b0) => (red, g, b) =>
         Math.abs(red - r0) < 40 && Math.abs(g - g0) < 40 && Math.abs(b - b0) < 40;
       const isGreen = near(17, 138, 78);     // MARK_GREEN
-      const isAmber = near(217, 139, 31);    // what the second check uses
+      const isAmber = near(130, 80, 223);    // purple: what the image & text-in-image search uses
       let green = 0, amber = 0;
       for (let i = 0; i < px.length; i += 4) {
         if (isGreen(px[i], px[i + 1], px[i + 2])) green++;
@@ -1394,7 +1394,7 @@ try {
     check('a dismissed mark is outlined in the colour it was found in',
       off && covered && off.green - covered.green > 20,
       JSON.stringify({ off, covered }));
-    check('and adds nothing in the colour the second check uses',
+    check('and adds nothing in the colour the image & text-in-image search uses',
       off && covered && off.amber === covered.amber,
       JSON.stringify({ off, covered }));
     check('and once Redact is pressed the dashed outline goes',
@@ -2246,6 +2246,37 @@ try {
     JSON.stringify(imageWhere.shown));
   check('pressing it again closes the list', imageWhere.after === 0,
     JSON.stringify(imageWhere));
+  // Each row shows what was matched, and a bar lowered below the search's own
+  // puts what only it takes in first, in amber, under a dotted line.
+  const rowsSeen = await page.evaluate(async () => {
+    const B = window.Blinded;
+    const t = B.state.templates[0];
+    const open = () => { if (!document.querySelector('#templates .tallyspot')) document.querySelector('#templates button.n').click(); };
+    open();
+    const thumbs = document.querySelectorAll('#templates .tallyspot .matchthumb canvas').length;
+    const rows = document.querySelectorAll('#templates .tallyspot').length;
+    const lowAtDefault = document.querySelectorAll('#templates .tallyspot.low').length;
+    const was = B.sensFor(t);
+    // A match planted just under the search's own bar, as a lowered bar would
+    // take in.
+    const p = B.state.pages[0];
+    const fake = { id: t.id + ':0:1:1', templateId: t.id, rect: { x: 1, y: 1, w: 40, h: 40 },
+      score: Math.max(0.01, (t.defaultBar || was) - 0.05) };
+    p.imageHits.push(fake);
+    B.renderTemplates(); open();
+    const list = [...document.querySelectorAll('#templates .tallywhere li')];
+    const firstLow = list[0] && list[0].querySelector('.tallyspot.low') !== null;
+    const sepAfter = list[1] && list[1].classList.contains('tallysep');
+    p.imageHits = p.imageHits.filter(m => m !== fake);
+    B.renderTemplates();
+    return { thumbs, rows, lowAtDefault, firstLow, sepAfter };
+  });
+  check('each place in a picked image\'s list shows what was matched there',
+    rowsSeen.rows > 0 && rowsSeen.thumbs === rowsSeen.rows, JSON.stringify(rowsSeen));
+  check('at the search\'s own bar nothing in it is amber', rowsSeen.lowAtDefault === 0,
+    JSON.stringify(rowsSeen));
+  check('and a match under that bar comes first, in amber, above a dotted line',
+    rowsSeen.firstLow && rowsSeen.sepAfter, JSON.stringify(rowsSeen));
 
   check('and does not repeat it in words',
     !/found \d+ times/.test(await page.textContent('#templates')),
@@ -3544,6 +3575,15 @@ try {
   });
   check('picking says what to do in the foot',
     pickingFoot.note === 'Mark out the image you would like to redact. Press Back once done.', pickingFoot.note);
+  check('and its Back is a link that leaves picking',
+    await page.evaluate(() => {
+      const back = document.querySelector('#exportnote .pickback');
+      if (!back || back.textContent !== 'Back') return false;
+      back.click();
+      const left = !document.body.classList.contains('picking');
+      window.Blinded.setMode('pick');
+      return left;
+    }));
   check('and the foot is above the dimming, not under it', pickingFoot.lit, JSON.stringify(pickingFoot));
   check('with its buttons greyed while picking', pickingFoot.search && pickingFoot.exp, JSON.stringify(pickingFoot));
   await page.evaluate(async () => {
@@ -3964,12 +4004,14 @@ try {
   });
   check('both sections open a list of page numbers',
     lists.word !== null && lists.image !== null, JSON.stringify(lists));
+  // The same type and spacing; an image's row is a little taller only for
+  // the picture of what was matched on it.
   check('and the two are the same size, line for line',
     lists.word && lists.image
       && lists.word.size === lists.image.size
       && lists.word.pad === lists.image.pad
       && lists.word.rowPad === lists.image.rowPad
-      && lists.word.height === lists.image.height,
+      && lists.image.height >= lists.word.height && lists.image.height <= lists.word.height + 8,
     JSON.stringify(lists));
   check('neither puts a rule between the page numbers',
     lists.word && lists.image
@@ -3990,12 +4032,12 @@ try {
                round: parseFloat(s.borderRadius) >= 12 };
     };
     return { word: pick('.termcounts .n.dot-green'),
-             image: pick('.templates .n.dot-green') };
+             image: pick('.templates .n.dot-shape') };
   });
-  check('a picked image\'s tally is a green circle too',
+  // Purple: the colour of the image & text-in-image search, which finds it.
+  check('a picked image\'s tally is a purple circle, the second phase\'s colour',
     badges.word && badges.image
-      && badges.image.ink === badges.word.ink
-      && badges.image.fill === badges.word.fill
+      && badges.image.fill === 'rgb(239, 231, 251)' && badges.image.ink === 'rgb(90, 50, 163)'
       && badges.image.round === true,
     JSON.stringify(badges));
 
@@ -4756,7 +4798,7 @@ try {
       offer.outAfterLeave === true, JSON.stringify(offer));
     check('and so does answering the card',
       offer.outAfterAnswer === true, JSON.stringify(offer));
-    check('accepting it marks the page in amber',
+    check('accepting it marks the page in purple',
       offer.marks === 1 && offer.amber === true, JSON.stringify(offer));
     check('and the offer goes once the word has a mark',
       offer.goneAfterTake === true, JSON.stringify(offer));
@@ -8368,8 +8410,10 @@ try {
     // Amber against green: the ordinary mark leans green, the check's leans
     // red. Comparing the two against each other rather than against constants
     // means this fails if they are ever painted the same.
-    check('and it is amber, not the green an ordinary mark gets',
-      drawn.amber[0] > drawn.red[0] && drawn.red[1] > drawn.amber[1]
+    // Purple against green: the ordinary mark leans green, the sweep's leans
+    // blue.
+    check('and it is purple, not the green an ordinary mark gets',
+      drawn.amber[2] > drawn.red[2] && drawn.red[1] > drawn.amber[1]
         && drawn.amber.join() !== drawn.red.join(),
       JSON.stringify(drawn));
 
@@ -8596,7 +8640,7 @@ try {
     check('and every mark it adds is flagged as its own',
       swept.marks >= 1, JSON.stringify(swept));
     check('afterwards the foot says the check found something',
-      /Image & text-in-image search complete\. Review marks outlined in amber/
+      /Image & text-in-image search complete\. Review marks outlined in purple/
         .test(swept.note), JSON.stringify(swept.note));
 
     // One report, two lines, one per run, each carrying the colour its marks
@@ -8645,7 +8689,7 @@ try {
       && /^Image & text-in-image search complete/.test(refused.lines[1]),
       JSON.stringify(refused));
     check('each line wearing the colour its marks wear on the page',
-      /green/.test(refused.dots[0]) && /amber/.test(refused.dots[1]),
+      /green/.test(refused.dots[0]) && /purple/.test(refused.dots[1]),
       JSON.stringify(refused));
     check('and no count of what the reader stood down from',
       !/skipped|stood down|left alone/.test(refused.said), refused.said);
@@ -8773,7 +8817,8 @@ try {
       // that was never caught moving is not a bar that failed to move. The run
       // is timed so that case can be told apart from a bar that is stuck.
       const watch = setInterval(() => {
-        const row = document.querySelector('[data-leg="read"], [data-leg="only"]');
+        // Picked images are searched in the second phase, on its bar.
+        const row = document.querySelector('[data-leg="sweep"], [data-leg="read"], [data-leg="only"]');
         if (row) {
           widths.push(parseFloat(row.querySelector('[data-fill]').style.width) || 0);
           texts.push(row.querySelector('[data-count]').textContent);
@@ -8783,7 +8828,7 @@ try {
       const wasOn = B.state.termImages;
       B.state.termImages = false;         // a picked image only, no reading
       await B.addTemplate(B.state.pages[0], { x: 40, y: 40, w: 120, h: 120 });
-      await B.applyRedaction();
+      await B.searchBoth();
       clearInterval(watch);
       const out = { widths, texts: [...new Set(texts)].slice(0, 4),
                     took: Date.now() - began,
@@ -8794,6 +8839,26 @@ try {
     });
     check('an image search reports progress on a bar of its own',
       seen.widths.length > 0, JSON.stringify(seen).slice(0, 200));
+    // With no word typed and no detector ticked there was no text to look
+    // for, and the foot says so rather than that nothing was found.
+    const afterImages = await page.evaluate(() => {
+      const lines = [...document.querySelectorAll('#runfoot-text .ranline')].map(r => r.textContent);
+      const tick = document.getElementById('labelling');
+      const was = tick.checked;
+      if (!was) tick.click();
+      const legend = {
+        rows: document.querySelectorAll('#legend li').length,
+        empty: !document.getElementById('legend-empty').hidden,
+        applied: window.Blinded.state.applied,
+      };
+      if (!was) tick.click();
+      return { lines, legend };
+    });
+    check('with nothing typed the foot says there was no text to redact',
+      afterImages.lines[0] === 'No text to redact.', JSON.stringify(afterImages.lines));
+    check('and ticking labels shows the key for what the image search found, before Redact',
+      afterImages.legend.rows > 0 && !afterImages.legend.empty && afterImages.legend.applied === false,
+      JSON.stringify(afterImages.legend));
     // Not just that a bar appeared: that it moved. Showing one and leaving it
     // at nothing for the whole search is worse than showing none.
     check('and the bar actually advances as pages are searched',
@@ -10861,7 +10926,10 @@ try {
       B.redrawAll();
       return {
         held: p.imageHits.filter(m => m.bySweep).length,
-        drawn: B.activeBoxes(p).filter(b => b.sweep).length,
+        // Picked images are drawn in the same colour; only the check's own
+        // marks are counted here.
+        drawn: B.activeBoxes(p).filter(b => b.sweep).length
+          - B.liveImageHits(p).filter(m => m.templateId && !p.dismissed.has(m.id)).length,
       };
     });
     check('a mark from the check is on the page to begin with',
@@ -10882,7 +10950,10 @@ try {
       return {
         searched: B.state.searched,
         held: p.imageHits.filter(m => m.bySweep).length,
-        drawn: B.activeBoxes(p).filter(b => b.sweep).length,
+        // Picked images are drawn in the same colour; only the check's own
+        // marks are counted here.
+        drawn: B.activeBoxes(p).filter(b => b.sweep).length
+          - B.liveImageHits(p).filter(m => m.templateId && !p.dismissed.has(m.id)).length,
       };
     });
     // What a setting invalidates is that setting's own results. Moving an
@@ -10903,7 +10974,10 @@ try {
       const p = B.state.pages[0];
       return {
         held: p.imageHits.filter(m => m.bySweep).length,
-        drawn: B.activeBoxes(p).filter(b => b.sweep).length,
+        // Picked images are drawn in the same colour; only the check's own
+        // marks are counted here.
+        drawn: B.activeBoxes(p).filter(b => b.sweep).length
+          - B.liveImageHits(p).filter(m => m.templateId && !p.dismissed.has(m.id)).length,
       };
     });
     check('and searching again puts it back on the page',

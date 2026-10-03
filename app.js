@@ -414,10 +414,14 @@
     };
 
     if (state.footRan) {
-      line('green', found
-        ? 'Text search complete.'
-          + ' Review marks outlined in green in left panel.'
-        : 'Text search complete. Nothing found to redact.');
+      // Nothing typed and no detector ticked: there was no text to look for,
+      // and "nothing found" would claim a search that did not happen.
+      const noText = !state.countedTerms.length && !state.countedKinds.length;
+      line('green', noText ? 'No text to redact.'
+        : found
+          ? 'Text search complete.'
+            + ' Review marks outlined in green in left panel.'
+          : 'Text search complete. Nothing found to redact.');
     }
     if (check) {
       const how = state.footStopped
@@ -428,8 +432,8 @@
       // nothing -- saying so sends the reviewer away from work waiting for
       // them.
       const toReview = sweepOffers().length;
-      const words = line('amber', state.footAdded
-        ? how + 'Review marks outlined in amber in left panel.'
+      const words = line('purple', state.footAdded
+        ? how + 'Review marks outlined in purple in left panel.'
         : state.footImages
           ? how + 'Review the images found in left panel.'
         : toReview
@@ -450,7 +454,7 @@
       // words are pictures - and the question at the end of it opens the same
       // dialog the search offered when it finished, so there is one place
       // where the cost is stated and one pair of answers to give.
-      line('amber', 'Some words appear as images, and searching for text'
+      line('purple', 'Some words appear as images, and searching for text'
         + ' in images is recommended. ').append(proceedLink());
     }
 
@@ -2710,7 +2714,16 @@
     // this one would be a second opinion about a question already being
     // answered — "press Search to find them" said next to Search running.
     if (picking) {
-      note.textContent = 'Mark out the image you would like to redact. Press Back once done.';
+      // "Back" is the way out itself, not only its name: the same as the
+      // Back button in the panel, where the reviewer may not be looking.
+      note.textContent = 'Mark out the image you would like to redact. Press ';
+      const back = document.createElement('button');
+      back.type = 'button';
+      back.className = 'checklink pickback';
+      back.textContent = 'Back';
+      back.title = 'Stop picking and go back';
+      back.addEventListener('click', () => setMode('box'));
+      note.append(back, document.createTextNode(' once done.'));
     } else if (state.redacting) {
       note.textContent = '';
     } else if (state.sweepRunning) {
@@ -4541,6 +4554,12 @@
       } else {
         entry.logo.autoBar = null;
       }
+      // The bar the search settled at: what it stands behind. A bar lowered
+      // from here takes in matches it would not have, and those are shown
+      // in amber, as matches to look at (lowered).
+      if (entry.logo.defaultBar === undefined || !entry.logo.chosenBar) {
+        entry.logo.defaultBar = sensFor(entry.logo);
+      }
 
       // A picked image searched again, after pages were added, is answered
       // afresh over all of them: what it found before is replaced, not added
@@ -5754,7 +5773,7 @@
         // The flag rides along with the rect: this is the path the page draws
         // through unless labelling is on, so dropping it here would mean the
         // sweep's marks were amber only for reviewers using placeholders.
-        .concat(images.map(m => ({ ...m.rect, sweep: Boolean(m.bySweep) })))
+        .concat(images.map(m => ({ ...m.rect, sweep: byPhaseTwo(m), low: lowered(m) })))
         .concat(page.manual);
     }
 
@@ -5772,7 +5791,7 @@
     }
     for (const match of images) {
       boxes.push({ ...match.rect, label: state.labels.byId[match.id],
-                   sweep: Boolean(match.bySweep) });
+                   sweep: byPhaseTwo(match), low: lowered(match) });
     }
     for (const box of page.manual) {
       boxes.push({ ...box, label: state.labels.byId[box.id] });
@@ -5846,7 +5865,8 @@
       ctx.lineWidth = stroke(Math.max(2, page.source.width / 600));
       for (const box of boxes) {
         if (insideLarger(box, boxes)) continue;
-        // Amber for what the thorough check added, green for everything else.
+        // Purple for what the image & text-in-image search found, green for
+        // everything else.
         // Both will be covered when Redact is pressed — the colour says where
         // the mark came from, not whether it counts. A reviewer who has just
         // asked "did you miss anything" needs the answer to be visible on the
@@ -5856,8 +5876,9 @@
         // of a mistake, and a proposed redaction is the opposite: it is the
         // tool doing what it was asked. A page of red boxes over someone's
         // document reads as a page of errors.
-        ctx.strokeStyle = box.sweep ? '#d98b1f' : MARK_GREEN;
-        ctx.fillStyle = box.sweep ? 'rgba(217, 139, 31, 0.18)' : MARK_GREEN_FILL;
+        ctx.strokeStyle = box.low ? MARK_AMBER : box.sweep ? MARK_PURPLE : MARK_GREEN;
+        ctx.fillStyle = box.low ? 'rgba(217, 139, 31, 0.18)'
+          : box.sweep ? 'rgba(130, 80, 223, 0.16)' : MARK_GREEN_FILL;
         ctx.fillRect(box.x, box.y, box.w, box.h);
         ctx.strokeRect(box.x, box.y, box.w, box.h);
       }
@@ -5889,7 +5910,7 @@
       ctx.strokeStyle = MARK_GREEN;
       for (const hit of off) for (const r of hit.rects) ctx.strokeRect(r.x, r.y, r.w, r.h);
       for (const m of offImages) {
-        ctx.strokeStyle = m.bySweep ? '#d98b1f' : MARK_GREEN;
+        ctx.strokeStyle = lowered(m) ? MARK_AMBER : byPhaseTwo(m) ? MARK_PURPLE : MARK_GREEN;
         ctx.strokeRect(m.rect.x, m.rect.y, m.rect.w, m.rect.h);
       }
       ctx.restore();
@@ -5901,13 +5922,18 @@
     // louder, and it has to be legible against a page that may already be
     // covered in green.
     if (state.spotlight && state.spotlight.pageIndex === page.index && !state.applied) {
-      const lit = state.spotlight.rect ? [{ ...state.spotlight.rect, sweep: true }]
+      // A place a card is asking about is lit amber, the colour of a
+      // question; a mark, in the colour it is drawn in.
+      const asking = Boolean(state.spotlight.rect);
+      const lit = asking ? [{ ...state.spotlight.rect }]
         : rectsOfMark(page, state.spotlight.mark);
       if (lit.length) {
         ctx.save();
-        const amber = lit.some(rect => rect.sweep);
-        ctx.fillStyle = amber ? 'rgba(217, 139, 31, 0.45)' : 'rgba(17, 138, 78, 0.42)';
-        ctx.strokeStyle = amber ? '#b36f12' : '#0c6b3c';
+        const purple = !asking && lit.some(rect => rect.sweep);
+        const warn = asking || lit.some(rect => rect.low);
+        ctx.fillStyle = warn ? 'rgba(217, 139, 31, 0.45)'
+          : purple ? 'rgba(130, 80, 223, 0.40)' : 'rgba(17, 138, 78, 0.42)';
+        ctx.strokeStyle = warn ? '#b36f12' : purple ? '#5a32a3' : '#0c6b3c';
         ctx.lineWidth = stroke(Math.max(3, page.source.width / 420));
         for (const rect of lit) {
           ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
@@ -7184,6 +7210,19 @@
   // The colour of a proposed redaction. Red once, which read as a page full of
   // mistakes; a proposal is the tool doing what it was asked.
   const MARK_GREEN = '#118a4e';
+  // Purple for what the image & text-in-image search found: a word matched
+  // as a picture, and a picked image. Amber is kept for what the tool is
+  // unsure of and wants the reviewer to look at.
+  const MARK_PURPLE = '#8250df';
+  const MARK_AMBER = '#d98b1f';
+  const byPhaseTwo = m => Boolean(m && (m.bySweep || m.templateId));
+  // A picked image's match that only a bar lowered below the search's own
+  // takes in: shown amber, on the page and in its list, to be looked at.
+  function lowered(m) {
+    if (!m || !m.templateId || typeof m.score !== 'number') return false;
+    const t = state.templates.find(one => one.id === m.templateId);
+    return Boolean(t && typeof t.defaultBar === 'number' && m.score < t.defaultBar - 1e-9);
+  }
   const MARK_GREEN_FILL = 'rgba(17, 138, 78, 0.13)';
 
   // Which page the reviewer is looking at, and how far down it, so zooming can
@@ -8132,11 +8171,12 @@
 
       const count = document.createElement('button');
       count.type = 'button';
-      // Green, the same as a word's tally: both answer "how many were found",
-      // and a picked image's answer is no less of an answer for being a
-      // picture. Grey read as a disabled control.
+      // Amber, the colour of the search that finds it: picked images are
+      // looked for in the image & text-in-image search, the second phase,
+      // which is amber wherever it is numbered. Grey read as a disabled
+      // control.
       const known = template.searched && !newPagesWaiting();
-      count.className = known ? 'n dot-green' : 'n unknown';
+      count.className = known ? 'n dot-shape' : 'n unknown';
       count.textContent = known ? String(live) : '?';
       count.disabled = !known || live === 0;
       if (!known) count.title = 'Not searched for yet  - press Search';
@@ -8255,10 +8295,14 @@
                    // counts the marks, and guesses again. With it, the
                    // weakest match on the list is the number to set it above.
                    score: typeof match.score === 'number' ? match.score : null,
-                   at: match.rect ? match.rect.y : 0 });
+                   at: match.rect ? match.rect.y : 0,
+                   // What was matched, drawn small on the row (tallyRows).
+                   rect: match.rect, low: lowered(match) });
       }
     }
-    out.sort((a, b) => a.pageIndex - b.pageIndex || a.at - b.at);
+    // What only a lowered bar took in goes first, to be looked at; then what
+    // the search stood behind, each by page.
+    out.sort((a, b) => (b.low - a.low) || a.pageIndex - b.pageIndex || a.at - b.at);
     return out;
   }
 
@@ -8565,14 +8609,67 @@
   // The rows themselves, which the sweep's note borrows: a place the check
   // stood down from is answered the same way as a place it found, because to
   // the reviewer they are the same question — where is it, take me there.
+  // A small picture of one match, and a larger one shown while the pointer
+  // is over it. Cut from the page as it is, which is what will be covered.
+  const MATCH_THUMB_H = 18, MATCH_THUMB_W = 64, MATCH_BIG = 220;
+  function cutMatch(page, rect, maxW, maxH) {
+    const pad = Math.max(2, Math.round(Math.min(rect.w, rect.h) * 0.08));
+    const x0 = Math.max(0, Math.floor(rect.x - pad)), y0 = Math.max(0, Math.floor(rect.y - pad));
+    const x1 = Math.min(page.source.width, Math.ceil(rect.x + rect.w + pad));
+    const y1 = Math.min(page.source.height, Math.ceil(rect.y + rect.h + pad));
+    const w = Math.max(1, x1 - x0), h = Math.max(1, y1 - y0);
+    const k = Math.min(maxW / w, maxH / h);
+    const c = document.createElement('canvas');
+    c.width = Math.max(1, Math.round(w * k));
+    c.height = Math.max(1, Math.round(h * k));
+    const ctx = c.getContext('2d');
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(page.source, x0, y0, w, h, 0, 0, c.width, c.height);
+    return c;
+  }
+  function matchThumb(spot) {
+    const page = state.pages[spot.pageIndex];
+    if (!page || !page.source) return null;
+    const wrap = document.createElement('span');
+    wrap.className = 'matchthumb';
+    wrap.append(cutMatch(page, spot.rect, MATCH_THUMB_W, MATCH_THUMB_H));
+    let big = null;
+    // Fixed to the window rather than the row: the panel scrolls and clips,
+    // and the larger picture belongs over the document beside it.
+    wrap.addEventListener('pointerenter', () => {
+      if (!big) {
+        big = cutMatch(page, spot.rect, MATCH_BIG, MATCH_BIG);
+        big.className = 'matchbig';
+        wrap.append(big);
+      }
+      const at = wrap.getBoundingClientRect();
+      // Beside the panel, over the document, so it hides none of the list.
+      const panel = wrap.closest('.panel');
+      const edge = panel ? panel.getBoundingClientRect().right : at.right;
+      big.style.left = Math.round(Math.min(window.innerWidth - big.width - 16, edge + 12)) + 'px';
+      big.style.top = Math.round(Math.max(8, Math.min(window.innerHeight - big.height - 8,
+        at.top + at.height / 2 - big.height / 2))) + 'px';
+    });
+    return wrap;
+  }
+
   function tallyRows(where) {
     const list = document.createElement('ul');
     list.className = 'tallywhere';
+    let wasLow = false;
     for (const spot of where) {
+      // A dotted line between the lowered bar's matches and the search's own.
+      if (wasLow && !spot.low) {
+        const rule = document.createElement('li');
+        rule.className = 'tallysep';
+        rule.setAttribute('role', 'separator');
+        list.append(rule);
+      }
+      wasLow = Boolean(spot.low);
       const item = document.createElement('li');
       const jump = document.createElement('button');
       jump.type = 'button';
-      jump.className = 'tallyspot ' + spot.kind;
+      jump.className = 'tallyspot ' + spot.kind + (spot.low ? ' low' : '');
       const dot = document.createElement('span');
       dot.className = 'dot';
       const text = document.createElement('span');
@@ -8587,7 +8684,13 @@
           : spot.kind === 'image'
             ? (spot.score === null ? 'as a picture' : spot.score.toFixed(2))
             : 'in the text';
-      jump.append(dot, text, how);
+      jump.append(dot, text);
+      // A picked image's match, shown as itself: what will be covered there,
+      // small on the row and larger under the pointer, so the list can be
+      // reviewed without travelling to each page.
+      const thumb = spot.kind === 'image' && spot.rect ? matchThumb(spot) : null;
+      if (thumb) jump.append(thumb);
+      jump.append(how);
       jump.addEventListener('click', () => goToPage(spot.pageIndex));
 
       // Hovering a row lights up the mark it stands for.
@@ -8664,7 +8767,7 @@
       // was filling green, so hovering a row changed the answer to "which run
       // found this" while the reviewer was reading it.
       if ((match.group || match.id) === mark && match.rect) {
-        out.push(match.bySweep ? { ...match.rect, sweep: true } : match.rect);
+        out.push(byPhaseTwo(match) ? { ...match.rect, sweep: true, low: lowered(match) } : match.rect);
       }
     }
     for (const box of page.manual) if (box.id === mark) out.push(box);
@@ -8846,6 +8949,7 @@
         // Each image's own bar. It used to be one number for the whole
         // document, kept under settings.
         sens: sensFor(t),
+        defaultBar: typeof t.defaultBar === 'number' ? t.defaultBar : undefined,
       })),
       pages: state.pages.map(page => ({
         index: page.index,
@@ -9020,6 +9124,7 @@
         id: saved.id, cut, rect: saved.rect, pageIndex: saved.pageIndex,
         thumbnail: thumbnailOf(page.source, saved.rect),
         sens: saved.sens !== undefined ? clampSens(saved.sens) : wasShared,
+        defaultBar: typeof saved.defaultBar === 'number' ? saved.defaultBar : undefined,
         matches: 0, rawMatches: 0, best: 0, searched: true,
       });
     }
@@ -11692,6 +11797,9 @@
     renderTermCounts();
     renderSweep();
     saidChecked(added, images.reduce((n, entry) => n + (entry.logo ? entry.logo.matches || 0 : 0), 0));
+    // What this search found is labelled now, as the text search's finds are
+    // when it ends: the key was otherwise empty until Redact.
+    applyLabels();
     redrawAll();
     refreshApply();
     return added;
@@ -12716,6 +12824,10 @@
   el('labelling').addEventListener('change', e => {
     state.labelling = e.target.checked;
     el('legendbox').hidden = !state.labelling;
+    // Built from the marks as they stand, found and not yet covered alike:
+    // the key belongs to what will be covered, and a reviewer ticking this
+    // wants to see it now, not after Redact.
+    if (state.labelling) applyLabels();
     renderSectionNotes();
     redrawAll();
     // The legend is the point of turning this on and it sits below the fold of
