@@ -4088,6 +4088,22 @@ check('no creation date is carried into the output', !meta.info.CreationDate);
     png.readUInt32BE(16) + 'x' + png.readUInt32BE(20));
 }
 
+// ---------- a colour-only match gives way to the shape's ----------
+//
+// Inside a mark of one flat colour every box is that colour, so the colour
+// check scores a box too small for the mark as highly as the right one. Where
+// the shape found the mark, that box is the same mark at the wrong size.
+{
+  const shape = { x: 100, y: 100, w: 170, h: 144, score: 0.996 };
+  const inside = { x: 120, y: 122, w: 130, h: 109, score: 1, byInk: true };
+  const elsewhere = { x: 600, y: 100, w: 170, h: 144, score: 0.97, byInk: true };
+  const kept = ImageSearch.shapeFirst([inside, shape, elsewhere]);
+  check('a colour-only match inside a shape match gives way to it',
+    kept.includes(shape) && !kept.includes(inside), JSON.stringify(kept));
+  check('and one where the shape found nothing still stands',
+    kept.includes(elsewhere), JSON.stringify(kept));
+}
+
 // ---------- report ----------
 
 console.log('\nBlinded self-test');

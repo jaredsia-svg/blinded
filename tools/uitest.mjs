@@ -2315,6 +2315,30 @@ try {
       i === 0 || pips[i - 1].bar >= pip.bar || pips[i - 1].count >= pip.count)),
     JSON.stringify(wheels));
 
+  // Pressing a circle moves the bar among the circles on offer; it does not
+  // bring new ones.
+  const pressed = await page.evaluate(() => {
+    const B = window.Blinded;
+    const bars = () => [...document.querySelectorAll('#templates .barwheel')]
+      .map(wheel => [...wheel.querySelectorAll('.barpip b')].map(b => b.textContent).join(' '));
+    const before = bars();
+    const row = [...document.querySelectorAll('#templates .barwheel')]
+      .findIndex(wheel => wheel.querySelectorAll('.barpip').length > 1);
+    if (row < 0) return { before, after: before, pressed: false };
+    const wheel = () => document.querySelectorAll('#templates .barwheel')[row];
+    const wasCovered = B.state.applied;
+    wheel().querySelector('.barpip:not(.now)').click();
+    const after = bars();
+    B.undoLast();
+    const back = bars();
+    // Moving the bar asks for the page to be covered again; it was.
+    if (wasCovered && !B.state.applied) { B.state.searched = true; B.coverMarks(); }
+    return { before, after, pressed: true, back };
+  });
+  check('pressing a sensitivity circle keeps the same circles on offer',
+    JSON.stringify(pressed.after) === JSON.stringify(pressed.before)
+      && JSON.stringify(pressed.back) === JSON.stringify(pressed.before), JSON.stringify(pressed));
+
   check('and does not repeat it in words',
     !/found \d+ times/.test(await page.textContent('#templates')),
     await page.textContent('#templates'));
@@ -2915,7 +2939,10 @@ try {
     const fromReading = { rows: greenRows.length,
       shapes: greenRows.filter(r => r.classList.contains('shape')).length,
       shown: greenRows.map(r => r.textContent.trim()),
-      colours: [...new Set(greenRows.map(colourOf))] };
+      colours: [...new Set(greenRows.map(colourOf))],
+      firstIsShape: Boolean(greenRows[0] && greenRows[0].classList.contains('shape')),
+      ruled: Boolean(document.querySelector('#termcounts .tallywhere .tallysep')),
+      thumbs: document.querySelectorAll('#termcounts .tallyspot .matchthumb canvas').length };
     green.click();
 
     amber.click();
@@ -2965,6 +2992,12 @@ try {
   // because they do not deserve equal trust.
   check('with each row wearing the colour of the pass that found it',
     where.fromReading.colours.length === 2, JSON.stringify(where.fromReading.colours));
+  // As a picked image's list does: what was found as a picture first, to be
+  // looked at, above a dotted line; and each place shown as itself.
+  check('what was found as a picture comes first, above a dotted line',
+    where.fromReading.firstIsShape && where.fromReading.ruled, JSON.stringify(where.fromReading));
+  check('and each place shows what is covered there',
+    where.fromReading.thumbs === where.fromReading.rows, JSON.stringify(where.fromReading));
   check('pressing it again puts the list away',
     where.afterSecond === 0, JSON.stringify(where));
 
@@ -3612,6 +3645,20 @@ try {
   });
   check('picking says what to do in the foot',
     pickingFoot.note === 'Mark out the image you would like to redact. Press Back once done.', pickingFoot.note);
+  // And says only that: what the last search found waits until Back.
+  const reportWhilePicking = await page.evaluate(() => {
+    const B = window.Blinded;
+    const was = B.state.footRan;
+    B.state.footRan = 'search';
+    B.refreshApply();
+    const foot = document.getElementById('runfoot');
+    const hidden = foot.hidden || foot.textContent.trim() === '';
+    B.state.footRan = was;
+    B.refreshApply();
+    return { hidden };
+  });
+  check('and the search\'s report is not shown beside it',
+    reportWhilePicking.hidden, JSON.stringify(reportWhilePicking));
   check('and its Back is a link that leaves picking',
     await page.evaluate(() => {
       const back = document.querySelector('#exportnote .pickback');
@@ -4336,7 +4383,8 @@ try {
       const raised = B.settleBar(flood, 0.75);
       // Four copies of a wordmark at four sizes score 1.00, 0.95, 0.88, 0.83:
       // spread out, and every one of them real. The bar goes to the gap here
-      // too, which is the trade this makes — see below.
+      // too -- and the widest is the fall from the last of them to the rest
+      // of the page, not a step between two copies.
       const spread = { matches: hits([1, 0.95, 0.88, 0.83]), near: hits([0.5]) };
       const spared = B.settleBar(spread, 0.75);
       const steps = B.barSteps([1, 0.99, 0.84, 0.836, 0.831, 0.825, 0.82, 0.818, 0.74], 3);
@@ -4392,7 +4440,7 @@ try {
     // rule cost was a reviewer left reading fifty-six proposals, two of which
     // were the logo, and then aiming a slider at a number nobody had told them.
     check('and to the gap in the ordinary case as well, not only against a flood',
-      moved.spared !== null && moved.spared > 0.75 && moved.sparedKept < 4,
+      moved.spared !== null && moved.spared > 0.75 && moved.spared < 0.83 && moved.sparedKept === 4,
       JSON.stringify(moved));
     // The runners-up, so the reviewer is choosing from a list rather than
     // aiming a slider at a number nobody has told them.
@@ -12780,8 +12828,12 @@ try {
     check('the code is offered on the details step', await codeShown());
     await shop.evaluate(() => window.__cb({ name: 'checkout.customer.created',
       data: { customer: { email: 'x@example.com' } } }));
-    check('and is gone once the details are sent and payment is next',
-      (await codeShown()) === false);
+    // Waited for rather than read at once: the step changes when the page
+    // has handled the event, which a busy machine can leave a frame late.
+    const goneAfter = await shop.waitForFunction(() =>
+      getComputedStyle(document.getElementById('buycode')).display === 'none',
+      undefined, { timeout: 3000 }).then(() => true, () => false);
+    check('and is gone once the details are sent and payment is next', goneAfter);
     await shop.evaluate(() => window.__cb({ name: 'checkout.customer.removed' }));
     check('and back if they go back to change their details', await codeShown());
     await shop.evaluate(() => window.__cb({ name: 'checkout.customer.updated' }));

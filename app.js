@@ -364,7 +364,9 @@
     // the places that change the question clear this, and here it is only
     // read.
     if (state.redacting) return;
-    if (!state.footRan && !sweepOnOffer) {
+    // While an image is being picked the foot says one thing, how to pick
+    // and how to stop. The search's report waits until Back.
+    if (!state.footRan && !sweepOnOffer || state.mode === 'pick') {
       said.textContent = '';
       foot.hidden = true;
       return;
@@ -4550,7 +4552,11 @@
       // be, not where the document puts it.
       spots.sort((a, b) => b.count - a.count);
       const repeated = spots.filter(spot => spot.count >= 2);
-      const seen = found.matches.concat(found.near || []);
+      // Only a match settles a page. A near miss at the same spot is often
+      // the mark itself, sized or placed badly by the coarse pass -- measured,
+      // a slide header's logo there scored under the bar and 0.84 once looked
+      // at closely -- and is exactly what the closer look is for.
+      const seen = found.matches;
       const seeds = [];
       for (const spot of repeated.slice(0, SPOTS_PER_IMAGE)) {
         for (const page of state.pages) {
@@ -4587,9 +4593,25 @@
   // image & text-in-image search can run these entries in the same sweep as
   // the words it draws, and place each kind its own way.
   function placeImageResults(entries, results) {
+    // What another image now covers changes what each setting would leave
+    // on the page, so every image's circles are worked out afresh.
+    for (const template of state.templates) {
+      if (template.report) template.report.wheel = null;
+    }
     // Logos: one entry each, so the results land directly.
     for (const entry of entries.filter(e => e.logo)) {
       const found = results.get(entry.key);
+      // One answer per spot before anything else is decided. The search keeps
+      // its matches and its near misses apart from each other but not one set
+      // from the other, and a bar settled lower than it started (settleBar)
+      // turns the near misses into matches: measured on a deck, the same logo
+      // came out two and three times over at 0.68.
+      {
+        const isMatch = new Set(found.matches);
+        const spots = oneEachSpot(found.matches.concat(found.near || []));
+        found.matches = spots.filter(hit => isMatch.has(hit));
+        found.near = spots.filter(hit => !isMatch.has(hit));
+      }
 
       // Nothing at the bar it was set to, but something just under it.
       //
@@ -4967,6 +4989,24 @@
     };
     const here = { bar, now: true,
       count: typeof showing === 'number' ? showing : countAt(bar) };
+    const best = barFromScores(all);
+
+    // The settings offered after the search stay the settings on offer.
+    //
+    // They used to be worked out again from wherever the bar stood, so
+    // pressing one of three circles could bring a fourth from nowhere, and
+    // the row the reviewer had just read was not the row they were choosing
+    // from. Pressing a circle moves the bar among them; only a new search
+    // offers new ones.
+    const fixed = report.wheel;
+    if (fixed && fixed.some(one => Math.abs(one - bar) < 0.005)) {
+      const settings = fixed.map(one => Math.abs(one - bar) < 0.005 ? { ...here, bar: one }
+        : { bar: one, count: countAt(one), now: false });
+      for (const step of settings) {
+        step.best = best !== null && Math.abs(step.bar - best) < 0.005;
+      }
+      return { warn: false, settings };
+    }
     // barSteps counts candidates, because that is all it is given. What each
     // setting would actually leave on the page is counted here, by the rule
     // the tally uses.
@@ -5008,12 +5048,16 @@
     // the circle for it then offers the reviewer a choice between eleven
     // matches and eleven matches. Only what would change the page is worth a
     // circle.
-    const changes = others.filter(step => step.count !== here.count);
+    // And no two circles promising the same number.
+    const changes = [];
+    for (const step of others) {
+      if (step.count === here.count || changes.some(one => one.count === step.count)) continue;
+      changes.push(step);
+    }
 
     // Which of them the scores actually point at. Ordinarily that is the one
     // the bar is already on, since the search puts it there; it is not, when
     // the reviewer has moved the bar themselves.
-    const best = barFromScores(all);
     const settings = [here].concat(changes.slice(0, 2));
     for (const step of settings) {
       step.best = best !== null && Math.abs(step.bar - best) < 0.005;
@@ -5021,6 +5065,8 @@
     // Left to right by how strict they are, the way the slider runs: a row
     // whose order changed with the answer would be a row nobody could learn.
     settings.sort((a, b) => a.bar - b.bar);
+    // Kept, once the counts are the page's own (see countAt).
+    if (template.verified) report.wheel = settings.map(step => step.bar);
     return { warn: false, settings };
   }
 
@@ -5048,7 +5094,13 @@
   const ONE_CLUMP = 0.06;
 
   function barFromScores(scores) {
-    const sorted = scores.filter(s => s >= AUTO_FLOOR).sort((a, b) => b - a);
+    // Everything, so the drop from the weakest candidate above the floor to
+    // whatever lies under it counts as a gap too. Only gaps among the
+    // candidates above the floor used to count, so four copies of a wordmark
+    // at 0.995 to 0.94 were split at a 0.03 step between them, while the fall
+    // from 0.94 to the rest of the page at 0.45 was never looked at.
+    const every = scores.slice().sort((a, b) => b - a);
+    const sorted = every.filter(s => s >= AUTO_FLOOR);
     if (!sorted.length) return null;
     // One candidate, or several with no gap worth speaking of: take them all,
     // just under the weakest. A clump of copies of the same mark scores within
@@ -5058,8 +5110,8 @@
     let cut = sorted[sorted.length - 1];
     let widest = REAL_GAP;
     let at = -1;
-    for (let i = 0; i < sorted.length - 1; i++) {
-      const gap = sorted[i] - sorted[i + 1];
+    for (let i = 0; i < sorted.length && i < every.length - 1; i++) {
+      const gap = sorted[i] - every[i + 1];
       if (gap > widest) { widest = gap; cut = sorted[i]; at = i; }
     }
 
@@ -8505,7 +8557,9 @@
         // not, so saying no to one from the row left the number unchanged.
         if (page.dismissed.has(hit.finding.id)) continue;
         out.push({ pageIndex: page.index, kind: 'text', mark: hit.finding.id,
-                   at: hit.rects && hit.rects[0] ? hit.rects[0].y : 0 });
+                   at: hit.rects && hit.rects[0] ? hit.rects[0].y : 0,
+                   // What is covered there, drawn small on the row (tallyRows).
+                   rect: hit.rects && hit.rects.length ? hit.rects[0] : null, low: false });
       }
       for (const match of liveImageHits(page)) {
         if (match.term !== term || page.dismissed.has(match.id)) continue;
@@ -8514,10 +8568,13 @@
           kind: match.bySweep ? 'shape' : 'text',
           mark: match.id,
           at: match.rect ? match.rect.y : 0,
+          rect: match.rect || null,
+          // Found as a picture: amber, and first, to be looked at.
+          low: Boolean(match.bySweep),
         });
       }
     }
-    out.sort((a, b) => a.pageIndex - b.pageIndex || a.at - b.at);
+    out.sort((a, b) => (Number(b.low) - Number(a.low)) || a.pageIndex - b.pageIndex || a.at - b.at);
     return out;
   }
 
@@ -8751,7 +8808,7 @@
   // the reviewer they are the same question — where is it, take me there.
   // A small picture of one match, and a larger one shown while the pointer
   // is over it. Cut from the page as it is, which is what will be covered.
-  const MATCH_THUMB_H = 18, MATCH_THUMB_W = 64, MATCH_BIG = 220;
+  const MATCH_THUMB_H = 16, MATCH_THUMB_W = 64, MATCH_BIG = 220;
   function cutMatch(page, rect, maxW, maxH) {
     const pad = Math.max(2, Math.round(Math.min(rect.w, rect.h) * 0.08));
     const x0 = Math.max(0, Math.floor(rect.x - pad)), y0 = Math.max(0, Math.floor(rect.y - pad));
@@ -8798,7 +8855,8 @@
     list.className = 'tallywhere';
     let wasLow = false;
     for (const spot of where) {
-      // A dotted line between the lowered bar's matches and the search's own.
+      // A dotted line between what is there to be looked at -- a lowered
+      // bar's matches, a word found as a picture -- and the rest.
       if (wasLow && !spot.low) {
         const rule = document.createElement('li');
         rule.className = 'tallysep';
@@ -8825,10 +8883,10 @@
             ? (spot.score === null ? 'as a picture' : spot.score.toFixed(2))
             : 'in the text';
       jump.append(dot, text);
-      // A picked image's match, shown as itself: what will be covered there,
-      // small on the row and larger under the pointer, so the list can be
-      // reviewed without travelling to each page.
-      const thumb = spot.kind === 'image' && spot.rect ? matchThumb(spot) : null;
+      // What will be covered there, shown as itself: small on the row and
+      // larger under the pointer, so the list can be reviewed without
+      // travelling to each page. A picked image's matches and a typed word's.
+      const thumb = spot.rect && state.kind !== 'text' ? matchThumb(spot) : null;
       if (thumb) jump.append(thumb);
       jump.append(how);
       jump.addEventListener('click', () => goToPage(spot.pageIndex));

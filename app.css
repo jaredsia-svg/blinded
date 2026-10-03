@@ -1464,7 +1464,7 @@ body.picking #imagesect { position: static; z-index: auto; background: none; }
   max-width: none; max-height: none; width: auto; height: auto;
   border: 0; border-radius: 0; padding: 0; background: none; cursor: default;
 }
-.matchthumb canvas:first-child { display: block; max-height: 18px; }
+.matchthumb canvas:first-child { display: block; max-height: 16px; }
 .matchthumb + .how { margin-left: 10px; }
 .templates .matchthumb canvas.matchbig, .matchthumb .matchbig {
   display: none; position: fixed; z-index: 70; background: #fff;
