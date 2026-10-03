@@ -432,8 +432,8 @@
       // nothing -- saying so sends the reviewer away from work waiting for
       // them.
       const toReview = sweepOffers().length;
-      const words = line('purple', state.footAdded
-        ? how + 'Review marks outlined in purple in left panel.'
+      const words = line('second', state.footAdded
+        ? how + 'Review marks outlined in amber in left panel.'
         : state.footImages
           ? how + 'Review the images found in left panel.'
         : toReview
@@ -454,7 +454,7 @@
       // words are pictures - and the question at the end of it opens the same
       // dialog the search offered when it finished, so there is one place
       // where the cost is stated and one pair of answers to give.
-      line('purple', 'Some words appear as images, and searching for text'
+      line('second', 'Some words appear as images, and searching for text'
         + ' in images is recommended. ').append(proceedLink());
     }
 
@@ -4522,6 +4522,66 @@
     placeImageResults(entries, results);
   }
 
+  // A picked image, looked for again where it was found, on the pages it
+  // was not.
+  //
+  // A logo in a slide's footer or corner sits in the same place on page
+  // after page, and the search over a whole page can miss it there: on a
+  // busy slide the first, coarse pass fills its shortlist with other shapes
+  // and never puts the small mark on it. Measured on an investor deck, the
+  // footer wordmark was found on twenty pages and missed on two, where
+  // looking at its usual spot scored 0.96. So each place it was found is
+  // looked at on every page that has nothing there — a handful of close
+  // looks per page, held to the same bar as everything else.
+  const SPOTS_PER_IMAGE = 8;
+  async function whereFoundElsewhere(images, results) {
+    const followUps = [];
+    for (const entry of images) {
+      const found = results.get(entry.key);
+      if (!found || !found.matches.length) continue;
+      // The places it was found, most often first.
+      const spots = [];
+      for (const hit of found.matches) {
+        const same = spots.find(spot => sameSpot(spot, hit));
+        if (same) same.count++;
+        else spots.push({ x: hit.x, y: hit.y, w: hit.w, h: hit.h, count: 1 });
+      }
+      // Only a place it recurs: a mark found once is where it happened to
+      // be, not where the document puts it.
+      spots.sort((a, b) => b.count - a.count);
+      const repeated = spots.filter(spot => spot.count >= 2);
+      const seen = found.matches.concat(found.near || []);
+      const seeds = [];
+      for (const spot of repeated.slice(0, SPOTS_PER_IMAGE)) {
+        for (const page of state.pages) {
+          if (!page.source) continue;
+          if (seen.some(hit => hit.pageIndex === page.index && sameSpot(hit, spot))) continue;
+          if (spot.x + spot.w > page.source.width || spot.y + spot.h > page.source.height) continue;
+          seeds.push({ pageIndex: page.index, x: spot.x, y: spot.y, w: spot.w, h: spot.h });
+        }
+      }
+      if (seeds.length) followUps.push({ entry, seeds });
+    }
+    if (!followUps.length) return;
+    const wanted = new Set(followUps.flatMap(one => one.seeds.map(seed => seed.pageIndex)));
+    const pages = state.pages.filter(page => wanted.has(page.index));
+    const again = await ImageSearch.searchAllParallel(pages,
+      followUps.map(({ entry, seeds }) => ({
+        key: entry.key, template: entry.template, threshold: entry.threshold,
+        seeds, pageIndexes: new Set(seeds.map(seed => seed.pageIndex)),
+        budget: { seedsOnly: true },
+      })),
+      { stop: () => state.sweepStopped });
+    for (const { entry } of followUps) {
+      const more = again.get(entry.key);
+      const into = results.get(entry.key);
+      if (!more || !into) continue;
+      into.matches = into.matches.concat(more.matches);
+      into.near = (into.near || []).concat(more.near || []);
+      if (more.best > into.best) into.best = more.best;
+    }
+  }
+
   // What a search for picked images (and, with the reader unavailable, for
   // typed words by their shape) found, put on the pages. Its own step so the
   // image & text-in-image search can run these entries in the same sweep as
@@ -4571,7 +4631,7 @@
       distribute(found.matches, hit => ({
         id: entry.logo.id + ':' + hit.pageIndex + ':' + Math.round(hit.x) + ':' + Math.round(hit.y),
         templateId: entry.logo.id,
-        rect: { x: hit.x, y: hit.y, w: hit.w, h: hit.h },
+        rect: coverOf(hit),
         score: hit.score,
         inverted: Boolean(hit.inverted),
       }));
@@ -4585,9 +4645,14 @@
       //
       // Not saved in a draft: a draft holds the reviewer's work, and this is
       // the search's working-out, rebuilt by the next search in any case.
-      entry.logo.verified = found.matches.concat(found.near || [])
+      const everyHit = found.matches.concat(found.near || []);
+      entry.logo.verified = oneEachSpot(everyHit)
         .map(hit => ({ pageIndex: hit.pageIndex, x: hit.x, y: hit.y, w: hit.w, h: hit.h,
           score: hit.score, inverted: Boolean(hit.inverted) }));
+      // How far down the search looked, which the spots above may not show:
+      // a candidate that lost its spot to a better one was still verified.
+      entry.logo.verifiedFloor = everyHit.length
+        ? Math.min(...everyHit.map(hit => hit.score)) : null;
       entry.logo.matches = found.matches.length;
       entry.logo.rawMatches = found.matches.length;
       entry.logo.best = found.best;
@@ -4696,7 +4761,63 @@
   function answeredAlready(template, bar) {
     const kept = template && template.verified;
     if (!kept || !kept.length) return false;
-    return bar >= Math.min(...kept.map(hit => hit.score)) - 1e-9;
+    const floor = typeof template.verifiedFloor === 'number'
+      ? template.verifiedFloor : Math.min(...kept.map(hit => hit.score));
+    return bar >= floor - 1e-9;
+  }
+
+  // One answer per spot.
+  //
+  // The search keeps its matches apart from one another, and its near misses
+  // apart from one another, but not one set from the other: the same logo
+  // found at 0.998 at one size came back again at 0.73 a size up, round it.
+  // Lowering the bar then drew a second box over the first, and counted the
+  // logo twice. The best score at a spot speaks for it.
+  function oneEachSpot(hits) {
+    const sorted = hits.slice().sort((a, b) => b.score - a.score);
+    const kept = [];
+    for (const hit of sorted) {
+      const clash = kept.some(other => other.pageIndex === hit.pageIndex && sameSpot(hit, other));
+      if (!clash) kept.push(hit);
+    }
+    return kept;
+  }
+
+  // A draft saved before matches were kept one to a spot can hold the same
+  // logo twice, from one picked image; the better-scored one is kept.
+  function withoutDoubles(hits) {
+    const picked = hits.filter(m => m.templateId && !m.bySweep && typeof m.score === 'number');
+    const drop = new Set();
+    for (const m of picked) {
+      if (picked.some(other => other !== m && other.templateId === m.templateId
+          && other.score > m.score && sameSpot(m.rect, other.rect))) drop.add(m);
+    }
+    return drop.size ? hits.filter(m => !drop.has(m)) : hits;
+  }
+
+  // Mostly the same ground: most of the smaller box lies inside the other.
+  function sameSpot(a, b) {
+    const w = Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x);
+    const h = Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y);
+    if (w <= 0 || h <= 0) return false;
+    return w * h > 0.5 * Math.min(a.w * a.h, b.w * b.h);
+  }
+
+  // The box a picked image's match is covered with.
+  //
+  // A match is found against the pick trimmed to its ink, so its box runs
+  // along the very edge of the mark — and the soft edge pixels of a logo, a
+  // pixel or two out, were left showing round the cover. A little margin,
+  // in proportion to the mark, kept on the page.
+  function coverOf(hit) {
+    const page = state.pages[hit.pageIndex];
+    const m = Math.max(2, Math.min(hit.w, hit.h) * 0.04);
+    let x = hit.x - m, y = hit.y - m, x1 = hit.x + hit.w + m, y1 = hit.y + hit.h + m;
+    if (page && page.source) {
+      x = Math.max(0, x); y = Math.max(0, y);
+      x1 = Math.min(page.source.width, x1); y1 = Math.min(page.source.height, y1);
+    }
+    return { x, y, w: x1 - x, h: y1 - y };
   }
 
   function applyKeptAt(template, bar) {
@@ -4715,7 +4836,7 @@
         id: template.id + ':' + hit.pageIndex + ':'
           + Math.round(hit.x) + ':' + Math.round(hit.y),
         templateId: template.id,
-        rect: { x: hit.x, y: hit.y, w: hit.w, h: hit.h },
+        rect: coverOf(hit),
         score: hit.score,
         inverted: Boolean(hit.inverted),
       });
@@ -5865,8 +5986,9 @@
       ctx.lineWidth = stroke(Math.max(2, page.source.width / 600));
       for (const box of boxes) {
         if (insideLarger(box, boxes)) continue;
-        // Purple for what the image & text-in-image search found, green for
-        // everything else.
+        // Amber for what the image & text-in-image search read in a picture,
+        // and for a picked image's match only a lowered bar takes in; green
+        // for everything else.
         // Both will be covered when Redact is pressed — the colour says where
         // the mark came from, not whether it counts. A reviewer who has just
         // asked "did you miss anything" needs the answer to be visible on the
@@ -5876,9 +5998,8 @@
         // of a mistake, and a proposed redaction is the opposite: it is the
         // tool doing what it was asked. A page of red boxes over someone's
         // document reads as a page of errors.
-        ctx.strokeStyle = box.low ? MARK_AMBER : box.sweep ? MARK_PURPLE : MARK_GREEN;
-        ctx.fillStyle = box.low ? 'rgba(217, 139, 31, 0.18)'
-          : box.sweep ? 'rgba(130, 80, 223, 0.16)' : MARK_GREEN_FILL;
+        ctx.strokeStyle = box.low || box.sweep ? MARK_AMBER : MARK_GREEN;
+        ctx.fillStyle = box.low || box.sweep ? 'rgba(217, 139, 31, 0.18)' : MARK_GREEN_FILL;
         ctx.fillRect(box.x, box.y, box.w, box.h);
         ctx.strokeRect(box.x, box.y, box.w, box.h);
       }
@@ -5910,7 +6031,7 @@
       ctx.strokeStyle = MARK_GREEN;
       for (const hit of off) for (const r of hit.rects) ctx.strokeRect(r.x, r.y, r.w, r.h);
       for (const m of offImages) {
-        ctx.strokeStyle = lowered(m) ? MARK_AMBER : byPhaseTwo(m) ? MARK_PURPLE : MARK_GREEN;
+        ctx.strokeStyle = lowered(m) || byPhaseTwo(m) ? MARK_AMBER : MARK_GREEN;
         ctx.strokeRect(m.rect.x, m.rect.y, m.rect.w, m.rect.h);
       }
       ctx.restore();
@@ -5929,11 +6050,9 @@
         : rectsOfMark(page, state.spotlight.mark);
       if (lit.length) {
         ctx.save();
-        const purple = !asking && lit.some(rect => rect.sweep);
-        const warn = asking || lit.some(rect => rect.low);
-        ctx.fillStyle = warn ? 'rgba(217, 139, 31, 0.45)'
-          : purple ? 'rgba(130, 80, 223, 0.40)' : 'rgba(17, 138, 78, 0.42)';
-        ctx.strokeStyle = warn ? '#b36f12' : purple ? '#5a32a3' : '#0c6b3c';
+        const warn = asking || lit.some(rect => rect.low || rect.sweep);
+        ctx.fillStyle = warn ? 'rgba(217, 139, 31, 0.45)' : 'rgba(17, 138, 78, 0.42)';
+        ctx.strokeStyle = warn ? '#b36f12' : '#0c6b3c';
         ctx.lineWidth = stroke(Math.max(3, page.source.width / 420));
         for (const rect of lit) {
           ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
@@ -7210,12 +7329,12 @@
   // The colour of a proposed redaction. Red once, which read as a page full of
   // mistakes; a proposal is the tool doing what it was asked.
   const MARK_GREEN = '#118a4e';
-  // Purple for what the image & text-in-image search found: a word matched
-  // as a picture, and a picked image. Amber is kept for what the tool is
-  // unsure of and wants the reviewer to look at.
-  const MARK_PURPLE = '#8250df';
+  // Green too for a picked image's matches: the reviewer showed the tool
+  // what to cover. Amber for what wants a look: a word the image &
+  // text-in-image search matched as a picture, and a match only a lowered
+  // bar takes in.
   const MARK_AMBER = '#d98b1f';
-  const byPhaseTwo = m => Boolean(m && (m.bySweep || m.templateId));
+  const byPhaseTwo = m => Boolean(m && m.bySweep);
   // A picked image's match that only a bar lowered below the search's own
   // takes in: shown amber, on the page and in its list, to be looked at.
   function lowered(m) {
@@ -8176,7 +8295,7 @@
       // which is amber wherever it is numbered. Grey read as a disabled
       // control.
       const known = template.searched && !newPagesWaiting();
-      count.className = known ? 'n dot-shape' : 'n unknown';
+      count.className = known ? 'n dot-green' : 'n unknown';
       count.textContent = known ? String(live) : '?';
       count.disabled = !known || live === 0;
       if (!known) count.title = 'Not searched for yet  - press Search';
@@ -9108,7 +9227,7 @@
       }
       page.manual = saved.manual || [];
       page.dismissed = new Set(saved.dismissed || []);
-      page.imageHits = (saved.imageHits || []).filter(m => m && m.rect);
+      page.imageHits = withoutDoubles((saved.imageHits || []).filter(m => m && m.rect));
     }
     dismissedText.clear();
     for (const id of data.dismissedText || []) dismissedText.add(id);
@@ -11502,6 +11621,9 @@
     // way has not looked for them everywhere, so they still ask to be
     // searched for.
     if (images.length) {
+      if (typeof results.stoppedAfter !== 'number' && !state.sweepStopped) {
+        try { await whereFoundElsewhere(images, results); } catch (error) { /* the sweep's answer stands */ }
+      }
       placeImageResults(images, results);
       if (typeof results.stoppedAfter === 'number') {
         for (const entry of images) if (entry.logo) entry.logo.searched = false;
@@ -13575,6 +13697,7 @@
   window.Blinded = { state, rescan, loadFile, exportFile, setMode, addTemplate, closeDocument, insideLarger, halfReadSpots, captureFile, offlineReady,
     undoLast, redoLast, undoStack, redoStack, applyLabels, labelItems, downloadKey,
     sensFor, barFromScores, settleBar, barSteps, moveBarTo, answeredAlready, planSeconds,
+    oneEachSpot, withoutDoubles, coverOf,
     liveImageHits,
     AUTO_FLOOR, REAL_GAP,
     anchorOn, returnTo, stepPage, refreshPaging,

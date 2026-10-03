@@ -1366,7 +1366,7 @@ try {
       const near = (r0, g0, b0) => (red, g, b) =>
         Math.abs(red - r0) < 40 && Math.abs(g - g0) < 40 && Math.abs(b - b0) < 40;
       const isGreen = near(17, 138, 78);     // MARK_GREEN
-      const isAmber = near(130, 80, 223);    // purple: what the image & text-in-image search uses
+      const isAmber = near(217, 139, 31);    // MARK_AMBER: what the image & text-in-image search uses
       let green = 0, amber = 0;
       for (let i = 0; i < px.length; i += 4) {
         if (isGreen(px[i], px[i + 1], px[i + 2])) green++;
@@ -2042,7 +2042,11 @@ try {
     templates: window.Blinded.state.templates.length,
     perPage: window.Blinded.state.pages.map(p => p.imageHits.length),
     total: window.Blinded.state.pages.reduce((n, p) => n + p.imageHits.length, 0),
-    scales: window.Blinded.state.pages.flatMap(p => p.imageHits.map(m => Math.round(m.rect.w))),
+    // The size of each match as found, not of its cover, which reaches a
+    // little past the mark's edge.
+    scales: (window.Blinded.state.templates[0].verified || [])
+      .filter(hit => hit.score >= window.Blinded.sensFor(window.Blinded.state.templates[0]))
+      .map(hit => Math.round(hit.w)),
   }));
   check('picking a logo leaves pick mode', await page.evaluate(() => window.Blinded.state.mode) === 'box');
   check('every copy of the logo is found across both pages',
@@ -2277,6 +2281,28 @@ try {
     JSON.stringify(rowsSeen));
   check('and a match under that bar comes first, in amber, above a dotted line',
     rowsSeen.firstLow && rowsSeen.sepAfter, JSON.stringify(rowsSeen));
+
+  // One answer per spot: the same logo found again a size up, round the
+  // first, under the bar, is the same logo and not a second one.
+  const spots = await page.evaluate(() => {
+    const B = window.Blinded;
+    const best = { pageIndex: 0, x: 100, y: 100, w: 230, h: 195, score: 0.998 };
+    const round = { pageIndex: 0, x: 80, y: 78, w: 273, h: 230, score: 0.726 };
+    const apart = { pageIndex: 0, x: 600, y: 100, w: 230, h: 195, score: 0.74 };
+    const other = { pageIndex: 1, x: 80, y: 78, w: 273, h: 230, score: 0.73 };
+    const kept = B.oneEachSpot([round, best, apart, other]);
+    const asMark = (h, id) => ({ id, templateId: 'tplX', score: h.score, rect: { x: h.x, y: h.y, w: h.w, h: h.h } });
+    const fromDraft = B.withoutDoubles([asMark(best, 'a'), asMark(round, 'b'), asMark(apart, 'c')]);
+    const cover = B.coverOf(best);
+    return { kept: kept.map(h => h.score), fromDraft: fromDraft.map(m => m.id),
+      covers: cover.x < best.x && cover.y < best.y
+        && cover.x + cover.w > best.x + best.w && cover.y + cover.h > best.y + best.h };
+  });
+  check('a picked image\'s near miss round one of its matches is not a second match',
+    JSON.stringify(spots.kept) === JSON.stringify([0.998, 0.74, 0.73]), JSON.stringify(spots));
+  check('and a draft holding both keeps the better one',
+    JSON.stringify(spots.fromDraft) === JSON.stringify(['a', 'c']), JSON.stringify(spots));
+  check('and its cover reaches a little past the mark\'s edge', spots.covers, JSON.stringify(spots));
 
   check('and does not repeat it in words',
     !/found \d+ times/.test(await page.textContent('#templates')),
@@ -4032,12 +4058,12 @@ try {
                round: parseFloat(s.borderRadius) >= 12 };
     };
     return { word: pick('.termcounts .n.dot-green'),
-             image: pick('.templates .n.dot-shape') };
+             image: pick('.templates .n.dot-green') };
   });
-  // Purple: the colour of the image & text-in-image search, which finds it.
-  check('a picked image\'s tally is a purple circle, the second phase\'s colour',
+  // Green, as a word's is: the reviewer showed the tool what to cover.
+  check('a picked image\'s tally is a green circle, as a word\'s is',
     badges.word && badges.image
-      && badges.image.fill === 'rgb(239, 231, 251)' && badges.image.ink === 'rgb(90, 50, 163)'
+      && badges.image.fill === badges.word.fill && badges.image.ink === badges.word.ink
       && badges.image.round === true,
     JSON.stringify(badges));
 
@@ -4798,7 +4824,7 @@ try {
       offer.outAfterLeave === true, JSON.stringify(offer));
     check('and so does answering the card',
       offer.outAfterAnswer === true, JSON.stringify(offer));
-    check('accepting it marks the page in purple',
+    check('accepting it marks the page in amber',
       offer.marks === 1 && offer.amber === true, JSON.stringify(offer));
     check('and the offer goes once the word has a mark',
       offer.goneAfterTake === true, JSON.stringify(offer));
@@ -8410,10 +8436,8 @@ try {
     // Amber against green: the ordinary mark leans green, the check's leans
     // red. Comparing the two against each other rather than against constants
     // means this fails if they are ever painted the same.
-    // Purple against green: the ordinary mark leans green, the sweep's leans
-    // blue.
-    check('and it is purple, not the green an ordinary mark gets',
-      drawn.amber[2] > drawn.red[2] && drawn.red[1] > drawn.amber[1]
+    check('and it is amber, not the green an ordinary mark gets',
+      drawn.amber[0] > drawn.red[0] && drawn.red[2] > drawn.amber[2]
         && drawn.amber.join() !== drawn.red.join(),
       JSON.stringify(drawn));
 
@@ -8640,7 +8664,7 @@ try {
     check('and every mark it adds is flagged as its own',
       swept.marks >= 1, JSON.stringify(swept));
     check('afterwards the foot says the check found something',
-      /Image & text-in-image search complete\. Review marks outlined in purple/
+      /Image & text-in-image search complete\. Review marks outlined in amber/
         .test(swept.note), JSON.stringify(swept.note));
 
     // One report, two lines, one per run, each carrying the colour its marks
@@ -8689,7 +8713,7 @@ try {
       && /^Image & text-in-image search complete/.test(refused.lines[1]),
       JSON.stringify(refused));
     check('each line wearing the colour its marks wear on the page',
-      /green/.test(refused.dots[0]) && /purple/.test(refused.dots[1]),
+      /green/.test(refused.dots[0]) && /second/.test(refused.dots[1]),
       JSON.stringify(refused));
     check('and no count of what the reader stood down from',
       !/skipped|stood down|left alone/.test(refused.said), refused.said);
@@ -10926,10 +10950,7 @@ try {
       B.redrawAll();
       return {
         held: p.imageHits.filter(m => m.bySweep).length,
-        // Picked images are drawn in the same colour; only the check's own
-        // marks are counted here.
-        drawn: B.activeBoxes(p).filter(b => b.sweep).length
-          - B.liveImageHits(p).filter(m => m.templateId && !p.dismissed.has(m.id)).length,
+        drawn: B.activeBoxes(p).filter(b => b.sweep).length,
       };
     });
     check('a mark from the check is on the page to begin with',
@@ -10950,10 +10971,7 @@ try {
       return {
         searched: B.state.searched,
         held: p.imageHits.filter(m => m.bySweep).length,
-        // Picked images are drawn in the same colour; only the check's own
-        // marks are counted here.
-        drawn: B.activeBoxes(p).filter(b => b.sweep).length
-          - B.liveImageHits(p).filter(m => m.templateId && !p.dismissed.has(m.id)).length,
+        drawn: B.activeBoxes(p).filter(b => b.sweep).length,
       };
     });
     // What a setting invalidates is that setting's own results. Moving an
@@ -10974,10 +10992,7 @@ try {
       const p = B.state.pages[0];
       return {
         held: p.imageHits.filter(m => m.bySweep).length,
-        // Picked images are drawn in the same colour; only the check's own
-        // marks are counted here.
-        drawn: B.activeBoxes(p).filter(b => b.sweep).length
-          - B.liveImageHits(p).filter(m => m.templateId && !p.dismissed.has(m.id)).length,
+        drawn: B.activeBoxes(p).filter(b => b.sweep).length,
       };
     });
     check('and searching again puts it back on the page',
