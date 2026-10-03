@@ -111,7 +111,7 @@
   "duration": "PT59S"
 }
 </script>
-<link rel="stylesheet" href="app.css?v=9334302f" integrity="sha384-jZ2UWZ4lXOsgtmPo2Q0MEURbl8sFJa2HSmS9c12RsibhZyv/aTQ5emTpiUOFcH42">
+<link rel="stylesheet" href="app.css?v=97fd12af" integrity="sha384-q9049okhQ9qFwHau78k8PAYIEW/BvOT/3DxvzoLayhDJ6dxXvWWADyugLoTKr/Yd">
 </head>
 <body>
 
@@ -948,23 +948,24 @@
       <li class="planrow">
         <label for="plan1">
           <span class="plannum phase1">1</span>
-          <span class="plantext">Text and image inputs</span>
+          <span class="plantext">Text search</span>
         </label>
         <input type="checkbox" id="plan1" checked disabled
           title="Always part of a search">
       </li>
       <li class="planrow planrow-more">
         <div class="planhead">
-          <label for="plan2">
+          <span class="planlabel">
             <span class="plannum phase2">2</span>
-            <span class="plantext">A second check for text that appears as images (recommended)</span>
-          </label>
-          <input type="checkbox" id="plan2" checked>
+            <span class="plantext">Image &amp; text-in-image search</span>
+          </span>
         </div>
-        <ul class="planextralist" aria-label="Closer looks in the second check">
-          <li><label><span>Include rotated text? Slanted, vertical or upside down (optional)</span>
+        <ul class="planextralist" aria-label="In the image and text-in-image search">
+          <li><label><span>Include text in images? (recommended)</span>
+            <input type="checkbox" id="plan2" checked></label></li>
+          <li><label><span>Include rotated text? (optional)</span>
             <input type="checkbox" id="planx-turned"></label></li>
-          <li><label><span>Include handwriting-style text? Signatures and script fonts (optional)</span>
+          <li><label><span>Include handwriting-style text? (optional)</span>
             <input type="checkbox" id="planx-hard"></label></li>
         </ul>
       </li>
@@ -1213,7 +1214,7 @@
 <script src="lib/match.js?v=8465eb88" integrity="sha384-54KsabuiRIz9lmTxPrr5g1FKNhkwlxi0zjtbQ9hID+3JDO+JEXxJGzKjC82O8Okc"></script>
 <script src="lib/pageprep.js?v=27686e31" integrity="sha384-TBCMA49N+MSLV8zykwZxbaQ+ioAsTdsCfnv3QavZMx/AAc5xMIJL9oRhhCrGAFbH"></script>
 <script src="lib/pagerole.js?v=83cb875e" integrity="sha384-AG9La2OYAB5QpK8WPj9ltwv5NnREu6PrQZsZ848YWQDjKUusF+MK2pJ3+bw09jFu"></script>
-<script src="lib/imagesearch.js?v=2946f4ce" integrity="sha384-vbi3sqbbyCXmO4RxZVzma26K1PXY7NJBrXx8D97267YFyzF+Xa9MFXDU4lQM0mYY"></script>
+<script src="lib/imagesearch.js?v=bc6273bd" integrity="sha384-EUEQVt065DZmGv087b9DiduPffWhq96tVEpUimB994aPQpETjgE9ja1MmAACUquL"></script>
 <script src="lib/ocr.js?v=2b151b4c" integrity="sha384-W6Hn4pJ9CcxkPKj6en6gYLTCv1WdOS742M7pXRUPyBCJYFdsl//QKr7fbJ5Jy56S"></script>
 <script src="lib/textimage.js?v=354eaac1" integrity="sha384-RYO4vGmWWgwAECuhOlY3p5KdT0kWusvAsoPbpQCItHrUw4wqrt+F7uvAx/Rc5MsE"></script>
 <script src="lib/pdfwrite.js?v=4b977425" integrity="sha384-GkbID1hGPJUWgvTs0KxUYnRCkh6HmGolGepz1e37YyjACybFLRWjoIAQe9yFOYcI"></script>
@@ -1221,7 +1222,7 @@
 <script src="lib/pass.js?v=fa8e95c9" integrity="sha384-vdiGIUAtPsWUwbV/9iFB3JwVBPa1iWWzPkpwZOb2O6VlxQpGrlUP9RGGlQaNl17N"></script>
 <script src="lib/pay.js?v=6f94d998" integrity="sha384-1bByT5YqR1yybQrDsj8bxhmARIphzp5gXG9YVdSfl6J9KWFMMAqdEFPO5nmQDcnr"></script>
 <script src="lib/render.js?v=65c3fe76" integrity="sha384-hC2pL0Iz3qZPhOkr8LTwrOtpoDzQ/Yq+qnhe6ySQZDtipsMW1eMqd8M9ZeZmqODr"></script>
-<script src="app.js?v=d3817b41" integrity="sha384-A1yauoV2NY/so7KV4XfmXFh/LYfj3n1eSUFnB52GoZOjN9PNs3ypotIXe6P80/6D"></script>
+<script src="app.js?v=9ecd45f3" integrity="sha384-ZQ6VucaNTroBDRoZVDFh8goAghli3zDTzxrKjGS60P3P0njJ1JMpERJObx1vV37Q"></script>
 <script type="module" src="lib/boot.mjs?v=8b98ed8f" integrity="sha384-/dJ3R23NfbIp89TMbKmNgtoFjuy8b5Kji1HBXxf7q7kKtAM2wTj9DeXCivsebPvb"></script>
 </body>
 </html>

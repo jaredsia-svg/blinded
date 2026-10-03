@@ -322,9 +322,10 @@
 
   // The same for the second check, which the reviewer starts from the
   // same bar and waits for in the same place.
-  function saidChecked(added) {
+  function saidChecked(added, images = 0) {
     state.footRan = 'check';
     state.footAdded = added;
+    state.footImages = images;
     state.footStopped = Boolean(state.sweepStopped);
     renderFoot();
   }
@@ -346,7 +347,7 @@
     ask.type = 'button';
     ask.className = 'checklink';
     ask.textContent = 'Proceed?';
-    ask.title = 'Start the second check';
+    ask.title = 'Start the image & text-in-image search';
     ask.addEventListener('click', () => { runSweep(); });
     return ask;
   }
@@ -389,8 +390,10 @@
       : state.pages.reduce((sum, page) => sum
         + page.hits.filter(hit => !page.dismissed.has(hit.finding.id)
           && findingAnswered(hit.finding)).length
+        // Not the picked images: the image & text-in-image search finds
+        // those, and its own line answers for them.
         + liveImageHits(page).filter(mark => !page.dismissed.has(mark.id)
-          && imageHitAnswered(mark) && !mark.bySweep).length
+          && imageHitAnswered(mark) && !mark.bySweep && !mark.templateId).length
         + page.manual.length, 0);
     said.textContent = '';
     const line = (colour, text) => {
@@ -412,13 +415,13 @@
 
     if (state.footRan) {
       line('green', found
-        ? 'Initial search (text + images) complete.'
+        ? 'Text search complete.'
           + ' Review marks outlined in green in left panel.'
-        : 'Initial search (text + images) complete. Nothing found to redact.');
+        : 'Text search complete. Nothing found to redact.');
     }
     if (check) {
       const how = state.footStopped
-        ? 'Second check stopped. ' : 'Second check complete. ';
+        ? 'Image & text-in-image search stopped. ' : 'Image & text-in-image search complete. ';
       // Marks are not the only thing to come back with. A word the check
       // could not place leaves a question under it in the panel, and a run
       // that found nothing to mark but left three of those has not found
@@ -427,6 +430,8 @@
       const toReview = sweepOffers().length;
       const words = line('amber', state.footAdded
         ? how + 'Review marks outlined in amber in left panel.'
+        : state.footImages
+          ? how + 'Review the images found in left panel.'
         : toReview
           ? how + 'Review left panel for results.'
           : how + 'Nothing further found.');
@@ -445,8 +450,8 @@
       // words are pictures - and the question at the end of it opens the same
       // dialog the search offered when it finished, so there is one place
       // where the cost is stated and one pair of answers to give.
-      line('amber', 'Some words appear as images and a second'
-        + ' check is recommended. ').append(proceedLink());
+      line('amber', 'Some words appear as images, and searching for text'
+        + ' in images is recommended. ').append(proceedLink());
     }
 
     // The bars are gone, and an empty row where they were takes the width the
@@ -2676,7 +2681,7 @@
     button.disabled = state.sweepRunning || state.redacting || picking
       || (!state.applied && marks === 0);
     if (state.sweepRunning) {
-      find.title = button.title = 'The second check is running  - let it finish, '
+      find.title = button.title = 'The image & text-in-image search is running  - let it finish, '
         + 'or stop it at the foot of the page';
     } else if (state.redacting) {
       find.title = button.title =
@@ -2818,15 +2823,10 @@
     busy(true, 'Searching…', { inFoot: true });
     refreshApply();
 
-    // One bar across both passes.
-    //
-    // Reading the pages and searching them for a picked image are separate
-    // jobs — one reads letters, the other correlates pixels, and neither can
-    // use the other's answer — but they are two passes over the same
-    // document, one after the other. A reviewer watching a bar does not care
-    // which is running; two bars filling in sequence just looks like the first
-    // one lied. So the work is counted once, here, in pages: those left to
-    // read, plus those to search if anything is going to be searched.
+    // The text search: reading the pages, and everything that reads again.
+    // Picked images are not looked for here; they are matched with the words
+    // drawn as pictures in the image & text-in-image search that follows
+    // (sweepNow), one sweep over the pages for both.
     const pages = state.pages.length;
     const unread = state.pages.filter(p => !p.ocrItems).length;
     // The text leg covers both halves of the text work, because from the
@@ -2835,17 +2835,11 @@
     // and showing only "Searching images" for a run that was plainly handling
     // a new word as well reads as the tool ignoring half of what was asked.
     const willRead = ocrPending() ? (unread || pages) : 0;
-    const willSearch = pendingTemplates().length ? pages : 0;
-    // One bar for the whole first phase, text and images both: each step
-    // names itself, and the bar fills once across them (stepLeg). The text
-    // steps' shares are what each took across the benchmark, reading the
-    // pages about three quarters of the text; the images' share is the
-    // estimate's own split between the two.
-    const plan = searchEstimate();
-    const imageShare = willSearch
-      ? Math.max(10, 100 * plan.match / Math.max(1, plan.seconds - plan.match)) : 0;
+    // One bar for the text search: each step names itself, and the bar fills
+    // once across them (stepLeg). The shares are what each took across the
+    // benchmark, reading the pages about three quarters of it.
     legs([{ key: 'read', phase: '1', total: 100, percent: true,
-      label: !willRead ? 'Searching images' : unread ? 'Searching text' : 'Matching words' }]);
+      label: unread ? 'Searching text' : 'Matching words' }]);
     // Pages read before a word was typed get the closer look again for it.
     const behind = willRead ? closerBehind().pages.filter(page => page.ocrItems).length : 0;
     const textAt = stepLeg('read', [
@@ -2856,7 +2850,6 @@
         { id: 'skipped', label: 'Reading skipped words', share: 11 },
         { id: 'finish', label: 'Finishing up', share: 2 },
       ] : []),
-      ...(willSearch ? [{ id: 'images', label: 'Searching images', share: imageShare }] : []),
     ]);
     // And a frame to actually draw it in. Everything below this line runs in
     // one go until it hits its own awaits, and the overlay that was just made
@@ -2926,9 +2919,9 @@
       // of the run, however the run ends.
     }
 
-    // A paused run stops here rather than going on to the image search, and
-    // does not claim the document is redacted: the marks found so far are
-    // shown, still red, and Redact picks up where it left off.
+    // A paused run stops here and does not claim the document is searched:
+    // the marks found so far are shown, and Search picks up where it left
+    // off.
     if (state.paused) {
       state.paused = false;
       state.redacting = false;
@@ -2939,16 +2932,6 @@
       return;
     }
 
-    const entries = pendingTemplates();
-    try {
-      if (entries.length) await runSearches(entries, (done, total) => textAt('images', done, total));
-    } catch (error) {
-      state.redacting = false;
-      freeRun();
-      busy(false);
-      alert('The image search could not finish: ' + (error && error.message ? error.message : error));
-      return;
-    }
     // Found, proposed, and drawn — but not covered. Covering is the next
     // press, so that the reviewer sees what is about to disappear before it
     // does, which is the whole point of reviewing.
@@ -3023,10 +3006,26 @@
     // first, or it would be looking at its own black boxes.
     if (state.applied) markPending();
     await runSearch();
-    // The second phase runs straight on, unless it was unticked or the first
-    // was paused part way: a search that has not finished has nothing to be
-    // a second check on.
-    if (plan.check && state.searched && !state.paused && !state.redacting) runSweep();
+    // The image & text-in-image search runs straight on: always for picked
+    // images, which nothing else looks for, and for the words drawn as
+    // pictures when that was left ticked. Not after a text search paused
+    // part way, which has not finished.
+    const images = pendingTemplates().length > 0;
+    if ((plan.check || images) && state.searched && !state.paused && !state.redacting) {
+      runSweep(plan.check);
+    }
+  }
+
+  // Both phases, as the Search button runs them but without the question,
+  // and waited for to the end: the text search, then the image &
+  // text-in-image search for any picked images (and the words drawn as
+  // pictures, when asked for).
+  async function searchBoth(withText = false) {
+    await runSearch();
+    if ((withText || pendingTemplates().length) && state.searched
+        && !state.paused && !state.redacting) {
+      await runSweep(withText);
+    }
   }
 
   async function applyButton() {
@@ -4507,7 +4506,14 @@
       // lowers them itself once both passes are done.
       if (!state.redacting) busy(false);
     }
+    placeImageResults(entries, results);
+  }
 
+  // What a search for picked images (and, with the reader unavailable, for
+  // typed words by their shape) found, put on the pages. Its own step so the
+  // image & text-in-image search can run these entries in the same sweep as
+  // the words it draws, and place each kind its own way.
+  function placeImageResults(entries, results) {
     // Logos: one entry each, so the results land directly.
     for (const entry of entries.filter(e => e.logo)) {
       const found = results.get(entry.key);
@@ -11189,7 +11195,7 @@
   // for it rather than race it.
   let sweepTask = null;
 
-  async function runSweep() {
+  async function runSweep(withText = true) {
     if (state.sweepRunning || sweepTask) return 0;
     if (state.redacting) return 0;
     // Any wait for the faces happens inside the task rather than before it,
@@ -11197,8 +11203,8 @@
     // Started in this same moment when the faces are already in, which after
     // the page's own preload they nearly always are.
     sweepTask = (!TextImage || !TextImage.ready || (TextImage.settled && TextImage.settled()))
-      ? sweepNow()
-      : (async () => { await TextImage.ready(); return sweepNow(); })();
+      ? sweepNow(withText)
+      : (async () => { await TextImage.ready(); return sweepNow(withText); })();
     try { return await sweepTask; } finally { sweepTask = null; }
   }
 
@@ -11281,17 +11287,22 @@
     }
   }
 
-  async function sweepNow() {
-    const entries = sweepTemplates();
-    if (!entries.length) {
+  // The image & text-in-image search: picked images, and the typed words
+  // drawn as pictures, in one sweep over the pages -- each page decoded and
+  // prepared once for both. The words only when asked for (withText): the
+  // images always, since nothing else looks for them.
+  async function sweepNow(withText = true) {
+    const entries = withText ? sweepTemplates() : [];
+    const images = pendingTemplates();
+    if (!entries.length && !images.length) {
       // Everything the reading already settled — nothing left to correlate.
       // The closer reads still have their pages: a word found in the text
       // can be on the same page again as a picture.
       state.sweepRunning = true;
       renderSweep();
       refreshApply();
-      try { await runCheckExtras([]); } finally { state.sweepRunning = false; }
-      state.sweptTerms = state.terms.slice();
+      try { if (withText) await runCheckExtras([]); } finally { state.sweepRunning = false; }
+      if (withText) state.sweptTerms = state.terms.slice();
       state.sweepAdded = 0;
       state.sweepRefused = 0;
       state.sweepRefusedAt = [];
@@ -11312,7 +11323,9 @@
     for (const entry of entries) {
       if (entry.pageIndexes) for (const i of entry.pageIndexes) pageIndexSet.add(i);
     }
-    const pages = state.pages.filter(p => pageIndexSet.has(p.index));
+    // A picked image is looked for on every page.
+    const pages = images.length ? state.pages.slice()
+      : state.pages.filter(p => pageIndexSet.has(p.index));
 
     // No overlay. Every other long pass in this tool blocks the document
     // because nothing useful can be done while it runs; this one is a second
@@ -11347,7 +11360,7 @@
     // while a check runs).
     offerRunControl({ id: 'sweepstop', label: 'Pause',
       onPress: stopTheCheck });
-    checkSteps();
+    checkSteps(entries.length > 0, images.length > 0);
     sweepProgress(0, pages.length);
     renderSweep();
     // The Search button greys out for as long as this runs, so it has to be
@@ -11357,23 +11370,37 @@
 
     let results;
     try {
+      // The words carry the longer shortlist they were measured with; the
+      // picked images keep the default, which raising was measured to make
+      // worse.
+      const budget = { maxCandidates: SWEEP_CANDIDATES, perScale: SWEEP_PER_SCALE,
+        verifyLimit: SWEEP_VERIFY };
       // The local check (window.Blinded.sweepLocal, for measuring): no pass
-      // over every page, only the seeded rounds below, at the places the
-      // reading left in doubt.
-      results = window.Blinded && window.Blinded.sweepLocal ? new Map()
-        : await ImageSearch.searchAllParallel(pages, entries,
-        { stop: () => state.sweepStopped,
-          maxCandidates: SWEEP_CANDIDATES,
-          perScale: SWEEP_PER_SCALE,
-          verifyLimit: SWEEP_VERIFY },
-        done => sweepProgress(done, pages.length));
+      // over every page for the words, only the seeded rounds below, at the
+      // places the reading left in doubt.
+      const local = Boolean(window.Blinded && window.Blinded.sweepLocal);
+      const swept = (local ? [] : entries.map(entry => ({ ...entry, budget }))).concat(images);
+      results = swept.length
+        ? await ImageSearch.searchAllParallel(pages, swept,
+          { stop: () => state.sweepStopped },
+          done => sweepProgress(done, pages.length))
+        : new Map();
     } catch (error) {
       state.sweepRunning = false;
       freeRun();
       renderSweep();
-      alert('The thorough check could not finish: '
+      alert('The image & text-in-image search could not finish: '
         + (error && error.message ? error.message : error));
       return 0;
+    }
+    // The picked images, placed as they always were. A sweep stopped part
+    // way has not looked for them everywhere, so they still ask to be
+    // searched for.
+    if (images.length) {
+      placeImageResults(images, results);
+      if (typeof results.stoppedAfter === 'number') {
+        for (const entry of images) if (entry.logo) entry.logo.searched = false;
+      }
     }
 
     const reached = typeof results.stoppedAfter === 'number'
@@ -11629,7 +11656,7 @@
     // its first page all that while, with the check's marks waiting behind
     // them. What they read is a reading, and green like any other.
     const extrasFrom = performance.now();
-    if (!state.sweepStopped) {
+    if (!state.sweepStopped && withText) {
       await runCheckExtras(pages,
         (step, done, of) => sweepProgress(pages.length, pages.length, step, done, of));
     }
@@ -11639,7 +11666,11 @@
 
     state.sweepRunning = false;
     freeRun();
-    if (!state.sweepStopped) learnPace((performance.now() - startedAt - extrasTook) / 1000, quoted);
+    // Only from a sweep of words alone: picked images in the same sweep are
+    // estimated apart (searchEstimate), and would make the words look slower.
+    if (!state.sweepStopped && !images.length && entries.length) {
+      learnPace((performance.now() - startedAt - extrasTook) / 1000, quoted);
+    }
     state.sweepBest = state.sweepBest || {};
     for (const term of checking) delete state.sweepBest[term];
     recordBest(entries, results);
@@ -11648,7 +11679,7 @@
     // does not get to claim it has: the offer stands, and the note says how
     // far it reached.
     // Words checked by an earlier run still count as checked.
-    state.sweptTerms = (state.sweepStopped ? sweptBefore : asked)
+    state.sweptTerms = (state.sweepStopped || !withText ? sweptBefore : asked)
       .filter(t => state.terms.includes(t));
     state.sweepAdded = added;
     // What the reader threw out, and where each one was.
@@ -11660,7 +11691,7 @@
     markDuplicates();
     renderTermCounts();
     renderSweep();
-    saidChecked(added);
+    saidChecked(added, images.reduce((n, entry) => n + (entry.logo ? entry.logo.matches || 0 : 0), 0));
     redrawAll();
     refreshApply();
     return added;
@@ -11674,11 +11705,13 @@
   // fills once across them (stepLeg), each step its share from what it took
   // across the benchmark -- the sweep about seventy seconds a face.
   let checkAt = null;
-  function checkSteps() {
-    const asked = checkExtras();
+  function checkSteps(words = true, images = false) {
+    const asked = words ? checkExtras() : {};
     checkAt = stepLeg('sweep', [
-      { id: 'sweep', label: 'Second check', share: 70 * sweepFaces().length, pages: true },
-      { id: 'seeded', label: 'Checking likely spots', share: 9, pages: true },
+      { id: 'sweep', label: words && images ? 'Searching images and text in images'
+          : images ? 'Searching images' : 'Searching text in images',
+        share: (words ? 70 * sweepFaces().length : 0) + (images ? 20 : 0), pages: true },
+      ...(words ? [{ id: 'seeded', label: 'Checking likely spots', share: 9, pages: true }] : []),
       ...(asked.vertical || asked.upsideDown
         ? [{ id: 'turned', label: 'Reading rotated text', share: 6, pages: true }] : []),
       ...(asked.slanted ? [{ id: 'slanted', label: 'Reading slanted text', share: 10, pages: true }] : []),
@@ -11692,7 +11725,7 @@
     // Drawn once: redrawing it on every page would restart its transition
     // and make a filling bar stutter.
     if (!host.querySelector('[data-leg="sweep"]')) {
-      legs([{ key: 'sweep', phase: '2', label: 'Second check', total: 100, percent: true }], host);
+      legs([{ key: 'sweep', phase: '2', label: 'Image & text-in-image search', total: 100, percent: true }], host);
     }
     if (!checkAt) checkSteps();
     if (step) checkAt(step, stepDone, stepOf);
@@ -12054,7 +12087,9 @@
       const extras = {};
       for (const [group, keys] of Object.entries(EXTRA_GROUPS)) {
         const tick = el('planx-' + group);
-        for (const key of keys) extras[key] = !tick || tick.checked;
+        // Part of the second check: without it they are not asked for, even
+        // if left ticked under a greyed-out row.
+        for (const key of keys) extras[key] = el('plan2').checked && (!tick || tick.checked);
       }
       state.checkExtras = extras;
       answerSearchPlan({ check: el('plan2').checked, extras });
@@ -12618,7 +12653,7 @@
       // Reading already settled every typed word — nothing for shape to do.
       if (!work.pages || !work.terms) {
         setSidebarNote(note,
-          'Nothing left for a second check – reading already covered every typed word.');
+          'No text left to search for in images – reading already covered every typed word.');
         return;
       }
       // Nothing here. The foot carries the offer, the wait, and what is left
@@ -13444,7 +13479,7 @@
     updateLivePages, fitCanvas, releaseCanvas, isLive, displayWidthFor, NEAR_PAGES,
     setPane, placeToolbar, onPhone, hasDocument, goAway, comeBack,
     scrollerFor, setTool, marking,
-    runSearch, applyRedaction: runSearch, coverMarks, uncoverMarks, applyButton,
+    runSearch, searchBoth, applyRedaction: runSearch, coverMarks, uncoverMarks, applyButton,
     activeBoxes,
     renderSheet, setOrder, moveTo, keepOnlyPicked, dropPicked, openSections,
     arrowThroughSheet, pageAfterArrow, sheetColumns,

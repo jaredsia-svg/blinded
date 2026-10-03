@@ -223,7 +223,7 @@ export const pages = [
           + 'a name, an account number or an address, and the words in the '
           + 'picture are read by text recognition in your browser, so each '
           + 'occurrence is found and proposed for you to accept. Where the '
-          + 'reading fails, a second check looks for the word by its shape.',
+          + 'reading fails, the image & text-in-image search looks for the word by its shape.',
           'Draw a box round a face, a logo or a signature to cover it. If the '
           + 'same logo or badge appears more than once in the picture, pick it '
           + 'once and every other copy is found, at any size. Turn on the '
@@ -548,10 +548,11 @@ export const pages = [
           + 'That is the difference between this and a black box drawn in a '
           + 'PDF editor.' },
       { q: 'How long does a 200-page CIM take?',
-        a: 'The first pass over a deck of that size is a few minutes, and it '
+        a: 'The text search over a deck of that size is a few minutes, and it '
           + 'reports its progress along the foot while you read the document. '
-          + 'The optional second check, which looks for words that exist only '
-          + 'as pictures, states the wait before it starts so you can decide.' },
+          + 'The image & text-in-image search, which looks for picked images and '
+          + 'for words that exist only as pictures, follows it, and the whole '
+          + 'wait is stated before it starts so you can decide.' },
     ],
   },
 
@@ -1549,8 +1550,8 @@ export const pages = [
           + 'text becomes selectable, and then redact. With iLovePDF that is a '
           + 'separate tool; with Smallpdf it is part of the paid Pro plan; with '
           + 'PDFgear it is a free part of the desktop app. In Blinded the pages '
-          + 'are read as part of the search, and a second check looks for words '
-          + 'the reading missed by their shape.'] },
+          + 'are read as part of the search, and the image & text-in-image '
+          + 'search looks for words the reading missed by their shape.'] },
       { h: 'Which one to use',
         p: ['If you want a free desktop app and are happy to box each thing '
           + 'yourself, PDFgear keeps the file on your computer and costs '
@@ -1647,7 +1648,7 @@ export const pages = [
       { h: 'The text on the page as well',
         p: ['Type the company name, the signatory and the reference numbers. '
           + 'On a scan they are read by text recognition inside your browser, '
-          + 'and a second check looks again at anything written in lettering '
+          + 'and the image & text-in-image search looks again at anything written in lettering '
           + 'too small or unusual to read. Names, stamps and letterheads are '
           + 'all removed in one pass.'] },
       { h: 'Signatures, fairly',
@@ -1809,9 +1810,10 @@ export const pages = [
           + 'a word. Then add the specific names and references that only you '
           + 'know to look for.',
           'A word the reading got wrong is not lost. Where recognition '
-          + 'misreads a name, a second check looks for it by its shape on the '
-          + 'page, and a common misreading, such as an ampersand read as an a, '
-          + 'is used to point that check at the right place.'] },
+          + 'misreads a name, the image & text-in-image search looks for it by '
+          + 'its shape on the page, and a common misreading, such as an '
+          + 'ampersand read as an a, is used to point that search at the right '
+          + 'place.'] },
       { h: 'A worked example',
         p: ['Take a forty-page bundle of scanned correspondence to be released '
           + 'with personal details removed. Opened here, the pages are read in '

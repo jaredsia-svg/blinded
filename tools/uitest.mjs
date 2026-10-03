@@ -318,8 +318,10 @@ async function clickSearch(page, { check = false, extras = false } = {}) {
 // now and leaves the page alone — which means the dialog is already hidden
 // while the search is still going, and every wait written against it returns
 // at once and tests the document mid-search.
-const settled = () => `!window.Blinded || (document.getElementById('busy').hidden
-  && !window.Blinded.state.redacting && !window.Blinded.state.sweepRunning)`;
+// A function, not a string: polled in a page whose security policy refuses
+// to evaluate strings, a string only worked when the first check passed.
+const settled = () => () => !window.Blinded || (document.getElementById('busy').hidden
+  && !window.Blinded.state.redacting && !window.Blinded.state.sweepRunning);
 
 async function redact(page) {
   // The foot's buttons wait while an image is being picked, so a reviewer
@@ -3839,7 +3841,7 @@ try {
       t.sens = 0.75;
       t.chosenBar = false;
       t.searched = false;
-      await B.runSearch();
+      await B.searchBoth();
       const marks = () => B.state.pages.reduce((n, p) =>
         n + p.imageHits.filter(m => m.templateId === t.id).length, 0);
       const before = { sens: B.sensFor(t), marks: marks(), searched: t.searched };
@@ -4454,11 +4456,14 @@ try {
       const IS = window.BlindedImageSearch;
       const real = IS.searchAllParallel;
       const seen = [];
+      // Each entry carries its own budget, since words and picked images are
+      // searched in the same sweep; one with none takes the default.
       IS.searchAllParallel = (pages, entries, opts, report) => {
-        seen.push({ words: entries.every(e => !e.logo),
-          maxCandidates: opts && opts.maxCandidates,
-          perScale: opts && opts.perScale,
-          verifyLimit: opts && opts.verifyLimit });
+        for (const e of entries) {
+          const b = e.budget || {};
+          seen.push({ words: !e.logo,
+            maxCandidates: b.maxCandidates, perScale: b.perScale, verifyLimit: b.verifyLimit });
+        }
         return real(pages, entries, opts, report);
       };
       try {
@@ -4476,7 +4481,7 @@ try {
     });
     const check1 = budgets.find(b => b.words);
     const picked = budgets.find(b => !b.words);
-    check('the check works from a longer shortlist than the default',
+    check('words drawn as pictures are searched with a longer shortlist than the default',
       Boolean(check1) && check1.maxCandidates === 400 && check1.perScale === 24
       && check1.verifyLimit === 64, JSON.stringify(budgets));
     check('and a picked image keeps the default one',
@@ -4796,13 +4801,14 @@ try {
         if (rows.length > 1) seen.deep++;
         for (const row of rows) {
           const name = row.querySelector('.leg-label span').textContent;
-          if (name !== 'Second check') seen.later.add(name);
+          // The sweep's own step, named by what it is looking for.
+          if (!/^Searching (images|text in images|images and text in images)$/.test(name)) seen.later.add(name);
         }
         const foot = document.getElementById('runfoot');
         const text = document.getElementById('runfoot-text').textContent;
         // The check's own line from an earlier run is not left up while a
         // new one works; the search's line is, and belongs there.
-        if (!foot.hidden && rows.length && /Second check (complete|stopped)/.test(text)) {
+        if (!foot.hidden && rows.length && /Image & text-in-image search (complete|stopped)/.test(text)) {
           seen.stale++;
         }
         if (/Checking page|carry on reviewing/.test(document.body.textContent)) {
@@ -4839,7 +4845,7 @@ try {
       run.stale === 0, JSON.stringify(run));
     check('and the foot says what the check itself did when it finishes',
       run.afterShown && run.runGone
-      && /Second check (complete|stopped)/.test(run.after),
+      && /Image & text-in-image search (complete|stopped)/.test(run.after),
       JSON.stringify(run));
     // The later passes get a bar. One bar for the whole run sat full while
     // the check was plainly still working, which is the bar lying. One bar,
@@ -5826,7 +5832,7 @@ try {
       // note would be right to stay quiet.
       template.sens = 0.45;
       template.searched = false;
-      await B.runSearch();
+      await B.searchBoth();
       const scores = B.state.pages
         .flatMap(p => p.imageHits.filter(m => m.templateId === template.id))
         .map(m => m.score).sort((a, b) => b - a);
@@ -5840,7 +5846,7 @@ try {
       for (const p of B.state.pages) {
         p.imageHits = p.imageHits.filter(m => m.templateId !== template.id);
       }
-      await B.runSearch();
+      await B.searchBoth();
       const pips = [...document.querySelectorAll('#templates .barpip')]
         .map(pip => ({ now: pip.classList.contains('now'),
                        bar: Number((pip.querySelector('b') || {}).textContent),
@@ -5885,7 +5891,7 @@ try {
       for (const p of B.state.pages) {
         p.imageHits = p.imageHits.filter(m => m.templateId !== template.id);
       }
-      await B.runSearch();
+      await B.searchBoth();
       // Counted the way the pill beside the slider counts, which is the
       // number the circle has to agree with: two proposals in one place are
       // one mark, and a dismissed one is none.
@@ -8209,7 +8215,7 @@ try {
     check('the offer is a line in the foot, not a note in the panel',
       offered.inFoot === true && offered.note === '', JSON.stringify(offered));
     check('the line says what is being offered and why',
-      /appear as images and a second check is recommended/i.test(offered.button),
+      /appear as images, and searching for text in images is recommended/i.test(offered.button),
       offered.button);
     // The question is the control: an outlined button among Search, Redact
     // and Export read as a fourth thing to press in a row that already says
@@ -8473,7 +8479,7 @@ try {
     });
     check('the search button is greyed out while the check runs',
       raced.during.disabled === true, JSON.stringify(raced));
-    check('and says why', /second check is running/i.test(raced.during.title),
+    check('and says why', /image & text-in-image search is running/i.test(raced.during.title),
       raced.during.title);
     // It used to say so in the panel, beside a yellow box holding the bar and
     // the stop button. Both live at the foot of the page now, with the button
@@ -8590,7 +8596,7 @@ try {
     check('and every mark it adds is flagged as its own',
       swept.marks >= 1, JSON.stringify(swept));
     check('afterwards the foot says the check found something',
-      /Second check complete\. Review marks outlined in amber/
+      /Image & text-in-image search complete\. Review marks outlined in amber/
         .test(swept.note), JSON.stringify(swept.note));
 
     // One report, two lines, one per run, each carrying the colour its marks
@@ -8635,8 +8641,8 @@ try {
     });
     check('both runs are reported, one line each',
       refused.lines.length === 2
-      && /^Initial search \(text \+ images\) complete/.test(refused.lines[0])
-      && /^Second check complete/.test(refused.lines[1]),
+      && /^Text search complete/.test(refused.lines[0])
+      && /^Image & text-in-image search complete/.test(refused.lines[1]),
       JSON.stringify(refused));
     check('each line wearing the colour its marks wear on the page',
       /green/.test(refused.dots[0]) && /amber/.test(refused.dots[1]),
@@ -10663,11 +10669,12 @@ try {
     });
     check('Search puts up the plan before anything runs',
       plan.searched === false && plan.rows.length === 2, JSON.stringify(plan));
-    check('the first phase is the text and image inputs',
-      /Text and image inputs/.test(plan.rows[0].text) && !/minute/.test(plan.rows[0].text),
+    check('the first phase is the text search',
+      /^1\s*Text search$/.test(plan.rows[0].text) && !/minute/.test(plan.rows[0].text),
       JSON.stringify(plan.rows));
-    check('the second is the check for text that appears as images',
-      /second check for text that appears as images \(recommended\)/i.test(plan.rows[1].text)
+    check('the second is the image & text-in-image search, with text in images recommended',
+      /Image & text-in-image search/.test(plan.rows[1].text)
+        && /Include text in images\? \(recommended\)/.test(plan.rows[1].text)
         && !/minute/.test(plan.rows[1].text), JSON.stringify(plan.rows));
     check('one estimated time for the whole search, above the button',
       /minute/.test(plan.totalShown), JSON.stringify(plan.totalShown));
@@ -10722,7 +10729,7 @@ try {
     check('the second phase starts on its own once the first is done',
       during.running === true, JSON.stringify(during));
     check('with the search\'s green line still up while it runs',
-      /Initial search \(text \+ images\) complete/.test(during.line), JSON.stringify(during));
+      /Text search complete/.test(during.line), JSON.stringify(during));
     check('and the check\'s bar underneath it',
       during.barShown && during.below, JSON.stringify(during));
     await page.waitForFunction(() => !window.Blinded.state.sweepRunning,
@@ -10730,7 +10737,7 @@ try {
     const after = await page.evaluate(() =>
       document.getElementById('runfoot-text').textContent);
     check('and both lines are there once it has finished',
-      /Initial search/.test(after) && /Second check (complete|stopped)/.test(after), after);
+      /Text search/.test(after) && /Image & text-in-image search (complete|stopped)/.test(after), after);
 
     // Unticked, the search runs alone.
     await setTerms(page, ['Zzyzx', 'Wvxqp']);
@@ -10956,31 +10963,32 @@ try {
         if (nowUp && !up) spells++;
         if (nowUp) seen++;
         up = nowUp;
-        const row = document.querySelector('[data-leg="read"]');
+        // The picked images are searched in the second phase, on its bar.
+        const row = document.querySelector('[data-leg="sweep"]');
         const name = row && row.querySelector('.leg-label > span').textContent;
-        const moving = name === 'Searching images';
-        if (moving) { if (nowUp) searchingSeen++; else searchingHidden++; }
+        const moving = /^Searching images/.test(name || '');
+        if (moving) { if (row.offsetParent) searchingSeen++; else searchingHidden++; }
         if (!document.getElementById('busy').hidden) dialog++;
       };
       const observer = new MutationObserver(look);
       observer.observe(document.body, { attributes: true, subtree: true });
       const poll = setInterval(look, 30);
       const done = setInterval(() => {
-        if (!window.Blinded.state.searched) return;
+        if (!window.Blinded.state.searched || window.Blinded.state.sweepRunning) return;
         clearInterval(poll); clearInterval(done); observer.disconnect();
         resolve({ seen, spells, searchingSeen, searchingHidden, dialog });
       }, 30);
     }));
     await clickSearch(page);
-    await page.waitForFunction(() => window.Blinded.state.searched === true,
-      undefined, { timeout: 240000 });
+    await page.waitForFunction(() => window.Blinded.state.searched === true
+      && !window.Blinded.state.sweepRunning, undefined, { timeout: 240000 });
     const overlay = await watched;
     check('the foot of the page says a search is running',
       overlay.seen > 0, JSON.stringify(overlay));
     // Both passes ran, so a hole between them would show here.
     check('and does not blink out between reading and searching',
       overlay.spells === 1, JSON.stringify(overlay));
-    check('it is still there while the image search is running',
+    check('the images are searched on the second phase\'s bar, which is on screen',
       overlay.searchingSeen > 0 && overlay.searchingHidden === 0,
       JSON.stringify(overlay));
     // And the page was never covered, which is the point of moving it: a
@@ -12036,20 +12044,29 @@ try {
     check('as does Escape',
       await fresh.evaluate(() => !document.body.classList.contains('picking')));
 
-    // The dialog's two optional choices are smaller than the check they are under.
+    // The second phase's choices are smaller than the phase they are under,
+    // and alike: text in images is one of them, with the optional two.
     const sizes = await fresh.evaluate(() => {
       const box = document.getElementById('searchplan');
       box.hidden = false;
       const size = e => e.getBoundingClientRect().width;
       const font = e => parseFloat(getComputedStyle(e).fontSize);
-      const out = { check: size(document.getElementById('plan2')), extra: size(document.getElementById('planx-turned')),
-        checkFont: font(document.querySelector('.planrow-more .plantext')),
-        extraFont: font(document.querySelector('.planextralist label')) };
+      const out = { phase: size(document.getElementById('plan1')),
+        text: size(document.getElementById('plan2')), extra: size(document.getElementById('planx-turned')),
+        phaseFont: font(document.querySelector('.planrow-more .plantext')),
+        extraFont: font(document.querySelector('.planextralist label')),
+        named: document.querySelector('.planrow-more .plantext').textContent.trim(),
+        first: document.querySelector('.planextralist label').textContent.trim() };
       box.hidden = true;
       return out;
     });
-    check('the optional choices are in smaller type, with smaller ticks, than the second check',
-      sizes.extra < sizes.check && sizes.extraFont < sizes.checkFont, JSON.stringify(sizes));
+    check('the second phase is the image & text-in-image search',
+      sizes.named === 'Image & text-in-image search', sizes.named);
+    check('and text in images is its first, recommended choice',
+      sizes.first === 'Include text in images? (recommended)', sizes.first);
+    check('its choices are in smaller type, with smaller ticks, than the phases',
+      sizes.extra < sizes.phase && sizes.text === sizes.extra && sizes.extraFont < sizes.phaseFont,
+      JSON.stringify(sizes));
     await fresh.close();
   });
 
@@ -12943,6 +12960,11 @@ try {
     let finished = true;
     await old.waitForFunction(() => window.Blinded.state.searched === true,
       undefined, { timeout: 120000 }).catch(() => { finished = false; });
+    // The word's shape is looked for in the image & text-in-image search,
+    // which follows the text search.
+    await old.waitForFunction(() => !window.Blinded.state.sweepRunning && !window.Blinded.state.redacting,
+      undefined, { timeout: 120000 }).catch(() => { finished = false; });
+    await old.waitForTimeout(300);
     const after = await old.evaluate(() => ({
       failed: window.Blinded.state.ocrFailed === true,
       counts: document.getElementById('termcounts').textContent.replace(/\s+/g, ' ').trim(),

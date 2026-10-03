@@ -22,7 +22,7 @@ pages, this list and the sitemap together.
 
 ## [Redact an image, photo or screenshot](https://blinded.dev/redact-image-photo-screenshot/)
 
-`/redact-image-photo-screenshot/` · 725 words · 4 questions
+`/redact-image-photo-screenshot/` · 727 words · 4 questions
 
 - redact image
 - redact photo
@@ -57,7 +57,7 @@ pages, this list and the sitemap together.
 
 ## [Redact a CIM or teaser without uploading it](https://blinded.dev/redact-cim/)
 
-`/redact-cim/` · 794 words · 4 questions
+`/redact-cim/` · 804 words · 4 questions
 
 - redact CIM
 - redact CIM without uploading
@@ -183,7 +183,7 @@ pages, this list and the sitemap together.
 
 ## [iLovePDF vs Smallpdf vs PDFgear vs Blinded for redaction](https://blinded.dev/ilovepdf-smallpdf-pdfgear-redaction/)
 
-`/ilovepdf-smallpdf-pdfgear-redaction/` · 794 words · 4 questions
+`/ilovepdf-smallpdf-pdfgear-redaction/` · 796 words · 4 questions
 
 - iLovePDF redact
 - Smallpdf redact
@@ -195,7 +195,7 @@ pages, this list and the sitemap together.
 
 ## [Remove a letterhead or stamp from every page](https://blinded.dev/remove-letterhead-stamp-signature/)
 
-`/remove-letterhead-stamp-signature/` · 614 words · 3 questions
+`/remove-letterhead-stamp-signature/` · 616 words · 3 questions
 
 - remove letterhead from PDF
 - redact company stamp in PDF
@@ -216,7 +216,7 @@ pages, this list and the sitemap together.
 
 ## [Redact scanned documents automatically](https://blinded.dev/redact-scanned-documents-automatically/)
 
-`/redact-scanned-documents-automatically/` · 625 words · 3 questions
+`/redact-scanned-documents-automatically/` · 627 words · 3 questions
 
 - redact scanned documents
 - redact scanned PDF automatically
