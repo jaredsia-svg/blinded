@@ -111,7 +111,7 @@
   "duration": "PT59S"
 }
 </script>
-<link rel="stylesheet" href="app.css?v=177249e6" integrity="sha384-6wxa52imTTorAV12DRRlPJsbCJIWGFbi+WpNUN7Kc8H13qmDNvpCD3/jLRdzn78i">
+<link rel="stylesheet" href="app.css?v=05d2112b" integrity="sha384-lSPtqbjyOtBFUC6MCZRsuAgoJ/QtwtyeaX7XS4k48fJ2gsTiWQ6svM5U2lpmmRpv">
 </head>
 <body>
 
@@ -1162,19 +1162,21 @@
          saying what it costs. They used to be three paragraphs of different
          lengths wrapping around their own checkboxes. -->
     <div class="nameopts">
+      <!-- First and on: keeping the words that were not redacted is what
+           most people expect of a redacted file, and it now costs a moment. -->
+      <label class="nameopt" id="searchablerow">
+        <input type="checkbox" id="searchable" checked>
+        <span class="nameopt-text">
+          <span class="nameopt-name">Searchable text <span class="namerec">(Recommended)</span></span>
+          <span class="namefaint">Keeps the text that was not redacted, so it can
+            still be searched and copied.</span>
+        </span>
+      </label>
       <label class="nameopt" id="losslessrow">
         <input type="checkbox" id="lossless">
         <span class="nameopt-text">
           <span class="nameopt-name">Lossless output</span>
           <span class="namefaint">Larger file, no compression artefacts.</span>
-        </span>
-      </label>
-      <label class="nameopt" id="searchablerow">
-        <input type="checkbox" id="searchable">
-        <span class="nameopt-text">
-          <span class="nameopt-name">Searchable text</span>
-          <span class="namefaint">Reads the redacted pages so the text can be
-            found and copied. Slower.</span>
         </span>
       </label>
       <!-- The finished file is not the work. Exporting is the moment somebody
@@ -1184,8 +1186,7 @@
         <input type="checkbox" id="withdraft">
         <span class="nameopt-text">
           <span class="nameopt-name">Save draft</span>
-          <span class="namefaint">Your marks and the words you typed, to reopen
-            and edit later. Keep it as carefully as the document.</span>
+          <span class="namefaint">Save the Blinded .json file to reopen and edit later.</span>
         </span>
       </label>
     </div>

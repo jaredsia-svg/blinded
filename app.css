@@ -2849,3 +2849,5 @@ a.payprice { text-decoration: none; color: var(--ink); }
   padding: 6px 12px; border-radius: 8px; border: 1px solid var(--line-strong);
   background: var(--card); color: var(--ink); font: inherit; font-size: 12px; cursor: pointer;
 }
+/* Said beside the option it recommends, quieter than its name. */
+.namerec { font-weight: 500; color: var(--accent); }

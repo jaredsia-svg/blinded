@@ -385,12 +385,15 @@ try {
 
   // Exporting now asks what to call the file first, so every export in these
   // tests goes through that step rather than around it.
-  const exportFile = async () => {
+  // `plain` unticks Searchable text, which is on by default, for the checks
+  // that are about a file with no text of its own.
+  const exportFile = async ({ plain = false } = {}) => {
     const [download] = await Promise.all([
       page.waitForEvent('download', { timeout: 60000 }),
       (async () => {
         await page.click('#export');
         await page.waitForSelector('#namebox:not([hidden])', { timeout: 15000 });
+        if (plain && await page.isVisible('#searchable')) await page.uncheck('#searchable');
         await page.click('#namesave');
       })(),
     ]);
@@ -1726,7 +1729,7 @@ try {
 
   // ---------- export ----------
   await redact(page);
-  const download = await exportFile();
+  const download = await exportFile({ plain: true });
   check('the export is named after the original',
     download.suggestedFilename().endsWith('-redacted.pdf'), download.suggestedFilename());
 
@@ -2628,8 +2631,10 @@ try {
   // The whole safety argument, checked against the finished bytes rather than
   // against intentions: everything the labels replaced must be absent.
   const labelledRaw = Buffer.from(labelledBytes).toString('latin1');
+  // Not the fixture's "(415) 555-0132": nothing marks it (see PH1 above), so
+  // it is on the finished page, and a searchable file rightly keeps it.
   for (const secret of ['Jane Doe', 'jane.doe@example.com', 'key=abc123',
-    '555-0132', 'guarded.value']) {
+    'guarded.value']) {
     check('a labelled export does not contain "' + secret + '"',
       !labelledRaw.includes(secret) && !extracted.includes(secret));
   }
@@ -6075,12 +6080,16 @@ try {
       return all;
     };
 
-    // Off by default: it costs a second reading of every page, and a reviewer
-    // who has not asked for it should not pay for it.
-    check('the option is offered on the way out, and is off to begin with',
+    // On by default and first: keeping the words that were not redacted is
+    // what a redacted file is expected to do, and it costs a moment.
+    check('the option is offered first on the way out, ticked, and recommended',
       await page.evaluate(() => {
         const box = document.getElementById('searchable');
-        return box && box.checked === false;
+        const first = document.querySelector('.nameopts .nameopt');
+        // Ticked as the page arrives; an earlier test here unticked it, and a
+        // choice made once in a session is kept.
+        return box && box.defaultChecked === true && first && first.id === 'searchablerow'
+          && /Recommended/.test(first.textContent);
       }));
 
     const withText = await (async () => {
