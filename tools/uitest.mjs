@@ -159,12 +159,16 @@ const base = 'http://127.0.0.1:' + port + '/';
   const shop = headersFor('/unlock.html');
   check('the suite serves the headers render.yaml sends',
     HEADER_RULES.length >= 8, String(HEADER_RULES.length));
-  check('including the tool\'s content security policy',
-    /connect-src 'self' blob:/.test(tool['Content-Security-Policy'] || ''),
+  // The header carries frame-ancestors, the one directive a page cannot set
+  // for itself, and nothing about what a page may load: a browser enforces
+  // the header's policy and the page's together, so a full one here blocked
+  // Paddle on the buying page. Each page states the rest in its own markup.
+  check('including frame-ancestors, which a page cannot say for itself',
+    /frame-ancestors 'none'/.test(tool['Content-Security-Policy'] || ''),
     tool['Content-Security-Policy']);
-  check('and the buying page\'s own, which is the one allowed to reach Paddle',
-    /cdn\.paddle\.com/.test(shop['Content-Security-Policy'] || '')
-      && !/cdn\.paddle\.com/.test(tool['Content-Security-Policy'] || ''),
+  check('and nothing that could block what a page itself allows',
+    !/(default|script|connect|frame|img|style|worker)-src/.test(tool['Content-Security-Policy'] || '')
+      && !/(default|script|connect|frame|img|style|worker)-src/.test(shop['Content-Security-Policy'] || ''),
     shop['Content-Security-Policy']);
   check('and an opener policy on both',
     Boolean(tool['Cross-Origin-Opener-Policy'] && shop['Cross-Origin-Opener-Policy']),
@@ -3117,7 +3121,7 @@ try {
       /saved draft/i.test(await page.textContent('.drop-sub')),
       await page.textContent('.drop-sub'));
     check('and promises nothing leaves, under the headline',
-      /nothing is uploaded/i.test(await page.textContent('.hero .lede')),
+      /zero-upload|never leaves your device|nothing is uploaded/i.test(await page.textContent('.hero .lede')),
       await page.textContent('.hero .lede'));
 
     await page.setInputFiles('#file', fixturePath);
@@ -9814,7 +9818,7 @@ try {
     const paying = await context.newPage();
     await paying.goto(base);
     const longEnough = join(tmpdir(), 'blinded-paywall.pdf');
-    writeFileSync(longEnough, buildManyPdf(24));
+    writeFileSync(longEnough, buildManyPdf(34));
 
     // A pass, signed with a key made here, so nothing in the repository has
     // to hold a private one.
@@ -9920,7 +9924,7 @@ try {
     // One sentence, not a paragraph. Somebody reading this has a finished
     // redaction on the other side of it and wants the price.
     check('and told what it is for and what it costs',
-      /over 20 pages/.test(asked.body) && /Blinded license/.test(asked.body)
+      /over 30 pages/.test(asked.body) && /Blinded license/.test(asked.body)
         && asked.prices >= 2, JSON.stringify(asked));
 
     // Choosing the price is the decision, so pressing it is the whole of it.
@@ -10144,7 +10148,7 @@ try {
     check('a long one is told the rule as the pages come up',
       /licen[cs]e/i.test(notice.head), JSON.stringify(notice));
     check('naming the length the line sits at',
-      notice.body.includes('over 20 pages'), JSON.stringify(notice));
+      notice.body.includes('over 30 pages'), JSON.stringify(notice));
     check('and pointed at the page that carries the numbers',
       /more details/i.test(notice.body), JSON.stringify(notice));
     // And pointed there by a link, in a tab of its own: the document is in
@@ -12518,7 +12522,7 @@ try {
     const tool = await context.newPage();
     await tool.goto(base);
     const overFree = join(tmpdir(), 'blinded-lost.pdf');
-    writeFileSync(overFree, buildManyPdf(24));
+    writeFileSync(overFree, buildManyPdf(34));
     await tool.evaluate(() => {
       window.BlindedPay.on = true;
       localStorage.removeItem('blinded.pass');
@@ -13120,12 +13124,12 @@ try {
   // not there: look for each word's shape instead, and say so.
   await part("a browser that will not run the reader still searches, and says so", async () => {
     const old = await context.newPage();
+    // The page's own policy is the one that allows WebAssembly, so it is the
+    // one taken away here.
     const refuse = async route => {
       const answer = await route.fetch();
-      const headers = Object.assign({}, answer.headers());
-      headers['content-security-policy'] = (headers['content-security-policy'] || '')
-        .replace(/'wasm-unsafe-eval'/g, '');
-      await route.fulfill({ response: answer, headers });
+      const body = (await answer.text()).replace(/'wasm-unsafe-eval'/g, '');
+      await route.fulfill({ response: answer, body });
     };
     await old.route(base, refuse);
     await old.route(base + 'index.html', refuse);
