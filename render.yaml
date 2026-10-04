@@ -87,9 +87,16 @@ services:
         value: no-referrer
       # None of these are used by the tool, so none of them are available to
       # anything that ends up running in the page.
+      #
+      # Except payment, for Paddle's checkout frame only: Apple Pay and Google
+      # Pay ask the browser through the Payment Request interface, from inside
+      # that frame, and payment=() refused them before the checkout could
+      # offer them. Only the buying page frames Paddle (its own policy allows
+      # the frame; the tool's allows no frame at all), so on every other page
+      # this grants nothing to anything.
       - path: /*
         name: Permissions-Policy
-        value: accelerometer=(), camera=(), geolocation=(), gyroscope=(), microphone=(), payment=(), usb=(), interest-cohort=()
+        value: accelerometer=(), camera=(), geolocation=(), gyroscope=(), microphone=(), payment=("https://buy.paddle.com"), usb=(), interest-cohort=()
       # One value for every page, and that value has to allow popups.
       #
       # The buying page needs it: Paddle opens windows for PayPal and for card
