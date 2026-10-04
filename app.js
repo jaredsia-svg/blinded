@@ -9948,15 +9948,20 @@
         //
         // It is a second reading, not the one done during review: that one
         // read the document as it arrived, bars and all still to come.
+        // Only the pages the search never read. What it read is reused below,
+        // held to the same rule as the page's own words; reading the finished
+        // page again cost most of the time a searchable file took to save.
         let readBack = null;
-        if (searchable) {
-          const canvases = flats.map(f => f.flat);
+        const unread = searchable ? flats.filter(f => !f.page.ocrItems) : [];
+        if (unread.length) {
+          const canvases = unread.map(f => f.flat);
           busy(true, 'Working…');
           legs([{ key: 'ocr', label: 'Reading the redacted pages',
                   total: canvases.length }]);
           await nextPaint();
           try {
-            readBack = await Ocr.readPages(canvases, done => leg('ocr', done));
+            const got = await Ocr.readPages(canvases, done => leg('ocr', done));
+            readBack = new Map(unread.map((f, i) => [f.page, got[i]]));
           } catch (error) {
             // Said as what to do, not only what went wrong: the file itself
             // is fine, and the one option that needs the reader is the one
@@ -9971,7 +9976,13 @@
           const { page, boxes, flat } = flats[i];
           pageProgress(i, flats.length, 'Writing pages');
           const placeholders = machineReadable ? textLayerFor(page, boxes) : [];
-          const words = readBack ? wordLayerFor(page, readBack[i]) : [];
+          // The page's own words where they can still be seen, and what the
+          // reader made of the rest of it.
+          const kept = searchable ? keptTextFor(page, flat, boxes) : { words: [], rects: [] };
+          const read = !searchable ? []
+            : page.ocrItems ? readStillSeen(page, flat, boxes, page.ocrItems)
+              : (readBack && readBack.get(page)) || [];
+          const words = kept.words.concat(wordLayerFor(page, read, kept.rects));
           const labels = placeholders.concat(words);
           built.push({
             widthPt: page.widthPt,
@@ -10045,14 +10056,167 @@
   // Very short scraps of ink are dropped. A single character the reader was
   // unsure of is more often a speck than a word, and a text layer full of
   // stray letters makes a search for a real word harder rather than easier.
-  function wordLayerFor(page, items) {
+  // The words of the original page that can still be seen on the finished
+  // one, as invisible text in their own places.
+  //
+  // Reading the flattened page back gave a searchable file, and a poor one:
+  // a whole dense page read in one pass came back as 35 words of 263 on a
+  // benchmark, some of them misread. The file already says what every word
+  // is and where, exactly, so for the words it has, nothing needs reading.
+  //
+  // What decides whether a word is kept is what decided it before: whether
+  // a reader of the finished page can see it.
+  // - Nothing redacted may touch it: its box, with a margin, clear of every
+  //   bar, note and drawing. A word half under a bar is not kept.
+  // - It has to be there to see. The finished page is unchanged where it
+  //   sits, and the page shows ink there: text drawn white on white, or
+  //   hidden behind a picture's blank ground, is not written back.
+  // Anything that fails either is left to the reader, which only sees the
+  // finished page. Returns the words, and their boxes so the reader's words
+  // over the same places are not written twice.
+  // What decides whether something on the original page can still be seen on
+  // the finished one: a bar, note or drawing over it, or the page there
+  // changed, or nothing there to see. Shared by the page's own words and the
+  // words the search read off it, which are held to the same rule.
+  // Once per finished page: both lists ask, and reading a page's pixels
+  // back is the part that costs.
+  const seenMemo = new WeakMap();
+  function seenOnFinished(page, flat, boxes) {
+    if (flat && seenMemo.has(flat)) return seenMemo.get(flat);
+    const check = seenCheck(page, flat, boxes);
+    if (flat) seenMemo.set(flat, check);
+    return check;
+  }
+  function seenCheck(page, flat, boxes) {
+    const W = page.source.width, H = page.source.height;
+    if (!flat || flat.width !== W || flat.height !== H) return null;
+    const before = page.source.getContext('2d').getImageData(0, 0, W, H).data;
+    const after = flat.getContext('2d').getImageData(0, 0, W, H).data;
+    const blockers = boxes.map(b => ({ x: b.x, y: b.y, w: b.w, h: b.h }))
+      .concat(notesOf(page).filter(n => n && n.w > 0).map(n => ({ x: n.x, y: n.y, w: n.w, h: n.h })));
+    for (const ink of inksOf(page)) {
+      const pts = ink && ink.points;
+      if (!pts || !pts.length) continue;
+      const xs = pts.map(q => q.x), ys = pts.map(q => q.y);
+      const pad = (ink.width || 4) * 2;
+      blockers.push({ x: Math.min(...xs) - pad, y: Math.min(...ys) - pad,
+        w: Math.max(...xs) - Math.min(...xs) + pad * 2, h: Math.max(...ys) - Math.min(...ys) + pad * 2 });
+    }
+    const touches = r => blockers.some(b => r.x < b.x + b.w && b.x < r.x + r.w
+      && r.y < b.y + b.h && b.y < r.y + r.h);
+    // Seen: unchanged by the redaction, and with ink in it.
+    const seen = r => {
+      const x0 = Math.max(0, Math.floor(r.x)), y0 = Math.max(0, Math.floor(r.y));
+      const x1 = Math.min(W, Math.ceil(r.x + r.w)), y1 = Math.min(H, Math.ceil(r.y + r.h));
+      if (x1 <= x0 || y1 <= y0) return false;
+      let lo = 255, hi = 0, changed = 0, n = 0;
+      const step = Math.max(1, Math.floor(Math.min(x1 - x0, y1 - y0) / 12));
+      for (let y = y0; y < y1; y += step) {
+        for (let x = x0; x < x1; x += step) {
+          const i = (y * W + x) * 4;
+          const lum = (before[i] * 3 + before[i + 1] * 6 + before[i + 2]) / 10;
+          if (lum < lo) lo = lum;
+          if (lum > hi) hi = lum;
+          if (Math.abs(before[i] - after[i]) + Math.abs(before[i + 1] - after[i + 1])
+            + Math.abs(before[i + 2] - after[i + 2]) > 24) changed++;
+          n++;
+        }
+      }
+      return n > 0 && changed / n < 0.02 && hi - lo >= 48;
+    };
+    return { touches, seen };
+  }
+
+  function keptTextFor(page, flat, boxes) {
+    const out = { words: [], rects: [] };
+    // A turned page's text layer is measured in the page as it was; the
+    // reader's words, turned with it, stand in for it instead.
+    if (!page.items || !page.items.length || page.textTurn) return out;
+    const check = seenOnFinished(page, flat, boxes);
+    if (!check) return out;
+    const { touches, seen } = check;
+    const W = page.source.width, H = page.source.height;
+    const scaleX = page.widthPt / W, scaleY = page.heightPt / H;
+    for (const item of page.items) {
+      const str = String(item.str || '');
+      if (!str.trim() || !(item.h > 0)) continue;
+      const placed = { ...item, start: 0, end: str.length };
+      const turned = Boxes.turned(item);
+      for (const word of str.matchAll(/\S+/g)) {
+        const a = word.index, b = a + word[0].length;
+        const rect = Boxes.sliceRect(placed, a, b, measure);
+        if (!rect || !(rect.w > 0)) continue;
+        const along = measure(placed, a);
+        const width = measure(placed, b) - along;
+        // Where the letters are, rather than the line's whole height: lines
+        // set close have one line's bar reaching into the next one's ascent,
+        // and measured by the full box every word on a line beside a bar was
+        // dropped. Upright runs only; a turned run keeps its whole box.
+        const pad = item.h * 0.08;
+        const core = turned ? rect : {
+          x: item.x + along - pad, w: width + pad * 2,
+          y: item.y - item.h * 0.75, h: item.h * 0.95,
+        };
+        if (touches(core) || !seen(core)) continue;
+        const angle = turned ? item.angle : 0;
+        const x = item.x + Math.cos(angle) * along;
+        const y = item.y + Math.sin(angle) * along;
+        out.words.push({
+          text: word[0],
+          x: x * scaleX,
+          y: page.heightPt - y * scaleY,
+          size: Math.max(1, item.h * scaleY),
+          width: width * scaleX,
+          // The page's y runs down and the file's up, so the turn reverses.
+          angle: -angle,
+        });
+        out.rects.push(rect);
+      }
+    }
+    return out;
+  }
+
+  // The words the search read off the original page, kept where they can
+  // still be seen. They were read before any bar was drawn, so a word now
+  // under one is in this list; the same rule as the page's own words takes
+  // it out, by where it is and by the finished page's pixels.
+  function readStillSeen(page, flat, boxes, items) {
+    const check = seenOnFinished(page, flat, boxes);
+    if (!check || !items) return [];
+    return items.filter(item => {
+      const r = item && item.rect;
+      if (!r || !(r.w > 0) || !(r.h > 0)) return false;
+      const pad = r.h * 0.08;
+      const core = { x: r.x - pad, y: r.y, w: r.w + pad * 2, h: r.h };
+      return !check.touches(core) && check.seen(core);
+    });
+  }
+
+  function wordLayerFor(page, items, alreadyKept) {
     if (!items || !items.length) return [];
     const scaleX = page.widthPt / page.source.width;
     const scaleY = page.heightPt / page.source.height;
+    const kept = alreadyKept || [];
+    // Over a word the file already gave, the reader's guess is a second,
+    // worse copy of it.
+    const overKept = r => kept.some(k => {
+      const w = Math.min(r.x + r.w, k.x + k.w) - Math.max(r.x, k.x);
+      const h = Math.min(r.y + r.h, k.y + k.h) - Math.max(r.y, k.y);
+      return w > 0 && h > 0 && w * h > 0.3 * r.w * r.h;
+    });
+    // Where the file had words, what the reader finds besides them is mostly
+    // rules, borders and the edges of pictures read as letters; it has to be
+    // surer of itself there.
+    // And it has to read as a word: two letters or digits together, not a
+    // lone stroke or bracket.
+    const floor = kept.length ? 70 : 40;
+    const wordLike = str => !kept.length || /[A-Za-z0-9\u00C0-\u024F]{2,}/.test(str);
 
     return items
       .filter(item => item.rect && String(item.str || '').trim().length
-        && (item.confidence === undefined || item.confidence >= 40))
+        && (item.confidence === undefined || item.confidence >= floor)
+        && wordLike(String(item.str))
+        && !overKept(item.rect))
       .map(item => {
         const height = item.rect.h * scaleY;
         return {
@@ -13806,7 +13970,7 @@
     setZoom, stepZoom, ZOOM_STEPS,
     MARK_GREEN,
     loadFaq, loadPremium, refreshScrub,
-    cleanName, coveredText, askName, askPassword, renderPdf, wordLayerFor,
+    cleanName, coveredText, askName, askPassword, renderPdf, wordLayerFor, keptTextFor, readStillSeen,
     confirmCrop, redactedName,
     confirmAction, showTemplate,
     addTerm, dropTerm,

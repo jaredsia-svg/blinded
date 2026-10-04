@@ -6105,6 +6105,36 @@ try {
     check('nor anything else behind a bar',
       !/jane\.doe@example\.com/i.test(withText), withText.slice(0, 300));
 
+    // The page's own words, not a reading of them: the file says exactly what
+    // they are, and a reading of a whole dense page loses most of them.
+    check('and they are the page\'s own words, spelled as the file spells them',
+      /Nothing else on this line is sensitive at all\./.test(withText), withText.slice(0, 300));
+
+    // Which words are kept, asked directly: a word only partly under a bar,
+    // and a word in the file that nothing on the page shows.
+    const keeps = await page.evaluate(() => {
+      const B = window.Blinded, Render = window.BlindedRender, Boxes = window.BlindedBoxes;
+      const p = B.state.pages[0];
+      const item = p.items.find(it => /Parkway/.test(it.str));
+      if (!item) return { error: 'no Parkway' };
+      const at = item.str.indexOf('Parkway');
+      const word = Boxes.sliceRect({ ...item, start: 0, end: item.str.length }, at, at + 7);
+      // A bar over the left third of it only.
+      const bar = { x: word.x, y: word.y, w: word.w / 3, h: word.h };
+      const ghost = { str: 'Ghostword', x: 4, y: p.source.height - 4, w: 40, h: 10, angle: 0, hasEOL: true };
+      const had = p.items;
+      p.items = had.concat([ghost]);
+      const flat = Render.flatten(p.source, [bar], [], []);
+      const kept = B.keptTextFor(p, flat, [bar]).words.map(w => w.text);
+      const open = B.keptTextFor(p, Render.flatten(p.source, [], [], []), []).words.map(w => w.text);
+      p.items = had;
+      return { partly: kept.some(t => /Parkway/.test(t)), openHas: open.some(t => /Parkway/.test(t)),
+               ghost: open.some(t => /Ghostword/.test(t)), count: kept.length };
+    });
+    check('a word only partly under a bar is not kept', keeps.openHas && !keeps.partly, JSON.stringify(keeps));
+    check('nor a word the file has and the page does not show', keeps.ghost === false, JSON.stringify(keeps));
+    check('while the rest of the page is', keeps.count > 10, JSON.stringify(keeps));
+
     // And the checkbox is what decides it, not something always on.
     await page.uncheck('#searchable').catch(() => {});
     const plain = await (async () => {
