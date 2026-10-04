@@ -317,10 +317,20 @@ a.mark { color: inherit; text-decoration: none; }
   padding: 12px 14px; border-bottom: 1px solid var(--line-strong);
   position: sticky; top: 0; background: var(--card); z-index: 2;
 }
-.panel-head h2 {
-  font-size: 13.5px; margin: 0; font-weight: 650;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+.docline { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.docicon {
+  flex: none; width: 17px; height: 17px; fill: none; stroke: var(--accent);
+  stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round;
 }
+.panel-head h2 {
+  flex: 0 1 auto; min-width: 0; display: flex; margin: 0;
+  font-size: 13.5px; font-weight: 650; letter-spacing: -0.005em; color: var(--ink);
+  white-space: nowrap;
+}
+/* The name gives way, the extension does not. */
+.panel-head h2 .docbase { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.panel-head h2 .docext { flex: none; color: var(--ink-soft); font-weight: 500; }
+.docpages { flex: none; margin-left: auto; }
 
 /* ---------- the tools ---------- */
 /*

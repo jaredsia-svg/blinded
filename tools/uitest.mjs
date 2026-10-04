@@ -423,6 +423,11 @@ try {
   await page.waitForSelector('#view-review:not([hidden])', { timeout: 30000 });
   check('the review view opens after a PDF is chosen', await page.isVisible('#view-review'));
   check('the document name is shown', (await page.textContent('#doc-name')).endsWith('.pdf'));
+  // And beside it how long the document is, as the section counts are shown.
+  const docPages = await page.evaluate(() => ({ said: document.getElementById('doc-pages').textContent,
+    n: window.Blinded.state.pages.length }));
+  check('with its page count beside it',
+    docPages.said === docPages.n + (docPages.n === 1 ? ' page' : ' pages'), JSON.stringify(docPages));
 
   // The other half of the unload guard, asserted here because it only means
   // anything once a document is actually open.

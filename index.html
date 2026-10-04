@@ -111,7 +111,7 @@
   "duration": "PT59S"
 }
 </script>
-<link rel="stylesheet" href="app.css?v=ad77aeaf" integrity="sha384-7iREukGexAoaJThIgZc75WYcmW8uiN4KrUcNQqRFAzLsx9vn2DGez6o/dpIOkyqW">
+<link rel="stylesheet" href="app.css?v=177249e6" integrity="sha384-6wxa52imTTorAV12DRRlPJsbCJIWGFbi+WpNUN7Kc8H13qmDNvpCD3/jLRdzn78i">
 </head>
 <body>
 
@@ -565,7 +565,17 @@
 
       <aside class="panel">
         <div class="panel-head">
-          <h2 id="doc-name">document</h2>
+          <!-- The file, and how long it is. The name keeps its end: the
+               extension says what kind of file it is, so a long name gives
+               way in the middle of itself rather than at the end. -->
+          <div class="docline">
+            <svg class="docicon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/>
+              <path d="M14 3v5h5"/>
+            </svg>
+            <h2 id="doc-name"><span class="docbase">document</span><span class="docext"></span></h2>
+            <span class="s-note docpages" id="doc-pages"></span>
+          </div>
           <div class="tools toolsmain" role="group" aria-label="Tools">
             <button type="button" id="tool-pan" class="tool" aria-pressed="true"
               title="Move the pages – drag to scroll. Nothing on a page changes.">
@@ -1222,7 +1232,7 @@
 <script src="lib/pass.js?v=fa8e95c9" integrity="sha384-vdiGIUAtPsWUwbV/9iFB3JwVBPa1iWWzPkpwZOb2O6VlxQpGrlUP9RGGlQaNl17N"></script>
 <script src="lib/pay.js?v=6f94d998" integrity="sha384-1bByT5YqR1yybQrDsj8bxhmARIphzp5gXG9YVdSfl6J9KWFMMAqdEFPO5nmQDcnr"></script>
 <script src="lib/render.js?v=65c3fe76" integrity="sha384-hC2pL0Iz3qZPhOkr8LTwrOtpoDzQ/Yq+qnhe6ySQZDtipsMW1eMqd8M9ZeZmqODr"></script>
-<script src="app.js?v=fde1a4b3" integrity="sha384-7bInIu/4+TGmIhaT9cNEF5dIZSJu2xHDhsmd7PEcVoziPiln/rLG0EMawaf0qh87"></script>
+<script src="app.js?v=b232b00b" integrity="sha384-FCjQFl4p6huYd9eUUZE8gnfLEqMhSCf0SBsv4YXyJBRYUwDx+JCABOAf3M4pqiVM"></script>
 <script type="module" src="lib/boot.mjs?v=8b98ed8f" integrity="sha384-/dJ3R23NfbIp89TMbKmNgtoFjuy8b5Kji1HBXxf7q7kKtAM2wTj9DeXCivsebPvb"></script>
 </body>
 </html>

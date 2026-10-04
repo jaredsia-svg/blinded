@@ -1266,8 +1266,7 @@
       dismissed: new Set(),
     }));
 
-    el('doc-name').textContent = name;
-    el('doc-name').title = name;
+    showDocName(name);
     el('textview').hidden = kind !== 'text';
     el('pages').hidden = kind === 'text';
     // The lossless choice is about how pages are re-encoded as pictures, so it
@@ -1463,6 +1462,7 @@
   }
 
   function rebuildAfterOrder() {
+    showPageCount();
     buildPageElements();
     renderSheet();
     // Settled, because a rescan otherwise sends the document back to
@@ -5207,7 +5207,29 @@
   // Sections can be shut, so each one has to say enough on its own line to be
   // worth not opening. Without this, collapsing the panel just hides the state
   // rather than tidying it.
+  // The file's name above the tools, its extension held apart so that a long
+  // name is shortened in the middle of itself and still says what it is.
+  function showDocName(name) {
+    const head = el('doc-name');
+    const dot = name.lastIndexOf('.');
+    const ext = dot > 0 && name.length - dot <= 6 ? name.slice(dot) : '';
+    head.querySelector('.docbase').textContent = ext ? name.slice(0, dot) : name;
+    head.querySelector('.docext').textContent = ext;
+    head.title = name;
+    showPageCount();
+  }
+
+  // How long the document is, beside its name, kept up as pages are added
+  // and removed.
+  function showPageCount() {
+    const note = el('doc-pages');
+    if (!note) return;
+    const n = state.kind === 'text' ? 0 : state.pages.length;
+    note.textContent = n ? n + (n === 1 ? ' page' : ' pages') : '';
+  }
+
   function renderSectionNotes() {
+    showPageCount();
     const set = (id, text, active) => {
       const note = el(id);
       note.textContent = text || '';
