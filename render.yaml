@@ -33,43 +33,22 @@ services:
     # served exactly as it is in the repository.
     buildCommand: sh tools/version.sh
     headers:
+      # Only what a page cannot say about itself.
+      #
+      # Every page carries its own policy in a meta tag -- the tool a strict
+      # one, the buying page one that lets Paddle in -- and a browser
+      # enforces every policy it is given, the header's and the page's
+      # together. A full policy here, on every path, was therefore also
+      # enforced on the buying page, and its script-src 'self' blocked
+      # Paddle's script there: "The payment window could not be loaded".
+      # Render cannot leave one path out of /*, and a second rule for
+      # /unlock.html adds a policy rather than replacing this one.
+      #
+      # frame-ancestors is the one directive a meta tag cannot carry, so it is
+      # the one sent here, with the two that cost nothing anywhere.
       - path: /*
         name: Content-Security-Policy
-        value: >-
-          default-src 'self';
-          script-src 'self' 'wasm-unsafe-eval';
-          style-src 'self' 'unsafe-inline';
-          img-src 'self' data: blob:;
-          connect-src 'self' blob:;
-          worker-src 'self' blob:;
-          frame-src 'none';
-          frame-ancestors 'none';
-          object-src 'none';
-          base-uri 'none';
-          form-action 'none'
-      # The buying page, and only the buying page.
-      #
-      # Taking a card needs a payment processor's script, its frames and its
-      # network calls. Those permissions are granted here, on a page that
-      # never opens a document, and nowhere else -- so the policy over the
-      # page that does hold a document is exactly what it was before there
-      # was anything to buy. A path rule wins over the /* one above it.
-      #
-      # This is the whole reason buying happens in a second window rather
-      # than inside the tool.
-      - path: /unlock.html
-        name: Content-Security-Policy
-        value: >-
-          default-src 'self';
-          script-src 'self' https://cdn.paddle.com;
-          style-src 'self' 'unsafe-inline';
-          img-src 'self' data: https://*.paddle.com;
-          connect-src 'self' https://*.paddle.com https://blinded-mint.onrender.com;
-          frame-src https://*.paddle.com;
-          frame-ancestors 'none';
-          object-src 'none';
-          base-uri 'none';
-          form-action 'none'
+        value: frame-ancestors 'none'; object-src 'none'; base-uri 'none'
       # Once a browser has seen this it will not be talked into http for a
       # year, which closes the one window where a document could be read off
       # the wire: the first plain request a typed address makes, before the

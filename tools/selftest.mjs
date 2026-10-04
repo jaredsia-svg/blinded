@@ -2612,18 +2612,17 @@ check('no creation date is carried into the output', !meta.info.CreationDate);
   check('and a referrer policy, since a file name can be the whole story',
     /Referrer-Policy[\s\S]{0,40}no-referrer/.test(deploy), 'not in render.yaml');
 
-  // Two copies of one policy drift. The header's job is to add
-  // frame-ancestors, not to disagree about what the page may reach.
+  // The header adds frame-ancestors and nothing a page decides for itself.
+  // A browser enforces every policy it is given, header and page together,
+  // so a full policy sent to every path was also enforced on the buying page
+  // and blocked the payment processor there. What a page may load is said by
+  // that page.
   const meta = html.match(/http-equiv="Content-Security-Policy" content="([^"]+)"/);
   check('the page still carries a policy of its own', Boolean(meta));
-  if (meta && deploy) {
-    const directives = meta[1].split(';').map(d => d.trim().replace(/\s+/g, ' '))
-      .filter(Boolean);
-    const flat = deploy.replace(/\s+/g, ' ');
-    const adrift = directives.filter(d => !flat.includes(d));
-    check('and the header repeats it rather than contradicting it',
-      adrift.length === 0, 'in the page but not in render.yaml: ' + adrift.join(' | '));
-  }
+  const sent = (deploy.match(/name: Content-Security-Policy\s+value: ([^\n]+)/g) || []);
+  check('and the header says nothing about what a page may load',
+    sent.length === 1 && !/(default|script|connect|frame|img|style)-src/.test(sent[0]),
+    sent.join(' | '));
 
   // The app refuses to run framed whatever the headers say, because a header
   // is a promise about a deployment and this is a promise about the program.
@@ -3167,9 +3166,10 @@ check('no creation date is carried into the output', !meta.info.CreationDate);
     'unlock.html');
   check('and it opens no documents',
     !/id="file"/.test(buy) && !/pdf\.min\.mjs/.test(buy), 'unlock.html');
-  check('the served headers say the same as the page does',
-    /path: \/unlock\.html/.test(headers) && /cdn\.paddle\.com/.test(headers),
-    'render.yaml');
+  // And nothing served over it takes that away: the one policy every page
+  // is sent names no sources at all (see the deployment checks).
+  check('and no header sent to every page can take that away',
+    !/script-src/.test(headers.replace(/^\s*#.*$/gm, '')), 'render.yaml');
 
   // The mint is on a hostname of its own -- that is the whole point of it --
   // so the buying page reaching it is a cross-origin request, and the policy
@@ -3189,9 +3189,7 @@ check('no creation date is carried into the output', !meta.info.CreationDate);
       .some(rule => rule.includes(origin));
     check('the buying page is allowed to reach the mint', reaches(buy),
       'unlock.html connect-src does not include ' + origin);
-    check('and so say the served headers',
-      reaches(headers.split('path: /unlock.html')[1] || ''),
-      'render.yaml /unlock.html connect-src does not include ' + origin);
+
   }
   // What the site says it costs has to be what it costs. These pages call it
   // free, which is true while nothing is charged for -- and becomes a lie the
@@ -3883,8 +3881,8 @@ check('no creation date is carried into the output', !meta.info.CreationDate);
   check('while the tool can still compile its reader',
     /script-src 'self' 'wasm-unsafe-eval'/.test(tool));
   const yaml = readFileSync(join(root, 'render.yaml'), 'utf8');
-  check('and so can the header every page is sent',
-    /- path: \/\*\s+name: Content-Security-Policy[\s\S]*?script-src 'self' 'wasm-unsafe-eval'/.test(yaml));
+  check('and no header every page is sent can stop it',
+    !/script-src/.test(yaml.replace(/^\s*#.*$/gm, '')));
 }
 
 // ---------- one opener policy, on every page ----------
