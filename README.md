@@ -676,7 +676,7 @@ Off, in this copy. `lib/pay.js` is the only file that decides: `on: false`
 means the whole tool, free, at any length, which is what ships.
 
 Switched on, one thing is charged for — writing the finished file, for a
-document longer than twenty pages. Everything else stays free at any length,
+document longer than thirty pages. Everything else stays free at any length,
 including the search, the review and saving a draft, because a reviewer has
 to be able to see what the tool finds before deciding whether it is worth
 paying for. The price is said when the document is opened rather than when

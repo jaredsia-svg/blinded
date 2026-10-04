@@ -3201,11 +3201,11 @@ check('no creation date is carried into the output', !meta.info.CreationDate);
         readFileSync(join(root, one.slug, 'index.html'), 'utf8')])];
     for (const [where, page] of saying) {
       check(where + ': it does not call itself free without saying where that ends',
-        !/\bfree\b/i.test(page) || /twenty pages|free below|needs a pass|pass to/i.test(page),
+        !/\bfree\b/i.test(page) || /thirty pages|free below|needs a pass|pass to/i.test(page),
         where + ' calls it free with payment on');
     }
     check('and the front page says so too',
-      /needs a pass|free below|twenty pages/i.test(
+      /needs a pass|free below|thirty pages/i.test(
         readFileSync(join(root, 'index.html'), 'utf8')), 'index.html');
     // The prices in the structured data are the prices the payment page
     // charges, and a free tier at the page limit it actually has: a search

@@ -44,7 +44,7 @@ Never commit either. `.pass-key.json` is in `.gitignore`.
 |---|---|
 | `BLINDED_PASS_KEY` | the private JWK, as JSON, from `.pass-key.json` |
 | `PADDLE_WEBHOOK_SECRET` | Paddle → Developer tools → Notifications → your endpoint |
-| `PADDLE_PRICE_DAYS` | the `pri_…` id of the 5-day pass |
+| `PADDLE_PRICE_DAYS` | the `pri_…` id of the 1-week pass |
 | `PADDLE_PRICE_MONTH` | the `pri_…` id of the month pass |
 | `ALLOW_ORIGIN` | `https://blinded.dev` — the only site allowed to read a pass back |
 | `PORT` | defaults to 8080 |
@@ -110,7 +110,7 @@ Not done. Worth doing if the disk ever feels like the wrong $7.
 
 ## In Paddle
 
-1. Catalogue → two products, one price each: 5 days and a month.
+1. Catalogue → two products, one price each: a week and a month.
 2. Developer tools → Notifications → a destination pointing at
    `https://<this service>/paddle`, subscribed to `transaction.completed`
    only. Copy the secret it gives you.

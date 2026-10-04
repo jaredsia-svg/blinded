@@ -536,7 +536,7 @@
       }
       // Straight to the checkout when the tool already asked which price.
       //
-      // The reviewer pressed USD 2.99 in the dialog; being shown the same two
+      // The reviewer pressed USD 4.99 in the dialog; being shown the same two
       // prices again and asked to press one of them again is the tool
       // doubting a decision that was just made. The prices stay on the page
       // behind the overlay, so changing their mind costs nothing.

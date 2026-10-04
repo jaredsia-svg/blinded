@@ -186,8 +186,8 @@ export const pages = [
           + 'risk of your release decision.'] },
 
       { h: 'What a license is',
-        p: ['Documents of twenty pages or fewer are free, at any length of '
-          + 'use and forever. Above twenty pages, writing the finished file '
+        p: ['Documents of thirty pages or fewer are free, at any length of '
+          + 'use and forever. Above thirty pages, writing the finished file '
           + 'needs a license. Everything before that step — opening, reading, '
           + 'searching, marking, reviewing, saving a draft — is free at any '
           + 'length.',
@@ -262,7 +262,7 @@ export const pages = [
           + 'purchase, for any reason at all.</strong> You do not have to '
           + 'explain, and you do not have to have found a fault. If the tool '
           + 'was not what you wanted, that is reason enough.',
-          'Twenty pages are free precisely so that this decision can be made '
+          'Thirty pages are free precisely so that this decision can be made '
           + 'before any money changes hands: you can see exactly what the tool '
           + 'finds in your own document before you pay a thing. A license buys '
           + 'length, and nothing else changes when you have one.'] },

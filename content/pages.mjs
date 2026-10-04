@@ -158,7 +158,7 @@ export const pages = [
           + 'document somewhere before it has removed anything. Blinded runs '
           + 'in your browser tab: the PDF is opened, searched and rebuilt on '
           + 'your own machine, and the page is not permitted by the browser to '
-          + 'send anything anywhere. Documents up to 20 pages are free.'] },
+          + 'send anything anywhere. Documents up to 30 pages are free.'] },
     ],
     steps: [
       'Open the PDF in Blinded. It stays on your machine.',
@@ -186,7 +186,7 @@ export const pages = [
           + 'with progress shown as it goes. Scanned pages take longer because '
           + 'they are read first. Most of the time left is your own check.' },
       { q: 'Is it free?',
-        a: 'Documents up to 20 pages are free. Longer ones need a license to '
+        a: 'Documents up to 30 pages are free. Longer ones need a license to '
           + 'export the finished file.' },
     ],
   },
@@ -341,7 +341,7 @@ export const pages = [
         p: ['The file never leaves your Mac. It is opened and rebuilt in the '
           + 'browser tab, and the page is not permitted to send anything '
           + 'anywhere; turn off Wi-Fi after the page has loaded and it keeps '
-          + 'working. Documents up to 20 pages are free.'] },
+          + 'working. Documents up to 30 pages are free.'] },
     ],
     steps: [
       'Open the PDF in Safari or any browser on your Mac. Nothing is installed '
@@ -1360,7 +1360,7 @@ export const pages = [
         a: 'No. Everything runs in your browser, and the page is not permitted '
           + 'to send data anywhere. You can check in the network panel.' },
       { q: 'Is it free?',
-        a: 'Documents up to 20 pages are free. Longer documents need a '
+        a: 'Documents up to 30 pages are free. Longer documents need a '
           + 'license to export the finished file; everything else works without one.' },
     ],
   },
@@ -1417,7 +1417,7 @@ export const pages = [
           + 'first. Where the file is processed: Acrobat desktop, on your '
           + 'machine; Blinded, in your browser tab, with no install and no '
           + 'upload. Price: Acrobat Pro is a subscription; Blinded is free up to '
-          + '20 pages, with a one-off license for longer documents.',
+          + '30 pages, with a one-off license for longer documents.',
           'They also work well together. If you already use Acrobat for text, '
           + 'Blinded is the step for the pictures.'] },
       { h: 'Without an Acrobat Pro subscription',
@@ -1425,7 +1425,7 @@ export const pages = [
           + 'come with a paid Acrobat plan. A black box drawn in Reader, or in '
           + 'any viewer\u2019s comment tools, is an annotation on top of the '
           + 'page, and the text under it can still be selected and copied.',
-          'Blinded needs no subscription and no install. Documents up to 20 '
+          'Blinded needs no subscription and no install. Documents up to 30 '
           + 'pages are free, and a longer one needs a one-off license rather '
           + 'than a monthly plan.'] },
       { h: 'What Blinded does not do',
@@ -1505,7 +1505,7 @@ export const pages = [
               'Run its free OCR first.'],
             ['Content removed, not covered', 'Yes: every page is rebuilt from pixels.',
               'Yes, they say.', 'Yes, they say.', 'Yes, they say.'],
-            ['Price', 'Free up to 20 pages; a one-off license beyond.',
+            ['Price', 'Free up to 30 pages; a one-off license beyond.',
               'Free with limits; Premium $5 a month billed yearly, or $9 monthly.',
               'Free with usage limits; OCR needs the paid Pro plan.',
               'Desktop redaction and OCR free.'],

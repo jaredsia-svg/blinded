@@ -162,7 +162,7 @@ ${mark()} Blinded</a>
   <p class="lede">${esc(page.lede)}</p>
 
   <p class="landgo"><a class="landcta" href="/">Open the tool</a>
-    <span class="landfree">Free below twenty pages, in your browser. Nothing is uploaded.</span></p>
+    <span class="landfree">Free below thirty pages, in your browser. Nothing is uploaded.</span></p>
 
   <figure class="landshot">
     <div class="landpair">

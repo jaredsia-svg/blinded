@@ -21,7 +21,7 @@
 // Environment:
 //   BLINDED_PASS_KEY       the private signing JWK, as JSON   (required)
 //   PADDLE_WEBHOOK_SECRET  the signing secret from Paddle     (required)
-//   PADDLE_PRICE_DAYS      price id for the 5-day pass
+//   PADDLE_PRICE_DAYS      price id for the 1-week pass
 //   PADDLE_PRICE_MONTH     price id for the month pass
 //   ALLOW_ORIGIN           the site that may read a pass back (required)
 //   PORT                   defaults to 8080
@@ -47,7 +47,7 @@ function settings() {
   ORIGIN = need('ALLOW_ORIGIN');
   STORE = process.env.STORE || './passes.json';
   DAYS = {
-    [process.env.PADDLE_PRICE_DAYS || 'days']: 5,
+    [process.env.PADDLE_PRICE_DAYS || 'days']: 7,
     [process.env.PADDLE_PRICE_MONTH || 'month']: 31,
   };
   passes = existsSync(STORE)
