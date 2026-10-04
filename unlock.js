@@ -254,6 +254,10 @@
       items: [{ priceId: id, quantity: 1 }],
       settings: inline ? {
         displayMode: 'inline',
+        // Every field on one page -- email, card, country -- and one button,
+        // rather than an email step followed by a payment step. A licence
+        // bought in passing should not feel like a form with chapters.
+        variant: 'one-page',
         frameTarget: 'checkout-container',
         frameInitialHeight: 460,
         frameStyle: 'width:100%; min-width:312px; background-color:transparent; border:none;',
@@ -265,6 +269,7 @@
         showAddTaxId: false,
       } : {
         displayMode: 'overlay',
+        variant: 'one-page',
         // Paddle's own discount link is off. Codes are typed into the box at
         // the top of this page, in plain sight, and passed in above as
         // discountCode -- a small link inside the frame was where nobody with
