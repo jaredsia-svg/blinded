@@ -365,12 +365,12 @@
       return;
     }
     if (answer.status === 404) {
-      say('No licence under that ID. Check it against the receipt \u2014 it '
+      say('No license under that ID. Check it against the receipt \u2014 it '
         + 'starts with txn_ \u2014 or write to support@blinded.dev.', true);
       return;
     }
     if (answer.status === 410) {
-      say('That licence has run out. Buying again gives you a new one.', true);
+      say('That license has run out. Buying again gives you a new one.', true);
       return;
     }
     if (!answer.ok) { say('Something went wrong. Try again in a moment.', true); return; }
@@ -380,7 +380,7 @@
     Pass.useKey(Pay.key);
     const checked = await Pass.check(licence);
     if (!checked.ok) {
-      say('That licence does not check out here (' + checked.why + '). Write '
+      say('That license does not check out here (' + checked.why + '). Write '
         + 'to support@blinded.dev and we will look.', true);
       return;
     }

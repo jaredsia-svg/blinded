@@ -111,7 +111,7 @@
   "duration": "PT59S"
 }
 </script>
-<link rel="stylesheet" href="app.css?v=05d2112b" integrity="sha384-lSPtqbjyOtBFUC6MCZRsuAgoJ/QtwtyeaX7XS4k48fJ2gsTiWQ6svM5U2lpmmRpv">
+<link rel="stylesheet" href="app.css?v=c93a1da0" integrity="sha384-q43fMRDO1lJOlyWlsta3DY/qQSuPkMz3qC+JRHd7TP3JkURDw0f1Kj9S3d7q0lnc">
 </head>
 <body>
 
@@ -185,6 +185,17 @@
       </svg>
       <p class="drop-lead">Drop a document here</p>
       <p class="drop-sub">PDF, PNG, JPEG, or a saved draft – or <span class="link">browse</span></p>
+      <!-- Shown by app.js once everything the tool needs, the page reader
+           included, is kept in this browser: from then on the tab works with
+           the network gone. Hidden until then, rather than saying "not yet",
+           because most people never need it. -->
+      <p class="drop-offline" id="offlineready" hidden>
+        <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+          <path d="M3.5 8.5l3 3 6-7" fill="none" stroke="currentColor" stroke-width="1.8"
+            stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        Ready to work offline
+      </p>
     </label>
     <!-- Outside the drop box: a file input nested inside a click-to-browse
          control often opens and immediately closes the picker (the same click
@@ -1217,7 +1228,7 @@
 
 
 <script src="lib/schedule.js?v=50cdd235" integrity="sha384-CoBlq4W68nTa7A+j2Ew5GC6Bo3zTYofTZaHrgHH8DOxbsyMIUj2aMBtd7RVZec1a"></script>
-<script src="lib/detect.js?v=a6be684c" integrity="sha384-rS6qo+WsBKnqIplevyxjDBB/zLRLsPUoR3puTasFYE1HL5a0bEiLcnAOeClEm2px"></script>
+<script src="lib/detect.js?v=93f4aba0" integrity="sha384-Ik+VdlEeBK7OOoujRyYuCXpZ/r4FMQLgROgElceT8ALsUrz71bvltqIYqB2JL7nD"></script>
 <script src="lib/labels.js?v=2d5fe1b7" integrity="sha384-d2sEC1xsX3rG7KcAwz8fjuRlnONQ5AU+YHHWzo/tFUmqA6tXgvFEBNHRxgUZiSYL"></script>
 <script src="lib/boxes.js?v=e6414165" integrity="sha384-tr5voIkxjHjH2/udUoAnXOWtc+Th795pb0pIC17SZo9UD+OyjYhsOFe2TjuJFNca"></script>
 <script src="lib/measure.js?v=3e3dc5dc" integrity="sha384-zkw92yLHGv632IGw2GvafXQKL4n470X5ZrcAeRuMC97MLxa5RtvWr81K31aNOigi"></script>
@@ -1232,7 +1243,7 @@
 <script src="lib/pass.js?v=fa8e95c9" integrity="sha384-vdiGIUAtPsWUwbV/9iFB3JwVBPa1iWWzPkpwZOb2O6VlxQpGrlUP9RGGlQaNl17N"></script>
 <script src="lib/pay.js?v=41ec5a2b" integrity="sha384-L5bxFqL502gRcU0N8W4+alk+ThIIz/A3U9Gv6j19yGAm6mOcKVl/TYkTbSZnFEDA"></script>
 <script src="lib/render.js?v=65c3fe76" integrity="sha384-hC2pL0Iz3qZPhOkr8LTwrOtpoDzQ/Yq+qnhe6ySQZDtipsMW1eMqd8M9ZeZmqODr"></script>
-<script src="app.js?v=ea9a6702" integrity="sha384-2yd4I8X9kpmPKGjja6hU9ew6UJtc1sDGieEEnnKJ8U3fr1q8037D2dYLGlccMX6x"></script>
+<script src="app.js?v=acf6cf25" integrity="sha384-ujUCl7yxczIbET65e73WKszEcTaH+zkeOHPbVjSiGQ0gZe+m0Sao82T0eBEwfGB1"></script>
 <script type="module" src="lib/boot.mjs?v=8b98ed8f" integrity="sha384-/dJ3R23NfbIp89TMbKmNgtoFjuy8b5Kji1HBXxf7q7kKtAM2wTj9DeXCivsebPvb"></script>
 </body>
 </html>

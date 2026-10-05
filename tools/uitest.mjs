@@ -4789,6 +4789,79 @@ try {
       half.markAtWord === true, JSON.stringify(half));
   });
 
+  await part("a name spelt another way in the document is offered, and export asks first", async () => {
+    const spelt = await page.evaluate(async () => {
+      const B = window.Blinded;
+      const p = B.state.pages[0];
+      const was = { terms: B.state.terms.slice(), swept: B.state.sweptTerms.slice(),
+        searched: B.state.searched, ocrItems: p.ocrItems };
+      p.ocrItems = (p.ocrItems || []).concat([
+        { str: 'Calloway', confidence: 95, rect: { x: 40, y: 60, w: 80, h: 14 } },
+        { str: 'Calloway', confidence: 40, rect: { x: 40, y: 90, w: 80, h: 14 } },
+      ]);
+      B.state.terms = ['Jane Callaway'];
+      B.state.sweptTerms = [];
+      B.state.searched = true;
+      B.state.spellingsDismissed = new Set();
+      B.renderTermCounts();
+      const card = () => document.querySelector('#termcounts .spelloffer');
+      const out = { shown: Boolean(card()) };
+      out.lead = card() ? card().querySelector('.offerlead').textContent : '';
+      out.underWord = Boolean(card() && card().closest('li').previousElementSibling
+        .querySelector('.t').textContent === 'Jane Callaway');
+
+      // Export with the question unanswered: asked first, and "Review first"
+      // goes to the card rather than to the Save box.
+      const first = B.exportFile();
+      await new Promise(r => setTimeout(r, 50));
+      const box = document.getElementById('confirmbox');
+      out.asked = !box.hidden;
+      out.askedTitle = document.getElementById('confirmhead').textContent;
+      out.askedBody = document.getElementById('confirmbody').textContent;
+      document.getElementById('confirmsave').click();
+      await first;
+      out.noSaveBox = document.getElementById('namebox').hidden;
+      out.nudged = Boolean(card() && card().classList.contains('nudge'));
+      // "Export anyway" carries on to the Save box.
+      const second = B.exportFile();
+      await new Promise(r => setTimeout(r, 50));
+      document.getElementById('confirmyes').click();
+      await new Promise(r => setTimeout(r, 300));
+      out.saveBoxAfter = !document.getElementById('namebox').hidden
+        || !document.getElementById('confirmbox').hidden;
+      if (!document.getElementById('namebox').hidden) document.getElementById('namecancel').click();
+      else document.getElementById('confirmx').click();
+      await second;
+
+      // No means not offered again; yes adds the spelling the document uses.
+      card().querySelector('.offerno').click();
+      out.goneAfterNo = !card();
+      B.state.spellingsDismissed = new Set();
+      B.renderTermCounts();
+      card().querySelector('.offeryes').click();
+      out.added = B.state.terms.includes('Jane Calloway');
+      out.goneAfterAdd = !card();
+      B.undoLast();
+
+      B.state.terms = was.terms; B.state.sweptTerms = was.swept;
+      B.state.searched = was.searched; p.ocrItems = was.ocrItems;
+      B.renderTermCounts();
+      return out;
+    });
+    check('another spelling of a typed name is offered under it',
+      spelt.shown && spelt.underWord && /did you mean jane calloway\?/i.test(spelt.lead), JSON.stringify(spelt));
+    check('counting only the places the reader was sure of',
+      /in 1 place\./.test(spelt.lead), spelt.lead);
+    check('export with a question unanswered asks to review the panel first',
+      spelt.asked && /review the left panel/i.test(spelt.askedTitle) && /1 possible match|one possible match/i.test(spelt.askedBody),
+      JSON.stringify(spelt));
+    check('and "Review first" goes to the question, not to the Save box',
+      spelt.noSaveBox && spelt.nudged, JSON.stringify(spelt));
+    check('while "Export anyway" carries on', spelt.saveBoxAfter, JSON.stringify(spelt));
+    check('a no puts the offer away, a yes adds the document\'s spelling',
+      spelt.goneAfterNo && spelt.added && spelt.goneAfterAdd, JSON.stringify(spelt));
+  });
+
   await part("the near miss, offered as a picture under its word", async () => {
     const offer = await page.evaluate(async () => {
       const B = window.Blinded;
@@ -12433,7 +12506,7 @@ try {
 
     const missing = await ask('txn_nothere');
     check('an id with nothing under it says so, and how to check it',
-      /no licence under that id/i.test(missing.note)
+      /no license under that id/i.test(missing.note)
         && /txn_/.test(missing.note), JSON.stringify(missing));
     check('and shows nothing', missing.shown === false && missing.stored === false,
       JSON.stringify(missing));
@@ -12621,7 +12694,7 @@ try {
       open: getComputedStyle(document.getElementById('premcodebox')).display !== 'none',
     }));
     check('a pasted string that does not check out is refused, not stored',
-      junk.stored === false && /does not look like a licence/i.test(junk.note),
+      junk.stored === false && /does not look like a license/i.test(junk.note),
       JSON.stringify(junk));
     check('and the box stays open to try again', junk.open === true,
       JSON.stringify(junk));
@@ -13224,6 +13297,13 @@ try {
       await tab.goto(base);
       const kept = await tab.evaluate(() => window.Blinded.offlineReady);
       check('everything the tool needs is kept for working offline', kept === true, String(kept));
+      const said = await tab.evaluate(() => {
+        const line = document.getElementById('offlineready');
+        return { shown: !line.hidden && line.offsetHeight > 0, text: line.textContent.trim(),
+          inDrop: Boolean(line.closest('#drop')) };
+      });
+      check('and the drop box says it is ready to work offline',
+        said.shown && said.inDrop && /ready to work offline/i.test(said.text), JSON.stringify(said));
       await offline.setOffline(true);
       await tab.setInputFiles('#file', readablePath);
       const opened = await tab.waitForSelector('#view-review:not([hidden])', { timeout: 60000 })

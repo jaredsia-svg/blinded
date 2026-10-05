@@ -198,6 +198,9 @@
     // Marks they have answered for, either way, so a card goes once and does
     // not come back on the next render.
     reviewed: new Set(),
+    // Other spellings the reviewer said were not the word they typed, kept as
+    // "word|spelling" so one answer does not hide the rest.
+    spellingsDismissed: new Set(),
     // Three states, in order: nothing looked for yet, looked for and proposed,
     // covered.
     //
@@ -1241,6 +1244,7 @@
     state.footRan = null;
     state.offersDismissed = new Set();
     state.reviewed = new Set();
+    state.spellingsDismissed = new Set();
     state.sweepStopped = false;
     state.sweepReached = 0;
     state.sweepRefused = 0;
@@ -8635,6 +8639,8 @@
       if (!lowByTerm.has(one.term)) lowByTerm.set(one.term, []);
       lowByTerm.get(one.term).push(one);
     }
+    // The document's words, gathered once for every row's other spellings.
+    const words = spellingWords();
     const halfByTerm = new Map();
     for (const one of halfReadSpots()) {
       if (!halfByTerm.has(one.term)) halfByTerm.set(one.term, []);
@@ -8764,6 +8770,7 @@
       // What the check could not place, and what it placed but is not sure
       // of, under the word that asked for it.
       const asks = [];
+      for (const other of spellingsFor(term, words)) asks.push(spellingCard(term, other));
       const offer = offerFor(term);
       if (offer) asks.push(nearMissCard(offer));
       if (lowByTerm.has(term)) {
@@ -9882,7 +9889,46 @@
     payNote('');
   }
 
+  // Questions in the panel still waiting for a yes or a no: the low
+  // confidence marks, the places only half read, the near misses and the
+  // other spellings. Counted off the panel itself, so whatever it is showing
+  // is what is asked about.
+  function questionsWaiting() {
+    return Array.from(document.querySelectorAll('#termcounts .offer'))
+      .filter(card => card.querySelector('.offeryes'));
+  }
+
+  // Asked before the file is built, once per press. An unanswered card is
+  // not a decision: a place waiting for a yes is not covered, and the file
+  // is what somebody else will read.
+  async function reviewedFirst() {
+    const waiting = questionsWaiting();
+    if (!waiting.length) return true;
+    const answer = await confirmAction({
+      title: 'Review the left panel first',
+      body: (waiting.length === 1 ? 'One possible match has' : waiting.length + ' possible matches have')
+        + ' not been checked yet. A place waiting for a yes is not covered in '
+        + 'the file you are about to save.',
+      saveLabel: 'Review first',
+      confirmLabel: 'Export anyway',
+      notice: true,
+    });
+    if (answer === true) return true;
+    // To the first of them: the panel forward on a phone, the card in view
+    // and drawn attention to.
+    if (state.pane === 'doc' && window.matchMedia('(max-width: 900px)').matches) setPane('edit');
+    const first = questionsWaiting()[0];
+    if (first) {
+      first.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      first.classList.remove('nudge');
+      void first.offsetWidth;
+      first.classList.add('nudge');
+    }
+    return false;
+  }
+
   async function exportFile() {
+    if (!(await reviewedFirst())) return;
     // Asked before the Save as box rather than after it. Being asked to name
     // a file, choose its options and press Save, and only then being told
     // there is a price, is a bait -- the work is done and the answer is
@@ -10986,6 +11032,16 @@
       return false;
     }
   })();
+  // Said in the drop box once it is true, so somebody about to go offline
+  // knows they can.
+  offlineReady.then(ready => {
+    const said = el('offlineready');
+    if (said && ready) {
+      said.hidden = false;
+      said.title = 'Everything this tool needs is saved in this browser. It keeps '
+        + 'working with the internet turned off, including reading scanned pages.';
+    }
+  });
   function stopTheCheck() {
     state.sweepStopped = true;
     // The sentence beside the bars is gone, so the button says it instead.
@@ -13036,6 +13092,140 @@
 
   // The offer for one word, if the check left it with nothing and there is
   // still a question to ask about it.
+  // ---------- the same word, spelt another way ----------
+  //
+  // A name typed "Callaway" where the document says "Calloway" is matched by
+  // nothing, and the panel's nought beside it reads as "not in the document".
+  // So once a search has read the pages, each typed word is held against the
+  // words they hold, and a near spelling is offered under it -- offered, never
+  // marked: two people can have names a letter apart.
+  //
+  // Every word the pages hold, as the text layer has it and as the reader read
+  // it, with where it is. Readings the reader was unsure of are left out:
+  // a misreading is not a spelling.
+  function spellingWords() {
+    if (!state.searched || state.sweepRunning) return null;
+    const out = [];
+    const fromText = (text, pageIndex) => {
+      const re = /[A-Za-z][A-Za-z0-9'\u2019]*/g;
+      let m;
+      while ((m = re.exec(text || ''))) {
+        out.push({ str: m[0], page: pageIndex, from: 'text', start: m.index, end: m.index + m[0].length });
+      }
+    };
+    if (state.kind === 'text') {
+      fromText(state.text, 0);
+      return out;
+    }
+    for (const page of state.pages) {
+      fromText(page.text, page.index);
+      for (const item of page.ocrItems || []) {
+        if (!item.rect || item.fromInvert) continue;
+        if (!(typeof item.confidence === 'number' && item.confidence >= READER_NEAR_SURE)) continue;
+        out.push({ str: item.str, page: page.index, from: 'reader', rect: item.rect });
+      }
+    }
+    return out;
+  }
+
+  // The other spellings worth offering for one typed word.
+  function spellingsFor(term, words) {
+    if (!words || !Detect.otherSpellings) return [];
+    const typed = new Set(state.terms.map(t => t.toLowerCase()));
+    const dismissed = state.spellingsDismissed || new Set();
+    const hit = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+    const out = [];
+    for (const other of Detect.otherSpellings(term, words)) {
+      if (typed.has(other.term.toLowerCase())) continue;
+      if (dismissed.has(term + '|' + other.spelling.toLowerCase())) continue;
+      // A reading the reader already counted as this word -- a long name read
+      // a letter or two off beside the rest of it read exactly -- is the word,
+      // misread, and is covered as such. It is not another spelling.
+      const places = other.places.filter(place => {
+        if (place.from !== 'reader') return true;
+        const page = state.pages[place.page];
+        return !liveImageHits(page).some(m => m.term === term && !m.bySweep && m.rect
+          && !page.dismissed.has(m.id) && hit(m.rect, place.rect));
+      });
+      if (!places.length) continue;
+      // The same word on the same page, once in the text layer and once as
+      // read, is one place.
+      let count = 0;
+      for (const index of new Set(places.map(place => place.page))) {
+        const here = places.filter(place => place.page === index);
+        count += Math.max(here.filter(p => p.from === 'text').length,
+          here.filter(p => p.from === 'reader').length);
+      }
+      out.push({ ...other, places, count });
+    }
+    return out;
+  }
+
+  function spellingCard(term, other) {
+    const card = document.createElement('div');
+    card.className = 'offer spelloffer';
+    card.dataset.term = term;
+    card.dataset.spelling = other.term;
+
+    const lead = document.createElement('p');
+    lead.className = 'offerlead';
+    const name = document.createElement('b');
+    name.textContent = other.term;
+    lead.append('Did you mean ', name, '? The document spells it that way in '
+      + other.count + (other.count === 1 ? ' place.' : ' places.'));
+    card.append(lead);
+
+    const row = document.createElement('div');
+    row.className = 'offerrow';
+    const first = other.places[0];
+    const where = document.createElement('button');
+    where.type = 'button';
+    where.className = 'offerwhere';
+    if (state.kind === 'text') {
+      where.textContent = '';
+      where.disabled = true;
+    } else {
+      where.textContent = 'Page ' + (first.page + 1);
+      where.title = 'Show me on the page';
+      where.addEventListener('click', () => goToPage(first.page));
+      const place = () => {
+        if (first.rect) return first.rect;
+        const page = state.pages[first.page];
+        const rects = textBoxes(page, [{ start: first.start, end: first.end }]);
+        return rects.length ? PageRole.unionRects(rects) : null;
+      };
+      const lightUp = () => { const at = place(); if (at) spotlight(first.page, null, at); };
+      const lightDown = () => spotlight(null, null);
+      where.addEventListener('pointerenter', lightUp);
+      where.addEventListener('focus', lightUp);
+      where.addEventListener('pointerleave', lightDown);
+      where.addEventListener('blur', lightDown);
+    }
+
+    const take = document.createElement('button');
+    take.type = 'button';
+    take.className = 'offeryes';
+    take.textContent = '\u2713';
+    take.title = 'Add "' + other.term + '" to the list';
+    take.setAttribute('aria-label', take.title);
+    take.addEventListener('click', () => addTerm(other.term));
+
+    const drop = document.createElement('button');
+    drop.type = 'button';
+    drop.className = 'offerno';
+    drop.textContent = '\u2715';
+    drop.title = 'Not the same name';
+    drop.setAttribute('aria-label', 'Not the same name');
+    drop.addEventListener('click', () => {
+      state.spellingsDismissed.add(term + '|' + other.spelling.toLowerCase());
+      renderTermCounts();
+    });
+
+    row.append(where, take, drop);
+    card.append(row);
+    return card;
+  }
+
   function offerFor(term) {
     if (!state.searched || state.sweepRunning) return null;
     const swept = state.sweptTerms.length

@@ -221,7 +221,7 @@ export const pages = [
         p: ['The source is published under the PolyForm Noncommercial License '
           + '1.0.0. You may read it, run it yourself and change it for any '
           + 'noncommercial purpose. You may not sell it or use it '
-          + 'commercially. The licence governs the source; these terms govern '
+          + 'commercially. The license governs the source; these terms govern '
           + 'the hosted tool and any license bought here.'] },
 
       { h: 'Ending it',

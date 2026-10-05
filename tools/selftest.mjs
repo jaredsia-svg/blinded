@@ -1238,6 +1238,38 @@ check('an empty term is harmless', TextImage.shapeRelief('') === 0
   check('one fuzzy + one exact still recovers Porter and Nash',
     Detect.findTerms('Portor and Nash limited', ['Porter and Nash'], { fromOcr: true })
       .some(h => h.term === 'Porter and Nash'));
+  // A long word in a name may be read two letters off, beside a part read
+  // exactly -- and only there.
+  check('a long part read two letters off is still the name',
+    Detect.findTerms('Signed Jane Callowe here', ['Jane Calloway'], { fromOcr: true })
+      .some(h => h.term === 'Jane Calloway'));
+  check('but not on its own, not three letters off, and not in the text layer',
+    Detect.findTerms('Signed Callowe here', ['Jane Calloway'], { fromOcr: true }).length === 0
+    && Detect.findTerms('Jane Wallowe', ['Jane Calloway'], { fromOcr: true }).length === 0
+    && Detect.findTerms('Jane Callowe', ['Jane Calloway']).length === 0);
+  check('a short part still allows one letter only',
+    !Detect.findTerms('Jane Hardie', ['Jane Harbey'], { fromOcr: true }).some(h => h.term === 'Jane Harbey')
+    && Detect.ocrFuzzyPartMatch('Callowe', 'Calloway') === false);
+
+  // Another spelling of a typed word, offered rather than marked.
+  const wordsOf = text => text.split(/\s+/).map(str => ({ str }));
+  const spelt = Detect.otherSpellings('Jane Callaway',
+    wordsOf('Signed by Jane Calloway for Calloway\u2019s firm; Callaway elsewhere'));
+  check('a name a letter away is offered, in the spelling the document uses',
+    spelt.length === 1 && spelt[0].spelling === 'Calloway' && spelt[0].count === 2
+    && spelt[0].term === 'Jane Calloway', JSON.stringify(spelt.map(s => [s.term, s.count])));
+  check('a swapped pair of letters is one slip',
+    Detect.otherSpellings('Calloway', wordsOf('Calolway')).length === 1
+    && Detect.osaDistance('calloway', 'calolway') === 1);
+  check('a word also written in lower case is a word, not a name',
+    Detect.otherSpellings('Marlow', wordsOf('Marrow is set. The marrow of Marlow')).length === 0);
+  check('short words, far words and the word itself are not offered',
+    Detect.otherSpellings('Rao', wordsOf('Rae Ran')).length === 0
+    && Detect.otherSpellings('Calloway', wordsOf('Galleway Calloway CALLOWAY')).length === 0);
+  check('a word cut short is not another spelling of it',
+    Detect.otherSpellings('Calloways', wordsOf('Callowa Alloways')).length === 0);
+  check('the spelling is offered in the case the word was typed in',
+    Detect.otherSpellings('JANE CALLAWAY', wordsOf('CALLOWAY'))[0].term === 'JANE CALLOWAY');
 })();
 
 // OCR phrase recovery: content-word chains + hyphen/bullet glue.

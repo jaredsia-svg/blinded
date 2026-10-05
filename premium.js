@@ -37,13 +37,13 @@
       note.classList.toggle('warnhint', Boolean(bad));
     };
     const typed = String(box.value || '').trim();
-    if (!typed) { say('Paste the licence you were given.', true); return; }
+    if (!typed) { say('Paste the license you were given.', true); return; }
     Pass.useKey(Pay.key);
     const answer = await Pass.check(typed);
     if (!answer.ok) {
       say(answer.why === 'expired'
-        ? 'That licence has run out. Buying again gives you a new one.'
-        : 'That does not look like a licence from here. Check for a missing '
+        ? 'That license has run out. Buying again gives you a new one.'
+        : 'That does not look like a license from here. Check for a missing '
           + 'character at either end.', true);
       return;
     }

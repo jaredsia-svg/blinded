@@ -32,6 +32,8 @@
 //   REVIEW=1 node tools/bench.mjs     also draw every page with its marks
 //   SAVE=1 node tools/bench.mjs       keep this run as the baseline
 //   OFFLINE=1 node tools/bench.mjs    open every document with the network cut
+//   WORDS=<regex> node tools/bench.mjs  print what the page reader read that
+//                                     matches, with its confidence
 //
 // Whether it works *well* needs an answer key: truth.json beside the
 // document, listing every place something should be covered -- what it is,
@@ -169,8 +171,8 @@ for (const name of readdirSync(bench).sort()) {
   const draft = files.find(f => f.endsWith('.blinded.json'))
     || files.find(f => f.endsWith('.json') && !notDraft(f));
   const capture = files.find(f => f.endsWith('.capture.json'));
-  // Whatever the draft was saved against, not the redacted output beside it.
-  const doc = files.find(f => /\.(pdf|jpe?g|png)$/i.test(f) && !/redact/i.test(f));
+  // Whatever the draft was saved against, not a redacted export beside it.
+  const doc = files.find(f => /\.(pdf|jpe?g|png)$/i.test(f) && !/redact|export/i.test(f));
   if (!doc) { console.log('--', name, '(no document)'); continue; }
   ran++;
 
@@ -513,6 +515,22 @@ for (const name of readdirSync(bench).sort()) {
     console.log('      ' + JSON.stringify(logo.all.slice(0, 16)));
   }
   writeFileSync(join(folder, 'scores.json'), JSON.stringify(out, null, 1));
+
+  // What the reader made of the places a word was looked for, where the run
+  // missed one and the question is whether it was read at all.
+  if (process.env.WORDS) {
+    const read = await page.evaluate(source => {
+      const want = new RegExp(source, 'i');
+      return window.Blinded.state.pages.flatMap(p => (p.ocrItems || [])
+        .filter(item => want.test(item.str))
+        .map(item => ({ page: p.index, str: item.str, confidence: Math.round(item.confidence || 0),
+          at: [item.rect.x, item.rect.y, item.rect.w, item.rect.h].map(Math.round) })));
+    }, process.env.WORDS);
+    for (const one of read) {
+      console.log('   read ' + JSON.stringify(one.str) + ' p' + (one.page + 1)
+        + ' · ' + one.confidence + ' · at ' + one.at.join(','));
+    }
+  }
 
   // Every mark the run left standing, said by what it is for, in the page's
   // own pixels. This is what the answer key is held against.
