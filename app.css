@@ -2679,6 +2679,8 @@ body.choosing { -webkit-user-select: none; user-select: none; }
   width: auto; flex: none; min-width: 132px;
   min-height: 38px; padding: 8px 22px; font-size: 13.5px;
 }
+#confirmyes.quietyes { background: #fff; color: var(--ink); border-color: var(--line-strong); }
+#confirmyes.quietyes:hover { background: #f4f6f9; border-color: var(--ink-soft); }
 .payfine { margin: 12px 0 0; }
 /* The line above Save. Quiet, because it is a caution and not an alarm --
    somebody exporting a document they have just reviewed does not need

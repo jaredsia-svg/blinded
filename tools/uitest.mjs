@@ -4818,6 +4818,8 @@ try {
       out.asked = !box.hidden;
       out.askedTitle = document.getElementById('confirmhead').textContent;
       out.askedBody = document.getElementById('confirmbody').textContent;
+      const yesLook = getComputedStyle(document.getElementById('confirmyes'));
+      out.anywayWhite = yesLook.backgroundColor === 'rgb(255, 255, 255)';
       document.getElementById('confirmsave').click();
       await first;
       out.noSaveBox = document.getElementById('namebox').hidden;
@@ -4857,7 +4859,7 @@ try {
       JSON.stringify(spelt));
     check('and "Review first" goes to the question, not to the Save box',
       spelt.noSaveBox && spelt.nudged, JSON.stringify(spelt));
-    check('while "Export anyway" carries on', spelt.saveBoxAfter, JSON.stringify(spelt));
+    check('while "Export anyway", in white, carries on', spelt.saveBoxAfter && spelt.anywayWhite, JSON.stringify(spelt));
     check('a no puts the offer away, a yes adds the document\'s spelling',
       spelt.goneAfterNo && spelt.added && spelt.goneAfterAdd, JSON.stringify(spelt));
   });

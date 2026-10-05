@@ -9471,6 +9471,9 @@
       // Red is for the ones that lose something. A notice that borrows it
       // makes every red button on the site mean a little less.
       yes.classList.toggle('danger', !opts.notice);
+      // White, where the confirm is the way past a suggestion rather than
+      // the suggestion itself.
+      yes.classList.toggle('quietyes', Boolean(opts.quietConfirm));
       box.classList.toggle('noticebox', Boolean(opts.notice));
       // A way to keep the work, offered beside the way to lose it rather than
       // left for the reviewer to remember on their own. Most confirmations
@@ -9912,6 +9915,7 @@
       saveLabel: 'Review first',
       confirmLabel: 'Export anyway',
       notice: true,
+      quietConfirm: true,
     });
     if (answer === true) return true;
     // To the first of them: the panel forward on a phone, the card in view
