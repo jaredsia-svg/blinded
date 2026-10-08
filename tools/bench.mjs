@@ -34,6 +34,9 @@
 //   OFFLINE=1 node tools/bench.mjs    open every document with the network cut
 //   WORDS=<regex> node tools/bench.mjs  print what the page reader read that
 //                                     matches, with its confidence
+//   HIDE=x,y,w,h node tools/bench.mjs   drop what the first reading of each
+//                                     page read there (page pixels), to stand
+//                                     in for a device that read nothing there
 //
 // Whether it works *well* needs an answer key: truth.json beside the
 // document, listing every place something should be covered -- what it is,
@@ -188,6 +191,17 @@ for (const name of readdirSync(bench).sort()) {
     if (!kept) console.log('   !! not everything was kept for offline use');
     await page.context().setOffline(true);
   }
+  if (process.env.HIDE) {
+    await page.evaluate(spot => {
+      const [x, y, w, h] = spot.split(',').map(Number);
+      const Ocr = window.BlindedOcr;
+      const readPages = Ocr.readPages;
+      const away = r => !(r && r.x < x + w && x < r.x + r.w && r.y < y + h && y < r.y + r.h);
+      window.__hidden = 0;
+      Ocr.readPages = async (...args) => (await readPages(...args))
+        .map(items => items && items.filter(item => away(item.rect) || !++window.__hidden));
+    }, process.env.HIDE);
+  }
   if (draft) {
     await page.setInputFiles('#file', join(folder, draft));
     await page.waitForTimeout(400);
@@ -214,6 +228,22 @@ for (const name of readdirSync(bench).sort()) {
       if (back) break;
       await page.waitForTimeout(250);
     }
+  }
+
+  // A draft can bring its own reading back with it, and then nothing is read
+  // again: what it holds at the place goes too.
+  if (process.env.HIDE) {
+    await page.evaluate(spot => {
+      const [x, y, w, h] = spot.split(',').map(Number);
+      const away = r => !(r && r.x < x + w && x < r.x + r.w && r.y < y + h && y < r.y + r.h);
+      for (const p of window.Blinded.state.pages) {
+        if (!p.ocrItems) continue;
+        p.ocrItems = p.ocrItems.filter(item => away(item.rect) || !++window.__hidden);
+        const stitched = window.BlindedOcr.stitch(p.ocrItems);
+        p.ocrText = stitched.text;
+        p.ocrPlaced = stitched.items;
+      }
+    }, process.env.HIDE);
   }
 
   // Each leg of the search timed on its own, not just the whole press.
@@ -515,6 +545,9 @@ for (const name of readdirSync(bench).sort()) {
     console.log('      ' + JSON.stringify(logo.all.slice(0, 16)));
   }
   writeFileSync(join(folder, 'scores.json'), JSON.stringify(out, null, 1));
+  if (process.env.HIDE) {
+    console.log('   hidden: ' + await page.evaluate(() => window.__hidden) + ' readings at ' + process.env.HIDE);
+  }
 
   // What the reader made of the places a word was looked for, where the run
   // missed one and the question is whether it was read at all.
@@ -524,11 +557,12 @@ for (const name of readdirSync(bench).sort()) {
       return window.Blinded.state.pages.flatMap(p => (p.ocrItems || [])
         .filter(item => want.test(item.str))
         .map(item => ({ page: p.index, str: item.str, confidence: Math.round(item.confidence || 0),
+          from: Object.keys(item).filter(k => /^from/.test(k) && item[k]).map(k => k + (item[k] === true ? '' : '=' + item[k])).join(' '),
           at: [item.rect.x, item.rect.y, item.rect.w, item.rect.h].map(Math.round) })));
     }, process.env.WORDS);
     for (const one of read) {
       console.log('   read ' + JSON.stringify(one.str) + ' p' + (one.page + 1)
-        + ' · ' + one.confidence + ' · at ' + one.at.join(','));
+        + ' · ' + one.confidence + ' · at ' + one.at.join(',') + (one.from ? ' · ' + one.from : ''));
     }
   }
 
