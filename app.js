@@ -3410,7 +3410,99 @@
     }
     // Switches for measuring each part's cost (tools/bench.mjs).
     if (window.Blinded && window.Blinded.inkPass) changed += await readUnexplainedInk();
+    if (READ_DARK_PATCHES) changed += await readUnexplainedInk(DARK_PATCH_READ);
     return changed;
+  }
+
+  // ---------- two closer looks, each with its own switch ----------
+  //
+  // Set either to false to take it out; nothing else depends on them.
+  //
+  // Light lettering on a dark box the first reading lost. Measured on a test
+  // sheet: a name handwritten in white on black was never read by the first
+  // reading, and was found only when the unread-stretch read below
+  // (GAPS_PER_PAGE) happened to rank its stretch among the six it takes --
+  // on one machine it did, on another it did not. Cut out on its own, the
+  // box reads the whole name surely. So patches of unexplained ink that are
+  // mostly dark ground are read again by themselves, a few a page, during
+  // every search, whatever else on the page competes for those six.
+  const READ_DARK_PATCHES = true;
+  // Ink no reading explains, read upside down, when the check is asked to
+  // look for upside-down names. A name handwritten upside down reads as
+  // nonsense the right way up -- nothing like the name turned over, so the
+  // turned read that starts from such a reading never looked there. Turned
+  // over, it read the first name surely and the surname two letters off.
+  // Only word-sized patches: a line tall, and as long as a typed word could be.
+  const READ_UPSIDE_DOWN_PATCHES = true;
+  const DARK_PATCHES_PER_PAGE = 6;
+  const UPSIDE_DOWN_PATCHES_PER_PAGE = 6;
+  const DARK_PATCH_READ = {
+    mark: 'darkReadFor',
+    limit: DARK_PATCHES_PER_PAGE,
+    // A dark ground: the reader's lit mode is the first way to read it.
+    which: (page, area) => !alreadyMarked(page, area)
+      && darkShare(page, area.x, area.y, area.x + area.w, area.y + area.h) >= DARK_PATCH_SHARE,
+  };
+  // How much of a patch is dark ground. Measured on the box that was lost:
+  // the patch round it takes in some of the white page as well, so its
+  // middle shade is light, but 43% of it is the box. Black type on white
+  // covered 5% of its patch or less on the same page.
+  const DARK_PATCH_SHARE = 0.3;
+  function darkShare(page, x0, y0, x1, y1) {
+    const w = Math.max(1, x1 - x0), h = Math.max(1, y1 - y0);
+    const c = document.createElement('canvas');
+    const step = Math.max(1, Math.round(Math.max(w, h) / 64));
+    c.width = Math.max(1, Math.round(w / step)); c.height = Math.max(1, Math.round(h / step));
+    const ctx = c.getContext('2d', { willReadFrequently: true });
+    ctx.drawImage(page.source, x0, y0, w, h, 0, 0, c.width, c.height);
+    const d = ctx.getImageData(0, 0, c.width, c.height).data;
+    let dark = 0;
+    for (let i = 0; i < d.length; i += 4) {
+      if (0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2] < 80) dark++;
+    }
+    return dark / (d.length / 4);
+  }
+
+  // Whether a place is already under a mark: reading it again finds nothing
+  // that would change what is covered.
+  function alreadyMarked(page, area) {
+    const hit = (u, v) => u.x < v.x + v.w && v.x < u.x + u.w && u.y < v.y + v.h && v.y < u.y + u.h;
+    return (page.hits || []).some(h => !page.dismissed.has(h.finding.id) && (h.rects || []).some(r => hit(r, area)))
+      || (page.imageHits || []).some(m => m.rect && !page.dismissed.has(m.id) && hit(m.rect, area));
+  }
+
+  // Unexplained ink the size of a typed word lying flat, for the upside-down
+  // read: about a line tall, at least as long as the shortest word looked for
+  // and no longer than the longest name typed, with room for a script hand.
+  function upsideDownPatches(page, wants) {
+    const shortest = Math.min(...wants.map(w => w.length));
+    const longest = Math.max(...state.terms.map(t => t.length));
+    return unexplainedInk(page, shortest, true)
+      .filter(a => !a.column && a.w > a.h * 1.5
+        && a.w >= a.h * 0.3 * shortest && a.w <= a.h * (longest + 2)
+        && !alreadyMarked(page, a))
+      .slice(0, UPSIDE_DOWN_PATCHES_PER_PAGE);
+  }
+
+  // One patch read turned over. The typed words it spells out, if one is read
+  // surely, with the other parts of the same name as read beside it for the
+  // phrase match to judge -- as the slanted read takes them.
+  async function readPatchUpsideDown(page, area, wants, known) {
+    const W = page.source.width, H = page.source.height;
+    const padX = Math.min(area.h * 1.5, 40), padY = Math.min(area.h * 0.5, 16);
+    const x0 = Math.max(0, Math.floor(area.x - padX)), y0 = Math.max(0, Math.floor(area.y - padY));
+    const x1 = Math.min(W, Math.ceil(area.x + area.w + padX)), y1 = Math.min(H, Math.ceil(area.y + area.h + padY));
+    const scale = Math.min(TERM_REREAD_SCALE, TURNED_READ_LONG / Math.max(1, x1 - x0, y1 - y0));
+    const crop = readableCrop(page, x0, y0, x1, y1, scale, inkModesFor(page, x0, y0, x1, y1)[0], 180);
+    let read;
+    try { read = await (Ocr.readCrop || Ocr.readPage)(crop); } catch { return []; }
+    const all = (read || []).map(word => ({ ...word, how: 'upside down',
+      rect: word.rect && cropRectToPage(word.rect, x0, y0, x1, y1, scale, 180) }))
+      .filter(word => word.rect);
+    const typed = all.filter(word => wants.includes(plainWord(bareWord(word.str))) && !known(word));
+    const sure = typed.some(word => typeof word.confidence === 'number'
+      && word.confidence >= sureEnoughFor(plainWord(bareWord(word.str))));
+    return sure ? typed.concat(nearParts(all, typed, wants)) : [];
   }
 
   // ---------- ink the reader did not account for ----------
@@ -4129,6 +4221,14 @@
         placeReadWords(page, words, r, true);
         added += words.length;
       }
+      // And unexplained ink that read as nothing at all the right way up.
+      for (const area of which.upsideDown && READ_UPSIDE_DOWN_PATCHES ? upsideDownPatches(page, wants) : []) {
+        if (state.paused || state.sweepStopped) break;
+        const words = await readPatchUpsideDown(page, area, wants, known);
+        if (!words.length) continue;
+        placeReadWords(page, words, area, true);
+        added += words.length;
+      }
     }
     return added;
   }
@@ -4259,18 +4359,23 @@
     return changed;
   }
 
-  async function readUnexplainedInk() {
+  // `only` narrows it to some patches: which ones (`which`), how many a page
+  // (`limit`), and the page field that says it has been done (`mark`).
+  async function readUnexplainedInk(only) {
     const wants = rereadParts().map(plainWord);
     if (!wants.length) return 0;
     const key = wants.slice().sort().join('|');
+    const mark = (only && only.mark) || 'inkReadFor';
     let added = 0;
     for (const page of state.pages) {
       if (state.paused) break;
-      if (!page.ocrItems || page.ocrSkipped || page.inkReadFor === key) continue;
-      page.inkReadFor = key;
+      if (!page.ocrItems || page.ocrSkipped || page[mark] === key) continue;
+      page[mark] = key;
       const shortest = Math.min(...wants.map(w => w.length));
+      let taken = 0;
       for (const area of unexplainedInk(page, shortest)) {
         if (state.paused) break;
+        if (only && only.limit && taken >= only.limit) break;
         // With some of the line either side, as the re-read takes: the
         // reader leans on the words around a word.
         // A little of the line either side, not much: the patch already holds
@@ -4282,6 +4387,8 @@
         const y0 = Math.max(0, Math.floor(area.y - padY));
         const x1 = Math.min(page.source.width, Math.ceil(area.x + area.w + padX));
         const y1 = Math.min(page.source.height, Math.ceil(area.y + area.h + padY));
+        if (only && only.which && !only.which(page, area, x0, y0, x1, y1)) continue;
+        taken++;
         // Every typed word the read gives, not only the first: the patch
         // round a lost "Yamamoto" also holds the "Freya" already read beside
         // it, and stopping at that one left the other where it was.
