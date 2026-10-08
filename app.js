@@ -2166,7 +2166,7 @@
   const PAGE_KEPT = ['source', 'thumb', 'thumbFrom', 'widthPt', 'heightPt', 'turn',
     'textTurn', 'textDims',
     'items', 'text', 'findings', 'hits', 'manual', 'imageHits', 'texts', 'inks',
-    'ocrItems', 'ocrText', 'ocrPlaced', 'ocrSkipped'];
+    'ocrItems', 'ocrText', 'ocrPlaced', 'ocrSkipped', 'art', 'readLight'];
 
   function pageSnapshot(page) {
     const kept = {};
@@ -3099,23 +3099,51 @@
     progress(0, outstanding.length);
     allowPause();
 
+    // Pages whose words are in their text layer have only their pictures
+    // read (READ_LIGHT_PAGES); a page whose text layer does not match what is
+    // drawn joins the rest and is read whole.
+    let whole = outstanding;
+    if (READ_LIGHT_PAGES && Ocr.readAreas) {
+      const light = outstanding.filter(lightReadable);
+      if (light.length) {
+        whole = outstanding.filter(page => !light.includes(page));
+        const got = await Ocr.readAreas(light.map(lightJob),
+          done => progress(done, outstanding.length), () => state.paused);
+        light.forEach((page, i) => {
+          const answer = got[i];
+          if (!answer) return;              // not reached before the pause
+          if (!answer.ok) { whole.push(page); return; }
+          page.ocrItems = answer.items.concat(layerReadings(page));
+          if (Ocr.readingOrder) Ocr.readingOrder(page.ocrItems);
+          page.readLight = true;
+          const stitched = Ocr.stitch(page.ocrItems);
+          page.ocrText = stitched.text;
+          page.ocrPlaced = stitched.items;
+        });
+      }
+    }
+
     // The reader's closer look at what it could not read is told the typed
     // words, so it can take one read exactly off a crop of its own.
     if (Ocr.setWants) Ocr.setWants(rereadParts());
-    let read;
+    let read = [];
+    const before = outstanding.length - whole.length;
     try {
-      read = await Ocr.readPages(
-        outstanding.map(page => page.source),
-        done => progress(done, outstanding.length),
-        () => state.paused);
+      if (whole.length && !state.paused) {
+        read = await Ocr.readPages(
+          whole.map(page => page.source),
+          done => progress(before + done, outstanding.length),
+          () => state.paused);
+      }
     } finally {
       if (Ocr.setWants) Ocr.setWants([]);
     }
 
     const toldOf = rereadParts().map(plainWord);
-    outstanding.forEach((page, i) => {
+    whole.forEach((page, i) => {
       if (!read[i]) return;                 // not reached before the pause
       page.ocrItems = read[i];
+      page.readLight = false;
       // The words its closer look was told of (Ocr.setWants above).
       page.closerFor = new Set(toldOf);
       const stitched = Ocr.stitch(page.ocrItems);
@@ -3124,6 +3152,85 @@
     });
     state.ocrLoaded = true;
     state.ocrRead = state.pages.every(page => page.ocrItems);
+  }
+
+  // ---------- reading only the pictures of a page ----------
+  //
+  // Set to false to read every page whole, as before.
+  //
+  // A page of a deck is mostly words its text layer already holds, and
+  // reading them again from the pixels is most of what reading the page
+  // costs: measured across three decks, 74% to 80% of the reading time went
+  // on words the text layer had. Those words are found from the text layer
+  // regardless. So a page with a text layer has only its pictures read --
+  // the areas a map made as it loaded (lib/pdfread.js pictureMap) says have
+  // anything drawn that is not text -- and its text layer's own words stand
+  // in for the rest of the reading, so everything that looks at a page's
+  // reading (the check's vetoes, the ink no reading explains, the half-read
+  // questions) sees a whole page.
+  //
+  // Not where it would not be the same answer: a page mostly picture (a scan,
+  // a photograph, a slide that is one image) is read whole, as is one with
+  // more separate pictures than reading them one by one would save, one
+  // turned since it was opened, and one whose text layer does not say what
+  // is drawn (lib/ocr.js readAreas checks a few of its words first).
+  const READ_LIGHT_PAGES = true;
+  const LIGHT_MAX_AREA = 0.5;
+  const LIGHT_MAX_PICTURES = 30;
+  const LIGHT_CHECKS = 2;
+
+  function lightReadable(page) {
+    return Boolean(page.art && page.art.boxes && page.items && page.items.length >= 3
+      && !page.turn && !page.textTurn && page.source
+      && page.art.area <= LIGHT_MAX_AREA && page.art.boxes.length <= LIGHT_MAX_PICTURES
+      && layerWords(page).length >= LIGHT_CHECKS);
+  }
+
+  // The text layer's words, each with where it is drawn on the page.
+  function layerWords(page) {
+    if (page._layerWords && page._layerWords.text === page.text) return page._layerWords.words;
+    const words = [];
+    const re = /\S+/g;
+    let m;
+    while ((m = re.exec(page.text || ''))) {
+      const rects = textBoxes(page, [{ start: m.index, end: m.index + m[0].length }]);
+      if (!rects.length) continue;
+      const rect = PageRole.unionRects(rects);
+      if (!rect || !(rect.w > 0) || !(rect.h > 0)) continue;
+      words.push({ str: m[0], rect });
+    }
+    page._layerWords = { text: page.text, words };
+    return words;
+  }
+
+  // Under a picture, a word of the text layer is the picture's to say: what
+  // the layer has there may not be what is shown (invisible text laid over
+  // an image is the usual case), and the picture is read.
+  function overPicture(page, rect) {
+    return page.art.boxes.some(b => rect.x < b.x + b.w && b.x < rect.x + rect.w
+      && rect.y < b.y + b.h && b.y < rect.y + rect.h);
+  }
+
+  function lightJob(page) {
+    // Words of a few letters, spread down the page, not under a picture.
+    const plain = layerWords(page).filter(word => /[A-Za-z]{4,}/.test(word.str)
+      && !overPicture(page, word.rect));
+    const checks = [];
+    for (let i = 0; i < LIGHT_CHECKS && plain.length; i++) {
+      const word = plain[Math.floor((i + 0.5) * plain.length / LIGHT_CHECKS)];
+      if (word) checks.push({ rect: word.rect, text: word.str });
+    }
+    return { canvas: page.source, areas: page.art.boxes, checks };
+  }
+
+  // The text layer's words, as a reading of them would come back: sure of
+  // every letter, since the file itself says what they are.
+  function layerReadings(page) {
+    return layerWords(page).filter(word => !overPicture(page, word.rect)).map(word => ({
+      str: word.str, confidence: 96, rect: { ...word.rect },
+      x: word.rect.x, y: word.rect.y + word.rect.h, w: word.rect.w, h: word.rect.h / 0.82,
+      hasEOL: false, fromLayer: true,
+    }));
   }
 
   // Typed words the reader's line check read exactly but not surely, held
@@ -10137,7 +10244,7 @@
           // reader made of the rest of it.
           const kept = searchable ? keptTextFor(page, flat, boxes) : { words: [], rects: [] };
           const read = !searchable ? []
-            : page.ocrItems ? readStillSeen(page, flat, boxes, page.ocrItems)
+            : page.ocrItems ? readStillSeen(page, flat, boxes, page.ocrItems.filter(item => !item.fromLayer))
               : (readBack && readBack.get(page)) || [];
           const words = kept.words.concat(wordLayerFor(page, read, kept.rects));
           const labels = placeholders.concat(words);
